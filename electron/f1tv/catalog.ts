@@ -3,6 +3,7 @@
  * catalog module hides future events and the extra channels, so these views are built here on
  * top of its client: the data layer needs every channel, and session times for countdowns.
  */
+import { promises as fsp } from 'node:fs';
 import type {
   Channel,
   ChannelKind,
@@ -165,15 +166,27 @@ export async function listChannels(contentId: number): Promise<Channel[]> {
 /**
  * Exact future session times. F1 TV only lists an event's sessions shortly before they run, so
  * upcoming sessions come from OpenF1; F1 TV's live-now list decides when playback can actually start.
+ * OpenF1 closes its free API while any session is live, so the last good copy is kept on disk.
  */
-export async function fetchSchedule(year: number): Promise<ScheduledSession[]> {
-  const res = await fetch(`https://api.openf1.org/v1/sessions?year=${encodeURIComponent(year)}`, {
-    headers: { 'User-Agent': 'f1a', Accept: 'application/json' },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error(`Schedule request failed (HTTP ${res.status})`);
-  const rows = (await res.json()) as any[];
-  if (!Array.isArray(rows)) return [];
+export async function fetchSchedule(year: number, cacheFile?: string): Promise<ScheduledSession[]> {
+  try {
+    const res = await fetch(`https://api.openf1.org/v1/sessions?year=${encodeURIComponent(year)}`, {
+      headers: { 'User-Agent': 'f1a', Accept: 'application/json' },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const rows = (await res.json()) as any;
+    if (!res.ok || !Array.isArray(rows)) throw new Error(`HTTP ${res.status}`);
+    const schedule = parseSchedule(rows);
+    if (cacheFile) await fsp.writeFile(cacheFile, JSON.stringify(schedule)).catch(() => {});
+    return schedule;
+  } catch (e) {
+    const cached = cacheFile ? await fsp.readFile(cacheFile, 'utf8').catch(() => null) : null;
+    if (cached) return JSON.parse(cached) as ScheduledSession[];
+    throw new Error(`The session schedule is unavailable right now. OpenF1 closes it while a session is live. (${(e as Error).message})`);
+  }
+}
+
+export function parseSchedule(rows: any[]): ScheduledSession[] {
   return rows
     .map((r) => ({
       meetingKey: Number(r.meeting_key),

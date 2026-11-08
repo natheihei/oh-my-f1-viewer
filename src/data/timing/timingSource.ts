@@ -35,6 +35,8 @@ export interface TimingView {
   sessionClock: { remaining: string; extrapolating: boolean } | null;
   lapCount: { current: number; total: number } | null;
   teamRadio: TeamRadioClip[];
+  /** Live records received but held back because the video hasn't reached them. */
+  heldRecords: number;
 }
 
 const EMPTY: TimingView = {
@@ -46,6 +48,7 @@ const EMPTY: TimingView = {
   sessionClock: null,
   lapCount: null,
   teamRadio: [],
+  heldRecords: 0,
 };
 
 export const useTiming = create<TimingView>(() => EMPTY);
@@ -132,7 +135,7 @@ export function createReplayTiming(session: SessionInfo): TimingSource {
 }
 
 export function createLiveTiming(session: SessionInfo): TimingSource {
-  const store = createStore();
+  let store = createStore();
   const buffer = new LiveFeedBuffer<{ feed: string; data: unknown }>();
   const unsubscribe = window.f1a.timing.onLiveUpdate((record) => buffer.push(record, Date.now()));
   void window.f1a.timing.liveStart(archiveQuery(session)).catch((e: Error) => {
@@ -141,10 +144,13 @@ export function createLiveTiming(session: SessionInfo): TimingSource {
 
   return {
     update(_timeSec, wallClockMs) {
-      const due = buffer.drain(wallClockMs);
-      if (due.length === 0) return;
-      for (const { feed, data } of due) applyRecord(store, feed, data);
-      publish(store, useTiming.getState().drivers);
+      const { reset, records } = buffer.advance(wallClockMs);
+      useTiming.setState({ heldRecords: buffer.held });
+      if (!reset && records.length === 0) return;
+      if (reset) store = createStore();
+      for (const { feed, data } of records) applyRecord(store, feed, data);
+      // Row identity only helps going forward: after a rewind, nothing of the old table may survive.
+      publish(store, reset ? [] : useTiming.getState().drivers);
     },
     destroy() {
       unsubscribe();

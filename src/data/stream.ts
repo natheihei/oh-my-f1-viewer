@@ -22,7 +22,13 @@ const RETRY: shaka.extern.RetryParameters = {
   stallTimeout: 20_000,
   connectionTimeout: 20_000,
 };
-const LIVE_EDGE_OFFSET_SEC = 6;
+/**
+ * How far behind the live edge to sit. Measured on a live race: 2.2s back starves the buffers, so
+ * onboards drift over a second and stay at low quality, while 7-8s back holds 0.04s at full quality.
+ */
+export const LIVE_EDGE_OFFSET_SEC = 8;
+/** How far from that target a join may land before it gets corrected. */
+const LIVE_EDGE_TOLERANCE_SEC = 2;
 const WALL_CLOCK_MIN_MS = 9.46e11; // after year 2000: HLS reports 1970-epoch garbage
 const SHAKA_LOAD_INTERRUPTED = 7000;
 const SHAKA_LOAD_DESTROYED = 7002;
@@ -274,7 +280,7 @@ export class StreamHandle {
       const range = this.seekRange();
       if (range) {
         const target = Math.max(range.start, range.end - LIVE_EDGE_OFFSET_SEC);
-        if (!Number.isFinite(this.video.currentTime) || Math.abs(this.video.currentTime - range.end) > LIVE_EDGE_OFFSET_SEC * 3) {
+        if (!Number.isFinite(this.video.currentTime) || Math.abs(this.video.currentTime - target) > LIVE_EDGE_TOLERANCE_SEC) {
           this.video.currentTime = target;
         }
         if (this.video.paused) await this.video.play().catch(() => {});

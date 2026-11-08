@@ -59,15 +59,35 @@ describe('LiveFeedBuffer', () => {
     const buffer = new LiveFeedBuffer<string>();
     buffer.push('a', 1_000);
     buffer.push('b', 2_000);
-    expect(buffer.drain(500)).toEqual([]);
-    expect(buffer.drain(1_500)).toEqual(['a']);
-    expect(buffer.size).toBe(1);
-    expect(buffer.drain(2_000)).toEqual(['b']);
+    expect(buffer.advance(500)).toEqual({ reset: false, records: [] });
+    expect(buffer.held).toBe(2);
+    expect(buffer.advance(1_500)).toEqual({ reset: false, records: ['a'] });
+    expect(buffer.held).toBe(1);
+    expect(buffer.advance(2_000)).toEqual({ reset: false, records: ['b'] });
+    expect(buffer.held).toBe(0);
   });
 
   it('releases everything when the stream has no clock to align to', () => {
     const buffer = new LiveFeedBuffer<string>();
     buffer.push('a', 10 ** 13);
-    expect(buffer.drain(null)).toEqual(['a']);
+    expect(buffer.advance(null).records).toEqual(['a']);
+  });
+
+  it('rebuilds from the start when the video rewinds, and only up to the new position', () => {
+    const buffer = new LiveFeedBuffer<string>();
+    buffer.push('a', 1_000);
+    buffer.push('b', 2_000);
+    buffer.push('c', 3_000);
+    buffer.advance(3_000);
+    expect(buffer.advance(1_500)).toEqual({ reset: true, records: ['a'] });
+    expect(buffer.held).toBe(2);
+    expect(buffer.advance(3_000)).toEqual({ reset: false, records: ['b', 'c'] });
+  });
+
+  it('does not rebuild when the video holds still', () => {
+    const buffer = new LiveFeedBuffer<string>();
+    buffer.push('a', 1_000);
+    buffer.advance(1_000);
+    expect(buffer.advance(1_000)).toEqual({ reset: false, records: [] });
   });
 });

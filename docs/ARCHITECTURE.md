@@ -45,8 +45,12 @@ feed starts 13-60 minutes before lights out. In order of preference (`timeMap.ts
 This differs from F1 OpenViewer, which puts the wall clock first. Measured against curated lights-out it ran about 15s ahead
 (14.73s on 2024 Mexico, 14.99s on 2023 Mexico), which would show events before they happen on screen.
 
-Live timing is buffered until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed. F1
-OpenViewer applies records on arrival, and lists this as a known limitation.
+Live timing is buffered until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed (about 45s
+when measured). F1 OpenViewer applies records on arrival, and lists this as a known limitation. Every record is kept, so rewinding
+the video can rebuild timing to match.
+
+Live streams sit 8s behind the edge. Closer than that starves their buffers: at 2.2s back, onboards drifted over a second and stayed
+at low quality.
 
 ## Layout layer (`src/layout`)
 
@@ -92,4 +96,5 @@ Sign in with ChatGPT plan usage. Tools run in the renderer because it owns layou
 ## Upcoming sessions
 
 F1 TV only lists an event's sessions shortly before they run, and F1 OpenViewer has no schedule at all. So times come from OpenF1,
-and F1 TV's live-now list decides when playback can actually start.
+and F1 TV's live-now list decides when playback can actually start. OpenF1 closes its free API during live sessions, so the last
+good schedule is saved to disk.

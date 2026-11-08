@@ -24,7 +24,7 @@ export async function startApp(port = 5198) {
   });
   const appLog = (chunk) => {
     for (const line of String(chunk).split('\n')) {
-      if (/^\[(login|session|window|main|ai|playback|Widevine|security)\b/.test(line)) console.log('  app:', line.slice(0, 200));
+      if (/^\[(login|session|window|main|ai|Widevine|security|license)\b/.test(line)) console.log('  app:', line.slice(0, 200));
     }
   };
   app.process().stdout?.on('data', appLog);
