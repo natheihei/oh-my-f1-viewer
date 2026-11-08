@@ -9,6 +9,8 @@ Local changes:
 - `session.js`: profile file names use `f1a-` instead of `f1openviewer-`.
 - `livetiming.js`: the User-Agent for the public sync API says `f1a`.
 - `durableSettings.test.js`: removed the check against a renderer file that f1a doesn't have.
+- `f1tvCatalog.js`, `f1tvPlayback.js`: follow each feed's play link, so the base stream is requested with no `channelId`. Upstream sends
+  `channelId=1025`, which F1 TV answers with a 404 through 2024. `f1tvCatalog.test.js` is new.
 
 `src/data/vendor/` holds the same project's pure domain logic (sync decisions, timing reducer, replay
 controller), unchanged.
