@@ -1,0 +1,46 @@
+{
+  "name": "f1a",
+  "version": "0.1.0",
+  "description": "Agent-driven F1 multi-view streaming app",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k -n vite,tsc,app \"vite\" \"tsc -w --preserveWatchOutput -p tsconfig.electron.json\" \"wait-on http://127.0.0.1:5173 && env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "npm run build:electron && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "start": "npm run build && env -u CHROME_DESKTOP electron .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^1.5.0",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "axios": "^1.20.0",
+    "gridstack": "^14.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "shaka-player": "^5.0.5",
+    "undici": "^7.29.0",
+    "ws": "^8.21.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.4",
+    "concurrently": "^9.2.1",
+    "electron": "github:castlabs/electron-releases#v42.11.18+wvcus",
+    "playwright": "^1.56.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.9",
+    "wait-on": "^9.0.4"
+  }
+}

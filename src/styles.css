@@ -1,0 +1,276 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius-*: initial;
+  --color-ink: #e7e7e7;
+  --color-dim: #8a8a8a;
+  --color-faint: #4a4a4a;
+  --color-line: #2c2c2c;
+  --color-panel: rgb(10 10 10 / 0.94);
+  --color-accent: #ff3b30;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full bg-black font-mono text-ink;
+    font-size: 13px;
+    line-height: 1.45;
+    overflow: hidden;
+  }
+  * {
+    border-radius: 0 !important;
+  }
+}
+
+.app {
+  @apply flex h-full flex-col;
+}
+
+.surface {
+  @apply relative min-h-0 flex-1 overflow-hidden;
+}
+
+/* Layer order, bottom to top: components, grid placeholders, countdown, palette. */
+.stage {
+  @apply absolute inset-0 z-0 overflow-hidden;
+}
+
+.stage-host {
+  @apply absolute overflow-hidden;
+  visibility: hidden;
+}
+
+.grid-surface {
+  @apply absolute! inset-0 z-10;
+  height: 100% !important;
+  min-height: 0 !important;
+  background: transparent;
+}
+
+.grid-surface .grid-stack-item-content {
+  overflow: hidden !important;
+  background: transparent;
+}
+
+/* The transparent surface that picks up the mouse over a tile. */
+.tile-grip {
+  @apply absolute inset-0 cursor-move;
+}
+
+.tile-group > .grid-stack-item-content {
+  border: 1px solid var(--color-accent);
+  pointer-events: none;
+}
+
+.tile-group > .grid-stack-item-content > * {
+  pointer-events: auto;
+}
+
+.group-title {
+  @apply bottom-auto z-10 truncate bg-black px-1.5 text-dim;
+  height: 18px;
+  line-height: 18px;
+  font-size: 11px;
+}
+
+/* The nested grid fills what the group title leaves. */
+.grid-stack-nested {
+  position: absolute !important;
+  inset: 18px 0 0 0;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.grid-stack-placeholder > .placeholder-content {
+  background: rgb(255 255 255 / 0.08) !important;
+  border: 1px solid var(--color-faint);
+}
+
+.grid-stack > .grid-stack-item > .ui-resizable-handle {
+  opacity: 0;
+}
+
+.grid-stack > .grid-stack-item:hover > .ui-resizable-handle {
+  opacity: 1;
+}
+
+/* Components */
+.tile {
+  @apply absolute inset-0 border border-line bg-black;
+}
+
+.tile-video {
+  @apply absolute inset-0;
+}
+
+.tile-video-hidden {
+  visibility: hidden;
+}
+
+.stream-video {
+  @apply block h-full w-full bg-black object-contain;
+}
+
+.tile-label {
+  @apply absolute top-1 left-1 bg-black/70 px-1.5 text-ink;
+  font-size: 11px;
+}
+
+.tile-audio {
+  @apply text-accent;
+}
+
+.tile-status {
+  @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
+  font-size: 12px;
+}
+
+.tile-status-name {
+  @apply mr-[1ch] text-ink;
+}
+
+.tile-status-error {
+  @apply text-accent;
+}
+
+.tile-resync {
+  @apply absolute top-1 right-1 bg-black/70 px-1.5 text-dim;
+  font-size: 11px;
+}
+
+/* Palette */
+.palette {
+  @apply absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 flex-col border border-faint bg-panel;
+  width: min(720px, calc(100% - 32px));
+}
+
+.palette-history {
+  @apply overflow-y-auto border-b border-line px-2.5 py-1.5;
+  max-height: calc(1.45em * 7 + 12px);
+}
+
+.palette-line {
+  @apply break-words whitespace-pre-wrap;
+}
+
+.palette-user {
+  @apply text-dim;
+}
+
+.palette-agent {
+  @apply text-ink;
+}
+
+.palette-system {
+  @apply text-dim;
+}
+
+.palette-error {
+  @apply text-accent;
+}
+
+.palette-suggestions {
+  @apply border-b border-line py-0.5;
+}
+
+.palette-suggestion {
+  @apply flex cursor-pointer justify-between gap-4 px-2.5;
+}
+
+.palette-suggestion-active {
+  @apply bg-white/10;
+}
+
+.palette-suggestion-desc {
+  @apply text-dim;
+}
+
+.palette-input-row {
+  @apply flex items-center gap-2 px-2.5 py-1.5;
+}
+
+.palette-prompt {
+  @apply w-[1ch] text-accent;
+}
+
+.palette-prompt-busy {
+  animation: palette-pulse 1s steps(2) infinite;
+}
+
+@keyframes palette-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.palette-input {
+  @apply min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-faint;
+}
+
+/* Timeline */
+.timeline {
+  @apply z-20 flex h-8 shrink-0 items-center gap-3 border-t border-line bg-black px-2.5;
+}
+
+.timeline-button {
+  @apply w-5 cursor-pointer text-center text-ink hover:text-accent;
+  font-size: 11px;
+}
+
+.timeline-bar {
+  @apply relative h-full min-w-0 flex-1 cursor-pointer touch-none;
+}
+
+.timeline-track {
+  @apply absolute top-1/2 right-0 left-0 h-px bg-faint;
+}
+
+.timeline-fill {
+  @apply absolute top-1/2 left-0 h-px bg-accent;
+}
+
+.timeline-head {
+  @apply absolute top-1/2 h-3 w-px -translate-y-1/2 bg-ink;
+}
+
+.timeline-hover {
+  @apply pointer-events-none absolute -top-5 -translate-x-1/2 border border-line bg-black px-1 text-ink;
+  font-size: 11px;
+}
+
+.timeline-time {
+  @apply whitespace-nowrap tabular-nums;
+}
+
+.timeline-total {
+  @apply text-dim;
+}
+
+.timeline-status {
+  @apply text-dim;
+}
+
+.timeline-live {
+  @apply cursor-pointer text-dim;
+}
+
+.timeline-live-on {
+  @apply text-accent;
+}
+
+/* Countdown */
+.countdown {
+  @apply absolute inset-0 z-20 flex flex-col items-center justify-center gap-1;
+}
+
+.countdown-title {
+  @apply text-dim;
+}
+
+.countdown-time {
+  @apply tabular-nums;
+  font-size: 40px;
+}
