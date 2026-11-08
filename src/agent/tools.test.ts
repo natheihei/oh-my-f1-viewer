@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel, LiveItem, SessionInfo } from '../../shared/api';
-import { AGENT_TOOLS } from '../../shared/tools';
 
-// The executor imports the video component, which pulls in the browser-only player.
+// The host pulls in the browser-only player and grid.
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { resolveChannel, runTool } = await import('./executor');
-const { closeViewingSession, startCountdown, useCountdown } = await import('../shell/viewing');
+const { AGENT_TOOLS, runTool, toolDefinitions } = await import('./tools');
+const { resolveChannel } = await import('./matching');
+const { closeViewingSession, startCountdown, useCountdown } = await import('../host/viewing');
 const { useSession } = await import('../data/session');
 
 const onboard = (label: string, driverName: string, number: number): Channel => ({
@@ -84,9 +84,40 @@ describe('agent tools', () => {
     expect(AGENT_TOOLS.map((t) => t.name)).toContain('reset_layout');
   });
 
-  it('all have a handler', async () => {
-    const source = await import('node:fs/promises').then((fs) => fs.readFile('src/agent/executor.ts', 'utf8'));
-    for (const { name } of AGENT_TOOLS) expect(source).toContain(`case '${name}'`);
+  it('send the model only plain JSON definitions', () => {
+    for (const definition of toolDefinitions()) {
+      expect(Object.keys(definition).sort()).toEqual(['description', 'name', 'parameters']);
+      expect(JSON.parse(JSON.stringify(definition))).toEqual(definition);
+      expect(definition.parameters).toMatchObject({ type: 'object' });
+    }
+  });
+
+  it('take their schema from the host unless they override it', async () => {
+    const { host } = await import('../host');
+    const reset = toolDefinitions().find((t) => t.name === 'reset_layout');
+    expect(reset?.parameters).toEqual(JSON.parse(JSON.stringify(host.layout.reset.info.args)));
+  });
+
+  it('cannot seek forward even if the model sends a negative rewind', async () => {
+    const seek = vi.spyOn((await import('../data/session')).sessionControl, 'seekBy');
+    const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
+    useSession.setState({ session: open, clock: { ...useSession.getState().clock, end: 100 } });
+    await expect(runTool('seek_back', { seconds: -30 })).rejects.toThrow(/must be positive/);
+    expect(seek).not.toHaveBeenCalled();
+    await runTool('seek_back', { seconds: 30 });
+    expect(seek).toHaveBeenCalledWith(-30);
+    useSession.setState({ session: null, clock: { ...useSession.getState().clock, end: 0 } });
+    seek.mockRestore();
+  });
+
+  it('reject an unknown tool', async () => {
+    await expect(runTool('seek_forward', {})).rejects.toThrow(/Unknown tool/);
+  });
+
+  it('refuse to act with no session open', async () => {
+    await expect(runTool('add_streams', { streams: ['HAM'] })).rejects.toThrow(/No session is open/);
+    await expect(runTool('seek_back', { seconds: 5 })).rejects.toThrow(/No session is open/);
+    await expect(runTool('set_audio', { stream: 'HAM' })).rejects.toThrow(/No session is open/);
   });
 });
 

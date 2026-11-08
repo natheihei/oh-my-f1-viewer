@@ -6,7 +6,7 @@
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { useEffect, useRef } from 'react';
-import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, type LayoutNode } from './model';
+import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, type LayoutNode, type Rect } from './model';
 import { layout, useLayout } from './store';
 
 const GROUP_TITLE_PX = 18;
@@ -41,7 +41,7 @@ function addGrip(item: Element, className: string): void {
   }
 }
 
-export function GridSurface() {
+export function GridSurface({ onMove, onSwap }: { onMove: (id: string, rect: Rect) => void; onSwap: (a: string, b: string) => void }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
   const renderedRef = useRef('');
@@ -65,7 +65,7 @@ export function GridSurface() {
       if (rebuildingRef.current) return;
       for (const item of items ?? []) {
         if (item.id == null) continue;
-        layout.mouseEdit(String(item.id), { x: item.x ?? 0, y: item.y ?? 0, w: item.w ?? 1, h: item.h ?? 1 });
+        onMove(String(item.id), { x: item.x ?? 0, y: item.y ?? 0, w: item.w ?? 1, h: item.h ?? 1 });
       }
       renderedRef.current = signature(layout.snapshot().nodes);
     });
@@ -85,7 +85,7 @@ export function GridSurface() {
         .find((item) => item && item !== el && item.parentElement === el.parentElement);
       const idA = el.getAttribute('gs-id');
       const idB = target?.getAttribute('gs-id');
-      if (idA && idB) setTimeout(() => layout.swap(idA, idB), 0);
+      if (idA && idB) setTimeout(() => onSwap(idA, idB), 0);
     });
 
     const applyCellHeights = () => {

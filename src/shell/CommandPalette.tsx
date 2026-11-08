@@ -3,8 +3,8 @@
  * there is history. Older history is a scroll away. Sits above the timeline, over the video.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { sendToAgent } from '../agent/bridge';
-import { useSession } from '../data/session';
+import { useLive } from '../host';
+import { sendToAgent } from './agentFeed';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import { palette, usePalette, type EntryRole } from './palette';
 
@@ -17,7 +17,7 @@ const ROLE_PREFIX: Record<EntryRole, string> = {
 
 export function CommandPalette() {
   const { open, busy, entries } = usePalette();
-  const blank = useSession((s) => s.session == null);
+  const blank = useLive((s) => s.session == null);
   const [value, setValue] = useState('');
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);

@@ -13,7 +13,7 @@ await page.waitForTimeout(2500);
 await page.evaluate(async () => {
   window.events = [];
   window.f1a.ai.onEvent((e) => window.events.push(e));
-  window.m = { session: await import('/src/data/session.ts'), viewing: await import('/src/shell/viewing.ts') };
+  window.m = { session: await import('/src/data/session.ts'), viewing: await import('/src/host/viewing.ts') };
 });
 
 await typeInPalette(page, request);

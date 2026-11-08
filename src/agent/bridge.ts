@@ -1,63 +1,62 @@
-/** Connects the agent's events to the palette and its tool calls to the executor. */
-import type { AgentEvent } from '../../shared/api';
-import { palette, usePalette } from '../shell/palette';
-import { isSessionOpen } from '../shell/viewing';
-import { describeAppState, handleToolCall } from './executor';
+/** Runs the agent's tool calls, and tells it what the app looks like with each message. */
+import type { AgentToolCall } from '../../shared/api';
+import { host, read, tilesOf, type GroupNode, type LayoutState } from '../host';
+import { runTool, toolDefinitions } from './tools';
 
-const AUTO_HIDE_MS = 2000;
-
-export function connectAgent(): () => void {
-  let streaming: number | null = null;
-  let finalText = '';
-
-  const onEvent = (event: AgentEvent) => {
-    switch (event.type) {
-      case 'turn_start':
-        streaming = null;
-        finalText = '';
-        palette.setBusy(true);
-        break;
-      case 'text_delta':
-        if (streaming == null) {
-          streaming = palette.push('agent', '');
-          finalText = '';
-        }
-        palette.append(streaming, event.delta);
-        finalText += event.delta;
-        break;
-      case 'tool_start':
-        // A later reply gets its own line under the tool calls.
-        streaming = null;
-        break;
-      case 'turn_end': {
-        palette.setBusy(false);
-        // Only hide once the agent did something and isn't waiting on an answer.
-        const asking = finalText.includes('?');
-        if (event.acted && !asking && isSessionOpen()) palette.hideAfter(AUTO_HIDE_MS);
-        break;
-      }
-      case 'error':
-        palette.setBusy(false);
-        palette.push('error', event.message);
-        break;
-    }
-  };
-
-  const offEvent = window.f1a.ai.onEvent(onEvent);
-  const offTool = window.f1a.ai.onToolCall((call) => void handleToolCall(call));
-  return () => {
-    offEvent();
-    offTool();
-  };
+function describeLayout(state: LayoutState): string {
+  if (state.nodes.length === 0) return 'nothing';
+  return state.nodes
+    .map((n) => (n.kind === 'tile' ? n.component.label : `group "${(n as GroupNode).title}" [${n.children.map((c) => c.component.label).join(', ')}]`))
+    .join('; ');
 }
 
-export async function sendToAgent(text: string): Promise<void> {
-  palette.push('user', text);
-  const status = await window.f1a.ai.status().catch(() => ({ signedIn: false, model: null }));
-  if (!status.signedIn) {
-    palette.push('system', 'The agent needs a ChatGPT sign-in first: /login-chatgpt');
-    return;
+function formatClock(t: number): string {
+  const s = Math.max(0, Math.floor(t));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** The state block sent with each user message. Contains nothing about how the race goes. */
+export function describeAppState(): string {
+  const { session, audio, feeds, clock, streams, countdown, layout } = read();
+  const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
+  if (countdown) lines.push(`countdown running for: ${countdown.title}`);
+  if (!session) {
+    lines.push('session: none open');
+    return lines.join('\n');
   }
-  if (usePalette.getState().busy) await window.f1a.ai.cancel();
-  await window.f1a.ai.send(text, describeAppState());
+  const failed = tilesOf(layout)
+    .filter((t) => streams[t.component.key]?.status === 'error')
+    .map((t) => `${t.component.label}: ${streams[t.component.key]?.error}`);
+  lines.push(
+    `session: ${session.title} (${session.status})`,
+    `playback: ${clock.playing ? 'playing' : 'paused'} at ${formatClock(clock.timeSec)}`,
+    `on screen: ${describeLayout(layout)}`,
+    `audio: ${feeds.find((f) => f.id === audio)?.label ?? 'muted'}`,
+  );
+  if (failed.length) lines.push(`failed streams: ${failed.join('; ')}`);
+  return lines.join('\n');
+}
+
+async function handleToolCall(call: AgentToolCall): Promise<void> {
+  try {
+    const content = await runTool(call.name, call.args);
+    host.agent.toolResult({ callId: call.callId, ok: true, content });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    host.agent.toolResult({
+      callId: call.callId,
+      ok: false,
+      content: message.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, ''),
+    });
+  }
+}
+
+export function connectTools(): () => void {
+  return host.agent.onToolCall((call) => void handleToolCall(call));
+}
+
+export function askAgent(text: string): Promise<void> {
+  return host.agent.send(text, describeAppState(), toolDefinitions());
 }

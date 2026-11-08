@@ -116,6 +116,13 @@ export interface AiStatus {
   model: string | null;
 }
 
+/** What the model is told about one tool. */
+export interface AgentToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
 /** One agent tool invocation the renderer must carry out, because it owns layout and playback. */
 export interface AgentToolCall {
   callId: string;
@@ -169,7 +176,7 @@ export interface F1aApi {
     status(): Promise<AiStatus>;
     login(): Promise<AiStatus>;
     logout(): Promise<void>;
-    send(text: string, context: string): Promise<void>;
+    send(text: string, context: string, tools: AgentToolDefinition[]): Promise<void>;
     cancel(): Promise<void>;
     reset(): Promise<void>;
     onEvent(cb: (event: AgentEvent) => void): () => void;

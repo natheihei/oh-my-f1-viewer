@@ -52,9 +52,10 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
 - **No timing for 2022.** The timing archive answers HTTP 403 on both 2022 races tried, while other seasons work, so it looks like the
   whole year. The error wrongly suggests signing out. Video is unaffected, and nothing displays timing yet.
-- **Odd timing on some races.** The 2021 Belgian archive has about a tenth of the usual records and produces no driver rows, and the 2021
-  Abu Dhabi driver list starts with 19 entries. This is probably the archive's data, but our parser hasn't been ruled out. The 2024 Bahrain
-  race isn't found in the index, and it isn't known whether its entry is missing or its key differs from F1 TV's.
+- **Odd timing on some races.** The 2021 Belgian archive has about a tenth of the usual records, and its driver rows only appear once its
+  timing data starts, later in the video. The 2021 Abu Dhabi driver list starts with 19 entries, which is probably the archive's data, but our
+  parser hasn't been ruled out. The 2024 Bahrain race isn't found in the index, and it isn't known whether its entry is missing or its key
+  differs from F1 TV's.
 - **Mouse edits inside groups** are only lightly tested. Dragging a tile between a group and the top level isn't supported: ask the
   agent instead.
 - **No timing while behind the join point of a live session.** Live timing only has records from when the app connected, so watching a

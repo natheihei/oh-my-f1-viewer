@@ -1,7 +1,5 @@
-/** Every component type a tile can show. Charts and other views get added here. */
-import type { TileComponent } from '../layout/Stage';
-import { VideoTile } from './VideoTile';
+/** Every component a tile can show. Charts and other views get added here. */
+import type { ComponentDefinition } from '../host';
+import VideoTile from './VideoTile';
 
-export const componentRegistry: Record<string, TileComponent> = {
-  video: VideoTile,
-};
+export const components: ComponentDefinition[] = [VideoTile];

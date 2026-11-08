@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
-import { connectAgent } from '../agent/bridge';
-import { componentRegistry } from '../components/registry';
-import { useSession } from '../data/session';
-import { GridSurface } from '../layout/GridSurface';
-import { Stage } from '../layout/Stage';
+import { components } from '../components/registry';
+import { Grid, host, useLive } from '../host';
+import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { palette } from './palette';
 import { Timeline } from './Timeline';
-import { closeViewingSession, useCountdown } from './viewing';
 
 function formatRemaining(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -20,7 +17,7 @@ function formatRemaining(ms: number): string {
 }
 
 function Countdown() {
-  const countdown = useCountdown((s) => s.countdown);
+  const countdown = useLive((s) => s.countdown);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!countdown) return;
@@ -38,13 +35,13 @@ function Countdown() {
 }
 
 export function App() {
-  const hasSession = useSession((s) => s.session != null);
+  const hasSession = useLive((s) => s.session != null);
 
   useEffect(() => {
     const offAgent = connectAgent();
     void reportReadiness();
-    const offExpired = window.f1a.f1tv.onExpired(() => {
-      closeViewingSession();
+    const offExpired = host.account.onExpired(() => {
+      host.session.close();
       palette.show();
       palette.push('error', 'F1 TV session expired. Run /login-f1tv.');
     });
@@ -57,8 +54,7 @@ export function App() {
   return (
     <div className="app" data-has-session={hasSession}>
       <div className="surface">
-        <Stage registry={componentRegistry} />
-        <GridSurface />
+        <Grid components={components} />
         <Countdown />
         <CommandPalette />
       </div>

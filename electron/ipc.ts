@@ -181,7 +181,7 @@ export function setupIpc(): void {
   handle('ai:status', () => agent.status());
   handle('ai:login', () => agent.login());
   handle('ai:logout', () => agent.logout());
-  handle('ai:send', (_e, text, context) => agent.send(String(text), String(context ?? '')));
+  handle('ai:send', (_e, text, context, tools) => agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : []));
   handle('ai:cancel', () => agent.cancel());
   handle('ai:reset', () => agent.reset());
   ipcMain.on('ai:toolResult', (evt, result) => {
