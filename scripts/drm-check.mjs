@@ -160,7 +160,7 @@ if (sessionStart != null) {
 
 const timing = await page.evaluate(() => {
   const t = window.modules.timing.useTiming.getState();
-  return { available: t.available, driverRows: t.drivers.length, hasClock: !!t.sessionClock, hasWeather: !!t.weather };
+  return { state: t.state, reason: t.reason, driverRows: t.drivers?.length ?? 0, hasClock: !!t.sessionClock, hasWeather: !!t.weather };
 });
 console.log('timing:', JSON.stringify(timing));
 
