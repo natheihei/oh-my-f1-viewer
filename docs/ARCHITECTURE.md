@@ -44,7 +44,7 @@ never touch a stream's time.
   everyone while the reference stalls. The decisions are pure and unit-tested.
 - **Reveal.** A new stream reports `resolving`, `loading` and `syncing` before `ready`, and its tile shows that status instead
   of the picture until it is within 0.25s of the clock.
-- **Timing** (`timing/`) exposes the race state at the frame on screen, never later.
+- **Timing** (`timing/`) exposes the race state at the frame on screen, never later. Its `state` says whether there's data and, if not, why.
 
 ### Aligning timing to video
 

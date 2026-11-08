@@ -156,10 +156,10 @@ check('pause holds, then resume plays on', s.clock.t > p1.clock.t + 4 && s.strea
 // Timing, buffered to the video. Reports shape only.
 const timing = await page.evaluate(() => {
   const t = window.m.timing.useTiming.getState();
-  return { available: t.available, driverRows: t.drivers.length, hasClock: !!t.sessionClock, hasWeather: !!t.weather, hasLapCount: !!t.lapCount, hasTrackStatus: !!t.trackStatus };
+  return { state: t.state, reason: t.reason, driverRows: t.drivers?.length ?? 0, hasClock: !!t.sessionClock, hasWeather: !!t.weather, hasLapCount: !!t.lapCount, hasTrackStatus: !!t.trackStatus };
 });
 console.log('timing:', JSON.stringify(timing));
-check('live timing reaches the app', timing.available && timing.driverRows > 0);
+check('live timing reaches the app', timing.state === 'ready' && timing.driverRows > 0);
 
 // How far timing is held back relative to arrival, measured around a burst of live records.
 const delay = await page.evaluate(async () => {

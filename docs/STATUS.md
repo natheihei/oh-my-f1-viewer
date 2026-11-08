@@ -51,7 +51,8 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   onboards). F1 OpenViewer fetches them and never uses them. `diff` and `diffV2` have opposite signs on F1 LIVE, so what they mean
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
 - **No timing for 2022.** The timing archive answers HTTP 403 on both 2022 races tried, while other seasons work, so it looks like the
-  whole year. The error wrongly suggests signing out. Video is unaffected, and nothing displays timing yet.
+  whole year. Timing reports `failed`, with a reason that wrongly suggests signing out, because the archive uses the same status for a rejected
+  sign-in. Video is unaffected, and nothing displays timing yet.
 - **Odd timing on some races.** The 2021 Belgian archive has about a tenth of the usual records, and its driver rows only appear once its
   timing data starts, later in the video. The 2021 Abu Dhabi driver list starts with 19 entries, which is probably the archive's data, but our
   parser hasn't been ruled out. The 2024 Bahrain race isn't found in the index, and it isn't known whether its entry is missing or its key

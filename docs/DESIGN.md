@@ -12,7 +12,8 @@ app through one write path. f1a adopts the idea, not the machinery.
 2. **One write surface.** Nothing changes except through `host.*` functions, and `tests/layers.test.ts` forbids any other route.
 3. **Components are mods.** A tile component only declares itself and uses the host. It can't reach the data or layout layers.
 4. **The host doesn't judge.** It has no gates or per-caller rules. `host.playback.seek()` goes anywhere, and policy belongs to whoever calls it.
-5. **Differences are data.** What varies by year or Grand Prix goes in a looked-up spec that names a parser, not in `if` branches.
+5. **Differences are data.** When something must vary by year or Grand Prix, it goes in a looked-up spec that names a parser, not in `if` branches.
+6. **Missing data is data.** Each data kind carries its own state and reason.
 
 ## Layers
 
@@ -22,7 +23,7 @@ app through one write path. f1a adopts the idea, not the machinery.
 │ Frame        timeline · palette · countdown                │
 │ Agent        tools built on the host · spoiler gate        │
 ├ HOST (src/host): the only import consumers may use ────────┤
-│ reads    session · clock · feeds · timing · coverage …     │
+│ reads    session · clock · feeds · streams · timing …      │
 │ writes   host.session · playback · audio · layout (typed)  │
 │ native   <Video feed />                                    │
 ├ CORE ──────────────────────────────────────────────────────┤
@@ -84,26 +85,67 @@ The gate belongs to the agent tool, based on the session state and playhead it r
 the model, because the model could repeat what it read. Until that approval exists, the agent has no forward seek and no race-state tool.
 The timeline is unaffected: the viewer can seek anywhere.
 
+## Missing data is part of the data
+
+There's no separate report of what a session has. Each data kind says so itself, and types stop a consumer from reading data without checking:
+
+```ts
+type Timing =
+  | { state: 'idle' }                        // No session is open
+  | { state: 'loading'; heldRecords: number }
+  | { state: 'failed'; reason: string }
+  | { state: 'ready'; drivers: DriverRow[] /* … */ };
+```
+
+Feeds and streams already work this way: an empty list means none, and each stream has its status and error.
+
+The cost is that a consumer learns this once a session is open, not before. If something needs to know earlier, a spec would answer it without
+loading anything. A `none` state, meaning we know there's no data, can arrive with the spec: 2022's refused archive shows as `failed` until then.
+Reasons can reach the agent, so they must not hint at what happened in the race.
+
 ## Per-year and per-race differences
 
-Settings resolve from general to specific: defaults, then year, then Grand Prix, then session. The file names parsers and the registry holds
-their code, so a new case means at most one parser and one entry:
+**Not built, and waiting for its first real case.** Today nothing needs one: the default parser handles every season, and a season with no data just
+fails to load, which `state: 'failed'` reports. Build this when a season or Grand Prix needs its own parser, or needs the app to behave differently.
+
+The spec is a tree that follows how F1 is organised: defaults at the root, then year, Grand Prix and session. Each level overrides the one above
+it. The file names parsers and the registry holds their code, so a new case means at most one parser and one entry:
 
 ```jsonc
 {
-  "defaults": { "timing": { "source": "f1-archive", "parser": "f1-feed-v1" } },
-  "years": { "2022": { "timing": { "source": "none", "reason": "Not available for this season" } } },
-  "meetings": { "1074": { "timing": { "coverage": "partial", "reason": "Limited timing" } } },
-  "sessions": { "9472": { "timing": { "archivePath": "…" } } }
+  "timing": { "source": "f1-archive", "parser": "f1-feed-v1" },
+  "years": {
+    "2021": {
+      "meetings": {
+        "1074": {
+          "name": "Belgian Grand Prix",
+          "timing": { "limited": "Limited timing" }
+        }
+      }
+    },
+    "2022": {
+      "timing": { "source": "none", "reason": "Not available for this season" }
+    },
+    "2024": {
+      "meetings": {
+        "1229": {
+          "name": "Bahrain Grand Prix",
+          "sessions": {
+            "9472": { "name": "Race", "timing": { "archivePath": "…" } }
+          }
+        }
+      }
+    }
+  }
 }
 ```
 
+- **Keys are F1's own:** `meetingKey` and `sessionKey`, which F1 TV reports for each session. `name` is only for reading the file, and the resolver ignores it.
 - **It holds what the source doesn't tell us or gets wrong:** refused archives, thin data, key mismatches and parser choice. HLS vs DASH, feed
   lists and play links come in each response, and copying them would create a second source of truth that goes stale.
-- **`coverage()` reports the result** per data kind (`full`, `partial` or `none`, with a reason), so a consumer knows what a session offers before
-  loading it. Reasons reach the agent, so they must not hint at what happened in the race.
-- **An audit script keeps it honest:** it walks every session, reports counts only, and flags anything that disagrees with the spec.
-- **New races inherit the defaults,** so the next Grand Prix works with no entry unless the audit finds a problem.
+- **An audit script keeps it honest:** it walks every session, reports counts only, and flags anything that disagrees with the spec, including keys
+  that match no session, such as a Grand Prix filed under the wrong year.
+- **New races inherit their year and the defaults,** so the next Grand Prix works with no entry unless the audit finds a problem.
 
 ## What we took from Herdr, and what we didn't
 
@@ -132,8 +174,9 @@ Deliberately different:
 1. Commit the 2021+ playback fix and the caption notes. *Done.*
 2. Add `src/host`, route every write through it, and enforce it in the layer test. *Done.*
 3. Move `VideoTile`, the timeline, the palette and the agent onto it, with tools built from it. *Done.*
-4. Add the spec, the parser registry and `coverage()`, so timing reports its real status.
-5. Build the audit script and fill in the real entries.
-6. Add captions as the next data kind, when the moments feature starts.
+4. Have timing report its real state. *Done.*
+5. Add the spec and parser registry, when the first real case needs them.
+6. Build the audit script, once timing is on screen and its findings matter.
+7. Add captions as the next data kind, when the moments feature starts.
 
 Also still to add: an error boundary per tile, so that a broken component can't take the app down.
