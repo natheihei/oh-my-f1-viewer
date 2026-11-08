@@ -13,6 +13,8 @@ export interface Live {
   streams: Record<string, StreamView>;
   /** The feed that's audible, if any. */
   audio: string | null;
+  /** Master level from 0 to 1. */
+  volume: number;
   clock: ClockState;
   layout: LayoutState;
   countdown: Countdown | null;
@@ -20,12 +22,13 @@ export interface Live {
 }
 
 export function read(): Live {
-  const { session, channels, streams, audioChannelId, clock } = useSession.getState();
+  const { session, channels, streams, audioChannelId, volume, clock } = useSession.getState();
   return {
     session,
     feeds: channels,
     streams,
     audio: audioChannelId,
+    volume,
     clock,
     layout: useLayout.getState(),
     countdown: useCountdown.getState().countdown,
