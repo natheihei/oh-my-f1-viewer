@@ -9,7 +9,7 @@ const { F1TV } = require('./f1tvapi');
 const { fetch: undiciFetch } = require('undici');
 const client = require('./f1tvClient');
 const { parseJwtPayload, redactUrl } = require('./util');
-const { pickMainChannelStream } = require('./f1tvCatalog');
+const { pickMainChannelStream, channelIdForPlay, getContentVideo } = require('./f1tvCatalog');
 
 const { F1TV_BASE, F1TV_PLATFORM, F1TV_LANG, F1TV_ENTITLEMENT, F1TV_GROUP } = client;
 
@@ -399,16 +399,18 @@ async function contentPlay(contentId, channelId) {
   }
   const contentIdNum = typeof contentId === 'string' ? parseInt(contentId, 10) : contentId;
   let requestChannelId = channelId;
-  if (requestChannelId == null || requestChannelId === '' || Number.isNaN(Number(requestChannelId))) {
-    try {
-      const cv = await f1Client.contentVideo(contentIdNum);
-      const main = pickMainChannelStream(cv?.metadata?.additionalStreams || []);
+  try {
+    const { container } = await getContentVideo(contentIdNum);
+    const additional = container?.metadata?.additionalStreams || [];
+    if (requestChannelId == null || requestChannelId === '' || Number.isNaN(Number(requestChannelId))) {
+      const main = pickMainChannelStream(additional);
       if (main?.channelId) {
         requestChannelId = main.channelId;
         console.log('[playback] main feed channelId from contentVideo:', requestChannelId);
       }
-    } catch (_) {}
-  }
+    }
+    requestChannelId = channelIdForPlay(additional, requestChannelId);
+  } catch (_) {}
   // Try platforms in parallel to keep round-trips low, but staged rather than all 6 at once
   const platformOrder = [
     F1TV.Platform.WEB_DASH,

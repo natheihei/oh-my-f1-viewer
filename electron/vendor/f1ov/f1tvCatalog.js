@@ -315,6 +315,16 @@ function pickMainChannelStream(additional) {
 }
 
 /**
+ * The channel to send to CONTENT/PLAY, or undefined for none. A feed whose play link has no channelId
+ * is the session's base stream, and through 2024 asking for it by number is a 404.
+ */
+function channelIdForPlay(additional, channelId) {
+  if (!Array.isArray(additional)) return channelId;
+  const stream = additional.find((s) => s.channelId && Number(s.channelId) === Number(channelId));
+  return stream?.playbackUrl && !/[?&]channelId=/.test(stream.playbackUrl) ? undefined : channelId;
+}
+
+/**
  * Content details for additional streams (onboard).
  */
 async function getContentVideo(contentId) {
@@ -377,4 +387,5 @@ module.exports = {
   getVodSessions,
   getContentVideo,
   pickMainChannelStream,
+  channelIdForPlay,
 };
