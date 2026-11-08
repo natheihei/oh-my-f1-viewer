@@ -66,6 +66,11 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
       properties: {
         contentId: { type: 'integer', description: 'contentId from list_sessions or list_live' },
         title: { type: 'string', description: 'Session title to show the user' },
+        fromStart: {
+          type: 'boolean',
+          description:
+            'For a live session: true starts at the beginning of the broadcast, otherwise it joins at the live edge. Replays always start at the beginning.',
+        },
       },
       required: ['contentId', 'title'],
       additionalProperties: false,
@@ -188,6 +193,11 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
     parameters: none,
   },
   {
+    name: 'seek_to_start',
+    description: 'Go back to the very beginning of the open session. It can never skip anything forward.',
+    parameters: none,
+  },
+  {
     name: 'seek_back',
     description:
       'Rewind every stream by some seconds. Going forward is not possible: the viewer does that on the timeline, so it cannot spoil anything.',
@@ -210,7 +220,7 @@ How to behave:
 - "Battle between X and Y", or two drivers together, means create_group. "Done with X and Y" means close_group.
 - Resolve nicknames and misspellings yourself: Norris, Noris, Lando, NOR are all the same driver. Lec is Leclerc. Max is Verstappen.
 - Any event uses list_events then list_sessions, which shows its past, live, and upcoming sessions. For "what's next" with no event named, use list_upcoming. For an upcoming session, offer wait_for_session.
-- If F1 TV has it live now, load_session it straight away.
+- If F1 TV has it live now, load_session it straight away. It joins at the live edge, unless the user asks for the start, or to watch from the beginning, which is fromStart true. For a session already open, that request is seek_to_start.
 - Do not guess content ids: always get them from a list tool in this conversation.
 
 Spoilers:

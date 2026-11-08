@@ -5,6 +5,7 @@
  */
 import shaka from 'shaka-player/dist/shaka-player.compiled-es2021';
 import type { Channel, PlaybackInfo } from '../../shared/api';
+import type { JoinPoint } from './join';
 
 export type StreamStatus = 'resolving' | 'loading' | 'syncing' | 'ready' | 'error';
 
@@ -29,6 +30,8 @@ const RETRY: shaka.extern.RetryParameters = {
 export const LIVE_EDGE_OFFSET_SEC = 8;
 /** How far from that target a join may land before it gets corrected. */
 const LIVE_EDGE_TOLERANCE_SEC = 2;
+/** The very start of a DVR window can already be gone by the time a seek lands. */
+export const LIVE_START_MARGIN_SEC = 3;
 const WALL_CLOCK_MIN_MS = 9.46e11; // after year 2000: HLS reports 1970-epoch garbage
 const SHAKA_LOAD_INTERRUPTED = 7000;
 const SHAKA_LOAD_DESTROYED = 7002;
@@ -58,10 +61,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 export interface StreamOptions {
-  /** Timeline position to start at, read when loading begins. Ignored for live streams. */
-  startAt: () => number | undefined;
-  /** Join at the live edge rather than the start of the DVR window. */
-  preferLiveEdge: () => boolean;
+  /** Where to start, read each time loading begins. */
+  join: () => JoinPoint;
+  /** The session's position, for joining at the clock. */
+  clockTime: () => number;
   /** Called on every status change. */
   onChange: () => void;
 }
@@ -118,9 +121,11 @@ export class StreamHandle {
       if (this.destroyed) return;
       if (!this.playback?.manifestUrl) throw new Error('F1 TV returned no stream for this channel.');
       this.setStatus('loading');
-      await this.attachAndLoad(this.playback);
+      const join = this.options.join();
+      await this.attachAndLoad(this.playback, join === 'clock' ? this.options.clockTime() : undefined);
       if (this.destroyed) return;
-      if (this.isLiveNow() && this.options.preferLiveEdge()) await this.seekToLiveEdge();
+      if (this.isLiveNow() && join === 'live-edge') await this.settleAt((r) => Math.max(r.start, r.end - LIVE_EDGE_OFFSET_SEC));
+      if (this.isLiveNow() && join === 'live-start') await this.settleAt((r) => r.start + LIVE_START_MARGIN_SEC);
       this.setStatus('syncing');
     } catch (e) {
       const code = (e as { code?: number })?.code;
@@ -151,7 +156,7 @@ export class StreamHandle {
     if (!this.destroyed) await this.start();
   }
 
-  private async attachAndLoad(playback: PlaybackInfo): Promise<void> {
+  private async attachAndLoad(playback: PlaybackInfo, startAt: number | undefined): Promise<void> {
     if (!polyfilled) {
       shaka.polyfill.installAll();
       polyfilled = true;
@@ -178,7 +183,6 @@ export class StreamHandle {
       })();
     });
 
-    const startAt = this.options.preferLiveEdge() ? undefined : this.options.startAt();
     try {
       await this.load(player, playback.manifestUrl, playback.licenseUrl, playback.drmToken, startAt);
     } catch (e) {
@@ -272,14 +276,14 @@ export class StreamHandle {
    * one seek to an unbuffered position can leave a black paused frame, so this keeps trying until
    * playback really advances.
    */
-  async seekToLiveEdge(): Promise<void> {
+  private async settleAt(targetIn: (range: { start: number; end: number }) => number): Promise<void> {
     const deadline = Date.now() + 10_000;
     let lastTime = -1;
     let progressTicks = 0;
     while (Date.now() < deadline && !this.destroyed) {
       const range = this.seekRange();
       if (range) {
-        const target = Math.max(range.start, range.end - LIVE_EDGE_OFFSET_SEC);
+        const target = targetIn(range);
         if (!Number.isFinite(this.video.currentTime) || Math.abs(this.video.currentTime - target) > LIVE_EDGE_TOLERANCE_SEC) {
           this.video.currentTime = target;
         }

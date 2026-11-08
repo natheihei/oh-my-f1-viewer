@@ -5,7 +5,8 @@
  */
 import { create } from 'zustand';
 import type { Channel, SessionInfo } from '../../shared/api';
-import { LIVE_EDGE_OFFSET_SEC, StreamHandle, type StreamStatus } from './stream';
+import { joinPoint } from './join';
+import { LIVE_EDGE_OFFSET_SEC, LIVE_START_MARGIN_SEC, StreamHandle, type StreamStatus } from './stream';
 import { isStalled, pickReference, syncTick, type SyncEntry } from './syncEngine';
 import { createLiveTiming, createReplayTiming, type TimingSource } from './timing/timingSource';
 
@@ -84,7 +85,10 @@ class SessionRuntime {
   private readonly live: boolean;
   private startQueue: Promise<void> = Promise.resolve();
 
-  constructor(readonly session: SessionInfo) {
+  constructor(
+    readonly session: SessionInfo,
+    private fromStart: boolean,
+  ) {
     this.live = session.status === 'live';
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.timing = this.live ? createLiveTiming(session) : createReplayTiming(session);
@@ -106,8 +110,8 @@ class SessionRuntime {
     const channel = this.channelOf(channelId);
     if (!channel) return null;
     const handle = new StreamHandle(channel, {
-      startAt: () => (this.started ? this.now() : undefined),
-      preferLiveEdge: () => this.live && !this.referenceId,
+      join: () => joinPoint({ live: this.live, fromStart: this.fromStart, started: this.started }),
+      clockTime: () => this.now(),
       onChange: () => this.publishStreams(),
     });
     this.handles.set(channelId, handle);
@@ -199,6 +203,17 @@ class SessionRuntime {
     this.tick();
   }
 
+  /** Back to the start of the broadcast, or the start of the seekable window when live. */
+  seekToStart(): void {
+    if (!this.started) {
+      // Nothing is playing yet, so there's no range to seek in: start there instead.
+      this.fromStart = true;
+      return;
+    }
+    const { start, end } = useSession.getState().clock;
+    this.seek(this.live && end > start ? start + LIVE_START_MARGIN_SEC : start);
+  }
+
   goLive(): void {
     const { end } = useSession.getState().clock;
     if (end > 0) this.seek(end - LIVE_EDGE_OFFSET_SEC);
@@ -282,11 +297,11 @@ class SessionRuntime {
 let runtime: SessionRuntime | null = null;
 
 /** Opens a session: resolves its channels. Streams start only when something acquires them. */
-export async function openSession(session: SessionInfo): Promise<Channel[]> {
+export async function openSession(session: SessionInfo, options: { fromStart?: boolean } = {}): Promise<Channel[]> {
   closeSession();
   const channels = await window.f1a.f1tv.channels(session.contentId);
   useSession.setState({ ...INITIAL, session, channels });
-  runtime = new SessionRuntime(session);
+  runtime = new SessionRuntime(session, options.fromStart ?? false);
   return channels;
 }
 
@@ -306,6 +321,7 @@ export const sessionControl = {
   seekBy: (deltaSec: number) => {
     if (runtime) runtime.seek(runtime.now() + deltaSec);
   },
+  seekToStart: () => runtime?.seekToStart(),
   goLive: () => runtime?.goLive(),
   setAudio: (channelId: string | null) => runtime?.setAudio(channelId),
   toggle: () => {

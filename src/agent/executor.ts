@@ -174,7 +174,7 @@ async function currentStatus(session: SessionInfo): Promise<SessionInfo> {
   return live.some((i) => i.contentId === session.contentId) ? { ...session, status: 'live' } : session;
 }
 
-async function loadSession(contentId: number, title: string): Promise<unknown> {
+async function loadSession(contentId: number, title: string, fromStart: boolean): Promise<unknown> {
   const year = Number(title.match(/\b(20\d{2})\b/)?.[1]) || new Date().getUTCFullYear();
   const known = knownSessions.get(contentId);
   const session = await currentStatus(
@@ -195,9 +195,10 @@ async function loadSession(contentId: number, title: string): Promise<unknown> {
   if (session.status === 'upcoming') {
     throw new Error(`${session.title} hasn't started. Offer wait_for_session instead.`);
   }
-  const channels = await openViewingSession(session);
+  const channels = await openViewingSession(session, { fromStart });
   return {
     opened: session.title,
+    playingFrom: session.status === 'live' && !fromStart ? 'live edge' : 'start',
     streams: channels.map((c) => c.label),
   };
 }
@@ -238,7 +239,7 @@ export async function runTool(name: string, args: Record<string, unknown>): Prom
     case 'list_upcoming':
       return JSON.stringify(await listUpcoming());
     case 'load_session':
-      return JSON.stringify(await loadSession(Number(args.contentId), String(args.title)));
+      return JSON.stringify(await loadSession(Number(args.contentId), String(args.title), args.fromStart === true));
     case 'wait_for_session': {
       const session = knownSessions.get(Number(args.contentId));
       if (!session) throw new Error('Unknown contentId. Get it from list_upcoming or list_sessions first.');
@@ -313,8 +314,13 @@ export async function runTool(name: string, args: Record<string, unknown>): Prom
       needSession();
       sessionControl.pause();
       return 'Paused.';
+    case 'seek_to_start':
+      needSession();
+      sessionControl.seekToStart();
+      return 'Back at the start.';
     case 'seek_back': {
       needSession();
+      if (useSession.getState().clock.end <= 0) throw new Error('Nothing is playing yet, so there is nothing to rewind.');
       const seconds = Math.abs(Number(args.seconds));
       if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('seconds must be positive.');
       sessionControl.seekBy(-seconds);

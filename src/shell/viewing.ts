@@ -29,10 +29,10 @@ export function mainChannel(channels: Channel[]): Channel | undefined {
   return channels.find((c) => c.kind === 'main') ?? channels[0];
 }
 
-export async function openViewingSession(session: SessionInfo): Promise<Channel[]> {
+export async function openViewingSession(session: SessionInfo, options: { fromStart?: boolean } = {}): Promise<Channel[]> {
   stopCountdown();
   layout.clear();
-  const channels = await openSession(session);
+  const channels = await openSession(session, options);
   const main = mainChannel(channels);
   if (main) layout.add(videoSpec(main.id, main.label));
   return channels;

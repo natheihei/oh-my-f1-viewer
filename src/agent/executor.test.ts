@@ -71,6 +71,7 @@ describe('agent tools', () => {
   it('cannot move playback forward or read race state until spoiler approval exists', () => {
     const names = AGENT_TOOLS.map((t) => t.name);
     expect(names).toContain('seek_back');
+    expect(names).toContain('seek_to_start');
     for (const banned of ['seek', 'seek_forward', 'seek_to_lap', 'go_live', 'get_race_state', 'get_standings']) {
       expect(names).not.toContain(banned);
     }
@@ -134,6 +135,21 @@ describe('upcoming sessions', () => {
     f1tv.liveNow.mockResolvedValue([live(1)]);
     await runTool('load_session', { contentId: 1, title: 'Race' });
     expect(useSession.getState().session).toMatchObject({ contentId: 1, status: 'live' });
+  });
+
+  it('reports where a live session starts playing', async () => {
+    f1tv.sessions.mockResolvedValue([session(5, 'Live race', 'live')]);
+    await runTool('list_sessions', { pageId: 1, year: 2026 });
+    expect(JSON.parse(await runTool('load_session', { contentId: 5, title: 'x' })).playingFrom).toBe('live edge');
+    expect(JSON.parse(await runTool('load_session', { contentId: 5, title: 'x', fromStart: true })).playingFrom).toBe('start');
+  });
+
+  it('refuses to rewind before anything has played', async () => {
+    f1tv.sessions.mockResolvedValue([session(5, 'Live race', 'live')]);
+    await runTool('list_sessions', { pageId: 1, year: 2026 });
+    await runTool('load_session', { contentId: 5, title: 'x' });
+    await expect(runTool('seek_back', { seconds: 30 })).rejects.toThrow(/Nothing is playing/);
+    await expect(runTool('seek_to_start', {})).resolves.toMatch(/start/);
   });
 
   it('wait_for_session needs a session it has seen, and only an upcoming one', async () => {
