@@ -48,6 +48,8 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
 - **Mouse edits inside groups** are only lightly tested. Dragging a tile between a group and the top level isn't supported: ask the
   agent instead.
+- **No timing while behind the join point of a live session.** Live timing only has records from when the app connected, so watching a
+  live race from its start shows no timing until the video catches up with that moment. Nothing displays timing yet.
 - **Tall windows waste space.** Tiles are sized without regard to 16:9, so a nearly square window shows large black bars.
 
 ## Deferred, by design
