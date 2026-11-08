@@ -65,5 +65,6 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
 
 - Race-state tools and forward seek for the agent, which wait on spoiler approval.
 - Charts and agent-created dynamic views.
+- Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows and macOS, including the VMP signing they need.
 - Saved layouts, pop-out windows, translations and auto-update.
