@@ -1,12 +1,12 @@
 /**
  * What opening a session means for the whole app: data opens it, the layout starts with the main
- * broadcast. Also owns the countdown to an upcoming session. Agent tools and commands both go
- * through here instead of each coordinating the layers themselves.
+ * broadcast. Also owns the countdown to an upcoming session.
  */
 import { create } from 'zustand';
 import type { Channel, SessionInfo } from '../../shared/api';
-import { videoSpec } from '../components/VideoTile';
-import { closeSession, openSession, useSession } from '../data/session';
+import { catalog } from '../data/catalog';
+import { closeSession, openSession } from '../data/session';
+import type { ComponentSpec } from '../layout/model';
 import { layout } from '../layout/store';
 
 export interface Countdown {
@@ -23,6 +23,11 @@ function stopCountdown(): void {
   if (countdownTimer != null) clearInterval(countdownTimer);
   countdownTimer = null;
   useCountdown.setState({ countdown: null });
+}
+
+/** A tile showing one feed. The layout only knows the component's name, not what it is. */
+export function videoSpec(channelId: string, label: string): ComponentSpec {
+  return { type: 'video', key: channelId, label, props: { feed: channelId } };
 }
 
 export function mainChannel(channels: Channel[]): Channel | undefined {
@@ -60,14 +65,10 @@ export function startCountdown(session: SessionInfo, onLive: (session: SessionIn
   countdownTimer = setInterval(() => {
     void (async () => {
       if (Date.now() < startMs - POLL_WINDOW_MS) return;
-      const items = await window.f1a.f1tv.liveNow().catch(() => []);
+      const items = await catalog.liveNow().catch(() => []);
       if (!items.some((i) => i.contentId === session.contentId)) return;
       stopCountdown();
       onLive({ ...session, status: 'live' });
     })();
   }, POLL_INTERVAL_MS);
-}
-
-export function isSessionOpen(): boolean {
-  return useSession.getState().session != null;
 }

@@ -1,7 +1,7 @@
 /**
- * The agent: Sign in with ChatGPT through pi-ai, and a short tool loop. The model only has the
- * tools in shared/tools.ts. They run in the renderer, which owns layout and playback, so each call
- * goes over IPC and its result comes back here.
+ * The agent: Sign in with ChatGPT through pi-ai, and a short tool loop. It holds the credentials,
+ * so it lives here, but its tools run in the renderer, which owns layout and playback. The renderer
+ * sends their definitions with each message, each call goes over IPC, and its result comes back here.
  */
 import { shell } from 'electron';
 import { randomUUID } from 'node:crypto';
@@ -13,8 +13,8 @@ import type {
   Tool,
   ToolCall,
 } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
-import type { AgentEvent, AgentToolCall, AgentToolResult, AiStatus } from '../../shared/api';
-import { AGENT_TOOLS, SYSTEM_PROMPT } from '../../shared/tools';
+import type { AgentEvent, AgentToolCall, AgentToolDefinition, AgentToolResult, AiStatus } from '../../shared/api';
+import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
 import { createFileCredentialStore, installId } from './credentials';
 
@@ -133,7 +133,7 @@ class Agent {
     });
   }
 
-  async send(text: string, appState: string): Promise<void> {
+  async send(text: string, appState: string, definitions: AgentToolDefinition[]): Promise<void> {
     this.cancel();
     const abort = new AbortController();
     this.abort = abort;
@@ -146,7 +146,7 @@ class Agent {
       const model = models.getModel(PROVIDER, DEFAULT_MODEL);
       if (!model) throw new Error(`Model ${DEFAULT_MODEL} is not available.`);
 
-      const tools = AGENT_TOOLS as unknown as Tool[];
+      const tools = definitions as unknown as Tool[];
       this.history.push({
         role: 'user',
         content: `<app_state>\n${appState}\n</app_state>\n\n${text}`,

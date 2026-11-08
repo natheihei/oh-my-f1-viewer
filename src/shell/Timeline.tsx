@@ -1,6 +1,6 @@
 /** The session's transport, fixed at the bottom. It drives the clock, so it controls every stream. */
 import { useEffect, useRef, useState } from 'react';
-import { sessionControl, useSession } from '../data/session';
+import { host, useLive } from '../host';
 
 function formatTime(sec: number): string {
   if (!Number.isFinite(sec)) return '--:--:--';
@@ -13,8 +13,8 @@ function formatTime(sec: number): string {
 const SEEK_STEP_SEC = 10;
 
 export function Timeline() {
-  const session = useSession((s) => s.session);
-  const clock = useSession((s) => s.clock);
+  const session = useLive((s) => s.session);
+  const clock = useLive((s) => s.clock);
   const barRef = useRef<HTMLDivElement | null>(null);
   const [dragTime, setDragTime] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -31,11 +31,11 @@ export function Timeline() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       if (e.code === 'Space') {
         e.preventDefault();
-        sessionControl.toggle();
+        host.playback.toggle();
       } else if (e.key === 'ArrowLeft') {
-        sessionControl.seekBy(-SEEK_STEP_SEC);
+        host.playback.seekBy({ seconds: -SEEK_STEP_SEC });
       } else if (e.key === 'ArrowRight') {
-        sessionControl.seekBy(SEEK_STEP_SEC);
+        host.playback.seekBy({ seconds: SEEK_STEP_SEC });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -62,7 +62,7 @@ export function Timeline() {
         className="timeline-button"
         data-testid="timeline-play"
         aria-label={clock.playing ? 'Pause' : 'Play'}
-        onClick={() => sessionControl.toggle()}
+        onClick={() => host.playback.toggle()}
       >
         {clock.playing ? '❚❚' : '▶'}
       </button>
@@ -79,7 +79,7 @@ export function Timeline() {
           if (dragTime != null) setDragTime(timeAt(e.clientX));
         }}
         onPointerUp={(e) => {
-          if (dragTime != null) sessionControl.seek(timeAt(e.clientX));
+          if (dragTime != null) host.playback.seek({ time: timeAt(e.clientX) });
           setDragTime(null);
         }}
         onPointerLeave={() => setHoverTime(null)}
@@ -102,7 +102,7 @@ export function Timeline() {
         <button
           type="button"
           className={`timeline-live ${clock.atLiveEdge ? 'timeline-live-on' : ''}`}
-          onClick={() => sessionControl.goLive()}
+          onClick={() => host.playback.goLive()}
         >
           ● LIVE
         </button>

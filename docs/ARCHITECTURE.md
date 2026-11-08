@@ -2,11 +2,12 @@
 
 ```
 ┌ Renderer ─────────────────────────────────────────────────────┐
+│ Components  what a tile can show: video for now               │
 │ Shell       palette · timeline · countdown · / commands       │
-│ Agent       runs tool calls against the layers below          │
-│ Components  registry of what a tile can show: video for now   │
-│ Layout      layout tree → solver → GridStack placeholders     │
+│ Agent       tools built on the host · gates                   │
+│ ── Host ──  the only thing the three above may use            │
 │ Data        session · clock · synced streams · timing         │
+│ Layout      layout tree → solver → GridStack placeholders     │
 └─────────────┬─────────────────────────────────────────────────┘
               │ typed IPC (shared/api.ts). Tokens never cross it.
 ┌ Main ───────┴─────────────────────────────────────────────────┐
@@ -15,8 +16,20 @@
 └───────────────────────────────────────────────────────────────┘
 ```
 
-Layers only depend downward, and `tests/layers.test.ts` fails if that stops being true. The layout knows nothing about video:
-a tile just names a component, so charts can be added by registering one in `src/components/registry.ts`.
+`tests/layers.test.ts` fails if anything reaches around the host, or if anything but the data layer talks to the main process. The layout knows
+nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`.
+
+[DESIGN.md](DESIGN.md) has the direction this is heading in, and why.
+
+## Host (`src/host`)
+
+Everything a component, the shell or the agent can do goes through here:
+
+- **Reads:** `useLive(selector)` re-renders only when the selected value changes, and `read()` gives the same state once, outside React.
+- **Writes and queries:** typed functions such as `host.playback.seekBy({ seconds: -10 })`. Each declares its description and argument schema, and
+  none of them checks who's calling. Policy, such as spoiler approval, belongs to the caller.
+- **Primitives:** `<Video feed={id} />` shows a feed, and `<Grid>` draws the layout. Mounting a `<Video>` is what asks for the stream, the one
+  thing that isn't a write function, because a stream's life follows the tile showing it.
 
 ## Data layer (`src/data`)
 
@@ -69,20 +82,27 @@ tree changes.
 ## Commands and agent tools are separate
 
 - **`/` commands** (`src/shell/commands.ts`) are for the user: account actions.
-- **Agent tools** (`shared/tools.ts`) are for the model, and run in `src/agent/executor.ts`. Users never invoke them.
+- **Agent tools** (`src/agent/tools.ts`) are for the model. Users never invoke them.
 
-Both call the same services underneath, but neither can call the other.
+Both use the host, but neither can call the other.
 
 ## Agent
 
 `electron/agent/agent.ts` is a short tool loop on [pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai), using OpenAI's
-Sign in with ChatGPT plan usage. Tools run in the renderer because it owns layout and playback, so each call goes over IPC.
+Sign in with ChatGPT plan usage. It lives in main because it holds the credentials. Tools run in the renderer because it owns layout and
+playback, so their definitions come with each message and each call goes over IPC.
+
+`src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the
+function's schema, and one with its own must type-check against the function's through `adapt`, so a host change that breaks a tool fails
+to compile. Only what's specific to the agent lives there: names, model-facing wording, matching names like "Hamilton" to feeds, and gates
+that refuse a call.
 
 - **Why not `codex app-server`.** It keeps built-in tools even with every feature flag off. In testing it still offered
   `apply_patch`, sub-agents and image generation, and tried to read `/etc/hostname` with `view_image`. With pi-ai, the model can
   only call what we define.
-- **Spoilers.** There is deliberately no forward seek and no race-state tool until there is a spoiler approval flow. Tool results
-  and `app_state` hold nothing about how a session turned out. Timing data exists in the data layer, but the agent can't read it.
+- **Spoilers.** There is deliberately no forward seek and no race-state tool until there is a spoiler approval gate, which will sit in the
+  agent's tools, not the host. Tool results and `app_state` hold nothing about how a session turned out. The host exposes timing, but no tool
+  reads it.
 - **Model.** `gpt-6-luna` by default, the fastest tested. Override with `F1A_MODEL`.
 
 ## Sign-in

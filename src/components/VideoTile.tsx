@@ -1,32 +1,13 @@
-/** A video stream in the layout. The element itself belongs to the data layer. */
-import { useEffect, useRef, useState } from 'react';
-import { sessionControl, useSession } from '../data/session';
-import type { ComponentSpec } from '../layout/model';
+/** A video feed in the layout. The stream itself belongs to the host. */
+import { useEffect, useState } from 'react';
+import { defineComponent, useLive, Video } from '../host';
 
-export function videoSpec(channelId: string, label: string): ComponentSpec {
-  return { type: 'video', key: channelId, label, props: { channelId } };
-}
-
-export function VideoTile({ spec }: { spec: ComponentSpec }) {
-  const channelId = String(spec.props.channelId);
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const view = useSession((s) => s.streams[channelId]);
-  const audible = useSession((s) => s.audioChannelId === channelId);
+function VideoTile({ props, label }: { props: { feed: string }; label: string }) {
+  const { feed } = props;
+  const view = useLive((s) => s.streams[feed]);
+  const audible = useLive((s) => s.audio === feed);
   // Once shown, a tile stays visible through seeks: its status line says when it is catching up.
   const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    const handle = sessionControl.acquire(channelId);
-    const host = hostRef.current;
-    if (!handle || !host) return;
-    host.appendChild(handle.video);
-    const observer = new ResizeObserver(([entry]) => handle.setDisplayHeight(entry.contentRect.height));
-    observer.observe(host);
-    return () => {
-      observer.disconnect();
-      sessionControl.release(channelId);
-    };
-  }, [channelId]);
 
   useEffect(() => {
     if (view?.status === 'ready') setRevealed(true);
@@ -46,14 +27,14 @@ export function VideoTile({ spec }: { spec: ComponentSpec }) {
 
   return (
     <div className="tile" data-status={status}>
-      <div ref={hostRef} className={`tile-video ${revealed ? '' : 'tile-video-hidden'}`} />
+      <Video feed={feed} className={`tile-video ${revealed ? '' : 'tile-video-hidden'}`} />
       <div className="tile-label">
-        {spec.label}
+        {label}
         {audible ? <span className="tile-audio"> ♪</span> : null}
       </div>
       {statusText && (status === 'error' || !revealed) ? (
         <div className={`tile-status ${status === 'error' ? 'tile-status-error' : ''}`} data-testid="tile-status">
-          <span className="tile-status-name">{spec.label}</span> {statusText}
+          <span className="tile-status-name">{label}</span> {statusText}
         </div>
       ) : statusText ? (
         <div className="tile-resync">{statusText}</div>
@@ -61,3 +42,5 @@ export function VideoTile({ spec }: { spec: ComponentSpec }) {
     </div>
   );
 }
+
+export default defineComponent({ name: 'video', View: VideoTile });

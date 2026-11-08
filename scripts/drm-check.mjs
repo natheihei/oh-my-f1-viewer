@@ -24,14 +24,14 @@ const opened = await page.evaluate(
     const event = events.find((e) => re.test(e.name) || re.test(e.shortName));
     const sessions = await window.f1a.f1tv.sessions(event.pageId, YEAR);
     const race = sessions.find((s) => s.type === 'race' && s.series === 'FORMULA 1') ?? sessions.find((s) => s.type === 'race');
-    const viewing = await import('/src/shell/viewing.ts');
+    const viewing = await import('/src/host/viewing.ts');
     const channels = await viewing.openViewingSession(race);
     window.modules = {
       viewing,
       session: await import('/src/data/session.ts'),
       timing: await import('/src/data/timing/timingSource.ts'),
       layout: await import('/src/layout/store.ts'),
-      video: await import('/src/components/VideoTile.tsx'),
+      video: await import('/src/host/viewing.ts'),
     };
     return {
       seasons: seasons.length,

@@ -9,10 +9,10 @@ const { page, stop } = await startApp(5194);
 await page.waitForTimeout(1500);
 await page.evaluate(async () => {
   window.m = {
-    viewing: await import('/src/shell/viewing.ts'),
+    viewing: await import('/src/host/viewing.ts'),
     session: await import('/src/data/session.ts'),
     layout: await import('/src/layout/store.ts'),
-    video: await import('/src/components/VideoTile.tsx'),
+    video: await import('/src/host/viewing.ts'),
   };
 });
 const race = await page.evaluate(async () => {

@@ -2,6 +2,7 @@
  * `/` commands: account actions the user runs themselves. A separate set from the agent's tools
  * (shared/tools.ts): neither can call the other, and anything to do with viewing goes to the agent.
  */
+import { host } from '../host';
 import { palette } from './palette';
 
 export interface SlashCommand {
@@ -17,10 +18,7 @@ function errorText(e: unknown): string {
 
 /** Tells the user what still needs signing in, or that they can start. */
 export async function reportReadiness(): Promise<void> {
-  const [f1, ai] = await Promise.all([
-    window.f1a.f1tv.status().catch(() => ({ signedIn: false, ready: false })),
-    window.f1a.ai.status().catch(() => ({ signedIn: false, model: null })),
-  ]);
+  const { f1tv: f1, chatgpt: ai } = await host.account.status();
   const missing: string[] = [];
   if (!f1.signedIn) missing.push('/login-f1tv');
   if (!ai.signedIn) missing.push('/login-chatgpt');
@@ -38,7 +36,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       palette.push('system', 'Complete F1 TV sign-in in the window that just opened.');
       try {
-        await window.f1a.f1tv.login();
+        await host.account.login('f1tv');
         palette.push('system', 'F1 TV signed in.');
         await reportReadiness();
       } catch (e) {
@@ -52,7 +50,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       palette.push('system', 'Complete ChatGPT sign-in in your browser.');
       try {
-        await window.f1a.ai.login();
+        await host.account.login('chatgpt');
         palette.push('system', 'ChatGPT signed in.');
         await reportReadiness();
       } catch (e) {
@@ -64,7 +62,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: '/logout-f1tv',
     description: 'Sign out of F1 TV',
     async run() {
-      await window.f1a.f1tv.logout();
+      await host.account.logout('f1tv');
       palette.push('system', 'F1 TV signed out.');
     },
   },
@@ -72,7 +70,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: '/logout-chatgpt',
     description: 'Sign out of ChatGPT',
     async run() {
-      await window.f1a.ai.logout();
+      await host.account.logout('chatgpt');
       palette.push('system', 'ChatGPT signed out.');
     },
   },
