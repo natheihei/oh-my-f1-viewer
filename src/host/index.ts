@@ -78,6 +78,21 @@ const audio = {
     },
     ({ feed }) => sessionControl.setAudio(feed),
   ),
+  setVolume: write(
+    {
+      description: 'Set the master volume, from 0 to 1. The audible feed stays the same.',
+      args: Type.Object({ volume: Type.Number({ minimum: 0, maximum: 1 }) }),
+    },
+    ({ volume }) => sessionControl.setVolume(volume),
+  ),
+  changeVolumeBy: write(
+    { description: 'Raise or lower the master volume: negative lowers it.', args: Type.Object({ amount: Type.Number() }) },
+    ({ amount }) => sessionControl.changeVolumeBy(amount),
+  ),
+  toggleMute: write(
+    { description: "Silence the master volume, or restore it. With no audible feed, make the default feed audible." },
+    () => sessionControl.toggleMute(),
+  ),
 };
 
 const catalogOps = {

@@ -10,6 +10,8 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
   group, then closing the group.
 - Four streams in sync, with the widest spread seen once settled under 0.07s, on the 2024 Mexico, 2025 Saudi Arabia, 2025 Mexico and 2026 Mexico races. None of these replays use DRM.
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
+- The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
+  back from the video elements, not checked by ear.
 - Timing lining up with video at lights out on the 2026 Mexico, 2024 Mexico and 2025 Saudi Arabia races.
 - The agent refusing to skip forward or name a winner when asked directly.
 - The production build, including its content security policy.

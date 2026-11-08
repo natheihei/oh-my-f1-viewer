@@ -1,5 +1,5 @@
 // Runs the production build (its CSP, file:// origin, no dev server) through the parts of the shell
-// the journey doesn't reach: countdown, timeline mouse and keyboard. Needs both sign-ins.
+// the journey doesn't reach: countdown, timeline mouse and keyboard, volume. Needs both sign-ins.
 // Usage: npm run build && node scripts/prod-check.mjs [screenshot-dir]
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -101,6 +101,31 @@ check('Right arrow steps forward 10s', Math.abs(stepped - pausedAt - 10) < 1.5, 
 await page.keyboard.press('Space');
 await page.waitForTimeout(800);
 check('Space resumes', !(await video.evaluate((v) => v.paused)));
+
+// Volume
+const volumeOf = () => video.evaluate((v) => v.volume);
+const slider = await page.locator('[data-testid=timeline-volume]').boundingBox();
+await page.mouse.click(slider.x + slider.width * 0.5, slider.y + slider.height / 2);
+await page.waitForTimeout(200);
+const halfway = await volumeOf();
+check('the slider sets the volume', Math.abs(halfway - 0.5) < 0.05, `at ${halfway}`);
+const audibleBefore = await video.evaluate((v) => v.muted);
+await page.keyboard.press('ArrowUp');
+await page.waitForTimeout(100);
+check('Up arrow raises the volume after using the slider', Math.abs((await volumeOf()) - halfway - 0.05) < 0.001);
+await page.keyboard.press('m');
+await page.waitForTimeout(100);
+check('M mutes', (await volumeOf()) === 0);
+check('muting leaves the audible feed alone', (await video.evaluate((v) => v.muted)) === audibleBefore);
+await page.locator('[data-testid=timeline-mute]').click();
+await page.waitForTimeout(100);
+check('the icon restores the volume', Math.abs((await volumeOf()) - halfway - 0.05) < 0.001);
+const beforeSpace = await video.evaluate((v) => v.paused);
+await page.keyboard.press('Space');
+await page.waitForTimeout(500);
+check('Space still toggles play after the volume control', (await video.evaluate((v) => v.paused)) !== beforeSpace);
+await page.keyboard.press('Space');
+await page.waitForTimeout(500);
 
 // Palette
 const wasOpen = await palette.isVisible();
