@@ -46,7 +46,7 @@ await page.waitForSelector('[data-testid=palette]');
 await page.waitForTimeout(2000);
 
 // Countdown
-await say('Count down to the next practice session in Las Vegas, that is the one I want.');
+await say('Count down to the next practice session, that is the one I want.');
 await page.waitForTimeout(1500);
 const countdown = page.locator('[data-testid=countdown]');
 check('countdown shows', await countdown.isVisible());

@@ -26,7 +26,7 @@ const api: F1aApi = {
     sessions: (eventPageId, year) => invoke('f1tv:sessions', eventPageId, year),
     channels: (contentId) => invoke('f1tv:channels', contentId),
     liveNow: () => invoke('f1tv:liveNow'),
-    schedule: (year) => invoke('f1tv:schedule', year),
+    upcoming: () => invoke('f1tv:upcoming'),
     play: (contentId, channelId) => invoke('f1tv:play', contentId, channelId),
     lastLicenseError: (streamKey) => invoke('f1tv:lastLicenseError', streamKey),
   },

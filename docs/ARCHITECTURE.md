@@ -93,8 +93,14 @@ Sign in with ChatGPT plan usage. Tools run in the renderer because it owns layou
 - Credentials are encrypted with the OS keyring. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
 
-## Upcoming sessions
+## What sessions exist
 
-F1 TV only lists an event's sessions shortly before they run, and F1 OpenViewer has no schedule at all. So times come from OpenF1,
-and F1 TV's live-now list decides when playback can actually start. OpenF1 closes its free API during live sessions, so the last
-good schedule is saved to disk.
+F1 TV is the only source for what exists and when, past, live and future (`electron/f1tv/catalog.ts`). It keeps sessions in two
+places on an event page, and the catalog combines them:
+
+- An `interactive_schedule` section, on events from 2024 on, holds the whole weekend, including sessions that haven't happened. Each
+  has a `contentId` ahead of time, and its state in `contentSubtype`: `LIVE_EVENT` for upcoming, `LIVE` and `REPLAY`.
+- Replay trays exist back to 2018, and also carry support series and earlier years of the same Grand Prix.
+
+Countdowns wait for their `contentId` to appear in F1 TV's live list. Matching on the event would also fire for a pre-race show going
+on air first, and the live list's `sessionKey` can be empty.

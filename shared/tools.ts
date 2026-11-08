@@ -36,7 +36,7 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'list_sessions',
     description:
-      'List the watchable sessions of one event: practice, qualifying, sprint, race, and shows. Future sessions are not listed here; use list_upcoming for those.',
+      'List all sessions of one event: practice, qualifying, sprint, race, and shows, each with its status: replay, live, or upcoming.',
     parameters: {
       type: 'object',
       properties: {
@@ -54,13 +54,13 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
   },
   {
     name: 'list_upcoming',
-    description: 'List sessions that have not started yet this season, with UTC start times.',
+    description: 'List the next sessions that have not started yet, across events, with UTC start times.',
     parameters: none,
   },
   {
     name: 'load_session',
     description:
-      'Open a session and start the main broadcast. Replaces whatever is open. Only call this once the user has identified one specific session; ask them if it is ambiguous.',
+      'Open a replay or live session and start the main broadcast. Replaces whatever is open. Only call this once the user has identified one specific session; ask them if it is ambiguous. Upcoming sessions use wait_for_session.',
     parameters: {
       type: 'object',
       properties: {
@@ -74,16 +74,13 @@ export const AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'wait_for_session',
     description:
-      'Show a countdown to an upcoming session from list_upcoming, once the user has chosen it. It starts by itself when F1 TV goes live.',
+      'Show a countdown to one upcoming session, once the user has chosen it. It starts by itself when F1 TV goes live.',
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'For example "Las Vegas Grand Prix - Practice 1"' },
-        startMs: { type: 'integer', description: 'Start time in Unix milliseconds' },
-        meetingKey: { type: 'integer' },
-        sessionKey: { type: 'integer' },
+        contentId: { type: 'integer', description: 'contentId of the session, from list_sessions or list_upcoming' },
       },
-      required: ['title', 'startMs'],
+      required: ['contentId'],
       additionalProperties: false,
     },
   },
@@ -212,7 +209,7 @@ How to behave:
 - A driver name alone means show their onboard.
 - "Battle between X and Y", or two drivers together, means create_group. "Done with X and Y" means close_group.
 - Resolve nicknames and misspellings yourself: Norris, Noris, Lando, NOR are all the same driver. Lec is Leclerc. Max is Verstappen.
-- Past events use list_events then list_sessions. If nothing is listed for a session that has not happened yet, check list_upcoming and offer wait_for_session.
+- Any event uses list_events then list_sessions, which shows its past, live, and upcoming sessions. For "what's next" with no event named, use list_upcoming. For an upcoming session, offer wait_for_session.
 - If F1 TV has it live now, load_session it straight away.
 - Do not guess content ids: always get them from a list tool in this conversation.
 

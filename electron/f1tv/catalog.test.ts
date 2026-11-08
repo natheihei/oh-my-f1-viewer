@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({}));
 
-const { classifySessionType, fetchSchedule, parseChannels, parseEventsPage, parseSessionsPage } = await import('./catalog');
-const { mkdtempSync, readFileSync } = await import('node:fs');
-const { tmpdir } = await import('node:os');
-const path = await import('node:path');
+const { classifySessionType, eventsAhead, parseChannels, parseEventsPage, parseSessionsPage } = await import('./catalog');
 
 const stream = (channelId: number, title: string, extra: Record<string, unknown> = {}) => ({
   channelId,
@@ -125,29 +122,85 @@ describe('parseEventsPage', () => {
   });
 });
 
-describe('fetchSchedule', () => {
-  const row = { meeting_key: 1, session_key: 2, country_name: 'United States', location: 'Las Vegas', session_name: 'Practice 1', session_type: 'Practice', date_start: '2026-11-20T00:30:00+00:00', date_end: '2026-11-20T01:30:00+00:00' };
-  const respond = (body: unknown, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status }));
-  const cacheFile = () => path.join(mkdtempSync(path.join(tmpdir(), 'f1a-schedule-')), 'schedule.json');
+describe('parseSessionsPage with a schedule section', () => {
+  const entry = (contentId: number, title: string, startMs: number, subtype: string, extra: Record<string, unknown> = {}) => ({
+    metadata: {
+      contentId,
+      title,
+      contentSubtype: subtype,
+      emfAttributes: { VideoType: 'meetingSession', sessionStartDate: startMs, sessionEndDate: startMs + 3_600_000, MeetingKey: '1300', MeetingSessionKey: String(contentId), Series: 'FORMULA 1', OBC: true, ...extra },
+    },
+  });
+  const schedule = (events: unknown[]) => ({
+    layout: 'interactive_schedule',
+    retrieveItems: {
+      resultObj: {
+        containers: [
+          { eventName: 'ALL', events },
+          { eventName: 'FORMULA 1', events },
+        ],
+      },
+    },
+  });
+  const P1 = Date.UTC(2026, 10, 20);
 
-  it('saves a good schedule', async () => {
-    vi.stubGlobal('fetch', respond([row]));
-    const file = cacheFile();
-    const schedule = await fetchSchedule(2026, file);
-    expect(schedule[0]).toMatchObject({ location: 'Las Vegas', name: 'Practice 1', sessionKey: 2 });
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(schedule);
+  it('reads future sessions, once each, soonest first', () => {
+    const sessions = parseSessionsPage([
+      schedule([entry(2, '2026 Las Vegas Grand Prix', P1 + 10 ** 8, 'LIVE_EVENT'), entry(1, '2026 Las Vegas GP - Practice 1', P1, 'LIVE_EVENT')]),
+    ]);
+    expect(sessions.map((s) => s.contentId)).toEqual([1, 2]);
+    expect(sessions[0]).toMatchObject({ status: 'upcoming', type: 'practice', startMs: P1, sessionKey: '1', hasOnboards: true });
+    expect(sessions[1].type).toBe('race');
   });
 
-  it('uses the saved copy when OpenF1 closes during a live session', async () => {
-    const file = cacheFile();
-    vi.stubGlobal('fetch', respond([row]));
-    await fetchSchedule(2026, file);
-    vi.stubGlobal('fetch', respond({ detail: 'Live F1 session in progress.' }, 401));
-    expect((await fetchSchedule(2026, file))[0].location).toBe('Las Vegas');
+  it('maps each state F1 TV uses', () => {
+    const sessions = parseSessionsPage([
+      schedule([entry(1, 'a Practice 1', P1, 'REPLAY'), entry(2, 'a Qualifying', P1 + 1, 'LIVE'), entry(3, 'a Grand Prix', P1 + 2, 'LIVE_EVENT')]),
+    ]);
+    expect(sessions.map((s) => s.status)).toEqual(['replay', 'live', 'upcoming']);
   });
 
-  it('treats a refusal as an error, not as an empty schedule', async () => {
-    vi.stubGlobal('fetch', respond({ detail: 'Live F1 session in progress.' }));
-    await expect(fetchSchedule(2026, cacheFile())).rejects.toThrow(/schedule is unavailable/);
+  it('adds trays to the schedule, which wins for sessions in both', () => {
+    const tray = page([entry(1, 'tray copy', P1, 'REPLAY'), entry(9, '2026 GP - F1A Race 1', P1 + 1, 'REPLAY', { Series: 'F1 ACADEMY' })])[0];
+    const sessions = parseSessionsPage([tray, schedule([entry(1, '2026 GP - Practice 1', P1, 'REPLAY')])]);
+    expect(sessions.map((s) => [s.contentId, s.title])).toEqual([
+      [1, '2026 GP - Practice 1'],
+      [9, '2026 GP - F1A Race 1'],
+    ]);
+    expect(sessions[1].series).toBe('F1 ACADEMY');
+  });
+
+  it('drops an end time that comes before the start', () => {
+    const [session] = parseSessionsPage([schedule([entry(1, 'Post-Race Show', P1, 'LIVE_EVENT', { sessionEndDate: P1 - 1000 })])]);
+    expect(session.endMs).toBeNull();
+    expect(session.startMs).toBe(P1);
+  });
+
+  it('reads 2018, whose sessions only appear in the weekend tray, without a video type', () => {
+    const replay = { metadata: { contentId: 7, title: '2018 Australian Grand Prix', contentSubtype: 'REPLAY', season: 2018, emfAttributes: {} } };
+    const highlight = { metadata: { contentId: 8, title: 'Highlights', contentSubtype: 'HIGHLIGHTS', season: 2018, emfAttributes: {} } };
+    const sessions = parseSessionsPage(
+      [
+        { metadata: { label: 'Weekend Sessions' }, retrieveItems: { resultObj: { containers: [replay, highlight] } } },
+        { metadata: { label: 'From The Archive' }, retrieveItems: { resultObj: { containers: [{ metadata: { contentId: 6, title: 'x', contentSubtype: 'REPLAY', season: 2018, emfAttributes: {} } }] } } },
+      ],
+      2018,
+    );
+    expect(sessions.map((s) => s.contentId)).toEqual([7]);
+    expect(sessions[0]).toMatchObject({ year: 2018, series: 'FORMULA 1', status: 'replay', type: 'race' });
+  });
+});
+
+describe('eventsAhead', () => {
+  const event = (pageId: number, startMs: number, endMs: number, isTest = false) => ({ pageId, name: '', shortName: '', round: 0, startMs, endMs, isTest });
+
+  it('includes the event in progress, then the next, and nothing further', () => {
+    const events = [event(1, 0, 900), event(2, 950, 1100), event(3, 2000, 2100), event(4, 3000, 3100)];
+    expect(eventsAhead(events, 1000).map((e) => e.pageId)).toEqual([2, 3]);
+  });
+
+  it('skips tests, and is empty after the last event', () => {
+    expect(eventsAhead([event(1, 2000, 2100, true), event(2, 3000, 3100)], 1000).map((e) => e.pageId)).toEqual([2]);
+    expect(eventsAhead([event(1, 0, 900)], 1000)).toEqual([]);
   });
 });

@@ -1,14 +1,13 @@
 /**
- * Turns F1 TV's nested page containers into the flat lists the app works with. F1OpenViewer's
- * catalog module hides future events and the extra channels, so these views are built here on
- * top of its client: the data layer needs every channel, and session times for countdowns.
+ * Turns F1 TV's nested page containers into the flat lists the app works with. F1 TV is the only
+ * source of what exists and when: past, live and future. F1OpenViewer's catalog module hides future
+ * events and the extra channels, so these views are built here on top of its client.
  */
-import { promises as fsp } from 'node:fs';
 import type {
   Channel,
   ChannelKind,
   EventInfo,
-  ScheduledSession,
+  SeasonInfo,
   SessionInfo,
   SessionType,
 } from '../../shared/api';
@@ -62,38 +61,71 @@ export function parseEventsPage(page: any[]): EventInfo[] {
   return [...byPage.values()].sort((a, b) => a.startMs - b.startMs);
 }
 
+function sessionStatus(subtype: string): SessionInfo['status'] | null {
+  if (subtype === 'REPLAY') return 'replay';
+  if (subtype === 'LIVE') return 'live';
+  if (subtype === 'LIVE_EVENT') return 'upcoming';
+  return null;
+}
+
+function toSession(entry: any, year?: number): SessionInfo | null {
+  const meta = entry.metadata ?? {};
+  const emf = meta.emfAttributes ?? {};
+  const contentId = Number(meta.contentId);
+  const status = sessionStatus(String(meta.contentSubtype ?? '').toUpperCase());
+  if (!contentId || !status) return null;
+  const startMs = Number(emf.sessionStartDate) || null;
+  const sessionYear = startMs ? new Date(startMs).getUTCFullYear() : Number(meta.season ?? meta.year) || 0;
+  // Event pages also list the same Grand Prix from earlier seasons.
+  if (year && sessionYear && sessionYear !== year) return null;
+  const endMs = Number(emf.sessionEndDate) || null;
+  const title = String(entry.title ?? meta.title ?? '').trim();
+  const sessionKey = emf.SessionKey || emf.MeetingSessionKey;
+  return {
+    contentId,
+    title,
+    type: classifySessionType(title),
+    year: sessionYear,
+    startMs,
+    // F1 TV has some end times before their start, e.g. a post-race show ending the same morning.
+    endMs: endMs && startMs && endMs < startMs ? null : endMs,
+    meetingKey: emf.MeetingKey ? String(emf.MeetingKey) : null,
+    sessionKey: sessionKey ? String(sessionKey) : null,
+    hasOnboards: emf.OBC === true || emf.OBC === 'true',
+    series: String(emf.Series || 'FORMULA 1'),
+    status,
+  };
+}
+
+/**
+ * Every session on an event page. F1 TV keeps them in two places:
+ *  - an `interactive_schedule` section, on events from 2024 on: the whole weekend including sessions
+ *    that haven't happened, grouped by series with an "ALL" group, and the only place with those;
+ *  - replay trays, on every season back to 2018, which also carry support series and earlier years.
+ * Older events have only the trays, and 2018 sessions lack the VideoType later seasons carry, so
+ * there they're recognised by the tray they sit in.
+ */
 export function parseSessionsPage(page: any[], year?: number): SessionInfo[] {
-  const out: SessionInfo[] = [];
-  const seen = new Set<number>();
-  for (const s of containersOf(page)) {
-    const meta = s.metadata ?? {};
-    const emf = meta.emfAttributes ?? {};
-    const contentId = Number(meta.contentId);
-    if (!contentId || seen.has(contentId)) continue;
-    if (emf.VideoType !== 'meetingSession') continue;
-    const subtype = String(meta.contentSubtype ?? '').toUpperCase();
-    if (subtype !== 'REPLAY' && subtype !== 'LIVE') continue;
-    const startMs = Number(emf.sessionStartDate) || null;
-    const sessionYear = startMs ? new Date(startMs).getUTCFullYear() : Number(meta.season) || 0;
-    // Event pages also list the same Grand Prix from earlier seasons.
-    if (year && sessionYear && sessionYear !== year) continue;
-    seen.add(contentId);
-    const title = String(s.title ?? meta.title ?? '').trim();
-    out.push({
-      contentId,
-      title,
-      type: classifySessionType(title),
-      year: sessionYear,
-      startMs,
-      endMs: Number(emf.sessionEndDate) || null,
-      meetingKey: emf.MeetingKey ? String(emf.MeetingKey) : null,
-      sessionKey: emf.SessionKey || emf.MeetingSessionKey ? String(emf.SessionKey || emf.MeetingSessionKey) : null,
-      hasOnboards: emf.OBC === true || emf.OBC === 'true',
-      series: String(emf.Series ?? 'FORMULA 1'),
-      status: subtype === 'LIVE' ? 'live' : 'replay',
-    });
+  const byId = new Map<number, SessionInfo>();
+  const add = (entry: any) => {
+    const session = toSession(entry, year);
+    if (session && !byId.has(session.contentId)) byId.set(session.contentId, session);
+  };
+  for (const section of page) {
+    if (section?.layout !== 'interactive_schedule') continue;
+    for (const group of section.retrieveItems?.resultObj?.containers ?? []) {
+      for (const entry of group.events ?? []) add(entry);
+    }
   }
-  return out.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
+  for (const section of page) {
+    if (section?.layout === 'interactive_schedule') continue;
+    const inWeekendTray = /weekend sessions/i.test(String(section?.metadata?.label ?? section?.metadata?.title ?? ''));
+    for (const entry of section?.retrieveItems?.resultObj?.containers ?? []) {
+      const videoType = entry.metadata?.emfAttributes?.VideoType;
+      if (videoType === 'meetingSession' || (inWeekendTray && !videoType)) add(entry);
+    }
+  }
+  return [...byId.values()].sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
 }
 
 function channelKind(stream: any): ChannelKind {
@@ -163,41 +195,21 @@ export async function listChannels(contentId: number): Promise<Channel[]> {
   return parseChannels(container, contentId);
 }
 
-/**
- * Exact future session times. F1 TV only lists an event's sessions shortly before they run, so
- * upcoming sessions come from OpenF1; F1 TV's live-now list decides when playback can actually start.
- * OpenF1 closes its free API while any session is live, so the last good copy is kept on disk.
- */
-export async function fetchSchedule(year: number, cacheFile?: string): Promise<ScheduledSession[]> {
-  try {
-    const res = await fetch(`https://api.openf1.org/v1/sessions?year=${encodeURIComponent(year)}`, {
-      headers: { 'User-Agent': 'f1a', Accept: 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-    });
-    const rows = (await res.json()) as any;
-    if (!res.ok || !Array.isArray(rows)) throw new Error(`HTTP ${res.status}`);
-    const schedule = parseSchedule(rows);
-    if (cacheFile) await fsp.writeFile(cacheFile, JSON.stringify(schedule)).catch(() => {});
-    return schedule;
-  } catch (e) {
-    const cached = cacheFile ? await fsp.readFile(cacheFile, 'utf8').catch(() => null) : null;
-    if (cached) return JSON.parse(cached) as ScheduledSession[];
-    throw new Error(`The session schedule is unavailable right now. OpenF1 closes it while a session is live. (${(e as Error).message})`);
-  }
+/** How many events ahead to look, which covers any gap in the calendar. */
+const UPCOMING_EVENTS = 2;
+
+/** Events that still have sessions to come, soonest first. */
+export function eventsAhead(events: EventInfo[], nowMs: number): EventInfo[] {
+  return events.filter((e) => !e.isTest && e.endMs > nowMs).slice(0, UPCOMING_EVENTS);
 }
 
-export function parseSchedule(rows: any[]): ScheduledSession[] {
-  return rows
-    .map((r) => ({
-      meetingKey: Number(r.meeting_key),
-      sessionKey: Number(r.session_key),
-      country: String(r.country_name ?? ''),
-      location: String(r.location ?? ''),
-      name: String(r.session_name ?? ''),
-      type: String(r.session_type ?? ''),
-      startMs: Date.parse(r.date_start),
-      endMs: Date.parse(r.date_end),
-    }))
-    .filter((r) => Number.isFinite(r.startMs))
-    .sort((a, b) => a.startMs - b.startMs);
+/** Sessions that haven't started, soonest first. Nothing past this season is published yet. */
+export async function listUpcoming(seasons: SeasonInfo[], nowMs = Date.now()): Promise<SessionInfo[]> {
+  const season = seasons.find((s) => s.year === new Date(nowMs).getUTCFullYear());
+  if (!season) return [];
+  const ahead = eventsAhead(await listEvents(season.pageId), nowMs);
+  const sessions = (await Promise.all(ahead.map((e) => listSessions(e.pageId, season.year)))).flat();
+  return sessions
+    .filter((s) => s.status === 'upcoming' && (s.startMs ?? 0) > nowMs)
+    .sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
 }
