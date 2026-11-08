@@ -9,6 +9,7 @@ import { joinPoint } from './join';
 import { LIVE_EDGE_OFFSET_SEC, LIVE_START_MARGIN_SEC, StreamHandle, type StreamStatus } from './stream';
 import { isStalled, pickReference, syncTick, type SyncEntry } from './syncEngine';
 import { createLiveTiming, createReplayTiming, type TimingSource } from './timing/timingSource';
+import { normalizeVolume, toggledVolume } from './volume';
 
 const TICK_MS = 200;
 /** Spacing between seeks, so all streams don't flush their buffers at the same instant. */
@@ -44,6 +45,8 @@ export interface SessionState {
   error: string | null;
   streams: Record<string, StreamView>;
   audioChannelId: string | null;
+  /** Master level from 0 to 1, whichever feed is audible. It outlives any one session. */
+  volume: number;
   clock: ClockState;
 }
 
@@ -58,7 +61,8 @@ const IDLE_CLOCK: ClockState = {
   wallClockMs: null,
 };
 
-const INITIAL: SessionState = {
+/** What opening and closing a session reset. */
+const INITIAL: Omit<SessionState, 'volume'> = {
   session: null,
   channels: [],
   error: null,
@@ -67,7 +71,10 @@ const INITIAL: SessionState = {
   clock: IDLE_CLOCK,
 };
 
-export const useSession = create<SessionState>(() => INITIAL);
+export const useSession = create<SessionState>(() => ({ ...INITIAL, volume: 1 }));
+
+/** The level the mute icon goes back to. */
+let lastHeardVolume = 1;
 
 const LIVE_EDGE_TOLERANCE_SEC = 15;
 
@@ -116,7 +123,8 @@ class SessionRuntime {
     });
     this.handles.set(channelId, handle);
     this.publishStreams();
-    const { audioChannelId } = useSession.getState();
+    const { audioChannelId, volume } = useSession.getState();
+    handle.video.volume = volume;
     if (audioChannelId) handle.video.muted = true;
     else if (channel.kind === 'main') this.setAudio(channelId);
     this.startQueue = this.startQueue.then(() => this.startInTurn(handle));
@@ -161,6 +169,17 @@ class SessionRuntime {
   setAudio(channelId: string | null): void {
     for (const [id, handle] of this.handles) handle.video.muted = id !== channelId;
     useSession.setState({ audioChannelId: channelId });
+  }
+
+  applyVolume(volume: number): void {
+    for (const handle of this.handles.values()) handle.video.volume = volume;
+  }
+
+  /** Makes the default feed audible, if there's one to hear. */
+  restoreAudio(): boolean {
+    const channelId = this.defaultAudioChannel();
+    if (channelId) this.setAudio(channelId);
+    return channelId != null;
   }
 
   private setVirtualTime(t: number): void {
@@ -296,6 +315,23 @@ class SessionRuntime {
 
 let runtime: SessionRuntime | null = null;
 
+function setVolume(level: number): void {
+  const volume = normalizeVolume(level);
+  if (volume > 0) lastHeardVolume = volume;
+  useSession.setState({ volume });
+  runtime?.applyVolume(volume);
+}
+
+function toggleMute(): void {
+  const { audioChannelId, volume } = useSession.getState();
+  // With no feed chosen, "unmute" has to choose one, and be heard once it has.
+  if (audioChannelId == null && runtime?.restoreAudio()) {
+    if (volume === 0) setVolume(toggledVolume(volume, lastHeardVolume));
+    return;
+  }
+  setVolume(toggledVolume(volume, lastHeardVolume));
+}
+
 /** Opens a session: resolves its channels. Streams start only when something acquires them. */
 export async function openSession(session: SessionInfo, options: { fromStart?: boolean } = {}): Promise<Channel[]> {
   closeSession();
@@ -324,6 +360,9 @@ export const sessionControl = {
   seekToStart: () => runtime?.seekToStart(),
   goLive: () => runtime?.goLive(),
   setAudio: (channelId: string | null) => runtime?.setAudio(channelId),
+  setVolume,
+  changeVolumeBy: (amount: number) => setVolume(useSession.getState().volume + amount),
+  toggleMute,
   toggle: () => {
     if (!runtime) return;
     if (useSession.getState().clock.playing) runtime.pause();
