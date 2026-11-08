@@ -1,0 +1,39 @@
+// Runs both sign-in commands through the palette, skipping any that are already done.
+import { paletteText, startApp, typeInPalette } from './harness.mjs';
+
+const { page, stop } = await startApp();
+const status = () => page.evaluate(async () => ({ f1: await window.f1a.f1tv.status(), ai: await window.f1a.ai.status() }));
+console.log('before:', JSON.stringify(await status()));
+
+/** Waits on the login itself rather than palette text, which a reload would clear. */
+async function waitFor(check, failed, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check(await status())) return true;
+    const text = await paletteText(page);
+    if (failed.test(text)) {
+      console.log('failed:', text.match(new RegExp(`.*${failed.source}.*`))?.[0]);
+      return false;
+    }
+    await page.waitForTimeout(1000);
+  }
+  console.log('timed out');
+  return false;
+}
+
+const FIVE_MINUTES = 5 * 60_000 + 10_000;
+await page.waitForTimeout(1500);
+if (!(await status()).f1.signedIn) {
+  await typeInPalette(page, '/login-f1tv');
+  console.log('F1 TV sign-in window should be open');
+  await waitFor((s) => s.f1.signedIn, /F1 TV sign-in failed/, FIVE_MINUTES);
+}
+if (!(await status()).ai.signedIn) {
+  await typeInPalette(page, '/login-chatgpt');
+  console.log('ChatGPT sign-in should be open in the browser');
+  await waitFor((s) => s.ai.signedIn, /ChatGPT sign-in failed/, FIVE_MINUTES);
+}
+console.log('palette:\n' + (await paletteText(page)));
+console.log('after:', JSON.stringify(await status()));
+await stop();
+process.exit(0);
