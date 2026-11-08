@@ -261,6 +261,30 @@
   @apply text-accent;
 }
 
+.timeline-volume {
+  @apply flex h-full shrink-0 items-center gap-1;
+}
+
+.timeline-speaker {
+  @apply mx-auto h-3.5 w-3.5;
+}
+
+.timeline-volume-slider {
+  @apply h-full w-16 cursor-pointer touch-none appearance-none bg-transparent;
+}
+
+.timeline-volume-slider::-webkit-slider-runnable-track {
+  height: 1px;
+  background: linear-gradient(to right, var(--color-accent) var(--level), var(--color-faint) var(--level));
+}
+
+.timeline-volume-slider::-webkit-slider-thumb {
+  @apply appearance-none bg-ink;
+  width: 1px;
+  height: 12px;
+  margin-top: -5.5px;
+}
+
 /* Countdown */
 .countdown {
   @apply absolute inset-0 z-20 flex flex-col items-center justify-center gap-1;

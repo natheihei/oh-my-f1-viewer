@@ -1,5 +1,5 @@
 /** The session's transport, fixed at the bottom. It drives the clock, so it controls every stream. */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { host, useLive } from '../host';
 
 function formatTime(sec: number): string {
@@ -11,10 +11,26 @@ function formatTime(sec: number): string {
 }
 
 const SEEK_STEP_SEC = 10;
+const VOLUME_STEP = 0.05;
+
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="timeline-speaker" aria-hidden="true">
+      <path d="M2 6v4h3l4 3V3L5 6z" fill="currentColor" />
+      {muted ? (
+        <path d="M11 6l4 4m0-4l-4 4" stroke="currentColor" fill="none" />
+      ) : (
+        <path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9" stroke="currentColor" fill="none" />
+      )}
+    </svg>
+  );
+}
 
 export function Timeline() {
   const session = useLive((s) => s.session);
   const clock = useLive((s) => s.clock);
+  const volume = useLive((s) => s.volume);
+  const audio = useLive((s) => s.audio);
   const barRef = useRef<HTMLDivElement | null>(null);
   const [dragTime, setDragTime] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -36,6 +52,14 @@ export function Timeline() {
         host.playback.seekBy({ seconds: -SEEK_STEP_SEC });
       } else if (e.key === 'ArrowRight') {
         host.playback.seekBy({ seconds: SEEK_STEP_SEC });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        host.audio.changeVolumeBy({ amount: VOLUME_STEP });
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        host.audio.changeVolumeBy({ amount: -VOLUME_STEP });
+      } else if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        host.audio.toggleMute();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -54,6 +78,7 @@ export function Timeline() {
   // Live timelines show distance behind the edge, since the DVR window's start means nothing.
   const position = clock.live ? `-${formatTime(Math.max(0, end - shown))}` : formatTime(shown - start);
   const total = clock.live ? '' : formatTime(span);
+  const muted = volume === 0 || audio == null;
 
   return (
     <div className="timeline" data-testid="timeline">
@@ -107,6 +132,33 @@ export function Timeline() {
           ● LIVE
         </button>
       ) : null}
+      <div className="timeline-volume">
+        <button
+          type="button"
+          className="timeline-button"
+          data-testid="timeline-mute"
+          aria-label={muted ? 'Unmute' : 'Mute'}
+          // Focus stays out of the control, so Space and the arrows keep driving playback after a click.
+          onPointerUp={(e) => e.currentTarget.blur()}
+          onClick={() => host.audio.toggleMute()}
+        >
+          <SpeakerIcon muted={muted} />
+        </button>
+        <input
+          type="range"
+          className="timeline-volume-slider"
+          data-testid="timeline-volume"
+          aria-label="Volume"
+          min={0}
+          max={1}
+          step={0.01}
+          value={volume}
+          style={{ '--level': `${volume * 100}%` } as CSSProperties}
+          onChange={(e) => host.audio.setVolume({ volume: Number(e.target.value) })}
+          onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+          onPointerUp={(e) => e.currentTarget.blur()}
+        />
+      </div>
     </div>
   );
 }
