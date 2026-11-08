@@ -74,6 +74,10 @@ npm run build && node scripts/prod-check.mjs
 node scripts/stream-soak.mjs 10
 ```
 
+```bash
+node scripts/captions-check.mjs 1000010420
+```
+
 During a live session:
 
 ```bash
