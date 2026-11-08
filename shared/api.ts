@@ -42,8 +42,8 @@ export interface SessionInfo {
   sessionKey: string | null;
   hasOnboards: boolean;
   series: string;
-  /** F1 TV state: 'replay' is watchable from the start, 'live' is on air now. */
-  status: 'replay' | 'live';
+  /** 'replay' is watchable from the start, 'live' is on air now, 'upcoming' can't be played yet. */
+  status: 'replay' | 'live' | 'upcoming';
 }
 
 export interface LiveItem {
@@ -51,17 +51,6 @@ export interface LiveItem {
   title: string;
   meetingKey?: string;
   sessionKey?: string;
-}
-
-export interface ScheduledSession {
-  meetingKey: number;
-  sessionKey: number;
-  country: string;
-  location: string;
-  name: string;
-  type: string;
-  startMs: number;
-  endMs: number;
 }
 
 export interface Channel {
@@ -162,7 +151,8 @@ export interface F1aApi {
     sessions(eventPageId: number, year?: number): Promise<SessionInfo[]>;
     channels(contentId: number): Promise<Channel[]>;
     liveNow(): Promise<LiveItem[]>;
-    schedule(year: number): Promise<ScheduledSession[]>;
+    /** Sessions that haven't started, soonest first. */
+    upcoming(): Promise<SessionInfo[]>;
     play(contentId: number, channelId?: number): Promise<PlaybackInfo>;
     lastLicenseError(streamKey?: string): Promise<string>;
   };

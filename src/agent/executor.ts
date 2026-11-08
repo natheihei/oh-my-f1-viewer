@@ -157,36 +157,44 @@ async function listLive(): Promise<unknown> {
 }
 
 async function listUpcoming(): Promise<unknown> {
-  const now = Date.now();
-  const year = new Date(now).getUTCFullYear();
-  const rows = await window.f1a.f1tv.schedule(year);
-  return rows
-    .filter((r) => r.startMs > now)
-    .slice(0, 12)
-    .map((r) => ({
-      title: `${r.location} (${r.country}) - ${r.name}`,
-      startMs: r.startMs,
-      startsAt: isoDate(r.startMs),
-      meetingKey: r.meetingKey,
-      sessionKey: r.sessionKey,
-    }));
+  const sessions = (await window.f1a.f1tv.upcoming()).filter((s) => s.series === 'FORMULA 1');
+  for (const s of sessions) knownSessions.set(s.contentId, s);
+  return sessions.slice(0, 16).map((s) => ({
+    contentId: s.contentId,
+    title: s.title,
+    type: s.type,
+    startsAt: isoDate(s.startMs),
+  }));
+}
+
+/** A listed session can have gone on air since. */
+async function currentStatus(session: SessionInfo): Promise<SessionInfo> {
+  if (session.status !== 'upcoming') return session;
+  const live = await window.f1a.f1tv.liveNow();
+  return live.some((i) => i.contentId === session.contentId) ? { ...session, status: 'live' } : session;
 }
 
 async function loadSession(contentId: number, title: string): Promise<unknown> {
   const year = Number(title.match(/\b(20\d{2})\b/)?.[1]) || new Date().getUTCFullYear();
-  const session: SessionInfo = knownSessions.get(contentId) ?? {
-    contentId,
-    title,
-    type: 'other',
-    year,
-    startMs: null,
-    endMs: null,
-    meetingKey: null,
-    sessionKey: null,
-    hasOnboards: true,
-    series: 'FORMULA 1',
-    status: 'replay',
-  };
+  const known = knownSessions.get(contentId);
+  const session = await currentStatus(
+    known ?? {
+      contentId,
+      title,
+      type: 'other',
+      year,
+      startMs: null,
+      endMs: null,
+      meetingKey: null,
+      sessionKey: null,
+      hasOnboards: true,
+      series: 'FORMULA 1',
+      status: 'replay',
+    },
+  );
+  if (session.status === 'upcoming') {
+    throw new Error(`${session.title} hasn't started. Offer wait_for_session instead.`);
+  }
   const channels = await openViewingSession(session);
   return {
     opened: session.title,
@@ -232,15 +240,10 @@ export async function runTool(name: string, args: Record<string, unknown>): Prom
     case 'load_session':
       return JSON.stringify(await loadSession(Number(args.contentId), String(args.title)));
     case 'wait_for_session': {
-      startCountdown(
-        {
-          title: String(args.title),
-          startMs: Number(args.startMs),
-          meetingKey: args.meetingKey != null ? Number(args.meetingKey) : undefined,
-          sessionKey: args.sessionKey != null ? Number(args.sessionKey) : undefined,
-        },
-        (session) => void openViewingSession(session),
-      );
+      const session = knownSessions.get(Number(args.contentId));
+      if (!session) throw new Error('Unknown contentId. Get it from list_upcoming or list_sessions first.');
+      if (session.status !== 'upcoming') throw new Error(`${session.title} isn't upcoming. Use load_session.`);
+      startCountdown(session, (live) => void openViewingSession(live));
       return 'Countdown showing. It starts by itself when F1 TV goes live.';
     }
     case 'list_streams':

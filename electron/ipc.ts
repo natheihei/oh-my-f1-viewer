@@ -1,9 +1,8 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
-import { app, ipcMain, session, type IpcMainInvokeEvent } from 'electron';
-import path from 'node:path';
+import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import type { F1TvStatus, TimingSessionRef } from '../shared/api';
 import { getMainAppUrl, sendToRenderer } from './windows';
-import { fetchSchedule, listChannels, listEvents, listSessions } from './f1tv/catalog';
+import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
@@ -133,9 +132,9 @@ export function setupIpc(): void {
     await ensureF1Client();
     return f1tv.getLiveNow();
   });
-  handle('f1tv:schedule', (_e, rawYear) => {
-    const year = toPositiveInt(rawYear, 'year');
-    return fetchSchedule(year, path.join(app.getPath('userData'), `f1a-schedule-${year}.json`));
+  handle('f1tv:upcoming', async () => {
+    await ensureF1Client();
+    return listUpcoming(await f1tv.getVodSeasons());
   });
 
   // --- Playback ---

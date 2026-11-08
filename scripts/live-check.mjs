@@ -180,8 +180,9 @@ const expected = (delay.recordsIn8s / 8) * (delay.videoLagSec ?? 0);
 check('timing is held back until the video reaches it', held > expected * 0.3, `${held} records held; about ${Math.round(expected)} expected for ${delay.videoLagSec}s of lag`);
 check('live feed is flowing', delay.recordsIn8s > 0, `${delay.recordsIn8s} records in 8s`);
 
-// The schedule during a live session: OpenF1 refuses, so this must fail honestly or use a saved copy.
-await say('What sessions are coming up?');
+// F1 TV's schedule has to keep working during a live session.
+const upcoming = await say('What sessions are coming up?');
+check('upcoming sessions are listed during a live session', upcoming.some((e) => e.type === 'tool_start' && e.name === 'list_upcoming') && !upcoming.some((e) => e.type === 'tool_end' && !e.ok));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 await stop();

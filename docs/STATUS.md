@@ -31,7 +31,8 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   On replays with a wall clock it ran about 15s ahead of lights out, so if live behaves the same, timing would be up to 15s early. Nothing
   on screen shows timing yet, and checking needs a lights-out or lap change to compare against.
 - **Rewinding live timing.** Unit-tested and exercised during the DVR seek, but its result wasn't compared with the picture.
-- **The countdown starting a session by itself.** The display is verified, but the race had already started when this was tested.
+- **The countdown starting a session by itself.** The display is verified, and a unit test covers firing only for its own session and not
+  another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 
 ## Known issues
 
@@ -47,8 +48,6 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
 - **Mouse edits inside groups** are only lightly tested. Dragging a tile between a group and the top level isn't supported: ask the
   agent instead.
-- **No upcoming sessions during a live session, on a fresh install.** OpenF1 closes its free API while any session is live, so the agent
-  says the schedule is unavailable. A copy saved from any earlier successful request is used instead when there is one.
 - **Tall windows waste space.** Tiles are sized without regard to 16:9, so a nearly square window shows large black bars.
 
 ## Deferred, by design

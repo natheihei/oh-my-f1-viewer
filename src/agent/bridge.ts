@@ -32,7 +32,7 @@ export function connectAgent(): () => void {
       case 'turn_end': {
         palette.setBusy(false);
         // Only hide once the agent did something and isn't waiting on an answer.
-        const asking = finalText.trim().endsWith('?');
+        const asking = finalText.includes('?');
         if (event.acted && !asking && isSessionOpen()) palette.hideAfter(AUTO_HIDE_MS);
         break;
       }
