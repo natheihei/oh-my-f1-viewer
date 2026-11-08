@@ -74,6 +74,12 @@ npm run build && node scripts/prod-check.mjs
 node scripts/stream-soak.mjs 10
 ```
 
+During a live session:
+
+```bash
+node scripts/live-check.mjs
+```
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together and [docs/STATUS.md](docs/STATUS.md) for what is
 verified and what isn't.
 

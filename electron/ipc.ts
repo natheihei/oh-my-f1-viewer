@@ -1,5 +1,6 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
-import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import path from 'node:path';
 import type { F1TvStatus, TimingSessionRef } from '../shared/api';
 import { getMainAppUrl, sendToRenderer } from './windows';
 import { fetchSchedule, listChannels, listEvents, listSessions } from './f1tv/catalog';
@@ -132,7 +133,10 @@ export function setupIpc(): void {
     await ensureF1Client();
     return f1tv.getLiveNow();
   });
-  handle('f1tv:schedule', (_e, year) => fetchSchedule(toPositiveInt(year, 'year')));
+  handle('f1tv:schedule', (_e, rawYear) => {
+    const year = toPositiveInt(rawYear, 'year');
+    return fetchSchedule(year, path.join(app.getPath('userData'), `f1a-schedule-${year}.json`));
+  });
 
   // --- Playback ---
   handle('f1tv:play', (_e, rawContentId, rawChannelId) => {

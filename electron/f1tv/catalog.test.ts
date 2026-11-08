@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({}));
 
-const { classifySessionType, parseChannels, parseEventsPage, parseSessionsPage } = await import('./catalog');
+const { classifySessionType, fetchSchedule, parseChannels, parseEventsPage, parseSessionsPage } = await import('./catalog');
+const { mkdtempSync, readFileSync } = await import('node:fs');
+const { tmpdir } = await import('node:os');
+const path = await import('node:path');
 
 const stream = (channelId: number, title: string, extra: Record<string, unknown> = {}) => ({
   channelId,
@@ -119,5 +122,32 @@ describe('parseEventsPage', () => {
 
   it('leaves out other series', () => {
     expect(parseEventsPage(page([event(3, 'FORMULA 1 F2 GRAND PRIX', 1000)]))).toEqual([]);
+  });
+});
+
+describe('fetchSchedule', () => {
+  const row = { meeting_key: 1, session_key: 2, country_name: 'United States', location: 'Las Vegas', session_name: 'Practice 1', session_type: 'Practice', date_start: '2026-11-20T00:30:00+00:00', date_end: '2026-11-20T01:30:00+00:00' };
+  const respond = (body: unknown, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status }));
+  const cacheFile = () => path.join(mkdtempSync(path.join(tmpdir(), 'f1a-schedule-')), 'schedule.json');
+
+  it('saves a good schedule', async () => {
+    vi.stubGlobal('fetch', respond([row]));
+    const file = cacheFile();
+    const schedule = await fetchSchedule(2026, file);
+    expect(schedule[0]).toMatchObject({ location: 'Las Vegas', name: 'Practice 1', sessionKey: 2 });
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(schedule);
+  });
+
+  it('uses the saved copy when OpenF1 closes during a live session', async () => {
+    const file = cacheFile();
+    vi.stubGlobal('fetch', respond([row]));
+    await fetchSchedule(2026, file);
+    vi.stubGlobal('fetch', respond({ detail: 'Live F1 session in progress.' }, 401));
+    expect((await fetchSchedule(2026, file))[0].location).toBe('Las Vegas');
+  });
+
+  it('treats a refusal as an error, not as an empty schedule', async () => {
+    vi.stubGlobal('fetch', respond({ detail: 'Live F1 session in progress.' }));
+    await expect(fetchSchedule(2026, cacheFile())).rejects.toThrow(/schedule is unavailable/);
   });
 });

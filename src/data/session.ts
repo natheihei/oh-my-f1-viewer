@@ -5,7 +5,7 @@
  */
 import { create } from 'zustand';
 import type { Channel, SessionInfo } from '../../shared/api';
-import { StreamHandle, type StreamStatus } from './stream';
+import { LIVE_EDGE_OFFSET_SEC, StreamHandle, type StreamStatus } from './stream';
 import { isStalled, pickReference, syncTick, type SyncEntry } from './syncEngine';
 import { createLiveTiming, createReplayTiming, type TimingSource } from './timing/timingSource';
 
@@ -201,7 +201,7 @@ class SessionRuntime {
 
   goLive(): void {
     const { end } = useSession.getState().clock;
-    if (end > 0) this.seek(end - 6);
+    if (end > 0) this.seek(end - LIVE_EDGE_OFFSET_SEC);
   }
 
   private tick(): void {

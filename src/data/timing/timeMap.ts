@@ -99,27 +99,35 @@ export function videoToFeedOffset(map: TimeMap, timeSec: number, wallClockMs: nu
  * Holds live timing records until the video reaches them. F1 TV's live video runs tens of seconds
  * behind the feed, so applying records on arrival would show what has not happened on screen yet.
  * Records are stamped on arrival, which is close enough to broadcast time for this purpose.
+ *
+ * Every record is kept, because rewinding the live video has to rewind timing too, and records are
+ * deltas that can't be undone: the store has to be rebuilt from the start.
  */
 export class LiveFeedBuffer<T> {
-  private queue: Array<{ atMs: number; record: T }> = [];
+  private log: Array<{ atMs: number; record: T }> = [];
+  private applied = 0;
+  private position = -Infinity;
 
   push(record: T, arrivedAtMs: number): void {
-    this.queue.push({ atMs: arrivedAtMs, record });
+    this.log.push({ atMs: arrivedAtMs, record });
   }
 
-  /** Records due at this video wall-clock time. With no clock to align to, everything is due. */
-  drain(videoWallClockMs: number | null): T[] {
-    if (videoWallClockMs == null) {
-      const all = this.queue.map((q) => q.record);
-      this.queue = [];
-      return all;
-    }
-    let i = 0;
-    while (i < this.queue.length && this.queue[i].atMs <= videoWallClockMs) i += 1;
-    return this.queue.splice(0, i).map((q) => q.record);
+  /**
+   * What to apply to reach this video wall-clock time. With no clock to align to, everything is
+   * due. `reset` means the video moved backward, so the store must start over from these records.
+   */
+  advance(videoWallClockMs: number | null): { reset: boolean; records: T[] } {
+    const target = videoWallClockMs ?? Infinity;
+    const reset = target < this.position;
+    this.position = target;
+    if (reset) this.applied = 0;
+    const start = this.applied;
+    while (this.applied < this.log.length && this.log[this.applied].atMs <= target) this.applied += 1;
+    return { reset, records: this.log.slice(start, this.applied).map((q) => q.record) };
   }
 
-  get size(): number {
-    return this.queue.length;
+  /** Records that have arrived but aren't on screen yet. */
+  get held(): number {
+    return this.log.length - this.applied;
   }
 }
