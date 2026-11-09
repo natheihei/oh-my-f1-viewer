@@ -327,3 +327,93 @@
   @apply tabular-nums;
   font-size: 40px;
 }
+
+/* Suggested tiles: a strip between the palette's history and its input. */
+.strip {
+  @apply flex gap-2 overflow-x-auto border-b border-line px-2.5 pt-2 pb-1.5;
+}
+
+.strip-item {
+  @apply relative flex w-40 shrink-0 cursor-pointer flex-col outline-none select-none;
+  touch-action: none;
+}
+
+.strip-view {
+  @apply relative aspect-video w-full overflow-hidden border border-line bg-black;
+}
+
+.strip-item:focus-visible .strip-view,
+.strip-item:hover .strip-view {
+  @apply border-ink;
+}
+
+.strip-placeholder {
+  @apply flex h-full items-center justify-center px-2 text-center text-faint;
+  font-size: 11px;
+}
+
+/* The + shows on hover and on keyboard focus. */
+.strip-overlay {
+  @apply pointer-events-none absolute inset-0 flex items-center justify-center bg-black/50 text-ink opacity-0;
+  font-size: 28px;
+}
+
+.strip-item-present .strip-overlay {
+  @apply bg-black text-dim;
+  font-size: 11px;
+}
+
+.strip-item:hover .strip-overlay,
+.strip-item:focus-visible .strip-overlay {
+  @apply opacity-100;
+}
+
+.strip-item-dragging {
+  @apply opacity-40;
+}
+
+.strip-label {
+  @apply flex items-center gap-1.5 pt-0.5 text-dim;
+  font-size: 11px;
+}
+
+.strip-item:hover .strip-label,
+.strip-item:focus-visible .strip-label {
+  @apply text-ink;
+}
+
+.strip-label-text {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.strip-badge {
+  @apply shrink-0 border border-faint px-1 text-dim;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.strip-hint {
+  @apply border-b border-line px-2.5 py-0.5 text-faint;
+  font-size: 11px;
+}
+
+.strip-ghost {
+  @apply pointer-events-none fixed z-50 border border-ink bg-panel px-1.5 text-ink;
+  font-size: 11px;
+  transform: translate(8px, 8px);
+}
+
+/* Where a dragged suggestion would land. */
+.drop-frame {
+  @apply pointer-events-none absolute inset-0 z-20;
+}
+
+.drop-preview {
+  @apply absolute border-2 border-accent bg-accent/15;
+}
+
+/* The tile a suggestion duplicates, while that suggestion is hovered or focused. */
+.stage-host-highlight::after {
+  @apply pointer-events-none absolute inset-0 border-2 border-accent;
+  content: '';
+}

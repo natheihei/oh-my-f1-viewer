@@ -213,6 +213,97 @@ export function addTile(state: LayoutState, component: ComponentSpec): LayoutSta
   return place({ ...state, nodes: [...state.nodes, node] }, node);
 }
 
+/** A cell on the grid, in grid units. */
+export interface Cell {
+  x: number;
+  y: number;
+}
+
+const area = (r: Rect) => r.w * r.h;
+const contains = (r: Rect, { x, y }: Cell) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+
+/** The biggest empty rectangle that covers a cell, or null if the cell is taken. */
+export function freeRectAt(nodes: Rect[], cell: Cell, columns = GRID_COLUMNS, rows = GRID_ROWS): Rect | null {
+  const taken = Array.from({ length: rows + 1 }, () => new Array<number>(columns + 1).fill(0));
+  for (const n of nodes) {
+    for (let y = n.y; y < Math.min(rows, n.y + n.h); y += 1) {
+      for (let x = n.x; x < Math.min(columns, n.x + n.w); x += 1) taken[y + 1][x + 1] = 1;
+    }
+  }
+  // Prefix sums, so asking whether a rectangle is empty is four lookups.
+  for (let y = 1; y <= rows; y += 1) {
+    for (let x = 1; x <= columns; x += 1) taken[y][x] += taken[y - 1][x] + taken[y][x - 1] - taken[y - 1][x - 1];
+  }
+  const filled = (x0: number, y0: number, x1: number, y1: number) => taken[y1][x1] - taken[y0][x1] - taken[y1][x0] + taken[y0][x0];
+  if (filled(cell.x, cell.y, cell.x + 1, cell.y + 1) > 0) return null;
+  let best: Rect | null = null;
+  for (let y0 = cell.y; y0 >= 0; y0 -= 1) {
+    for (let x0 = cell.x; x0 >= 0; x0 -= 1) {
+      if (filled(x0, y0, cell.x + 1, cell.y + 1) > 0) break;
+      for (let y1 = cell.y + 1; y1 <= rows; y1 += 1) {
+        if (filled(x0, y0, cell.x + 1, y1) > 0) break;
+        let x1 = cell.x + 1;
+        while (x1 < columns && filled(x0, y0, x1 + 1, y1) === 0) x1 += 1;
+        const rect = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+        if (!best || area(rect) > area(best)) best = rect;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a tile dropped on this cell goes. On empty space, it fills the biggest gap there. On a
+ * node, that node splits across its longer side as it looks on screen, and the new tile takes the
+ * half under the cell. `cellAspect` is a cell's width over its height. Null when the node is too
+ * small to split.
+ */
+export function dropTarget(state: LayoutState, cell: Cell, cellAspect = 1): { rect: Rect; split: LayoutNode | null } | null {
+  const node = state.nodes.find((n) => contains(n, cell));
+  if (!node) {
+    const rect = freeRectAt(state.nodes, cell);
+    return rect ? { rect, split: null } : null;
+  }
+  const across = node.w * cellAspect >= node.h;
+  const size = across ? node.w : node.h;
+  if (size < 2) return null;
+  const first = Math.floor(size / 2);
+  const inFirst = across ? cell.x < node.x + first : cell.y < node.y + first;
+  const halves: [Rect, Rect] = across
+    ? [
+        { x: node.x, y: node.y, w: first, h: node.h },
+        { x: node.x + first, y: node.y, w: size - first, h: node.h },
+      ]
+    : [
+        { x: node.x, y: node.y, w: node.w, h: first },
+        { x: node.x, y: node.y + first, w: node.w, h: size - first },
+      ];
+  return { rect: inFirst ? halves[0] : halves[1], split: node };
+}
+
+/** Adds a tile where it was dropped, which makes the layout manual. Falls back to `addTile`. */
+export function addTileAt(state: LayoutState, component: ComponentSpec, cell: Cell, cellAspect = 1): LayoutState {
+  if (findTile(state, component.key)) return state;
+  const target = dropTarget(state, cell, cellAspect);
+  if (!target) return addTile(state, component);
+  const { rect, split } = target;
+  const node: TileNode = { ...newTile(component), ...rect };
+  const nodes = state.nodes.map((n) => {
+    if (n !== split) return n;
+    const rest = rectMinus(n, rect);
+    return withChildren({ ...n, ...rest });
+  });
+  return { ...state, nodes: [...nodes, node], manual: true };
+}
+
+/** What's left of a node once one of its halves is taken. */
+function rectMinus(r: Rect, half: Rect): Rect {
+  if (half.x === r.x && half.w < r.w) return { x: r.x + half.w, y: r.y, w: r.w - half.w, h: r.h };
+  if (half.x > r.x) return { x: r.x, y: r.y, w: r.w - half.w, h: r.h };
+  if (half.y === r.y && half.h < r.h) return { x: r.x, y: r.y + half.h, w: r.w, h: r.h - half.h };
+  return { x: r.x, y: r.y, w: r.w, h: r.h - half.h };
+}
+
 /** Removes a tile. A group left with one member dissolves into a plain tile. */
 export function removeTile(state: LayoutState, key: string): LayoutState {
   if (!findTile(state, key)) return state;

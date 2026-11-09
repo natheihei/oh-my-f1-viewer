@@ -133,7 +133,7 @@ class Agent {
     });
   }
 
-  async send(text: string, appState: string, definitions: AgentToolDefinition[]): Promise<void> {
+  async send(text: string, appState: string, definitions: AgentToolDefinition[], reference = ''): Promise<void> {
     this.cancel();
     const abort = new AbortController();
     this.abort = abort;
@@ -155,11 +155,13 @@ class Agent {
       if (this.history.length > MAX_HISTORY_MESSAGES) {
         this.history = this.trimHistory(this.history);
       }
-      const context: Context = { systemPrompt: SYSTEM_PROMPT, messages: this.history, tools };
+      // The reference changes rarely, so it goes at the end of the system prompt, ahead of a history that grows.
+      const systemPrompt = reference ? `${SYSTEM_PROMPT}\n\n${reference}` : SYSTEM_PROMPT;
+      const context: Context = { systemPrompt, messages: this.history, tools };
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const stream = models.streamSimple(model, context, {
-          reasoning: 'low',
+          reasoning: 'medium',
           signal: abort.signal,
           sessionId: 'f1a',
         });

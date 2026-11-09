@@ -115,9 +115,96 @@ describe('agent tools', () => {
   });
 
   it('refuse to act with no session open', async () => {
-    await expect(runTool('add_streams', { streams: ['HAM'] })).rejects.toThrow(/No session is open/);
+    await expect(runTool('suggest_tiles', { streams: ['HAM'] })).rejects.toThrow(/No session is open/);
     await expect(runTool('seek_back', { seconds: 5 })).rejects.toThrow(/No session is open/);
     await expect(runTool('set_audio', { stream: 'HAM' })).rejects.toThrow(/No session is open/);
+  });
+});
+
+const { host, read } = await import('../host');
+const { layout } = await import('../layout/store');
+const { videoSpec } = await import('../host/viewing');
+
+describe('suggested tiles', () => {
+  const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
+  const keys = () => read().suggestions.items.map((i) => i.label);
+
+  beforeEach(() => {
+    useSession.setState({ session: open, channels });
+    layout.clear();
+    layout.add(videoSpec('1:101', 'F1 LIVE'));
+  });
+  afterEach(() => {
+    host.suggestions.newTurn();
+    layout.clear();
+    useSession.setState({ session: null, channels: [] });
+  });
+
+  it('the agent can only suggest, never add', () => {
+    const names = AGENT_TOOLS.map((t) => t.name);
+    expect(names).toContain('suggest_tiles');
+    expect(names).not.toContain('add_streams');
+  });
+
+  it('suggesting puts nothing on screen', async () => {
+    const out = await runTool('suggest_tiles', { streams: ['Hamilton', 'Verstappen'] });
+    expect(out).toMatch(/Suggested: HAM, VER/);
+    expect(keys()).toEqual(['HAM', 'VER']);
+    expect(layout.tiles().map((t) => t.component.label)).toEqual(['F1 LIVE']);
+  });
+
+  it('a stream already on screen is still suggested, and marked so', async () => {
+    const out = await runTool('suggest_tiles', { streams: ['main'] });
+    expect(out).toMatch(/Already on screen.*F1 LIVE/);
+    expect(keys()).toEqual(['F1 LIVE']);
+  });
+
+  it('suggesting again in a turn adds to the strip, skipping repeats and what was added', async () => {
+    await runTool('suggest_tiles', { streams: ['HAM', 'VER'] });
+    host.suggestions.add({ key: '1:44' });
+    const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER', 'NOR'] });
+    expect(out).toMatch(/Suggested: NOR/);
+    expect(out).toMatch(/Already suggested this turn: HAM, VER/);
+    expect(keys()).toEqual(['VER', 'NOR']);
+  });
+
+  it('holds at most four streams at a time', async () => {
+    const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER', 'NOR', 'LEC', 'PER'] });
+    expect(keys()).toHaveLength(4);
+    expect(out).toMatch(/strip is full: PER/);
+  });
+
+  it('adding a suggestion puts it on screen and takes it out of the strip', async () => {
+    await runTool('suggest_tiles', { streams: ['HAM', 'main'] });
+    expect(host.suggestions.add({ key: '1:44' })).toBe(true);
+    expect(layout.tiles().map((t) => t.component.label)).toEqual(['F1 LIVE', 'HAM']);
+    // A duplicate only leaves the strip.
+    host.suggestions.add({ key: '1:101' });
+    expect(layout.tiles()).toHaveLength(2);
+    expect(keys()).toEqual([]);
+  });
+
+  it('nothing joins a dismissed strip until the next turn', async () => {
+    await runTool('suggest_tiles', { streams: ['HAM'] });
+    host.suggestions.dismiss();
+    await expect(runTool('suggest_tiles', { streams: ['VER'] })).rejects.toThrow(/dismissed/);
+    host.suggestions.newTurn();
+    await runTool('suggest_tiles', { streams: ['VER'] });
+    expect(keys()).toEqual(['VER']);
+  });
+
+  it('a new turn clears the strip and tells the agent what the user did', async () => {
+    await runTool('suggest_tiles', { streams: ['HAM', 'VER', 'NOR'] });
+    host.suggestions.add({ key: '1:44' });
+    expect(host.suggestions.newTurn()).toBe('From your last suggestions the user added HAM; left VER, NOR unanswered.');
+    expect(keys()).toEqual([]);
+    expect(host.suggestions.newTurn()).toBeNull();
+  });
+
+  it('opening another session clears the strip', async () => {
+    await runTool('suggest_tiles', { streams: ['HAM'] });
+    useSession.setState({ session: { ...open, contentId: 2 } });
+    expect(keys()).toEqual([]);
   });
 });
 
@@ -153,11 +240,12 @@ describe('upcoming sessions', () => {
     expect(JSON.parse(await runTool('list_upcoming', {})).map((s: { contentId: number }) => s.contentId)).toEqual([1]);
   });
 
-  it('refuses to load a session that has not started', async () => {
+  it('loading a session that has not started shows a countdown instead', async () => {
     f1tv.upcoming.mockResolvedValue([session(1, 'Race', 'upcoming')]);
     await runTool('list_upcoming', {});
-    await expect(runTool('load_session', { contentId: 1, title: 'Race' })).rejects.toThrow(/hasn't started/);
+    expect(JSON.parse(await runTool('load_session', { contentId: 1, title: 'Race' }))).toMatchObject({ countdown: 'Race' });
     expect(useSession.getState().session).toBeNull();
+    expect(useCountdown.getState().countdown).toMatchObject({ title: 'Race' });
   });
 
   it('loads a listed upcoming session once it has gone live', async () => {
@@ -183,15 +271,15 @@ describe('upcoming sessions', () => {
     await expect(runTool('seek_to_start', {})).resolves.toMatch(/start/);
   });
 
-  it('wait_for_session needs a session it has seen, and only an upcoming one', async () => {
-    f1tv.upcoming.mockResolvedValue([session(1, 'Race', 'upcoming')]);
-    f1tv.sessions.mockResolvedValue([session(3, 'Old', 'replay')]);
-    await expect(runTool('wait_for_session', { contentId: 99 })).rejects.toThrow(/Unknown contentId/);
-    await runTool('list_sessions', { pageId: 1, year: 2026 });
-    await expect(runTool('wait_for_session', { contentId: 3 })).rejects.toThrow(/isn't upcoming/);
-    await runTool('list_upcoming', {});
-    await runTool('wait_for_session', { contentId: 1 });
-    expect(useCountdown.getState().countdown).toMatchObject({ title: 'Race' });
+  it('list_sessions refuses seasons before the first supported one', async () => {
+    await expect(runTool('list_sessions', { pageId: 1, year: 2022 })).rejects.toThrow(/Only 2023 on/);
+    expect(f1tv.sessions).not.toHaveBeenCalledWith(1, 2022);
+  });
+
+  it('there is no separate tool to wait for a session, or to list events', () => {
+    const names = AGENT_TOOLS.map((t) => t.name);
+    expect(names).not.toContain('wait_for_session');
+    expect(names).not.toContain('list_events');
   });
 
   it('a countdown fires for its own session, not another going live in the same event', async () => {

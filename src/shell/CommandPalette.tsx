@@ -1,12 +1,17 @@
 /**
  * The app's only control surface besides the timeline: an input box, plus a short history box when
- * there is history. Older history is a scroll away. Sits above the timeline, over the video.
+ * there is history, and the agent's suggested tiles between them. Older history is a scroll away.
+ * Sits above the timeline, over the video. It stays open while there are suggestions.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLive } from '../host';
-import { sendToAgent } from './agentFeed';
+import { host, useLive } from '../host';
+import { sendToAgent, stopTurn } from './agentFeed';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import { palette, usePalette, type EntryRole } from './palette';
+import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
+
+/** While the agent is still working, a second Esc this soon after the first stops it. */
+const ESC_AGAIN_MS = 2000;
 
 const ROLE_PREFIX: Record<EntryRole, string> = {
   user: '> ',
@@ -24,14 +29,55 @@ export function CommandPalette() {
   const historyRef = useRef<HTMLDivElement | null>(null);
   const sentRef = useRef<string[]>([]);
   const recallRef = useRef<number | null>(null);
+  const stripRef = useRef<SuggestionStripHandle | null>(null);
+  const tiles = useLive((s) => s.suggestions.items);
+  const [armed, setArmed] = useState(false);
+  const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
-  const showing = open || blank;
+  const hasTiles = tiles.length > 0;
+  const showing = open || blank || hasTiles;
   const suggestions = matchCommands(value);
 
   useEffect(() => {
-    if (showing) inputRef.current?.focus();
+    if (showing && !hasTiles) inputRef.current?.focus();
+    // Only on showing: suggestions arriving take focus themselves, below.
   }, [showing]);
+
+  // New suggestions keep the palette open, and take focus.
+  useEffect(() => {
+    if (!hasTiles) {
+      disarm();
+      return;
+    }
+    palette.show();
+    requestAnimationFrame(() => stripRef.current?.focus());
+  }, [hasTiles]);
+
+  function disarm(): void {
+    if (armedTimer.current != null) clearTimeout(armedTimer.current);
+    armedTimer.current = null;
+    setArmed(false);
+  }
+
+  /**
+   * Esc with suggestions showing dismisses them. While the agent is still working it could suggest
+   * more right after, so then it takes a second Esc, which also stops the turn.
+   */
+  const escapeTiles = () => {
+    if (!usePalette.getState().busy) {
+      host.suggestions.dismiss();
+    } else if (armed) {
+      host.suggestions.dismiss();
+      void stopTurn();
+    } else {
+      setArmed(true);
+      armedTimer.current = setTimeout(disarm, ESC_AGAIN_MS);
+      return;
+    }
+    disarm();
+    inputRef.current?.focus();
+  };
 
   useLayoutEffect(() => {
     const box = historyRef.current;
@@ -100,6 +146,14 @@ export function CommandPalette() {
           ))}
         </div>
       ) : null}
+      {hasTiles ? (
+        <>
+          <SuggestionStrip ref={stripRef} items={tiles} onLeave={() => inputRef.current?.focus()} onEscape={escapeTiles} />
+          <div className="strip-hint" data-testid="strip-hint">
+            {armed ? 'esc again to dismiss and stop the agent' : '← → choose · enter add · drag to place · esc dismiss'}
+          </div>
+        </>
+      ) : null}
       {suggestions.length > 0 ? (
         <div className="palette-suggestions" data-testid="palette-suggestions">
           {suggestions.map((command, i) => (
@@ -146,6 +200,7 @@ export function CommandPalette() {
             } else if (e.key === 'Escape') {
               e.preventDefault();
               if (value) setValue('');
+              else if (hasTiles) escapeTiles();
               else if (!blank) palette.hide();
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
@@ -156,7 +211,8 @@ export function CommandPalette() {
               else recall(1);
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
-              if (suggestions.length > 0) setSelected((selected - 1 + suggestions.length) % suggestions.length);
+              if (hasTiles && !value && suggestions.length === 0) stripRef.current?.focus();
+              else if (suggestions.length > 0) setSelected((selected - 1 + suggestions.length) % suggestions.length);
               else recall(-1);
             }
           }}

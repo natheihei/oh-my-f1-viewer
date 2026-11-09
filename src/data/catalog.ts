@@ -2,7 +2,47 @@
  * What F1 TV offers: past, live and upcoming. Remembers every session it has listed, so one can be
  * opened later by its contentId alone.
  */
+import { create } from 'zustand';
 import type { EventInfo, LiveItem, SeasonInfo, SessionInfo } from '../../shared/api';
+
+/** The first season the app supports. Earlier ones are on F1 TV, but nothing here is built for them. */
+export const FIRST_SEASON = 2023;
+
+/**
+ * Every event from FIRST_SEASON on, loaded once at start. The agent gets it up front, so it can work
+ * out which weekend the user means without looking it up. Failing to load is an error for the user
+ * to see and retry: without it the agent can't find anything.
+ */
+export interface EventIndex {
+  state: 'idle' | 'loading' | 'ready' | 'error';
+  seasons: { year: number; events: EventInfo[] }[];
+  error: string | null;
+}
+
+export const useEventIndex = create<EventIndex>(() => ({ state: 'idle', seasons: [], error: null }));
+
+let indexLoad: Promise<EventIndex> | null = null;
+
+function loadEventIndex(): Promise<EventIndex> {
+  if (indexLoad) return indexLoad;
+  useEventIndex.setState({ state: 'loading', error: null });
+  indexLoad = (async () => {
+    try {
+      const all = await window.f1a.f1tv.seasons();
+      const supported = all.filter((s) => s.year >= FIRST_SEASON).sort((a, b) => a.year - b.year);
+      if (supported.length === 0) throw new Error(`F1 TV lists no season from ${FIRST_SEASON} on.`);
+      const seasons = await Promise.all(supported.map(async (s) => ({ year: s.year, events: await window.f1a.f1tv.events(s.pageId) })));
+      useEventIndex.setState({ state: 'ready', seasons, error: null });
+    } catch (e) {
+      const message = (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '');
+      useEventIndex.setState({ state: 'error', error: message });
+    } finally {
+      indexLoad = null;
+    }
+    return useEventIndex.getState();
+  })();
+  return indexLoad;
+}
 
 const known = new Map<number, SessionInfo>();
 
@@ -27,6 +67,9 @@ function liveToSession(item: LiveItem, now: number): SessionInfo {
 }
 
 export const catalog = {
+  /** Loads the event index, or joins a load already under way. Never throws: the result says how it went. */
+  loadIndex: loadEventIndex,
+
   seasons: (): Promise<SeasonInfo[]> => window.f1a.f1tv.seasons(),
 
   async events(year: number): Promise<EventInfo[]> {

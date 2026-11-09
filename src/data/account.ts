@@ -20,7 +20,8 @@ export const account = {
 
 export const agentLink = {
   status: (): Promise<AiStatus> => window.f1a.ai.status().catch(() => ({ signedIn: false, model: null })),
-  send: (text: string, context: string, tools: AgentToolDefinition[]): Promise<void> => window.f1a.ai.send(text, context, tools),
+  send: (text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void> =>
+    window.f1a.ai.send(text, context, tools, reference),
   cancel: (): Promise<void> => window.f1a.ai.cancel(),
   onEvent: (cb: (event: AgentEvent) => void): (() => void) => window.f1a.ai.onEvent(cb),
   onToolCall: (cb: (call: AgentToolCall) => void): (() => void) => window.f1a.ai.onToolCall(cb),

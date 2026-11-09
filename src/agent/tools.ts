@@ -12,7 +12,7 @@
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentToolDefinition, Channel } from '../../shared/api';
-import { host, read, tilesOf, type Op } from '../host';
+import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type Op } from '../host';
 import { normalize, resolveChannel } from './matching';
 
 export interface AgentTool extends AgentToolDefinition {
@@ -103,26 +103,21 @@ function isoDate(ms: number | null): string | null {
 const MAX_UPCOMING = 16;
 
 export const AGENT_TOOLS: AgentTool[] = [
-  expose(host.catalog.events, {
-    name: 'list_events',
-    description:
-      'List the Grand Prix events of a season, including future ones, with their pageId. Event names are official, e.g. Brazil is the São Paulo Grand Prix and Mexico is the Mexico City Grand Prix.',
-    args: Type.Object({ year: Type.Integer({ description: 'Season, e.g. 2025' }) }, { additionalProperties: false }),
-    result: (events) =>
-      JSON.stringify(
-        events.map((e) => ({ pageId: e.pageId, name: e.shortName || e.name, officialName: e.name, round: e.round, startsOn: isoDate(e.startMs), isTest: e.isTest })),
-      ),
-  }),
   expose(host.catalog.sessions, {
     name: 'list_sessions',
     description: 'List all sessions of one event: practice, qualifying, sprint, race, and shows, each with its status: replay, live, or upcoming.',
     args: Type.Object(
       {
-        pageId: Type.Integer({ description: 'Event pageId from list_events' }),
-        year: Type.Integer({ description: 'Season of the event' }),
+        pageId: Type.Integer({ description: 'Event pageId, from the event list' }),
+        year: Type.Integer({ description: `Season of the event, ${FIRST_SEASON} or later` }),
       },
       { additionalProperties: false },
     ),
+    gate: [
+      (_, { year }) => {
+        if (year < FIRST_SEASON) throw new Error(`Only ${FIRST_SEASON} on is supported.`);
+      },
+    ],
     result: (sessions) =>
       JSON.stringify(sessions.map((s) => ({ contentId: s.contentId, title: s.title, type: s.type, status: s.status, startedAt: isoDate(s.startMs) }))),
   }),
@@ -140,10 +135,10 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.session.open, {
     name: 'load_session',
     description:
-      'Open a replay or live session and start the main broadcast. Replaces whatever is open. Only call this once the user has identified one specific session; ask them if it is ambiguous. Upcoming sessions use wait_for_session.',
+      "Open one session, once the user has chosen it. A replay or live one starts the main broadcast and replaces whatever is open. One that hasn't started shows a countdown, and starts by itself when F1 TV goes live.",
     args: Type.Object(
       {
-        contentId: Type.Integer({ description: 'contentId from list_sessions or list_live' }),
+        contentId: Type.Integer({ description: 'contentId from list_sessions, list_live or list_upcoming' }),
         title: Type.String({ description: 'Session title to show the user' }),
         fromStart: Type.Optional(
           Type.Boolean({
@@ -154,25 +149,13 @@ export const AGENT_TOOLS: AgentTool[] = [
       { additionalProperties: false },
     ),
     result: ({ session, feeds }, { fromStart }) =>
-      JSON.stringify({
-        opened: session.title,
-        playingFrom: session.status === 'live' && fromStart !== true ? 'live edge' : 'start',
-        streams: feeds.map((f) => f.label),
-      }),
-    hints: [[/hasn't started/, 'Offer wait_for_session instead.']],
-  }),
-  expose(host.session.waitFor, {
-    name: 'wait_for_session',
-    description: 'Show a countdown to one upcoming session, once the user has chosen it. It starts by itself when F1 TV goes live.',
-    args: Type.Object(
-      { contentId: Type.Integer({ description: 'contentId of the session, from list_sessions or list_upcoming' }) },
-      { additionalProperties: false },
-    ),
-    result: () => 'Countdown showing. It starts by itself when F1 TV goes live.',
-    hints: [
-      [/Unknown contentId/, 'Get it from list_upcoming or list_sessions first.'],
-      [/isn't upcoming/, 'Use load_session.'],
-    ],
+      feeds == null
+        ? JSON.stringify({ countdown: session.title, note: 'It starts by itself when F1 TV goes live.' })
+        : JSON.stringify({
+            opened: session.title,
+            playingFrom: session.status === 'live' && fromStart !== true ? 'live edge' : 'start',
+            streams: feeds.map((f) => f.label),
+          }),
   }),
   expose(host.session.feeds, {
     name: 'list_streams',
@@ -181,9 +164,9 @@ export const AGENT_TOOLS: AgentTool[] = [
     result: (feeds) =>
       JSON.stringify(feeds.map((f) => ({ name: f.label, kind: f.kind, driver: f.driverName, team: f.team, number: f.number, onScreen: onScreen(f.id) }))),
   }),
-  expose(host.layout.add, {
-    name: 'add_streams',
-    description: 'Put streams on screen, each as its own tile.',
+  expose(host.suggestions.offer, {
+    name: 'suggest_tiles',
+    description: `Suggest streams as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time.`,
     args: Type.Object({ streams: StreamRefs }, { additionalProperties: false }),
     adapt: ({ streams }) => ({ feeds: idsOf(matchAll(streams).feeds) }),
     gate: [
@@ -192,10 +175,16 @@ export const AGENT_TOOLS: AgentTool[] = [
         if (feeds.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
       },
     ],
-    result: (_, { streams }) => {
-      const { feeds, missing } = matchAll(streams);
-      return `On screen: ${labelsOf(feeds)}.${missingNote(missing)}`;
+    result: ({ suggested, onScreen, repeated, overLimit }, { streams }) => {
+      const parts = [
+        suggested.length ? `Suggested: ${suggested.join(', ')}.` : '',
+        onScreen.length ? `Already on screen, shown as such: ${onScreen.join(', ')}.` : '',
+        repeated.length ? `Already suggested this turn: ${repeated.join(', ')}.` : '',
+        overLimit.length ? `Left out, the strip is full: ${overLimit.join(', ')}.` : '',
+      ];
+      return `${parts.filter(Boolean).join(' ')}${missingNote(matchAll(streams).missing)} The user decides; nothing is on screen until they add it.`;
     },
+    hints: [[/dismissed/, 'Do not suggest again until they ask.']],
   }),
   expose(host.layout.remove, {
     name: 'remove_streams',
