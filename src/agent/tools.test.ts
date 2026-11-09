@@ -80,8 +80,8 @@ describe('agent tools', () => {
   it('are separate from user commands', async () => {
     const source = await import('node:fs/promises').then((fs) => fs.readFile('src/shell/commands.ts', 'utf8'));
     expect(source).not.toMatch(/from .*shared\/tools/);
-    expect(source).not.toContain('reset_layout');
-    expect(AGENT_TOOLS.map((t) => t.name)).toContain('reset_layout');
+    expect(source).not.toContain('list_live');
+    expect(AGENT_TOOLS.map((t) => t.name)).toContain('list_live');
   });
 
   it('send the model only plain JSON definitions', () => {
@@ -94,8 +94,8 @@ describe('agent tools', () => {
 
   it('take their schema from the host unless they override it', async () => {
     const { host } = await import('../host');
-    const reset = toolDefinitions().find((t) => t.name === 'reset_layout');
-    expect(reset?.parameters).toEqual(JSON.parse(JSON.stringify(host.layout.reset.info.args)));
+    const live = toolDefinitions().find((t) => t.name === 'list_live');
+    expect(live?.parameters).toEqual(JSON.parse(JSON.stringify(host.catalog.live.info.args)));
   });
 
   it('cannot seek forward even if the model sends a negative rewind', async () => {
