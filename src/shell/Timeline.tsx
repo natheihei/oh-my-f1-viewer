@@ -43,6 +43,8 @@ export function Timeline() {
   useEffect(() => {
     if (!session) return;
     const onKey = (e: KeyboardEvent) => {
+      // A focused component that handles a key (e.g. arrows between suggestion cards) claims it.
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       if (e.code === 'Space') {
