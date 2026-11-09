@@ -1,7 +1,7 @@
 /** Writes to the layout. Feeds are named by id and components by name: matching "Hamilton" to a feed is up to the caller. */
 import Type from 'typebox';
-import { allTiles } from '../layout/model';
-import { layout } from '../layout/store';
+import { allTiles, findTile } from '../layout/model';
+import { layout, useLayout } from '../layout/store';
 import { Item, specOf } from './components';
 import { write } from './op';
 
@@ -19,11 +19,18 @@ export const layoutOps = {
   ),
   remove: write(
     {
-      description: 'Take tiles off screen by key, whether they stand alone or are inside a group.',
+      description: 'Take tiles off screen by key, whether they stand alone or are inside a group. Returns the labels of those that were on screen.',
       args: Type.Object({ keys: Type.Array(Type.String(), { description: "Tile keys: a video tile's is its feed id" }) }),
     },
     ({ keys }) => {
-      for (const key of keys) layout.remove(key);
+      const removed: string[] = [];
+      for (const key of keys) {
+        const found = findTile(useLayout.getState(), key);
+        if (!found) continue;
+        layout.remove(key);
+        removed.push(found.tile.component.label);
+      }
+      return removed;
     },
   ),
   close: write(
