@@ -1,0 +1,187 @@
+/** The running order, one row per driver: position, gaps, last lap and tyre. */
+import { useMemo } from 'react';
+import Type from 'typebox';
+import { defineComponent, useSql } from '../../host';
+import {
+  ChartCanvas,
+  ChartFrame,
+  colors,
+  compoundLetter,
+  formatGap,
+  formatLapTime,
+  hline,
+  num,
+  parseGap,
+  stintAge,
+  styleOf,
+  text,
+  textWidth,
+  tyreColour,
+  useDriverStyles,
+  type Box,
+  type Ctx,
+  type DriverStyle,
+} from './kit';
+
+const NEEDS = ['timing' as const];
+
+// Each driver's latest position, gaps, lap, last completed lap and stint. `laps` is read once.
+export const SQL = `
+WITH l AS MATERIALIZED (SELECT driver_number, lap_number, lap_duration FROM laps),
+pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
+gap AS (SELECT driver_number, gap_to_leader, interval, MAX(date) AS gap_date FROM intervals GROUP BY driver_number),
+lap AS (SELECT driver_number, MAX(lap_number) AS lap FROM l GROUP BY driver_number),
+last AS (SELECT driver_number, lap_duration AS last_lap, MAX(lap_number) FROM l WHERE lap_duration IS NOT NULL GROUP BY driver_number),
+tyre AS (SELECT driver_number, compound, lap_start, lap_end, tyre_age_at_start, MAX(stint_number) FROM stints GROUP BY driver_number)
+SELECT pos.driver_number, pos.position, gap.gap_to_leader, gap.interval, gap.gap_date, lap.lap, last.last_lap,
+  tyre.compound, tyre.lap_start, tyre.lap_end, tyre.tyre_age_at_start
+FROM pos
+LEFT JOIN gap USING (driver_number) LEFT JOIN lap USING (driver_number) LEFT JOIN last USING (driver_number) LEFT JOIN tyre USING (driver_number)
+ORDER BY pos.position`;
+
+export interface TowerRow {
+  driver: number;
+  position: number | null;
+  /** "+1.234", "+1 LAP", or "LAP 31" for the leader. */
+  gap: string;
+  interval: string;
+  last: string;
+  compound: string | null;
+  age: number | null;
+}
+
+/** The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN. */
+export function towerModel(rows: ReadonlyArray<Record<string, unknown>>): TowerRow[] {
+  return rows.flatMap((r, i): TowerRow[] => {
+    const driver = num(r.driver_number);
+    if (driver === null) return [];
+    const lap = num(r.lap);
+    const start = num(r.lap_start);
+    // The leader's gap is the lap it's on, once the session has gaps at all.
+    const leader = i === 0;
+    return [
+      {
+        driver,
+        position: num(r.position),
+        gap: leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}` : '') : formatGap(parseGap(r.gap_to_leader)),
+        interval: leader ? '' : formatGap(parseGap(r.interval)),
+        last: formatLapTime(num(r.last_lap)),
+        compound: typeof r.compound === 'string' ? r.compound : null,
+        age: start === null ? null : stintAge(start, num(r.lap_end), num(r.tyre_age_at_start)),
+      },
+    ];
+  });
+}
+
+type Key = 'position' | 'bar' | 'code' | 'gap' | 'interval' | 'last' | 'tyre';
+
+/** Width in characters, and which go first when there's no room: higher drops sooner. */
+const COLUMNS: Array<{ key: Key; head: string; chars: number; drop: number }> = [
+  { key: 'position', head: 'P', chars: 2, drop: 0 },
+  { key: 'bar', head: '', chars: 0.5, drop: 0 },
+  { key: 'code', head: '', chars: 3, drop: 0 },
+  { key: 'gap', head: 'GAP', chars: 7, drop: 1 },
+  { key: 'interval', head: 'INT', chars: 7, drop: 3 },
+  { key: 'last', head: 'LAST', chars: 8, drop: 4 },
+  { key: 'tyre', head: 'TYRE', chars: 4, drop: 2 },
+];
+
+interface Drawn {
+  rows: TowerRow[];
+  styles: Map<number, DriverStyle>;
+}
+
+function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
+  const c = colors();
+  const pad = compact ? 4 : 8;
+  const head = compact ? 0 : 16;
+  const pitch = Math.min(22, Math.max(compact ? 9 : 12, (height - head - pad) / Math.max(1, m.rows.length)));
+  const size = Math.min(12, Math.max(8, Math.floor(pitch * 0.58)));
+  const ch = textWidth(ctx, '0', size);
+
+  // Drop columns until the rest fit, with at least a character and a half between them.
+  let columns = COLUMNS.filter((col) => !compact || col.drop < 3);
+  const room = width - pad * 2;
+  const needed = (cols: typeof columns) => cols.reduce((sum, col) => sum + col.chars, 0) * ch + (cols.length - 1) * 1.5 * ch;
+  while (needed(columns) > room && columns.some((col) => col.drop > 0)) {
+    const worst = Math.max(...columns.map((col) => col.drop));
+    columns = columns.filter((col) => col.drop !== worst);
+  }
+  const spacing = Math.min(3 * ch, Math.max(1.5 * ch, (room - columns.reduce((s, col) => s + col.chars, 0) * ch) / (columns.length - 1)));
+  const edges = new Map<Key, { x0: number; x1: number }>();
+  let at = pad;
+  for (const col of columns) {
+    // The bar sits tight against the code.
+    const gap = col.key === 'code' || col.key === 'bar' ? ch * 0.6 : spacing;
+    if (at > pad) at += gap;
+    edges.set(col.key, { x0: at, x1: at + col.chars * ch });
+    at += col.chars * ch;
+  }
+
+  if (head) {
+    for (const col of columns) {
+      const e = edges.get(col.key)!;
+      if (col.head) text(ctx, col.head, e.x1, head / 2 + 1, { align: 'right', color: c.faint, size: 9 });
+    }
+  }
+
+  m.rows.forEach((row, i) => {
+    const top = head + i * pitch;
+    if (top + pitch > height) return;
+    const y = top + pitch / 2 + 0.5;
+    if (!compact) hline(ctx, pad, width - pad, top);
+    const style = styleOf(m.styles, row.driver);
+    for (const col of columns) {
+      const { x0, x1 } = edges.get(col.key)!;
+      switch (col.key) {
+        case 'position':
+          text(ctx, row.position === null ? '' : String(row.position), x1, y, { align: 'right', size });
+          break;
+        case 'bar':
+          ctx.fillStyle = style.colour;
+          ctx.fillRect(x0, top + pitch * 0.22, Math.max(2, x1 - x0), pitch * 0.56);
+          break;
+        case 'code':
+          text(ctx, style.code, x0, y, { color: c.ink, size, weight: 500 });
+          break;
+        case 'gap':
+          text(ctx, row.gap, x1, y, { align: 'right', color: c.ink, size });
+          break;
+        case 'interval':
+          text(ctx, row.interval, x1, y, { align: 'right', size });
+          break;
+        case 'last':
+          text(ctx, row.last, x1, y, { align: 'right', color: c.ink, size });
+          break;
+        case 'tyre':
+          if (!row.compound) break;
+          text(ctx, compoundLetter(row.compound), x1 - 3 * ch, y, { align: 'right', color: tyreColour(row.compound), size, weight: 500 });
+          if (row.age !== null) text(ctx, String(row.age), x1, y, { align: 'right', size });
+          break;
+      }
+    }
+  });
+}
+
+function TimingTower() {
+  const view = useSql(SQL);
+  const styles = useDriverStyles();
+  const model = useMemo(() => (view.state === 'ready' ? { rows: towerModel(view.rows), styles } : null), [view, styles]);
+  return (
+    <ChartFrame needs={NEEDS} views={[view]}>
+      {() => model && <ChartCanvas model={model} draw={draw} />}
+    </ChartFrame>
+  );
+}
+
+export default defineComponent({
+  name: 'timing_tower',
+  title: 'Timing tower',
+  description:
+    'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age. Suggest it for an overview of the race, or whenever the user asks where someone is.',
+  args: Type.Object({}),
+  needs: NEEDS,
+  size: { aspect: 0.6, min: [6, 12] },
+  spec: () => ({ key: 'timing_tower', label: 'Timing' }),
+  View: TimingTower,
+});
