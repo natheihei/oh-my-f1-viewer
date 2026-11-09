@@ -4,23 +4,27 @@
  * `adapt`. Only what's specific to the agent lives here: names, wording, name matching and gates.
  * These are not user commands: `/` commands are a separate, much smaller set in src/shell/commands.ts.
  *
- * There is deliberately no forward seek and no race-state tool yet. Both wait for a spoiler approval
- * gate here, so the agent can never jump past what the viewer has seen. See docs/DESIGN.md.
+ * Reading the session past the playhead and seeking forward both ask the spoiler gate first, on every
+ * call, before anything runs. The agent reads ahead only to find a moment to jump to. See docs/DESIGN.md.
  *
- * Results are short and go back to the model. Nothing returned here may reveal how a session turned
- * out, only what exists and what is on screen.
+ * Results are short and go back to the model. Apart from an approved read ahead, nothing returned here
+ * may reveal how a session turned out, only what exists and what is on screen. A seek says only where
+ * playback landed.
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentToolDefinition, Channel } from '../../shared/api';
+import { SQL_TABLES } from '../../shared/sessionData';
+import { sqlColumns, TABLE_BY_NAME } from '../../shared/sessionTables';
 import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type Op } from '../host';
 import { normalize, resolveChannel } from './matching';
+import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 
 export interface AgentTool extends AgentToolDefinition {
   run(args: Record<string, unknown>): Promise<string>;
 }
 
-/** Refuses a call by throwing. Gets the host arguments, and what the model actually sent. */
-type Gate<A, M> = (args: A, modelArgs: M) => void;
+/** Refuses a call by throwing, or rejecting. Gets the host arguments, and what the model actually sent. */
+type Gate<A, M> = (args: A, modelArgs: M) => void | Promise<void>;
 
 interface Exposure<A, R, S extends TObject> {
   name: string;
@@ -45,7 +49,7 @@ function expose<A, R, S extends TObject = TObject>(op: Op<A, R>, options: Exposu
     async run(modelArgs) {
       const model = modelArgs as Static<S>;
       const hostArgs = adapt ? adapt(model) : (modelArgs as A);
-      for (const check of gate) check(hostArgs, model);
+      for (const check of gate) await check(hostArgs, model);
       try {
         const out = await op(hostArgs);
         return result ? result(out as Awaited<R>, model) : JSON.stringify(out);
@@ -64,13 +68,57 @@ const sessionOpen = (): void => {
   if (!read().session) throw new Error('No session is open.');
 };
 
-const somethingPlaying = (): void => {
-  if (read().clock.end <= 0) throw new Error('Nothing is playing yet, so there is nothing to rewind.');
+const dataReady = (): void => {
+  const data = read().sessionData;
+  if (data.state === 'ready') return;
+  const why = 'reason' in data ? ` ${data.reason}` : data.state === 'loading' ? ' It is still loading.' : '';
+  throw new Error(`This session's timing data isn't available.${why}`);
 };
 
-const rewindOnly = ({ seconds }: { seconds: number }): void => {
-  if (!(seconds < 0)) throw new Error('seconds must be positive.');
-};
+/** Asks the spoiler gate, and refuses the call unless it approves. */
+async function approve(request: SpoilerRequest): Promise<void> {
+  const { approved, reason } = await spoilerGate(request);
+  if (!approved) throw new Error(`The user did not allow that${reason ? `: ${reason}` : ''}. Tell them, and do not try another way.`);
+}
+
+const sessionTitle = (): string => read().session?.title ?? '';
+
+function playheadMs(): number | null {
+  const data = read().sessionData;
+  return data.state === 'ready' ? data.playheadMs : null;
+}
+
+/** h:mm:ss on the session clock. */
+export function formatClock(t: number): string {
+  const s = Math.max(0, Math.floor(t));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Session SQL
+
+/** At most this many rows go back to the model. */
+export const MAX_QUERY_ROWS = 200;
+
+/** Generated from the table definitions, so it can't drift from what the database holds. */
+function describeTables(): string {
+  const shared = new Set(['session_key', 'meeting_key', 'visible_from']);
+  return SQL_TABLES.map((name) => `${name}: ${sqlColumns(TABLE_BY_NAME.get(name)!).filter((c) => !shared.has(c)).join(', ')}`).join('\n');
+}
+
+const QUERY_DESCRIPTION = [
+  'Read the open session\'s timing data with SQLite. SELECT only.',
+  'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen. asOf "session" reads everything the session holds, including what the user has not watched yet: use it only to find a moment to jump to with seek_to, and never tell the user what it showed.',
+  'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
+  `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
+  'Every table also has session_key, meeting_key and visible_from. Tables and their other columns:',
+  describeTables(),
+].join('\n');
+
+const AsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
+  description: '"playhead" (the default) sees up to the frame on screen; "session" sees the whole session, and asks the user first.',
+});
 
 // Name matching
 
@@ -231,13 +279,54 @@ export const AGENT_TOOLS: AgentTool[] = [
     gate: [sessionOpen],
     result: () => 'Back at the start.',
   }),
-  expose(host.playback.seekBy, {
-    name: 'seek_back',
-    description: 'Rewind every stream by some seconds. Going forward is not possible: the viewer does that on the timeline, so it cannot spoil anything.',
-    args: Type.Object({ seconds: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }),
-    adapt: ({ seconds }) => ({ seconds: -seconds }),
-    gate: [sessionOpen, somethingPlaying, rewindOnly],
-    result: (_, { seconds }) => `Back ${seconds}s.`,
+  expose(host.data.sql, {
+    name: 'query_session',
+    description: QUERY_DESCRIPTION,
+    args: Type.Object(
+      {
+        sql: Type.String({ description: 'One SELECT statement. Use ? for params.' }),
+        params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
+        asOf: Type.Optional(AsOf),
+      },
+      { additionalProperties: false },
+    ),
+    adapt: ({ sql, params, asOf }) => ({ sql, params, asOf }),
+    gate: [
+      sessionOpen,
+      dataReady,
+      async ({ sql, asOf }) => {
+        if (asOf === 'session') await approve({ kind: 'read_ahead', session: sessionTitle(), playheadMs: playheadMs(), sql });
+      },
+    ],
+    result: ({ columns, rows }, { asOf }) => {
+      const shown = rows.slice(0, MAX_QUERY_ROWS).map((row) => columns.map((c) => row[c]));
+      // Nothing at the playhead often just means it hasn't happened on screen yet.
+      const note =
+        rows.length > MAX_QUERY_ROWS
+          ? `Showing ${MAX_QUERY_ROWS} of ${rows.length} rows. Narrow the query to see the rest.`
+          : rows.length === 0 && asOf !== 'session'
+            ? 'Nothing up to the frame on screen. If the moment may be later, ask again with asOf "session".'
+            : undefined;
+      return JSON.stringify({ columns, rows: shown, ...(note ? { note } : {}) });
+    },
+  }),
+  expose(host.playback.seekToDate, {
+    name: 'seek_to',
+    description:
+      'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. A moment later than the frame on screen asks the user first. Playback stays within what can be played.',
+    args: Type.Object({ date: Type.Number({ description: 'UTC milliseconds, from a query_session date column' }) }, { additionalProperties: false }),
+    adapt: ({ date }) => ({ dateMs: date }),
+    gate: [
+      sessionOpen,
+      dataReady,
+      async ({ dateMs }) => {
+        const playhead = playheadMs();
+        // With the frame on screen unknown, a seek may be forward: ask.
+        if (playhead === null || dateMs > playhead) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: dateMs });
+      },
+    ],
+    result: ({ timeSec, clamped }) =>
+      `Playback is at ${formatClock(timeSec)}.${clamped ? ' That moment is outside what can be played, so it stopped at the nearest end.' : ''}`,
   }),
 ];
 

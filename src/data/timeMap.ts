@@ -32,9 +32,10 @@ export function buildTimeMap(clock: FeedClock, sessionStartSec: number | null): 
   return { feedBaseUtc: clock.feedBaseUtc, leadInMs, curated, durationMs: clock.durationMs };
 }
 
+const usesWallClock = (map: TimeMap, wallClockMs: number | null): boolean => !map.curated && wallClockMs != null && map.feedBaseUtc != null;
+
 export function videoToFeedOffset(map: TimeMap, timeSec: number, wallClockMs: number | null): number {
-  const useWallClock = !map.curated && wallClockMs != null && map.feedBaseUtc != null;
-  const raw = useWallClock ? wallClockMs - map.feedBaseUtc! : timeSec * 1000 + map.leadInMs;
+  const raw = usesWallClock(map, wallClockMs) ? wallClockMs! - map.feedBaseUtc! : timeSec * 1000 + map.leadInMs;
   return Math.max(0, Math.min(raw, map.durationMs));
 }
 
@@ -48,4 +49,20 @@ export function playheadOf(live: boolean, map: TimeMap | null, timeSec: number, 
   if (live) return wallClockMs ?? 'everything';
   if (!map || map.feedBaseUtc === null) return null;
   return map.feedBaseUtc + videoToFeedOffset(map, timeSec, wallClockMs);
+}
+
+/**
+ * The other way: the video second showing a moment on the database's clock, given where the video is
+ * now. A replay placed by the lead-in inverts it exactly, kept within the feed. Anything placed by a
+ * wall clock moves by the difference from the frame on screen, as that clock has no fixed origin.
+ * Null when the frame on screen can't be placed.
+ */
+export function videoTimeOf(live: boolean, map: TimeMap | null, dateMs: number, timeSec: number, wallClockMs: number | null): number | null {
+  if (!live && map && map.feedBaseUtc !== null && !usesWallClock(map, wallClockMs)) {
+    const offset = Math.max(0, Math.min(dateMs - map.feedBaseUtc, map.durationMs));
+    return (offset - map.leadInMs) / 1000;
+  }
+  const playhead = playheadOf(live, map, timeSec, wallClockMs);
+  if (typeof playhead !== 'number') return null;
+  return timeSec + (dateMs - playhead) / 1000;
 }
