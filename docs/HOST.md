@@ -144,7 +144,7 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. One whose key is already on screen is skipped |
-| `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group |
+| `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group. Returns the labels of those that were on screen |
 | `close` | `tile: string` | Takes one tile off screen. Returns whether a tile matched |
 | `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
@@ -213,14 +213,21 @@ matching and gates (spoiler approval among them). The host doesn't know about an
 
 The agent can't put a feed on screen itself: it suggests tiles, and the user adds them. `src/agent/bridge.ts` sends it the event
 index (`live.events`) with every message, so it can work out which weekend the user means without a tool. It also sends what
-`host.suggestions.newTurn` reports. The tools today:
+`host.suggestions.newTurn` reports, and the tiles on screen, a chart by its label and component name.
+
+Every registered component but `video` is a chart. The bridge lists them at the end of the system prompt, one line each: name, title,
+how many drivers it takes, session types and description. With none registered, the list is left out. `suggest_tiles` takes charts
+by name, each with the drivers it's about, which the agent matches to car numbers through the session's roster, or the onboard feeds
+without one. A chart's props carry only those numbers, and a chart given none picks its own. The agent never sees what a chart shows,
+and a refusal only ever depends on the session type, missing data, an unknown name or the driver count, never on how the session is
+going. The tools today:
 
 | Tool | Host function |
 | --- | --- |
 | `list_sessions`, `list_live`, `list_upcoming` | `host.catalog.sessions`, `.live`, `.upcoming` |
 | `load_session`, `list_streams` | `host.session.open`, `.feeds` |
-| `suggest_tiles` | `host.suggestions.offer` |
-| `remove_streams` | `host.layout.remove` |
+| `suggest_tiles` | `host.suggestions.offer`, for streams and charts |
+| `remove_tiles` | `host.layout.remove`, for streams and charts |
 | `set_audio` | `host.audio.set` |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
