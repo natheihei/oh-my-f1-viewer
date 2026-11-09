@@ -110,6 +110,33 @@ class WeatherProcessor implements Processor {
   }
 }
 
+/** Keeps F1's own word for the status, such as `SCDeployed`. OpenF1 has no such table. */
+class TrackStatusProcessor implements Processor {
+  topics = ['TrackStatus'];
+  constructor(private key: Key) {}
+  *process({ content, time }: Message): Iterable<Emission> {
+    const status = typeof content?.Message === 'string' && content.Message ? content.Message : null;
+    if (status === null) return;
+    yield { table: 'track_status', row: { ...this.key, date: time, status } };
+  }
+}
+
+/** The first message carries the scheduled distance, later ones only the lap. */
+class LapCountProcessor implements Processor {
+  topics = ['LapCount'];
+  private current: number | null = null;
+  private total: number | null = null;
+  constructor(private key: Key) {}
+  *process({ content }: Message): Iterable<Emission> {
+    const current = toInt(content?.CurrentLap);
+    const total = toInt(content?.TotalLaps);
+    if (current === null && total === null) return;
+    if (current !== null) this.current = current;
+    if (total !== null) this.total = total;
+    yield { table: 'lap_count', row: { ...this.key, current_lap: this.current, total_laps: this.total } };
+  }
+}
+
 class CarDataProcessor implements Processor {
   topics = ['CarData.z'];
   constructor(private key: Key) {}
@@ -675,7 +702,8 @@ class LapsProcessor implements Processor {
       }
     }
 
-    if (data.PitOut !== undefined && data.PitOut !== null) this.update(driver, 'is_pit_out_lap', true);
+    // F1 also sends `PitOut: false`, which marked every car's first lap until it was read as a value.
+    if (data.PitOut === true) this.update(driver, 'is_pit_out_lap', true);
   }
 
   /** Lap 1 has no lap time of its own. It runs from the start to the beginning of lap 2. */
@@ -716,6 +744,8 @@ export const TIMING_FEEDS = [
   'PitLaneTimeCollection',
   'WeatherData',
   'ChampionshipPrediction',
+  'TrackStatus',
+  'LapCount',
   'ExtrapolatedClock',
 ] as const;
 
@@ -759,6 +789,8 @@ export function timingRouter({ meetingKey, sessionKey, isRace }: SessionMeta): R
     [
       new PositionProcessor(key),
       new WeatherProcessor(key),
+      new TrackStatusProcessor(key),
+      new LapCountProcessor(key),
       new OvertakesProcessor(key),
       new IntervalsProcessor(key),
       new RaceControlProcessor(key),

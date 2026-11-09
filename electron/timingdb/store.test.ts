@@ -4,8 +4,9 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ingestResults, ingestTelemetry, ingestTiming, isFinal, LiveCapture } from './ingest';
-import type { SessionMeta } from './processors';
+import { timingRouter, type SessionMeta } from './processors';
 import { TimingStore } from './store';
+import { LAP_SUMMARY_COLUMNS } from '../../shared/sessionTables';
 
 const META: SessionMeta = { meetingKey: 100, sessionKey: 200, isRace: true };
 const BASE = Date.UTC(2026, 0, 1, 12, 0, 0);
@@ -17,7 +18,10 @@ const stream = (records: Array<[number, unknown]>) => `﻿${records.map(([ms, da
 const compressed = (records: Array<[number, unknown]>) =>
   records.map(([ms, data]) => `${offset(ms)}"${zlib.deflateRawSync(Buffer.from(JSON.stringify(data))).toString('base64')}"`).join('\r\n');
 
-/** A short race: lights out at 1m, one lap in 1m30s, a stop on lap 2, a finish at 10m. */
+/**
+ * A short race: lights out at 1m, one lap in 1m30s, a stop on lap 2, a finish at 10m. Yellow on lap 1,
+ * a VSC then a safety car on lap 2, and a red flag on lap 4. The distance is cut from 5 laps to 3 at 5m.
+ */
 function raceFiles(): Record<string, string> {
   return {
     SessionInfo: stream([[0, { Key: 200, Type: 'Race', Name: 'Race', Path: '2026/x/', Meeting: { Key: 100 } }]]),
@@ -39,7 +43,25 @@ function raceFiles(): Record<string, string> {
       [151_000, { Lines: { '1': { LastLapTime: { Value: '1:29.000' } } } }],
       [240_000, { Lines: { '1': { NumberOfLaps: 2 } } }],
       [241_000, { Lines: { '1': { LastLapTime: { Value: '1:31.000' } } } }],
+      // F1 sends `PitOut: false` too, which isn't an out lap.
+      [155_000, { Lines: { '1': { PitOut: false } } }],
+      [245_000, { Lines: { '1': { PitOut: true } } }],
       [330_000, { Lines: { '1': { NumberOfLaps: 3, Line: 1 } } }],
+    ]),
+    TrackStatus: stream([
+      [0, { Status: '1', Message: 'AllClear' }],
+      [100_000, { Status: '2', Message: 'Yellow' }],
+      [110_000, { Status: '1', Message: 'AllClear' }],
+      [200_000, { Status: '6', Message: 'VSCDeployed' }],
+      [230_000, { Status: '4', Message: 'SCDeployed' }],
+      [260_000, { Status: '1', Message: 'AllClear' }],
+      [340_000, { Status: '5', Message: 'Red' }],
+    ]),
+    LapCount: stream([
+      [2_000, { CurrentLap: 1, TotalLaps: 5 }],
+      [150_000, { CurrentLap: 2 }],
+      [240_000, { CurrentLap: 3 }],
+      [300_000, { TotalLaps: 3 }],
     ]),
     DriverRaceInfo: stream([[150_000, { '1': { Gap: '+1.500', Interval: '+0.500' } }]]),
     // Reports a stop at 200s, but the message only arrives at 235s.
@@ -120,9 +142,113 @@ describe('session database', () => {
       expect(store.detail(META.sessionKey, 'timing').clock).toEqual({ feedBaseUtc: BASE, clockStartOffsetMs: null, scheduledStartOffsetMs: null, durationMs: 600_000 });
     });
 
+    it('keeps F1\'s words for the track status, each from when it was sent', () => {
+      expect(sql('SELECT status FROM track_status ORDER BY date', at(99_999)).map((r) => r.status)).toEqual(['AllClear']);
+      expect(sql('SELECT date, status FROM track_status ORDER BY date', at(230_000)).at(-1)).toEqual({ date: BASE + 230_000, status: 'SCDeployed' });
+      expect(sql('SELECT COUNT(*) AS n FROM track_status', at(600_000))[0].n).toBe(7);
+    });
+
+    it('gives the lap count as of the playhead, with the distance from the start', () => {
+      expect(store.sessionObjects(META.sessionKey, at(1_999)).lapCount).toBeNull();
+      expect(store.sessionObjects(META.sessionKey, at(2_000)).lapCount).toEqual({ current: 1, total: 5 });
+      expect(store.sessionObjects(META.sessionKey, at(239_999)).lapCount).toEqual({ current: 2, total: 5 });
+      expect(store.sessionObjects(META.sessionKey, at(299_999)).lapCount).toEqual({ current: 3, total: 5 });
+      expect(store.sessionObjects(META.sessionKey, at(300_000)).lapCount).toEqual({ current: 3, total: 3 });
+    });
+
+    it('takes a flag of PitOut: false as no out lap', () => {
+      expect(sql('SELECT lap_number, is_pit_out_lap FROM laps ORDER BY lap_number', at(600_000))).toEqual([
+        { lap_number: 1, is_pit_out_lap: 0 },
+        { lap_number: 2, is_pit_out_lap: 0 },
+        { lap_number: 3, is_pit_out_lap: 1 },
+        { lap_number: 4, is_pit_out_lap: 0 },
+      ]);
+    });
+
     it('keeps each session to itself', () => {
       expect(store.sql(999, at(600_000), 'SELECT * FROM position').rows).toEqual([]);
     });
+  });
+
+  describe('lap_summary', () => {
+    beforeEach(() => ingest());
+    const laps = (playhead: number, columns = 'lap_number, date_end, position, gap_to_leader') =>
+      sql(`SELECT ${columns} FROM lap_summary ORDER BY lap_number`, at(playhead));
+
+    it('ends a lap where the next starts, with position and gaps from the line', () => {
+      expect(laps(600_000)).toEqual([
+        { lap_number: 1, date_end: BASE + 150_000, position: 2, gap_to_leader: 1.5 },
+        { lap_number: 2, date_end: BASE + 240_000, position: 2, gap_to_leader: 1.5 },
+        { lap_number: 3, date_end: BASE + 330_000, position: 1, gap_to_leader: 1.5 },
+        { lap_number: 4, date_end: null, position: 1, gap_to_leader: 1.5 },
+      ]);
+    });
+
+    it('only has the laps the playhead has reached, and no end before the next lap starts', () => {
+      expect(laps(149_999)).toEqual([]);
+      expect(laps(150_000)).toEqual([
+        { lap_number: 1, date_end: BASE + 150_000, position: 2, gap_to_leader: 1.5 },
+        { lap_number: 2, date_end: null, position: 2, gap_to_leader: 1.5 },
+      ]);
+      expect(laps(239_999).map((r) => [r.lap_number, r.date_end])).toEqual([
+        [1, BASE + 150_000],
+        [2, null],
+      ]);
+    });
+
+    it('marks the in-lap once the stop is known, and the lap after as the out lap', () => {
+      const flags = (playhead: number) => laps(playhead, 'lap_number, is_pit_in_lap, is_pit_out_lap');
+      expect(flags(234_999)).toEqual([
+        { lap_number: 1, is_pit_in_lap: 0, is_pit_out_lap: 0 },
+        { lap_number: 2, is_pit_in_lap: 0, is_pit_out_lap: 0 },
+      ]);
+      expect(flags(600_000)).toEqual([
+        { lap_number: 1, is_pit_in_lap: 0, is_pit_out_lap: 0 },
+        { lap_number: 2, is_pit_in_lap: 1, is_pit_out_lap: 0 },
+        { lap_number: 3, is_pit_in_lap: 0, is_pit_out_lap: 1 },
+        { lap_number: 4, is_pit_in_lap: 0, is_pit_out_lap: 0 },
+      ]);
+    });
+
+    it('gives each lap the worst track status during it, counting the one it started under', () => {
+      const status = (playhead: number) => laps(playhead, 'lap_number, track_status').map((r) => r.track_status);
+      expect(status(600_000)).toEqual(['Yellow', 'SCDeployed', 'SCDeployed', 'Red']);
+      // The lap in progress has only what's happened so far.
+      expect(status(229_999)).toEqual(['Yellow', 'VSCDeployed']);
+      expect(status(339_999)).toEqual(['Yellow', 'SCDeployed', 'SCDeployed', 'AllClear']);
+    });
+
+    it('carries the stint, compound and the age of the set', () => {
+      expect(laps(600_000, 'lap_number, stint_number, compound, tyre_age')[0]).toEqual({ lap_number: 1, stint_number: 1, compound: 'SOFT', tyre_age: 1 });
+    });
+
+    it('is a view consumers can read but not reach past', () => {
+      expect(() => sql('SELECT * FROM lap_summary', at(600_000))).not.toThrow();
+      expect(sql('SELECT * FROM lap_summary', at(49_999))).toEqual([]);
+    });
+
+    it('has the columns the agent is told about', () => {
+      const [row] = sql('SELECT * FROM lap_summary LIMIT 1', at(600_000)) as Array<Record<string, unknown>>;
+      expect(Object.keys(row)).toEqual(['session_key', 'meeting_key', ...LAP_SUMMARY_COLUMNS]);
+    });
+  });
+
+  it('turns track status and lap count messages into rows', () => {
+    const router = timingRouter(META);
+    const rows = (topic: string, content: unknown) => router.process({ topic, content, time: BASE }).map((e) => [e.table, e.row]);
+    const key = { meeting_key: 100, session_key: 200 };
+    expect(rows('TrackStatus', { Status: '6', Message: 'VSCDeployed' })).toEqual([['track_status', { ...key, date: BASE, status: 'VSCDeployed' }]]);
+    expect(rows('TrackStatus', { Status: '1' })).toEqual([]);
+    expect(rows('LapCount', { CurrentLap: 1, TotalLaps: 71 })).toEqual([['lap_count', { ...key, current_lap: 1, total_laps: 71 }]]);
+    // Later messages carry only the lap: the distance stays.
+    expect(rows('LapCount', { CurrentLap: 2 })).toEqual([['lap_count', { ...key, current_lap: 2, total_laps: 71 }]]);
+  });
+
+  it('has no lap count in a session without one', () => {
+    const files = raceFiles();
+    delete files.LapCount;
+    ingestTiming(store, META, { files, failed: [] }, BASE, BASE + DAY);
+    expect(store.sessionObjects(META.sessionKey, at(600_000)).lapCount).toBeNull();
   });
 
   describe('results', () => {

@@ -19,6 +19,7 @@ import {
   asOfSql,
   createTableSql,
   INGEST_VERSION,
+  LAP_SUMMARY_SQL,
   quote,
   rowColumns,
   sqlColumns,
@@ -133,10 +134,13 @@ export class TimingStore {
     this.reader.function('f1a_session', { deterministic: true }, () => this.querySession);
     this.reader.function('f1a_playhead', { deterministic: true }, () => this.queryPlayhead);
     for (const name of SQL_TABLES) {
+      if (name === 'lap_summary') continue;
       const table = TABLE_BY_NAME.get(name)!;
       const columns = sqlColumns(table).map(quote).join(', ');
       this.reader.exec(`CREATE TEMP VIEW ${quote(name)} AS SELECT ${columns} FROM (${asOfSql(table, 'f1a_session()', 'f1a_playhead()')})`);
     }
+    // Built on the views above, so it's limited to the playhead just as they are.
+    this.reader.exec(`CREATE TEMP VIEW lap_summary AS ${LAP_SUMMARY_SQL}`);
     this.reader.setAuthorizer((action, a, b, database, view) => {
       switch (action) {
         case constants.SQLITE_SELECT:
@@ -192,7 +196,13 @@ export class TimingStore {
       sessionResult: this.objects('session_result', sessionKey, playheadMs, 'position IS NULL, position, driver_number'),
       championshipDrivers: this.objects('championship_drivers', sessionKey, playheadMs, 'position_current IS NULL, position_current, driver_number'),
       championshipTeams: this.objects('championship_teams', sessionKey, playheadMs, 'position_current IS NULL, position_current, team_key'),
+      lapCount: this.lapCount(sessionKey, playheadMs),
     };
+  }
+
+  private lapCount(sessionKey: number, playheadMs: number): SessionObjects['lapCount'] {
+    const [row] = this.objects<{ current_lap: number | null; total_laps: number | null }>('lap_count', sessionKey, playheadMs, 'current_lap');
+    return row && row.current_lap !== null && row.total_laps !== null ? { current: row.current_lap, total: row.total_laps } : null;
   }
 
   // --- Writes ---

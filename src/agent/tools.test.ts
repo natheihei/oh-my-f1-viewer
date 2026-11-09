@@ -402,6 +402,7 @@ describe('seeking to a moment', () => {
     sessionResult: [],
     championshipDrivers: [],
     championshipTeams: [],
+    lapCount: null,
   });
   let seekToDate: MockInstance<typeof sessionControl.seekToDate>;
 

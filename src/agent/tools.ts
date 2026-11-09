@@ -14,7 +14,7 @@
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentToolDefinition, Channel, SessionType } from '../../shared/api';
 import { SQL_TABLES } from '../../shared/sessionData';
-import { sqlColumns, TABLE_BY_NAME } from '../../shared/sessionTables';
+import { LAP_SUMMARY_COLUMNS, sqlColumns, TABLE_BY_NAME } from '../../shared/sessionTables';
 import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
@@ -107,7 +107,9 @@ export const MAX_QUERY_ROWS = 200;
 /** Generated from the table definitions, so it can't drift from what the database holds. */
 function describeTables(): string {
   const shared = new Set(['session_key', 'meeting_key', 'visible_from']);
-  return SQL_TABLES.map((name) => `${name}: ${sqlColumns(TABLE_BY_NAME.get(name)!).filter((c) => !shared.has(c)).join(', ')}`).join('\n');
+  const columnsOf = (name: (typeof SQL_TABLES)[number]) =>
+    name === 'lap_summary' ? LAP_SUMMARY_COLUMNS : sqlColumns(TABLE_BY_NAME.get(name)!).filter((c) => !shared.has(c));
+  return SQL_TABLES.map((name) => `${name}: ${columnsOf(name).join(', ')}`).join('\n');
 }
 
 const QUERY_DESCRIPTION = [
