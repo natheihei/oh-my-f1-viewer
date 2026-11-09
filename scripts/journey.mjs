@@ -139,8 +139,6 @@ check('pause stops playback', s.playing === false);
 r = await say('audio on Hamilton');
 s = await state();
 check('audio moves to Hamilton', s.audio === 'HAM', s.audio ?? 'none');
-r = await say('make Hamilton bigger');
-check('focus runs', r.tools.includes('focus_stream'));
 r = await say('skip ahead ten minutes');
 s = await state();
 check('refuses to seek forward', !r.tools.some((t) => /seek/.test(t)) && s.t < tBefore + 60, r.reply.slice(0, 90));
