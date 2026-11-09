@@ -67,8 +67,6 @@ Live capture has only run in unit tests. See "Not verified".
 
 ## Known issues
 
-- **"Next race" mostly starts a countdown to Practice 1,** not the race: 2 of 3 runs. Starting a countdown is now just `load_session`, so
-  the agent treats it as lightly as loading.
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
   reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.
 
