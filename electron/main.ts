@@ -84,7 +84,7 @@ app
     livetiming.setAuthTokenProvider(() => sessionState.memSession.accessToken);
     licenseProxy.startLicenseProxy();
     licenseProxy.installWebRequestHooks();
-    setupIpc();
+    const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'));
 
     try {
       await sessionState.restoreSessionOnStartup();
@@ -95,6 +95,8 @@ app
 
     Menu.setApplicationMenu(null);
     createMainWindow();
+    // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
+    void data.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

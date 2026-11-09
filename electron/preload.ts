@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentEvent, AgentToolCall, AgentToolResult, F1aApi, LiveTimingStatus } from '../shared/api';
+import type { AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const handler = (_event: unknown, payload: T) => {
@@ -30,14 +30,14 @@ const api: F1aApi = {
     play: (contentId, channelId) => invoke('f1tv:play', contentId, channelId),
     lastLicenseError: (streamKey) => invoke('f1tv:lastLicenseError', streamKey),
   },
-  timing: {
-    resolve: (year, query) => invoke('timing:resolve', year, query),
-    load: (path) => invoke('timing:load', path),
-    syncData: (meetingKey, sessionKey) => invoke('timing:syncData', meetingKey, sessionKey),
-    liveStart: (query) => invoke('timing:liveStart', query),
-    liveStop: () => invoke('timing:liveStop'),
-    onLiveUpdate: (cb) => subscribe<{ feed: string; data: unknown }>('timing:liveUpdate', cb),
-    onLiveStatus: (cb) => subscribe<LiveTimingStatus>('timing:liveStatus', cb),
+  data: {
+    schedule: () => invoke('data:schedule'),
+    onSchedule: (cb) => subscribe('data:schedule', cb),
+    open: (query, live) => invoke('data:open', query, live),
+    close: () => invoke('data:close'),
+    onStatus: (cb) => subscribe('data:status', cb),
+    objects: (sessionKey, playheadMs) => invoke('data:objects', sessionKey, playheadMs),
+    sql: (sessionKey, playheadMs, sql, params) => invoke('data:sql', sessionKey, playheadMs, sql, params),
   },
   ai: {
     status: () => invoke('ai:status'),

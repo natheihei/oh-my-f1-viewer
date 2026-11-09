@@ -8,7 +8,7 @@ import type { Channel, SessionInfo } from '../../shared/api';
 import { joinPoint } from './join';
 import { LIVE_EDGE_OFFSET_SEC, LIVE_START_MARGIN_SEC, StreamHandle, type StreamStatus } from './stream';
 import { isStalled, pickReference, syncTick, type SyncEntry } from './syncEngine';
-import { createLiveTiming, createReplayTiming, type TimingSource } from './timing/timingSource';
+import { openSessionData, type SessionDataHandle } from './sessionData';
 import { normalizeVolume, toggledVolume } from './volume';
 
 const TICK_MS = 200;
@@ -82,7 +82,6 @@ class SessionRuntime {
   private readonly handles = new Map<string, StreamHandle>();
   private readonly held = new Set<string>();
   private timer: ReturnType<typeof setInterval> | null = null;
-  private timing: TimingSource | null = null;
   private referenceId: string | null = null;
   private wantPlaying = true;
   private virtualTime = 0;
@@ -90,6 +89,7 @@ class SessionRuntime {
   /** The clock holds at the start until the first stream has media to show. */
   private started = false;
   private readonly live: boolean;
+  private sessionData: SessionDataHandle | null = null;
   private startQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -98,7 +98,7 @@ class SessionRuntime {
   ) {
     this.live = session.status === 'live';
     this.timer = setInterval(() => this.tick(), TICK_MS);
-    this.timing = this.live ? createLiveTiming(session) : createReplayTiming(session);
+    this.sessionData = openSessionData(session, this.live);
   }
 
   private channelOf(channelId: string): Channel | undefined {
@@ -285,7 +285,7 @@ class SessionRuntime {
       timeSec = this.now();
     }
 
-    this.timing?.update(timeSec, wallClockMs);
+    this.sessionData?.update(timeSec, wallClockMs);
 
     const prev = useSession.getState().clock;
     const start = range?.start ?? prev.start;
@@ -306,8 +306,8 @@ class SessionRuntime {
   destroy(): void {
     if (this.timer != null) clearInterval(this.timer);
     this.timer = null;
-    this.timing?.destroy();
-    this.timing = null;
+    this.sessionData?.destroy();
+    this.sessionData = null;
     for (const handle of this.handles.values()) handle.destroy();
     this.handles.clear();
   }

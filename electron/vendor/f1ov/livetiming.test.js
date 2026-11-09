@@ -233,15 +233,15 @@ test('parseCoreFrame: type:3 Subscribe completion = initial snapshot, keyed by f
   const frame = JSON.stringify({ type: 3, invocationId: '1', result: { DriverList: { '1': { Tla: 'VER' } }, TimingData: { Lines: {} } } });
   const recs = lt.parseCoreFrame(frame);
   assert.deepEqual(recs, [
-    { feed: 'DriverList', data: { '1': { Tla: 'VER' } } },
-    { feed: 'TimingData', data: { Lines: {} } },
+    { feed: 'DriverList', data: { '1': { Tla: 'VER' } }, snapshot: true },
+    { feed: 'TimingData', data: { Lines: {} }, snapshot: true },
   ]);
 });
 
 test('parseCoreFrame: type:1 feed invocation', () => {
   const frame = JSON.stringify({ type: 1, target: 'feed', arguments: ['TimingData', { Lines: { '1': { Position: '1' } } }, '2026-01-01T00:00:00Z'] });
   assert.deepEqual(lt.parseCoreFrame(frame), [
-    { feed: 'TimingData', data: { Lines: { '1': { Position: '1' } } } },
+    { feed: 'TimingData', data: { Lines: { '1': { Position: '1' } } }, ts: '2026-01-01T00:00:00Z' },
   ]);
 });
 
@@ -249,8 +249,8 @@ test('parseCoreFrame: multiple record-separator-joined messages in one frame', (
   const a = JSON.stringify({ type: 1, target: 'feed', arguments: ['TrackStatus', { Status: '1' }, 't'] });
   const b = JSON.stringify({ type: 1, target: 'feed', arguments: ['LapCount', { CurrentLap: 3 }, 't'] });
   assert.deepEqual(lt.parseCoreFrame(`${a}\x1e${b}\x1e`), [
-    { feed: 'TrackStatus', data: { Status: '1' } },
-    { feed: 'LapCount', data: { CurrentLap: 3 } },
+    { feed: 'TrackStatus', data: { Status: '1' }, ts: 't' },
+    { feed: 'LapCount', data: { CurrentLap: 3 }, ts: 't' },
   ]);
 });
 
@@ -265,7 +265,7 @@ test('parseCoreFrame: inflates .z feeds (base64 string, not a JSON-quoted text l
   const obj = { Entries: [{ Cars: { '1': { Channels: { '2': 140 } } } }] };
   const b64 = zlib.deflateRawSync(Buffer.from(JSON.stringify(obj), 'utf8')).toString('base64');
   const frame = JSON.stringify({ type: 1, target: 'feed', arguments: ['CarData.z', b64, 't'] });
-  assert.deepEqual(lt.parseCoreFrame(frame), [{ feed: 'CarData.z', data: obj }]);
+  assert.deepEqual(lt.parseCoreFrame(frame), [{ feed: 'CarData.z', data: obj, ts: 't' }]);
 });
 
 test('parseCoreFrame: drops a .z record with a garbage blob instead of applying it', () => {

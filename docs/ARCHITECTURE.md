@@ -6,13 +6,13 @@
 │ Shell       palette · timeline · countdown · / commands       │
 │ Agent       tools built on the host · gates                   │
 │ ── Host ──  the only thing the three above may use            │
-│ Data        session · clock · synced streams · timing         │
+│ Data        session · clock · synced streams · session data   │
 │ Layout      layout tree → solver → GridStack placeholders     │
 └─────────────┬─────────────────────────────────────────────────┘
               │ typed IPC (shared/api.ts). Tokens never cross it.
 ┌ Main ───────┴─────────────────────────────────────────────────┐
 │ F1 TV sign-in, catalog, playback · license proxy · Widevine   │
-│ timing archive + live socket · agent loop (pi-ai)             │
+│ session database + live socket · agent loop (pi-ai)           │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,7 +25,8 @@ nothing about video: a tile just names a component, so charts can be added by de
 
 Everything a component, the shell or the agent can do goes through here:
 
-- **Reads:** `useLive(selector)` re-renders only when the selected value changes, and `read()` gives the same state once, outside React.
+- **Reads:** `useLive(selector)` re-renders only when the selected value changes, and `read()` gives the same state once, outside React. `useSql` and `host.data.sql` read the session's
+  time series, and can't write.
 - **Writes and queries:** typed functions such as `host.playback.seekBy({ seconds: -10 })`. Each declares its description and argument schema, and
   none of them checks who's calling. Policy, such as spoiler approval, belongs to the caller.
 - **Primitives:** `<Video feed={id} />` shows a feed, and `<Grid>` draws the layout. Mounting a `<Video>` is what asks for the stream, the one
@@ -44,9 +45,10 @@ never touch a stream's time.
   everyone while the reference stalls. The decisions are pure and unit-tested.
 - **Reveal.** A new stream reports `resolving`, `loading` and `syncing` before `ready`, and its tile shows that status instead
   of the picture until it is within 0.25s of the clock.
-- **Timing** (`timing/`) exposes the race state at the frame on screen, never later. Its `state` says whether there's data and, if not, why.
+- **Session data** (`sessionData.ts`) is the session database from this side: the calendar, the roster and results, and SQL over the time series, all as of the frame on screen, never later. Its `state`
+  says whether there's data and, if not, why. The database itself lives in `electron/timingdb`, on a worker thread. See [SESSION_DATA.md](SESSION_DATA.md).
 
-### Aligning timing to video
+### Aligning data to video
 
 Neither timeline starts at the race start: replay video has a lead-in (lights out at 512.9s for the 2026 Mexico race), and the
 feed starts 13-60 minutes before lights out. In order of preference (`timeMap.ts`):
@@ -58,9 +60,9 @@ feed starts 13-60 minutes before lights out. In order of preference (`timeMap.ts
 This differs from F1 OpenViewer, which puts the wall clock first. Measured against curated lights-out it ran about 15s ahead
 (14.73s on 2024 Mexico, 14.99s on 2023 Mexico), which would show events before they happen on screen.
 
-Live timing is buffered until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed (about 45s
-when measured). F1 OpenViewer applies records on arrival, and lists this as a known limitation. Every record is kept, so rewinding
-the video can rebuild timing to match.
+Live data is held until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed (about 45s
+when measured). F1 OpenViewer applies records on arrival, and lists this as a known limitation. Each row stores when it arrived, so rewinding
+the video just changes which rows show.
 
 Live streams sit 8s behind the edge. Closer than that starves their buffers: at 2.2s back, onboards drifted over a second and stayed
 at low quality.
@@ -101,7 +103,7 @@ that refuse a call.
   `apply_patch`, sub-agents and image generation, and tried to read `/etc/hostname` with `view_image`. With pi-ai, the model can
   only call what we define.
 - **Spoilers.** There is deliberately no forward seek and no race-state tool until there is a spoiler approval gate, which will sit in the
-  agent's tools, not the host. Tool results and `app_state` hold nothing about how a session turned out. The host exposes timing, but no tool
+  agent's tools, not the host. Tool results and `app_state` hold nothing about how a session turned out. The host exposes session data, but no tool
   reads it.
 - **Model.** `gpt-6-luna` by default, the fastest tested. Override with `F1A_MODEL`.
 

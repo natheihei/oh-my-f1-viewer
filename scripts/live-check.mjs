@@ -28,7 +28,7 @@ await page.evaluate(async () => {
   window.f1a.ai.onEvent((e) => window.events.push(e));
   window.m = {
     session: await import('/src/data/session.ts'),
-    timing: await import('/src/data/timing/timingSource.ts'),
+    sessionData: await import('/src/data/sessionData.ts'),
     layout: await import('/src/layout/store.ts'),
   };
 });
@@ -123,11 +123,13 @@ await page.screenshot({ path: path.join(outDir, 'live-four.png') });
 
 // DVR
 const before = s.clock;
-const rowsBefore = await page.evaluate(() => window.m.timing.useTiming.getState().heldRecords);
+const visibleRows = () => page.evaluate(async () => (await window.m.sessionData.sessionSql('SELECT COUNT(*) AS n FROM position')).rows[0].n);
+const rowsBefore = await visibleRows();
 await page.evaluate((t) => window.m.session.sessionControl.seek(t), before.t - 180);
 await page.waitForTimeout(12000);
-const heldAfterRewind = await page.evaluate(() => window.m.timing.useTiming.getState().heldRecords);
-console.log(`timing records held: ${rowsBefore} at the edge, ${heldAfterRewind} after rewinding`);
+const rowsAfterRewind = await visibleRows();
+console.log(`position rows visible: ${rowsBefore} at the edge, ${rowsAfterRewind} after rewinding`);
+check('rewinding hides what the video has not reached', rowsAfterRewind < rowsBefore);
 s = await sample();
 show('12s after seeking back 3 minutes', s);
 check('DVR seek landed', Math.abs(s.clock.t - (before.t - 180 + 12)) < 8, `wanted about ${(before.t - 168).toFixed(1)}, at ${s.clock.t}`);
@@ -153,32 +155,31 @@ await page.waitForTimeout(8000);
 s = await sample();
 check('pause holds, then resume plays on', s.clock.t > p1.clock.t + 4 && s.streams.every((x) => x.status === 'ready'), `${p1.clock.t} -> ${s.clock.t}`);
 
-// Timing, buffered to the video. Reports shape only.
-const timing = await page.evaluate(() => {
-  const t = window.m.timing.useTiming.getState();
-  return { state: t.state, reason: t.reason, driverRows: t.drivers?.length ?? 0, hasClock: !!t.sessionClock, hasWeather: !!t.weather, hasLapCount: !!t.lapCount, hasTrackStatus: !!t.trackStatus };
+// The capture, held back to the video. Reports shape only.
+const captured = await page.evaluate(() => {
+  const d = window.m.sessionData.useSessionData.getState();
+  return { state: d.state, reason: d.reason, drivers: d.drivers?.length ?? 0, source: d.coverage?.source, capturedFrom: !!d.coverage?.capturedFrom, gaps: d.coverage?.gaps?.length, timing: d.coverage?.datasets?.timing?.state };
 });
-console.log('timing:', JSON.stringify(timing));
-check('live timing reaches the app', timing.state === 'ready' && timing.driverRows > 0);
+console.log('session data:', JSON.stringify(captured));
+check('live data reaches the database', captured.state === 'ready' && captured.source === 'live' && captured.drivers > 0);
+check('a live capture is not marked complete', captured.timing === 'partial');
 
-// How far timing is held back relative to arrival, measured around a burst of live records.
+// How far the data is held back from arrival, measured against everything captured so far.
 const delay = await page.evaluate(async () => {
-  const arrivals = [];
-  const off = window.f1a.timing.onLiveUpdate(() => arrivals.push(Date.now()));
-  let versionChanges = 0;
-  let last = null;
-  const unsub = window.m.timing.useTiming.subscribe((st) => { if (st !== last) { versionChanges += 1; last = st; } });
+  const { useSessionData, sessionSql } = window.m.sessionData;
+  const key = useSessionData.getState().sessionKey;
+  const everything = async () => (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT COUNT(*) AS n FROM intervals', [])).rows[0].n;
+  const first = await everything();
   await new Promise((r) => setTimeout(r, 8000));
-  off();
-  unsub();
+  const last = await everything();
+  const visible = (await sessionSql('SELECT COUNT(*) AS n FROM intervals')).rows[0].n;
   const c = window.m.session.useSession.getState().clock;
-  return { recordsIn8s: arrivals.length, publishesIn8s: versionChanges, videoLagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs) / 1000).toFixed(1) : null };
+  return { rowsIn8s: last - first, held: last - visible, videoLagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs) / 1000).toFixed(1) : null };
 });
 console.log('live feed:', JSON.stringify(delay));
-const held = await page.evaluate(() => window.m.timing.useTiming.getState().heldRecords);
-const expected = (delay.recordsIn8s / 8) * (delay.videoLagSec ?? 0);
-check('timing is held back until the video reaches it', held > expected * 0.3, `${held} records held; about ${Math.round(expected)} expected for ${delay.videoLagSec}s of lag`);
-check('live feed is flowing', delay.recordsIn8s > 0, `${delay.recordsIn8s} records in 8s`);
+const expected = (delay.rowsIn8s / 8) * (delay.videoLagSec ?? 0);
+check('data is held back until the video reaches it', delay.held > expected * 0.3, `${delay.held} rows held; about ${Math.round(expected)} expected for ${delay.videoLagSec}s of lag`);
+check('live feed is flowing', delay.rowsIn8s > 0, `${delay.rowsIn8s} rows in 8s`);
 
 // F1 TV's schedule has to keep working during a live session.
 const upcoming = await say('What sessions are coming up?');
