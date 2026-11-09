@@ -63,7 +63,7 @@ export default defineComponent({
 ```
 
 Each write and query declares its description and argument schema. The agent's tools are built from them, so a host change that breaks a tool
-fails to compile.
+fails to compile. [HOST.md](HOST.md) lists them all.
 
 ## The agent
 
