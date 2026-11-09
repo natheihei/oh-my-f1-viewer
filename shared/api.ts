@@ -81,19 +81,6 @@ export interface PlaybackInfo {
   channelId?: number;
 }
 
-export interface TimingSessionRef {
-  path: string;
-  meetingKey: string | number | null;
-  sessionKey: string | number | null;
-  name: string | null;
-}
-
-export interface SyncData {
-  sessionStartSec: number;
-  channelDiffs: Record<string, { diff: number; diffV2: number }>;
-  contentId: string | null;
-}
-
 export interface TimingQuery {
   year?: number;
   meetingKey?: string | number;
@@ -103,8 +90,6 @@ export interface TimingQuery {
   sessionType?: string;
   sessionKey?: string | number;
 }
-
-export type FeedRecord = { offsetMs: number; ts?: string; data: unknown };
 
 export interface F1TvStatus {
   signedIn: boolean;
@@ -145,7 +130,14 @@ export type AgentEvent =
   | { type: 'turn_end'; turnId: string; acted: boolean }
   | { type: 'error'; turnId: string; message: string };
 
-export type LiveTimingStatus = { status: string; detail?: string };
+export type {
+  DataStatus,
+  Schedule,
+  ScheduleView,
+  SessionDataView,
+  SessionObjects,
+  SqlRows,
+} from './sessionData';
 
 export interface F1aApi {
   f1tv: {
@@ -163,14 +155,16 @@ export interface F1aApi {
     play(contentId: number, channelId?: number): Promise<PlaybackInfo>;
     lastLicenseError(streamKey?: string): Promise<string>;
   };
-  timing: {
-    resolve(year: number, query: TimingQuery): Promise<TimingSessionRef | null>;
-    load(path: string): Promise<Record<string, FeedRecord[]>>;
-    syncData(meetingKey: string | number, sessionKey: string | number): Promise<SyncData | null>;
-    liveStart(query: TimingQuery): Promise<{ path: string | null }>;
-    liveStop(): Promise<void>;
-    onLiveUpdate(cb: (record: { feed: string; data: unknown }) => void): () => void;
-    onLiveStatus(cb: (status: LiveTimingStatus) => void): () => void;
+  /** The session database. It only ever answers as of the playhead it's given. */
+  data: {
+    schedule(): Promise<import('./sessionData').Schedule | null>;
+    onSchedule(cb: (update: { schedule: import('./sessionData').Schedule; reason: string | null }) => void): () => void;
+    /** Ingests what isn't there yet. Progress comes through `onStatus`. */
+    open(query: TimingQuery, live: boolean): Promise<void>;
+    close(): Promise<void>;
+    onStatus(cb: (status: import('./sessionData').DataStatus) => void): () => void;
+    objects(sessionKey: number, playheadMs: number): Promise<import('./sessionData').SessionObjects>;
+    sql(sessionKey: number, playheadMs: number, sql: string, params: unknown[]): Promise<import('./sessionData').SqlRows>;
   };
   ai: {
     status(): Promise<AiStatus>;

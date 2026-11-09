@@ -1,9 +1,11 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
-import type { F1TvStatus, TimingSessionRef } from '../shared/api';
+import type { F1TvStatus } from '../shared/api';
 import { getMainAppUrl, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
+import { TimingDb } from './timingdb';
+import { localToUtc } from '../shared/feedTime';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const f1tv = require('./vendor/f1ov/f1tv-bridge');
@@ -87,7 +89,57 @@ function queueContentPlay(contentId: number, channelId?: number): Promise<unknow
   return contentPlayQueue;
 }
 
-export function setupIpc(): void {
+function createTimingDb(file: string): TimingDb {
+  return new TimingDb({
+    file,
+    fetchFeed: (sessionPath, feed) => livetiming.fetchSessionFeedText(sessionPath, feed),
+    fetchSeasonIndex: (year) => livetiming.getIndex(year),
+    fetchPage: async (url) => {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(30_000) });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${url} answered HTTP ${res.status}`);
+      return res.text();
+    },
+    resolveSession: async (year, query) => {
+      const found = await livetiming.resolveSessionPath(year, query);
+      if (!found || found.meeting?.Key == null || found.session?.Key == null) return null;
+      return {
+        path: found.path,
+        meetingKey: Number(found.meeting.Key),
+        sessionKey: Number(found.session.Key),
+        type: found.session.Type ?? null,
+        name: found.session.Name ?? null,
+        endMs: localToUtc(found.session.EndDate, found.session.GmtOffset),
+      };
+    },
+    listUpcoming: async () => {
+      await ensureF1Client();
+      const seasons = await f1tv.getVodSeasons();
+      const current = seasons.find((s: { year: number }) => s.year === new Date().getUTCFullYear());
+      return { upcoming: await listUpcoming(seasons), events: current ? await listEvents(current.pageId) : [] };
+    },
+    fetchSessionStart: async (meetingKey, sessionKey) => (await livetiming.fetchSyncData(meetingKey, sessionKey))?.sessionStartSec ?? null,
+    connectLive: (feeds, onRecord, onStatus) => {
+      livetiming
+        .connectLiveSocket(
+          feeds,
+          (feed: string, data: unknown, record: { ts?: string; snapshot?: boolean }) =>
+            onRecord({ topic: feed, data, ts: record?.ts, snapshot: record?.snapshot, receivedAt: Date.now() }),
+          onStatus,
+        )
+        .catch((e: Error) => {
+          console.warn('[timingdb] live feed:', e?.message);
+          onStatus('error');
+        });
+    },
+    disconnectLive: () => livetiming.disconnectLiveSocket(),
+    send: sendToRenderer,
+  });
+}
+
+export function setupIpc(databaseFile: string): { refreshSchedule(): Promise<void> } {
+  const timingDb = createTimingDb(databaseFile);
+
   // --- F1 TV account ---
   handle('f1tv:status', () => f1Status());
   handle('f1tv:login', async () => {
@@ -98,6 +150,7 @@ export function setupIpc(): void {
     });
     memSession.accessToken = token;
     sessionState.persistSession(token);
+    void timingDb.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
     return f1Status();
   });
   handle('f1tv:logout', async () => {
@@ -145,37 +198,12 @@ export function setupIpc(): void {
   });
   handle('f1tv:lastLicenseError', (_e, key) => licenseProxy.getLastLicenseError(key));
 
-  // --- Timing ---
-  handle('timing:resolve', async (_e, year, query): Promise<TimingSessionRef | null> => {
-    const found = await livetiming.resolveSessionPath(year, query);
-    if (!found) return null;
-    return {
-      path: found.path,
-      meetingKey: found.meeting?.Key ?? null,
-      sessionKey: found.session?.Key ?? null,
-      name: found.session?.Name ?? null,
-    };
-  });
-  handle('timing:load', (_e, path) => livetiming.loadSession(path));
-  handle('timing:syncData', (_e, meetingKey, sessionKey) => livetiming.fetchSyncData(meetingKey, sessionKey));
-  handle('timing:liveStart', async (_e, query = {}) => {
-    let path: string | null = null;
-    try {
-      const found = await livetiming.resolveSessionPath(query.year || new Date().getFullYear(), query);
-      path = found ? found.path : null;
-    } catch {
-      // The archive may not list a session in progress; the live feed still works without it.
-    }
-    livetiming
-      .connectLiveSocket(
-        livetiming.DEFAULT_FEEDS,
-        (feed: string, data: unknown) => sendToRenderer('timing:liveUpdate', { feed, data }),
-        (status: string, detail?: string) => sendToRenderer('timing:liveStatus', { status, detail }),
-      )
-      .catch((e: Error) => sendToRenderer('timing:liveStatus', { status: 'error', detail: e?.message }));
-    return { path };
-  });
-  handle('timing:liveStop', () => livetiming.disconnectLiveSocket());
+  // --- Session database ---
+  handle('data:schedule', () => timingDb.schedule());
+  handle('data:open', (_e, query, live) => timingDb.open(query ?? {}, live === true));
+  handle('data:close', () => timingDb.close());
+  handle('data:objects', (_e, sessionKey, playheadMs) => timingDb.objects(Number(sessionKey), Number(playheadMs)));
+  handle('data:sql', (_e, sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
 
   // --- Agent ---
   handle('ai:status', () => agent.status());
@@ -187,4 +215,6 @@ export function setupIpc(): void {
   ipcMain.on('ai:toolResult', (evt, result) => {
     if (isTrusted(evt)) agent.onToolResult(result);
   });
+
+  return { refreshSchedule: () => timingDb.refreshSchedule() };
 }

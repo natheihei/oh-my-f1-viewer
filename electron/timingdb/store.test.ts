@@ -1,0 +1,352 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ingestResults, ingestTelemetry, ingestTiming, isFinal, LiveCapture } from './ingest';
+import type { SessionMeta } from './processors';
+import { TimingStore } from './store';
+
+const META: SessionMeta = { meetingKey: 100, sessionKey: 200, isRace: true };
+const BASE = Date.UTC(2026, 0, 1, 12, 0, 0);
+const DAY = 24 * 3600 * 1000;
+
+const offset = (ms: number) => new Date(ms).toISOString().slice(11, 23);
+const utc = (ms: number) => new Date(BASE + ms).toISOString();
+const stream = (records: Array<[number, unknown]>) => `﻿${records.map(([ms, data]) => `${offset(ms)}${JSON.stringify(data)}`).join('\r\n')}\r\n`;
+const compressed = (records: Array<[number, unknown]>) =>
+  records.map(([ms, data]) => `${offset(ms)}"${zlib.deflateRawSync(Buffer.from(JSON.stringify(data))).toString('base64')}"`).join('\r\n');
+
+/** A short race: lights out at 1m, one lap in 1m30s, a stop on lap 2, a finish at 10m. */
+function raceFiles(): Record<string, string> {
+  return {
+    SessionInfo: stream([[0, { Key: 200, Type: 'Race', Name: 'Race', Path: '2026/x/', Meeting: { Key: 100 } }]]),
+    ExtrapolatedClock: stream([[0, { Utc: utc(0), Remaining: '02:00:00', Extrapolating: false }]]),
+    DriverList: stream([[0, { '1': { RacingNumber: '1', FullName: 'Driver One', Tla: 'ONE', TeamName: 'A' } }]]),
+    SessionData: stream([
+      [60_000, { StatusSeries: { '0': { Utc: utc(60_000), SessionStatus: 'Started' } } }],
+      [590_000, { StatusSeries: { '1': { Utc: utc(590_000), SessionStatus: 'Finished' } } }],
+      [600_000, { StatusSeries: { '2': { Utc: utc(600_000), SessionStatus: 'Finalised' } } }],
+    ]),
+    TimingAppData: stream([
+      [1_000, { Lines: { '1': { Stints: [{ Compound: 'SOFT', StartLaps: 0, TotalLaps: 0 }] } } }],
+      [240_000, { Lines: { '1': { Stints: { '1': { Compound: 'HARD', StartLaps: 0, TotalLaps: 0 } } } } }],
+    ]),
+    TimingData: stream([
+      [50_000, { Lines: { '1': { Line: 3 } } }],
+      [61_000, { Lines: { '1': { Sectors: { '0': { Value: '' } } } } }],
+      [150_000, { Lines: { '1': { NumberOfLaps: 1, Line: 2 } } }],
+      [151_000, { Lines: { '1': { LastLapTime: { Value: '1:29.000' } } } }],
+      [240_000, { Lines: { '1': { NumberOfLaps: 2 } } }],
+      [241_000, { Lines: { '1': { LastLapTime: { Value: '1:31.000' } } } }],
+      [330_000, { Lines: { '1': { NumberOfLaps: 3, Line: 1 } } }],
+    ]),
+    DriverRaceInfo: stream([[150_000, { '1': { Gap: '+1.500', Interval: '+0.500' } }]]),
+    // Reports a stop at 200s, but the message only arrives at 235s.
+    PitStopSeries: stream([[235_000, { PitTimes: { '1': [{ Timestamp: utc(200_000), PitStop: { Lap: '2', PitLaneTime: '20.0', PitStopTime: '2.5' } }] } }]]),
+    RaceControlMessages: stream([[100_000, { Messages: [{ Utc: utc(90_000), Category: 'Flag', Flag: 'YELLOW', Message: 'YELLOW' }] }]]),
+    ChampionshipPrediction: stream([
+      [120_000, { Drivers: { '1': { CurrentPoints: 10, PredictedPoints: 20, CurrentPosition: 2, PredictedPosition: 2 } } }],
+      [300_000, { Drivers: { '1': { PredictedPoints: 35, PredictedPosition: 1 } } }],
+    ]),
+  };
+}
+
+describe('session database', () => {
+  let dir: string;
+  let store: TimingStore;
+  const sql = (query: string, playhead: number, params: unknown[] = []) => store.sql(META.sessionKey, playhead, query, params).rows;
+  const at = (ms: number) => BASE + ms;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-timingdb-'));
+    store = new TimingStore(path.join(dir, 'test.sqlite'));
+  });
+
+  afterEach(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const ingest = (now = BASE + DAY) => ingestTiming(store, META, { files: raceFiles(), failed: [] }, BASE + 2 * 3600 * 1000, now);
+
+  describe('visible_from on archived data', () => {
+    beforeEach(() => ingest());
+
+    it('shows nothing before the feed has said it', () => {
+      expect(sql('SELECT * FROM position', at(49_999))).toEqual([]);
+      expect(sql('SELECT position FROM position', at(50_000))).toEqual([expect.objectContaining({ position: 3 })]);
+    });
+
+    it("goes by when a message arrived, not the time it reports", () => {
+      expect(sql('SELECT * FROM pit', at(200_000))).toEqual([]);
+      expect(sql('SELECT * FROM pit', at(234_999))).toEqual([]);
+      expect(sql('SELECT date, lane_duration FROM pit', at(235_000))).toEqual([{ date: BASE + 200_000, lane_duration: 20 }]);
+      expect(sql("SELECT date FROM race_control WHERE category = 'Flag'", at(95_000))).toEqual([]);
+      expect(sql("SELECT date FROM race_control WHERE category = 'Flag'", at(100_000))).toEqual([{ date: BASE + 90_000 }]);
+    });
+
+    it('reads a lap as it stood, without its time before that was known', () => {
+      expect(sql('SELECT lap_number, lap_duration FROM laps WHERE lap_number = 2', at(150_500))).toEqual([{ lap_number: 2, lap_duration: null }]);
+      expect(sql('SELECT lap_duration FROM laps WHERE lap_number = 1', at(150_500))[0].lap_duration).not.toBe(89);
+      expect(sql('SELECT lap_duration FROM laps WHERE lap_number = 1', at(151_000))).toEqual([{ lap_duration: 89 }]);
+    });
+
+    it("doesn't reveal a pit stop through a stint's laps", () => {
+      expect(sql('SELECT stint_number, lap_end FROM stints', at(120_000))).toEqual([{ stint_number: 1, lap_end: 1 }]);
+      expect(sql('SELECT stint_number FROM stints ORDER BY stint_number', at(239_999))).toEqual([{ stint_number: 1 }]);
+      expect(sql('SELECT stint_number, compound FROM stints ORDER BY stint_number', at(240_000)).at(-1)).toEqual({ stint_number: 2, compound: 'HARD' });
+    });
+
+    it('never returns two versions of one row', () => {
+      const laps = sql('SELECT driver_number, lap_number, COUNT(*) AS n FROM laps GROUP BY 1, 2', at(600_000));
+      expect(laps.length).toBeGreaterThan(1);
+      expect(laps.every((row) => row.n === 1)).toBe(true);
+    });
+
+    it('moves backward as well as forward', () => {
+      expect(sql('SELECT COUNT(*) AS n FROM position', at(600_000))[0].n).toBe(3);
+      expect(sql('SELECT COUNT(*) AS n FROM position', at(100_000))[0].n).toBe(1);
+      expect(sql('SELECT COUNT(*) AS n FROM position', at(600_000))[0].n).toBe(3);
+    });
+
+    it('shows standings as they stood, not the final ones', () => {
+      expect(store.sessionObjects(META.sessionKey, at(100_000)).championshipDrivers).toEqual([]);
+      expect(store.sessionObjects(META.sessionKey, at(200_000)).championshipDrivers[0]).toMatchObject({ points_current: 20, position_current: 2 });
+      expect(store.sessionObjects(META.sessionKey, at(300_000)).championshipDrivers[0]).toMatchObject({ points_current: 35, position_current: 1 });
+    });
+
+    it("records where the feed's timeline sits, to place video frames on it", () => {
+      expect(store.detail(META.sessionKey, 'timing').clock).toEqual({ feedBaseUtc: BASE, clockStartOffsetMs: null, scheduledStartOffsetMs: null, durationMs: 600_000 });
+    });
+
+    it('keeps each session to itself', () => {
+      expect(store.sql(999, at(600_000), 'SELECT * FROM position').rows).toEqual([]);
+    });
+  });
+
+  describe('results', () => {
+    const grid = [{ driver_number: 1, position: 3, lap_duration: 80 }];
+    const result = [{ driver_number: 1, position: 1, number_of_laps: 3, points: 25, dnf: false, dns: false, dsq: false, duration: 300, gap_to_leader: 0 }];
+
+    it('shows the grid from the start of the feed, and the result only once the session has finished', () => {
+      ingest();
+      ingestResults(store, META, { grid, result, final: true, failed: false }, BASE + DAY);
+      expect(store.sessionObjects(META.sessionKey, at(-1)).startingGrid).toEqual([]);
+      expect(store.sessionObjects(META.sessionKey, at(100_000)).startingGrid).toEqual(grid);
+      expect(store.sessionObjects(META.sessionKey, at(599_999)).sessionResult).toEqual([]);
+      expect(store.sessionObjects(META.sessionKey, at(600_000)).sessionResult).toEqual(result);
+    });
+
+    it('stores no result for a session still in progress', () => {
+      ingestTiming(store, META, { files: raceFiles(), failed: ['WeatherData'] }, null, BASE + DAY);
+      ingestResults(store, META, { grid, result, final: true, failed: false }, BASE + DAY);
+      expect(store.sessionObjects(META.sessionKey, at(10 * DAY)).sessionResult).toEqual([]);
+      expect(store.isComplete(META.sessionKey, 'results')).toBe(false);
+    });
+  });
+
+  describe('marking an ingestion complete', () => {
+    it('is complete once everything arrived and the feed says the session is over', () => {
+      ingest();
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(true);
+      expect(store.coverage(META.sessionKey).datasets.timing.state).toBe('complete');
+    });
+
+    it("isn't complete when a feed failed to download, and says so", () => {
+      ingestTiming(store, META, { files: raceFiles(), failed: ['WeatherData'] }, BASE, BASE + 30 * DAY);
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(false);
+      expect(store.coverage(META.sessionKey).datasets.timing).toEqual({ state: 'partial', reason: expect.stringContaining('could not be downloaded') });
+    });
+
+    it('accepts a feed that just doesn\'t exist for this session', () => {
+      const files = raceFiles();
+      delete files.ChampionshipPrediction;
+      ingestTiming(store, META, { files, failed: [] }, BASE, BASE + DAY);
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(true);
+      expect(store.coverage(META.sessionKey).missingFeeds).toContain('ChampionshipPrediction');
+    });
+
+    it('has a fallback for archives that never report the end', () => {
+      expect(isFinal([], true, null, 0)).toBe(true);
+      expect(isFinal([], false, BASE, BASE + DAY)).toBe(false);
+      expect(isFinal([], false, BASE, BASE + 4 * DAY)).toBe(true);
+      expect(isFinal(['TimingData'], true, BASE, BASE + 4 * DAY)).toBe(false);
+    });
+
+    it('fails with a reason when there is no timing, instead of marking it done', () => {
+      ingestTiming(store, META, { files: {}, failed: [] }, BASE, BASE + DAY);
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(false);
+      expect(store.coverage(META.sessionKey).datasets.timing.state).toBe('failed');
+    });
+
+    it('replaces rather than adds when ingested again', () => {
+      ingest();
+      ingest();
+      expect(sql('SELECT COUNT(*) AS n FROM position', at(600_000))[0].n).toBe(3);
+    });
+
+    it('marks each dataset by itself', () => {
+      ingest();
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(true);
+      expect(store.isComplete(META.sessionKey, 'telemetry')).toBe(false);
+      expect(store.isComplete(META.sessionKey, 'results')).toBe(false);
+    });
+  });
+
+  describe('telemetry', () => {
+    it('decompresses both feeds and shows them by when they arrived', async () => {
+      ingest();
+      const files = {
+        'CarData.z': compressed([[60_000, { Entries: [{ Utc: utc(59_000), Cars: { '1': { Channels: { '0': 11000, '2': 300, '3': 8, '4': 100, '5': 0, '45': 12 } } } }] }]]),
+        'Position.z': compressed([[60_000, { Position: [{ Timestamp: utc(59_500), Entries: { '1': { X: 1, Y: 2, Z: 3 } } }] }]]),
+      };
+      await ingestTelemetry(store, META, { files, failed: [] }, BASE, BASE + DAY, async () => {});
+      expect(sql('SELECT * FROM car_data', at(59_999))).toEqual([]);
+      expect(sql('SELECT date, speed, n_gear FROM car_data', at(60_000))).toEqual([{ date: BASE + 59_000, speed: 300, n_gear: 8 }]);
+      expect(sql('SELECT date, x FROM location', at(60_000))).toEqual([{ date: BASE + 59_500, x: 1 }]);
+      expect(store.isComplete(META.sessionKey, 'telemetry')).toBe(true);
+    });
+  });
+
+  describe('live capture', () => {
+    const snapshot = (receivedAt: number) => [
+      { topic: 'SessionInfo', data: { Key: 200, Type: 'Race', Path: '2026/x/' }, snapshot: true, receivedAt },
+      { topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 20, Line: 4, LastLapTime: { Value: '1:30.000' } } } }, snapshot: true, receivedAt },
+      { topic: 'TimingAppData', data: { Lines: { '1': { Stints: [{ Compound: 'SOFT', StartLaps: 0, TotalLaps: 15 }, { Compound: 'HARD', StartLaps: 0, TotalLaps: 5 }] } } }, snapshot: true, receivedAt },
+    ];
+
+    it('joins mid-race at the lap in progress, with no made-up earlier laps', () => {
+      const capture = new LiveCapture(store, META, BASE);
+      capture.append(snapshot(BASE));
+      const laps = sql('SELECT lap_number, lap_duration FROM laps', BASE);
+      expect(laps).toEqual([{ lap_number: 21, lap_duration: null }]);
+    });
+
+    it('gives the finished stints their laps from the snapshot', () => {
+      new LiveCapture(store, META, BASE).append(snapshot(BASE));
+      expect(sql('SELECT lap_start, lap_end, compound FROM stints ORDER BY stint_number', BASE)[0]).toEqual({ lap_start: 1, lap_end: 15, compound: 'SOFT' });
+    });
+
+    it('carries on with laps after joining', () => {
+      const capture = new LiveCapture(store, META, BASE);
+      capture.append(snapshot(BASE));
+      capture.append([{ topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 21 } } }, ts: utc(90_000), receivedAt: BASE + 90_500 }]);
+      capture.append([{ topic: 'TimingData', data: { Lines: { '1': { LastLapTime: { Value: '1:31.000' } } } }, ts: utc(91_000), receivedAt: BASE + 91_500 }]);
+      expect(sql('SELECT lap_number, date_start, lap_duration FROM laps ORDER BY lap_number', BASE + 92_000)).toEqual([
+        { lap_number: 21, date_start: null, lap_duration: 91 },
+        { lap_number: 22, date_start: BASE + 90_000, lap_duration: null },
+      ]);
+    });
+
+    it('holds what arrived back until the video reaches it, whatever time the feed puts on it', () => {
+      const capture = new LiveCapture(store, META, BASE);
+      capture.append([{ topic: 'TimingData', data: { Lines: { '1': { Line: 1 } } }, ts: utc(0), receivedAt: BASE + 2_000 }]);
+      expect(sql('SELECT * FROM position', BASE + 1_999)).toEqual([]);
+      expect(sql('SELECT date FROM position', BASE + 2_000)).toEqual([{ date: BASE }]);
+    });
+
+    it('is never marked complete, so the archive replaces it later', () => {
+      new LiveCapture(store, META, BASE).append(snapshot(BASE));
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(false);
+      expect(store.coverage(META.sessionKey).source).toBe('live');
+      ingest();
+      expect(store.isComplete(META.sessionKey, 'timing')).toBe(true);
+      expect(store.coverage(META.sessionKey).source).toBe('archive');
+      expect(store.coverage(META.sessionKey).capturedFrom).toBeNull();
+      expect(sql('SELECT lap_number FROM laps WHERE lap_number = 21', at(600_000))).toEqual([]);
+    });
+
+    it('rebuilds from what it kept when the app restarts mid-session', () => {
+      const first = new LiveCapture(store, META, BASE);
+      first.append(snapshot(BASE));
+      first.append([{ topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 21 } } }, receivedAt: BASE + 90_000 }]);
+      const second = new LiveCapture(store, META, BASE + 100_000);
+      second.append([{ topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 22 } } }, receivedAt: BASE + 180_000 }]);
+      expect(sql('SELECT lap_number FROM laps ORDER BY lap_number', BASE + 180_000).map((row) => row.lap_number)).toEqual([21, 22, 23]);
+    });
+
+    it('records gaps while the connection is down', () => {
+      new LiveCapture(store, META, BASE).append(snapshot(BASE));
+      store.openGap(META.sessionKey, BASE + 10);
+      store.openGap(META.sessionKey, BASE + 20);
+      store.closeGap(META.sessionKey, BASE + 30);
+      expect(store.coverage(META.sessionKey).gaps).toEqual([{ from: BASE + 10, to: BASE + 30 }]);
+      expect(store.coverage(META.sessionKey).capturedFrom).toBe(BASE);
+    });
+
+    it('keeps a row visible from when it was first seen when a reconnect sends it again', () => {
+      const capture = new LiveCapture(store, META, BASE);
+      const message = { topic: 'RaceControlMessages', data: { Messages: [{ Utc: utc(0), Category: 'Flag', Message: 'GREEN' }] } };
+      capture.append([{ ...message, receivedAt: BASE + 1_000 }]);
+      capture.append([{ ...message, snapshot: true, receivedAt: BASE + 9_000 }]);
+      expect(sql('SELECT visible_from FROM race_control', BASE + 9_000)).toEqual([{ visible_from: BASE + 1_000 }]);
+    });
+
+    it("ignores another session's details", () => {
+      const capture = new LiveCapture(store, META, BASE);
+      capture.append([{ topic: 'SessionInfo', data: { Key: 999, Type: 'Practice' }, receivedAt: BASE }]);
+      capture.append([{ topic: 'ChampionshipPrediction', data: { Drivers: { '1': { PredictedPoints: 5 } } }, receivedAt: BASE }]);
+      expect(store.sessionObjects(META.sessionKey, BASE).championshipDrivers).toHaveLength(1);
+    });
+  });
+
+  describe('consumers can only read, and only the views', () => {
+    beforeEach(() => ingest());
+    const denied = (query: string) => expect(() => sql(query, at(600_000))).toThrow();
+
+    it('refuses the tables behind the views, which hold the whole session', () => {
+      denied('SELECT * FROM t_laps');
+      denied('SELECT * FROM main.t_position');
+      denied('SELECT * FROM t_session_result');
+      denied('SELECT * FROM t_live_messages');
+      denied('SELECT * FROM t_ingest');
+      denied('SELECT * FROM sqlite_master');
+      denied('SELECT * FROM (SELECT * FROM t_laps)');
+    });
+
+    it('offers no way to the roster and results objects through SQL', () => {
+      denied('SELECT * FROM session_result');
+      denied('SELECT * FROM starting_grid');
+      denied('SELECT * FROM championship_drivers');
+    });
+
+    it('refuses every kind of write', () => {
+      denied('DELETE FROM laps');
+      denied("UPDATE laps SET lap_duration = 1");
+      denied('INSERT INTO laps (lap_number) VALUES (1)');
+      denied('DELETE FROM t_laps');
+      denied('DROP TABLE t_laps');
+      denied('DROP VIEW laps');
+      denied('CREATE TABLE x (y)');
+      denied('CREATE TEMP TABLE x (y)');
+      denied('CREATE TEMP VIEW x AS SELECT * FROM t_laps');
+    });
+
+    it('refuses anything that could reach outside', () => {
+      denied("ATTACH '/tmp/x.sqlite' AS x");
+      denied('PRAGMA journal_mode');
+      denied("SELECT load_extension('x')");
+    });
+
+    it("can't change what the playhead allows from inside a query", () => {
+      expect(sql('SELECT COUNT(*) AS n FROM position WHERE visible_from > 0', at(49_999))[0].n).toBe(0);
+    });
+
+    it('takes parameters and ordinary SQL', () => {
+      expect(sql('WITH p AS (SELECT driver_number, MAX(date) AS d FROM position GROUP BY 1) SELECT driver_number FROM p WHERE driver_number = ?', at(600_000), [1])).toEqual([{ driver_number: 1 }]);
+      expect(store.sql(META.sessionKey, at(0), 'SELECT driver_number, position FROM position').columns).toEqual(['driver_number', 'position']);
+    });
+
+    it('hides internal keys', () => {
+      expect(store.sql(META.sessionKey, at(600_000), 'SELECT * FROM race_control').columns).not.toContain('row_key');
+    });
+  });
+
+  it('keeps the calendar across restarts', () => {
+    store.saveSchedule({ meetings: [], sessions: [], refreshedAt: 5 });
+    store.close();
+    store = new TimingStore(path.join(dir, 'test.sqlite'));
+    expect(store.schedule()).toEqual({ meetings: [], sessions: [], refreshedAt: 5 });
+  });
+});
