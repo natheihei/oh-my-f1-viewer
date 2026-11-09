@@ -1,12 +1,15 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentToolCall } from '../../shared/api';
-import { FIRST_SEASON, host, read, tilesOf, type EventIndex, type GroupNode, type LayoutState } from '../host';
-import { formatClock, runTool, toolDefinitions } from './tools';
+import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
+import { driverCount, formatClock, runTool, toolDefinitions } from './tools';
+
+/** A stream by its label, a chart by its label and chart name. */
+const describeTile = (c: ComponentSpec) => (c.type === 'video' ? c.label : `${c.label} (${c.type} chart)`);
 
 function describeLayout(state: LayoutState): string {
   if (state.nodes.length === 0) return 'nothing';
   return state.nodes
-    .map((n) => (n.kind === 'tile' ? n.component.label : `group "${(n as GroupNode).title}" [${n.children.map((c) => c.component.label).join(', ')}]`))
+    .map((n) => (n.kind === 'tile' ? describeTile(n.component) : `group "${(n as GroupNode).title}" [${n.children.map((c) => describeTile(c.component)).join(', ')}]`))
     .join('; ');
 }
 
@@ -98,8 +101,24 @@ export function describeEvents(index: EventIndex): string {
   return lines.join('\n');
 }
 
+/**
+ * Every chart `suggest_tiles` can offer, for the system prompt: one line each, or nothing when there
+ * are none. Only what each chart is for, never what it shows.
+ */
+export function describeCharts(components: ComponentInfo[]): string {
+  const charts = components.filter((c) => c.name !== 'video');
+  if (charts.length === 0) return '';
+  const lines = ['Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One that can take none picks its own.'];
+  for (const c of charts) {
+    lines.push(`${c.name}, ${c.title}, ${driverCount(c).text}, ${c.sessions ? c.sessions.join('/') : 'any session'}: ${c.description}`);
+  }
+  return lines.join('\n');
+}
+
 /** A message starts a new turn, which clears the suggestion strip. */
 export function askAgent(text: string): Promise<void> {
   const note = host.suggestions.newTurn();
-  return host.agent.send(text, describeAppState(note), toolDefinitions(), describeEvents(read().events));
+  const { events, components } = read();
+  const reference = [describeEvents(events), describeCharts(components)].filter(Boolean).join('\n\n');
+  return host.agent.send(text, describeAppState(note), toolDefinitions(), reference);
 }

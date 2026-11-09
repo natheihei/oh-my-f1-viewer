@@ -7,6 +7,7 @@ import Type, { type Static, type TObject } from 'typebox';
 import Value from 'typebox/value';
 import type { ComponentType } from 'react';
 import { create } from 'zustand';
+import type { SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
 import type { ComponentSpec } from '../layout/model';
 import { write } from './op';
@@ -18,8 +19,8 @@ interface Declared {
   title: string;
   /** What the agent reads when deciding what to suggest. */
   description: string;
-  /** Session types it applies to. Omitted means any. */
-  sessions?: string[];
+  /** Session types it applies to, as `SessionInfo.type` names them. Omitted means any. */
+  sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
   /** A size hint in grid cells. Unused for now. */
@@ -42,7 +43,7 @@ export interface ComponentInfo {
   /** The props' schema, as plain JSON. */
   args: Record<string, unknown>;
   /** Null means any session type. */
-  sessions: string[] | null;
+  sessions: SessionType[] | null;
   needs: Dataset[];
   size: { aspect: number; min: [number, number] } | null;
 }

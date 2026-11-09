@@ -75,7 +75,7 @@ fails to compile. [HOST.md](HOST.md) lists them all.
 The agent is a consumer like any other. `src/agent/tools.ts` exposes host functions with one entry per tool:
 
 ```ts
-expose(host.suggestions.offer, { name: 'suggest_tiles', args: streams, adapt: matchNames, gate: sessionOpen });
+expose(host.suggestions.offer, { name: 'suggest_tiles', args: streamsAndCharts, adapt: matchNames, gate: [sessionOpen, chartsFit] });
 expose(host.playback.seekToDate, { name: 'seek_to', adapt: toDateMs, gate: [sessionOpen, dataReady, askIfForward] });
 ```
 
@@ -84,6 +84,17 @@ arguments from the host's declares its own, and `adapt` must turn them into the 
 
 The agent can change the layout, except that it can't add to it: it suggests tiles, and the user adds them. It isn't offered groups for now: the
 host still supports them, so they can come back.
+
+### Charts
+
+Every registered component but video is a chart. Each message carries a list of them at the end of the system prompt: name, title, how many
+drivers it takes, session types and description. The agent picks one by its description and suggests it next to the onboards it's about.
+It never sees race data, which is what keeps charts free of spoilers without an approval gate:
+
+- Props carry only the drivers the user named, as car numbers. A chart given none picks its own from the data at the playhead.
+- A refusal never depends on how the session is going. It may say no session is open, the chart is for another session type, the session
+  has no data, the name is unknown, or the driver count is wrong.
+- The agent has not seen what a chart shows, so it never describes it.
 
 ### Finding a session
 
@@ -98,7 +109,7 @@ once F1 TV has it live.
 
 ### Suggested tiles
 
-`suggest_tiles` puts streams in a strip between the palette's history and its input, and returns at once: the turn doesn't wait for the user.
+`suggest_tiles` puts streams and charts in a strip between the palette's history and its input, and returns at once: the turn doesn't wait for the user.
 Each suggestion is a live preview, unless that tile is already on screen. Then it shows its title with an "on screen" badge, and hovering or
 focusing it outlines the tile in the layout. The layout never holds the same component twice, so adding one of those only takes it out of the
 strip.
