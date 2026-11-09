@@ -6,9 +6,9 @@ An agent-driven, multi-view F1 TV player. Instead of menus, you tell an agent wh
 > 2025 Mexico
 2025 Mexico City Grand Prix loaded.
 > Hamilton. Also battle between Norris and Leclerc.
-Hamilton added; Norris and Leclerc grouped together.
-> Done with that battle.
-Norris and Leclerc battle closed.
+Hamilton, Norris and Leclerc added.
+> Done with Norris and Leclerc.
+Removed: NOR, LEC.
 ```
 
 Every stream, and the session data, stays locked to one session clock. Needs an F1 TV subscription and a ChatGPT plan.

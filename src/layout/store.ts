@@ -27,6 +27,12 @@ export const layout = {
   clear: () => set(EMPTY_LAYOUT),
   add: (component: ComponentSpec) => set(addTile(get(), component)),
   remove: (key: string) => set(removeTile(get(), key)),
+  /** Removes a tile by its id, as the close button on its title bar does. */
+  close(id: string): boolean {
+    const tile = allTiles(get()).find((t) => t.id === id);
+    if (tile) set(removeTile(get(), tile.component.key));
+    return tile != null;
+  },
   has: (key: string) => findTile(get(), key) != null,
   group(components: ComponentSpec[], title?: string): string {
     const { state, groupId } = createGroup(get(), components, title);

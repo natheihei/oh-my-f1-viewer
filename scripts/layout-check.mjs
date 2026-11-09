@@ -1,5 +1,5 @@
 // Exercises the real grid surface in Electron, without needing any sign-in: rects line up with the
-// layout, hosts survive grouping, and mouse edits reach the layout tree.
+// layout, hosts survive grouping, mouse edits reach the layout tree, and only title bars take the mouse.
 // Usage: node scripts/layout-check.mjs [screenshot-dir]
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -43,6 +43,7 @@ const hostRects = () =>
     ),
   );
 const settle = () => page.waitForTimeout(350);
+const TITLE = 18;
 
 // Main fills the surface.
 await page.evaluate(() => window.layoutStore.layout.add(window.spec('MAIN')));
@@ -52,7 +53,11 @@ const surface = await page.evaluate(() => {
   const r = document.querySelector('[data-testid=stage]').getBoundingClientRect();
   return { w: Math.round(r.width), h: Math.round(r.height) };
 });
-check('main fills the surface', rects.MAIN.w === surface.w && Math.abs(rects.MAIN.h - surface.h) <= 2, JSON.stringify(rects.MAIN));
+check('main fills the surface below its title bar', rects.MAIN.w === surface.w && rects.MAIN.y === TITLE && Math.abs(rects.MAIN.h + TITLE - surface.h) <= 2, JSON.stringify(rects.MAIN));
+check('the title bar shows the label and a close button', await page.evaluate(() => {
+  const bar = document.querySelector('.tile-titlebar');
+  return bar?.querySelector('.tile-title')?.textContent === 'MAIN' && bar.querySelector('.tile-close') != null;
+}));
 
 // Hamilton, then a group.
 await page.evaluate(() => window.layoutStore.layout.add(window.spec('HAM')));
@@ -115,7 +120,27 @@ await page.evaluate(() => {
 await settle();
 await page.keyboard.press('Control+Shift+P');
 const before = await hostRects();
-await page.mouse.move(before.HAM.x + before.HAM.w / 2, before.HAM.y + before.HAM.h / 2);
+// The body of a tile belongs to its component: the mouse reaches it, and pressing there drags nothing.
+await page.evaluate(() => {
+  const host = document.querySelector('[data-tile-key=HAM]');
+  host.innerHTML = '<button id="inner" style="position:absolute;inset:0">inside</button>';
+  window.innerClicks = 0;
+  host.querySelector('#inner').addEventListener('click', () => (window.innerClicks += 1));
+});
+const middle = { x: before.HAM.x + before.HAM.w / 2, y: before.HAM.y + before.HAM.h / 2 };
+check('the component gets the mouse, not the grid', await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id === 'inner', middle));
+await page.mouse.click(middle.x, middle.y);
+check('clicks inside a tile reach its component', (await page.evaluate(() => window.innerClicks)) === 1);
+await page.mouse.move(middle.x, middle.y);
+await page.mouse.down();
+await page.mouse.move(before.MAIN.x + 200, before.MAIN.y + 300, { steps: 12 });
+await page.mouse.up();
+await settle();
+check('dragging inside a tile does not move it', (await hostRects()).HAM.x === before.HAM.x);
+check('the body shows no move cursor', await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)).cursor !== 'move', middle));
+
+// Drag by the title bar.
+await page.mouse.move(before.HAM.x + 40, before.HAM.y - TITLE / 2);
 await page.mouse.down();
 await page.mouse.move(before.MAIN.x + 200, before.MAIN.y + 300, { steps: 12 });
 await page.waitForTimeout(100);
@@ -139,6 +164,20 @@ await page.evaluate(() => window.layoutStore.layout.add(window.spec('NEW')));
 await settle();
 const placed = await hostRects();
 check('a new tile uses free space and leaves mouse edits alone', placed.HAM.w === resized.HAM.w && placed.NEW.visible && placed.NEW.x >= resized.HAM.x + resized.HAM.w - 2, JSON.stringify(placed.NEW));
+
+// The close button removes just that tile.
+const closeBox = await page.evaluate(() => {
+  const id = window.layoutStore.layout.snapshot().nodes.find((n) => n.component?.key === 'NEW').id;
+  const r = document.querySelector(`.grid-stack-item[gs-id="${id}"] .tile-close`).getBoundingClientRect();
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+await page.mouse.click(closeBox.x, closeBox.y);
+await settle();
+const remaining = await page.evaluate(() => window.layoutStore.layout.tiles().map((t) => t.component.key).sort().join(','));
+check('the close button removes its tile', remaining === 'HAM,MAIN', remaining);
+const afterClose = await hostRects();
+check('closing leaves the other tiles where they were', JSON.stringify(afterClose.HAM) === JSON.stringify(placed.HAM), JSON.stringify([placed.HAM, afterClose.HAM]));
+await page.screenshot({ path: path.join(outDir, 'layout-closed.png') });
 
 // Window resize.
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 640));

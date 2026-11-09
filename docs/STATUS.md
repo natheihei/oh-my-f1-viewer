@@ -7,7 +7,7 @@ What has actually been verified, and what hasn't. Last updated 2026-11-08.
 On Linux with an RTX 4080, against real F1 TV streams and the real agent:
 
 - The full journey: blank start, sign-ins, clarifying "2026 Brazil", loading "2025 Mexico", adding Hamilton and a Norris/Leclerc
-  group, then closing the group.
+  group, then closing the group. That was before groups were taken out of the agent's tools.
 - Four streams in sync, with the widest spread seen once settled under 0.07s, on the 2024 Mexico, 2025 Saudi Arabia, 2025 Mexico and 2026 Mexico races. None of these replays use DRM.
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
 - The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
@@ -67,8 +67,8 @@ Live capture has only run in unit tests. See "Not verified".
 - **Per-channel offsets aren't applied.** So a data feed or F1 LIVE tile can sit a fraction of a second off the playhead. The sync API gives offsets per channel (0.4s for DATA and TRACKER, 0.08s for F1 LIVE, 0 for
   onboards). F1 OpenViewer fetches them and never uses them. `diff` and `diffV2` have opposite signs on F1 LIVE, so what they mean
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
-- **Mouse edits inside groups** are only lightly tested. Dragging a tile between a group and the top level isn't supported: ask the
-  agent instead.
+- **Groups aren't offered** to the agent or the mouse for now. The layout model still supports them, and mouse edits inside them are
+  only lightly tested.
 - **No data while behind the join point of a live session.** A capture only has what arrived since the app connected, so watching a
   live race from its start shows nothing until the video catches up with that moment. Nothing displays session data yet.
 - **Tall windows waste space.** Tiles are sized without regard to 16:9, so a nearly square window shows large black bars.

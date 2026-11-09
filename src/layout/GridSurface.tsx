@@ -2,11 +2,14 @@
  * Draws the layout tree with GridStack as transparent placeholders, and reports mouse edits back.
  * Placeholders hold no state, so a change simply rebuilds them: GridStack re-parenting nodes when
  * nesting can't touch a video, because components live in the Stage underneath.
+ *
+ * Only each tile's title bar and resize handles take the mouse. Everything else passes through to
+ * the component underneath, so it can handle its own clicks.
  */
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { useEffect, useRef } from 'react';
-import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, type LayoutNode, type Rect } from './model';
+import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, type LayoutNode, type Rect, type TileNode } from './model';
 import { layout, useLayout } from './store';
 
 const GROUP_TITLE_PX = 18;
@@ -17,8 +20,8 @@ function signature(nodes: LayoutNode[]): string {
   return JSON.stringify(
     nodes.map((n) =>
       n.kind === 'tile'
-        ? [n.id, n.x, n.y, n.w, n.h]
-        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h])],
+        ? [n.id, n.x, n.y, n.w, n.h, n.component.label]
+        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label])],
     ),
   );
 }
@@ -28,20 +31,47 @@ const baseOptions: GridStackOptions = {
   animate: false,
   mode: 'float',
   acceptWidgets: false,
-  alwaysShowResizeHandle: false,
+  // GridStack otherwise adds handles on mouseover, which an item that lets the mouse through never gets.
+  // They stay invisible until hovered: see styles.css.
+  alwaysShowResizeHandle: true,
   resizable: { handles: 'e,s,se,w,sw' },
 };
 
-function addGrip(item: Element, className: string): void {
+/** The tile's title bar: dragging it moves the tile, and its x closes it. */
+function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void): void {
   const content = item.querySelector(':scope > .grid-stack-item-content');
-  if (content && !content.querySelector(`:scope > .${className}`)) {
-    const grip = document.createElement('div');
-    grip.className = `tile-grip ${className}`;
-    content.appendChild(grip);
-  }
+  if (!content || content.querySelector(':scope > .tile-titlebar')) return;
+  const bar = document.createElement('div');
+  bar.className = `tile-titlebar tile-grip ${className}`;
+  const title = document.createElement('span');
+  title.className = 'tile-title';
+  title.textContent = tile.component.label;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'tile-close';
+  close.title = `Close ${tile.component.label}`;
+  close.setAttribute('aria-label', close.title);
+  close.textContent = '×';
+  // Keep a press on the button from starting a drag.
+  close.addEventListener('mousedown', (e) => e.stopPropagation());
+  close.addEventListener('pointerdown', (e) => e.stopPropagation());
+  close.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClose(tile.id);
+  });
+  bar.append(title, close);
+  content.appendChild(bar);
 }
 
-export function GridSurface({ onMove, onSwap }: { onMove: (id: string, rect: Rect) => void; onSwap: (a: string, b: string) => void }) {
+export function GridSurface({
+  onMove,
+  onSwap,
+  onClose,
+}: {
+  onMove: (id: string, rect: Rect) => void;
+  onSwap: (a: string, b: string) => void;
+  onClose: (id: string) => void;
+}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
   const renderedRef = useRef('');
@@ -79,10 +109,12 @@ export function GridSurface({ onMove, onSwap }: { onMove: (id: string, rect: Rec
     };
     window.addEventListener('mousemove', trackPointer, true);
     grid.on('dragstop', (_event: Event, el: HTMLElement) => {
-      const target = document
-        .elementsFromPoint(pointer.x, pointer.y)
-        .map((hit) => hit.closest('.grid-stack-item'))
-        .find((item) => item && item !== el && item.parentElement === el.parentElement);
+      // Placeholders let the mouse through, so hit-test their boxes rather than elementsFromPoint.
+      const target = [...(el.parentElement?.children ?? [])].find((item) => {
+        if (item === el || !item.classList.contains('grid-stack-item') || item.classList.contains('grid-stack-placeholder')) return false;
+        const r = item.getBoundingClientRect();
+        return pointer.x >= r.left && pointer.x < r.right && pointer.y >= r.top && pointer.y < r.bottom;
+      });
       const idA = el.getAttribute('gs-id');
       const idB = target?.getAttribute('gs-id');
       if (idA && idB) setTimeout(() => onSwap(idA, idB), 0);
@@ -125,7 +157,7 @@ export function GridSurface({ onMove, onSwap }: { onMove: (id: string, rect: Rec
       const rect = { id: node.id, x: node.x, y: node.y, w: node.w, h: node.h };
       if (node.kind === 'tile') {
         const el = grid.addWidget(rect);
-        if (el) addGrip(el, TOP_GRIP);
+        if (el) addTitleBar(el, TOP_GRIP, node, onClose);
       } else {
         const el = grid.addWidget({
           ...rect,
@@ -145,7 +177,10 @@ export function GridSurface({ onMove, onSwap }: { onMove: (id: string, rect: Rec
           title.textContent = node.title;
           el.querySelector(':scope > .grid-stack-item-content')?.prepend(title);
           el.classList.add('tile-group');
-          el.querySelectorAll('.grid-stack-nested > .grid-stack-item').forEach((child) => addGrip(child, SUB_GRIP));
+          el.querySelectorAll('.grid-stack-nested > .grid-stack-item').forEach((child) => {
+            const tile = node.children.find((c) => c.id === child.getAttribute('gs-id'));
+            if (tile) addTitleBar(child, SUB_GRIP, tile, onClose);
+          });
         }
       }
     }

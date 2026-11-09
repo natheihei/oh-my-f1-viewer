@@ -50,6 +50,8 @@ export const GRID_COLUMNS = 24;
 export const GRID_ROWS = 24;
 export const GROUP_COLUMNS = 12;
 export const GROUP_ROWS = 12;
+/** Height of the bar across the top of every tile: its drag handle, label and close button. */
+export const TITLE_BAR_PX = 18;
 const ZERO: Rect = { x: 0, y: 0, w: 0, h: 0 };
 
 let nextId = 1;

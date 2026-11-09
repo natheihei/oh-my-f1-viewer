@@ -29,6 +29,10 @@ export const layoutOps = {
       for (const feed of feeds) layout.remove(feed);
     },
   ),
+  close: write(
+    { description: 'Take one tile off screen by its tile id. Returns whether it matched.', args: Type.Object({ tile: Type.String() }) },
+    ({ tile }) => layout.close(tile),
+  ),
   group: write(
     {
       description: 'Show feeds side by side as one group. Returns the group id.',

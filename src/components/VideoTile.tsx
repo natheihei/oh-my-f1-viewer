@@ -28,10 +28,8 @@ function VideoTile({ props, label }: { props: { feed: string }; label: string })
   return (
     <div className="tile" data-status={status}>
       <Video feed={feed} className={`tile-video ${revealed ? '' : 'tile-video-hidden'}`} />
-      <div className="tile-label">
-        {label}
-        {audible ? <span className="tile-audio"> ♪</span> : null}
-      </div>
+      {/* The label is on the title bar the grid draws. */}
+      {audible ? <div className="tile-audio">♪</div> : null}
       {statusText && (status === 'error' || !revealed) ? (
         <div className={`tile-status ${status === 'error' ? 'tile-status-error' : ''}`} data-testid="tile-status">
           <span className="tile-status-name">{label}</span> {statusText}
