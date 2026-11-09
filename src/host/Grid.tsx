@@ -20,6 +20,7 @@ export function defineComponent<P extends Record<string, unknown>>(definition: {
 
 const onMove = (tile: string, rect: Rect) => layoutOps.move({ tile, rect });
 const onSwap = (a: string, b: string) => layoutOps.swap({ a, b });
+const onClose = (tile: string) => void layoutOps.close({ tile });
 
 export function Grid({ components }: { components: ComponentDefinition[] }) {
   // A stable wrapper per component, because a new one would remount every tile.
@@ -36,7 +37,7 @@ export function Grid({ components }: { components: ComponentDefinition[] }) {
   return (
     <>
       <Stage registry={registry} />
-      <GridSurface onMove={onMove} onSwap={onSwap} />
+      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} />
     </>
   );
 }

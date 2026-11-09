@@ -55,9 +55,42 @@
   background: transparent;
 }
 
-/* The transparent surface that picks up the mouse over a tile. */
+/* The grid only takes the mouse at title bars and resize handles; the rest reaches the components. */
+.grid-surface,
+.grid-surface .grid-stack-item,
+.grid-surface .grid-stack-item-content {
+  pointer-events: none;
+}
+
+.grid-surface .ui-resizable-handle {
+  pointer-events: auto;
+}
+
+/* Where a tile is dragged from. */
 .tile-grip {
-  @apply absolute inset-0 cursor-move;
+  @apply absolute inset-x-0 top-0 cursor-move;
+  pointer-events: auto;
+}
+
+.tile-titlebar {
+  @apply flex items-center border border-b-0 border-line bg-black pl-1.5 text-dim;
+  height: 18px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.tile-titlebar:hover {
+  @apply text-ink;
+}
+
+.tile-title {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.tile-close {
+  @apply h-full w-[18px] shrink-0 cursor-pointer text-center text-dim hover:bg-white/10 hover:text-accent;
+  font-size: 13px;
+  line-height: 16px;
 }
 
 .tile-group > .grid-stack-item-content {
@@ -70,7 +103,7 @@
 }
 
 .group-title {
-  @apply bottom-auto z-10 truncate bg-black px-1.5 text-dim;
+  @apply z-10 truncate bg-black px-1.5 text-dim;
   height: 18px;
   line-height: 18px;
   font-size: 11px;
@@ -114,13 +147,9 @@
   @apply block h-full w-full bg-black object-contain;
 }
 
-.tile-label {
-  @apply absolute top-1 left-1 bg-black/70 px-1.5 text-ink;
-  font-size: 11px;
-}
-
 .tile-audio {
-  @apply text-accent;
+  @apply absolute top-1 left-1 bg-black/70 px-1.5 text-accent;
+  font-size: 11px;
 }
 
 .tile-status {
