@@ -63,6 +63,8 @@ A selector must return a value or an existing reference. Building a new object o
   - `playheadMs`: the frame on screen, in UTC milliseconds.
   - The roster and results as they stood at the playhead: `drivers`, `startingGrid` (races and sprints, from the grid on),
     `sessionResult` (only once the session has finished at the playhead), `championshipDrivers` and `championshipTeams`.
+  - `lapCount`: `{ current, total }`, the leader's lap and the scheduled distance, as of the playhead. `null` in a session
+    without them, such as practice or qualifying.
 
 Types are in [shared/sessionData.ts](../shared/sessionData.ts). Field names follow OpenF1, except that times are UTC milliseconds.
 
@@ -86,10 +88,11 @@ Queries read things that aren't part of the live state. They return promises, ex
 while playing, and returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
 returns the same rows as the last, it keeps returning the previous object, so a chart can redraw only when its data changes.
 
-The tables are `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints` and `weather`. By default
-(`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query can't see past the playhead. `asOf: 'session'`
-sees everything the session holds, results included, so a caller that shows what it reads to the user must ask first. `useSql` always reads as
-of the playhead. Only `SELECT` is allowed. The table and column definitions are in [shared/sessionTables.ts](../shared/sessionTables.ts).
+The tables are `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`,
+`track_status` and `weather`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
+can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
+the user must ask first. `useSql` always reads as of the playhead. Only `SELECT` is allowed. The table and column definitions are in
+[shared/sessionTables.ts](../shared/sessionTables.ts).
 [SESSION_DATA.md](SESSION_DATA.md) covers the columns, where the data comes from, and when it loads.
 
 ## Writes

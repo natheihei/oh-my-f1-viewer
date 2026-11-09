@@ -4,13 +4,15 @@
  */
 import type { Dataset, SqlTable } from './sessionData';
 
+/** `lap_summary` is a view over the others, built in electron/timingdb/schema.ts. */
 export type RowTable =
-  | SqlTable
+  | Exclude<SqlTable, 'lap_summary'>
   | 'drivers'
   | 'championship_drivers'
   | 'championship_teams'
   | 'starting_grid'
-  | 'session_result';
+  | 'session_result'
+  | 'lap_count';
 
 export interface TableDefinition {
   name: RowTable;
@@ -77,6 +79,22 @@ export const TABLES: TableDefinition[] = [
       wind_speed: 'REAL',
     },
     versioned: false,
+  },
+  {
+    // F1's own words for the status: AllClear, Yellow, SCDeployed, VSCDeployed, VSCEnding, Red.
+    name: 'track_status',
+    dataset: 'timing',
+    key: ['date'],
+    columns: { status: 'TEXT' },
+    versioned: false,
+  },
+  {
+    // One row per session: the lap the leader is on, and the scheduled distance.
+    name: 'lap_count',
+    dataset: 'timing',
+    key: [],
+    columns: { current_lap: 'INTEGER', total_laps: 'INTEGER' },
+    versioned: true,
   },
   {
     name: 'overtakes',
@@ -213,3 +231,24 @@ export function visibleColumns(table: TableDefinition): string[] {
 export function sqlColumns(table: TableDefinition): string[] {
   return ['session_key', 'meeting_key', ...visibleColumns(table), 'visible_from'];
 }
+
+/** What a query sees of `lap_summary`, which is a view and so has no table definition. Kept in step with LAP_SUMMARY_SQL by a test. */
+export const LAP_SUMMARY_COLUMNS = [
+  'driver_number',
+  'lap_number',
+  'date_start',
+  'date_end',
+  'lap_duration',
+  'duration_sector_1',
+  'duration_sector_2',
+  'duration_sector_3',
+  'position',
+  'gap_to_leader',
+  'interval',
+  'stint_number',
+  'compound',
+  'tyre_age',
+  'is_pit_in_lap',
+  'is_pit_out_lap',
+  'track_status',
+];

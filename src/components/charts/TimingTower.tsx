@@ -1,7 +1,7 @@
 /** The running order, one row per driver: position, gaps, last lap and tyre. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
+import { defineComponent, useLive, useSql } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -42,7 +42,7 @@ ORDER BY pos.position`;
 export interface TowerRow {
   driver: number;
   position: number | null;
-  /** "+1.234", "+1 LAP", or "LAP 31" for the leader. */
+  /** "+1.234", "+1 LAP", or "LAP 31" for the leader, "LAP 31/56" when the distance is known. */
   gap: string;
   interval: string;
   last: string;
@@ -50,8 +50,8 @@ export interface TowerRow {
   age: number | null;
 }
 
-/** The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN. */
-export function towerModel(rows: ReadonlyArray<Record<string, unknown>>): TowerRow[] {
+/** The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN. `total` is the race distance. */
+export function towerModel(rows: ReadonlyArray<Record<string, unknown>>, total: number | null = null): TowerRow[] {
   return rows.flatMap((r, i): TowerRow[] => {
     const driver = num(r.driver_number);
     if (driver === null) return [];
@@ -63,7 +63,7 @@ export function towerModel(rows: ReadonlyArray<Record<string, unknown>>): TowerR
       {
         driver,
         position: num(r.position),
-        gap: leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}` : '') : formatGap(parseGap(r.gap_to_leader)),
+        gap: leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}${total ? `/${total}` : ''}` : '') : formatGap(parseGap(r.gap_to_leader)),
         interval: leader ? '' : formatGap(parseGap(r.interval)),
         last: formatLapTime(num(r.last_lap)),
         compound: typeof r.compound === 'string' ? r.compound : null,
@@ -80,7 +80,7 @@ const COLUMNS: Array<{ key: Key; head: string; chars: number; drop: number }> = 
   { key: 'position', head: 'P', chars: 2, drop: 0 },
   { key: 'bar', head: '', chars: 0.5, drop: 0 },
   { key: 'code', head: '', chars: 3, drop: 0 },
-  { key: 'gap', head: 'GAP', chars: 7, drop: 1 },
+  { key: 'gap', head: 'GAP', chars: 9, drop: 1 },
   { key: 'interval', head: 'INT', chars: 7, drop: 3 },
   { key: 'last', head: 'LAST', chars: 8, drop: 4 },
   { key: 'tyre', head: 'TYRE', chars: 4, drop: 2 },
@@ -166,7 +166,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
 function TimingTower() {
   const view = useSql(SQL);
   const styles = useDriverStyles();
-  const model = useMemo(() => (view.state === 'ready' ? { rows: towerModel(view.rows), styles } : null), [view, styles]);
+  const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
+  const model = useMemo(() => (view.state === 'ready' ? { rows: towerModel(view.rows, total), styles } : null), [view, styles, total]);
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} />}

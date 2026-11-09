@@ -12,13 +12,40 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | --- | --- | --- |
 | Meetings, sessions | `useLive((s) => s.schedule)` | On every app start and sign-in. The last copy stays readable until then, or if that fails |
 | Drivers, championship, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
-| `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
+| Lap count | `useLive((s) => s.sessionData.lapCount)` | When a session opens |
+| `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
 
-Names match OpenF1, except that all times are UTC milliseconds. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
+Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
+doesn't follow its naming, and `lap_summary` is our own (see below). Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
 upcoming list, not OpenF1's website API, so it lacks `circuit_type`, images and `is_cancelled`. Upcoming meetings also have no location or circuit
 until they've happened.
 
 `useSql` runs again as the playhead moves and as data arrives. Objects are frozen. `sessionData.coverage` says what the database holds and why anything is missing.
+
+## Track status, lap count and `lap_summary`
+
+- **`track_status`** (`date`, `status`) comes from F1's `TrackStatus` feed, one row per change. `status` keeps F1's own words: `AllClear`,
+  `Yellow`, `SCDeployed`, `VSCDeployed`, `VSCEnding` and `Red`. `date` is when the message was sent, as the feed gives no other time.
+- **`sessionData.lapCount`** comes from `LapCount`, stored as versions. `total` is the scheduled distance, in the feed's first message, so it
+  isn't a spoiler. A shortened race shows its new distance only from when the feed said so. Practice and qualifying have no `LapCount`.
+- **`lap_summary`** is a view over the other views, not a table, so it only knows what they show at the playhead. One row per driver per lap
+  reached: `session_key`, `meeting_key`, `driver_number`, `lap_number`, `date_start`, `date_end`, `lap_duration`, `duration_sector_1` to `3`,
+  `position`, `gap_to_leader`, `interval`, `stint_number`, `compound`, `tyre_age`, `is_pit_in_lap`, `is_pit_out_lap` and `track_status`.
+  - A lap ends where the driver's next lap starts, or else at its start plus its time. The lap in progress has no `date_end`.
+  - `position`, `gap_to_leader` and `interval` are the last values at or before `date_end`, so as the car crossed the line. The lap in
+    progress, and a retired car's last lap, get the latest. Gaps can be text such as `+1 LAP`, as in `intervals`.
+  - `tyre_age` is the laps on the set by the end of this lap, used ones included. `is_pit_in_lap` is a `pit` row on this lap, since its
+    `lap_number` is the in-lap. `is_pit_out_lap` is the lap's own flag, or a stop on the lap before.
+  - `track_status` is the worst status during the lap, counting the one it started under: `Red`, then `SCDeployed`, `VSCDeployed`,
+    `VSCEnding`, `Yellow`, and `AllClear`. Null when there's no status yet. Lap 1 often has no start: it then runs back from its end by its time.
+
+On session 11396 at the end of the race, through the real worker in the app (`scripts/charts-check.mjs`, median of 5): `SELECT * FROM
+lap_summary` took 27ms for 1,166 rows, one driver's laps 6ms, every driver's position and gap per lap 13ms, and everyone's last 5 laps 11ms.
+With the timing tower (11ms), five such queries together take about 70ms. So it stays a view.
+
+That needed one change: a versioned table now finds each row's newest version from its key's index, then reads only those rows. Reading every
+version took 26ms on that race's 34,000 lap versions, and 7ms now. Before it, the same queries took 37, 24, 29 and 48ms, and the tower 28ms,
+measured on the store directly. The tower is also cheaper for it, so it doesn't use `lap_summary`.
 
 ## `visible_from`
 
@@ -45,6 +72,7 @@ Each dataset has its own mark in `t_ingest`, so a failed scrape can't force the 
 | `telemetry` | `CarData.z`, `Position.z` | The same as timing |
 
 A complete dataset is skipped when the session opens again. Bump `INGEST_VERSION` when a processor or table changes, and each session is ingested again the next time it opens.
+It's 3 since `TrackStatus` and `LapCount` were added, and `PitOut: false` stopped marking every car's first lap as an out lap.
 
 `ArchiveStatus` can't be the test: it reads `Generating` in files that have been final for years. Neither can the feed alone, since some archives never report the end.
 
@@ -95,6 +123,8 @@ history. There's no lap-by-lap history from before, as a snapshot doesn't hold i
 | Table | Result, session 11396 |
 | --- | --- |
 | `laps`, `stints`, `pit`, `position`, `race_control`, `weather`, `overtakes`, `intervals`, `drivers`, championship, `session_result` | Same rows and values (`intervals`: 24,227 rows) |
+| `laps.is_pit_out_lap` | The same 32 out laps. It wasn't compared before, and every car's lap 1 was wrongly marked until `INGEST_VERSION` 3 |
+| `lap_summary` | For 5 drivers, every lap's end, position, gaps and pit-in flag agree with a recount from the raw tables. Each completed lap has positions 1 to 22 once. The last lap's order matches the published result for all 19 classified cars |
 | `car_data`, `location` | Same rows and values, in a 1-minute sample for one car |
 | `sessions`, `meetings` | All 123 of 2025's sessions present, with one meeting and one session's fields compared |
 | `starting_grid` | 7 of 22 differ. The page we read is still the one OpenF1 scrapes, so its copy looks older |
@@ -108,6 +138,8 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 
 - **Live is untested.** No session was on while this was built, so the capture has only run in unit tests. It subscribes to more feeds than before, and any of them being refused
   would show up only on a live session. Check at the next one.
+- **`TrackStatus` and `LapCount` are untested live.** They're in the same subscription as the other feeds, so they'd be refused or missing
+  the same way. Check at the next live session.
 - **No live telemetry.** `CarData.z` and `Position.z` likely need the token on the socket, which isn't sent.
 - **Some archives are cut short.** F1's archive of the 2026 Mexico race (session 11404) ends about 2.2 hours in and never reports a finish, where OpenF1 has more rows from recording it live. A fresh
   download on 2026-11-09 was byte-identical to the cached copy in all 15 feeds checked, so this is F1's file and not a stale cache. It's still marked complete after 3 days, with nothing in `coverage` to say it's short.
