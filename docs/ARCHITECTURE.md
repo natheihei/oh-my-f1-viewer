@@ -23,7 +23,7 @@ nothing about video: a tile just names a component, so charts can be added by de
 
 ## Host (`src/host`)
 
-Everything a component, the shell or the agent can do goes through here:
+Everything a component, the shell or the agent can do goes through here. [HOST.md](HOST.md) lists every read and write:
 
 - **Reads:** `useLive(selector)` re-renders only when the selected value changes, and `read()` gives the same state once, outside React. `useSql` and `host.data.sql` read the session's
   time series, and can't write.
