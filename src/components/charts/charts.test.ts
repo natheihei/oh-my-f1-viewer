@@ -128,6 +128,10 @@ describe('timing_tower', () => {
     ]);
   });
 
+  it('gives the leader the race distance when it is known', () => {
+    expect(towerModel([row(4, 1, null, null)], 56)[0].gap).toBe('LAP 31/56');
+  });
+
   it('leaves the gaps blank in a session without them', () => {
     const [leader, second] = towerModel([row(4, 1, null, null, { gap_date: null }), row(1, 2, null, null, { gap_date: null })]);
     expect(leader.gap).toBe('');

@@ -67,6 +67,8 @@ await page.evaluate(async (time) => {
   host.playback.pause();
 }, at);
 await page.waitForTimeout(4000);
+const lapCount = await page.evaluate(async () => (await import('/src/host/index.ts')).read().sessionData.lapCount);
+console.log(`lap count at the playhead: ${JSON.stringify(lapCount)}`);
 
 await page.evaluate(async (items) => (await import('/src/host/index.ts')).host.suggestions.offer({ items }), items);
 await page.waitForTimeout(2500);
@@ -113,7 +115,14 @@ const timings = await page.evaluate(
       runs.sort((a, b) => a - b);
       return { medianMs: Math.round(runs[2] * 10) / 10, rows };
     };
-    return { timing_tower: await time(tower, []), gap_evolution: await time(gap, pair), tyre_strategy: await time(sqlFor(0), []) };
+    // The lap-based charts to come read lap_summary: five at once is the load to plan for.
+    const lapSummary = {
+      lap_summary_all: await time('SELECT * FROM lap_summary', []),
+      one_driver_laps: await time('SELECT lap_number, lap_duration, compound, tyre_age, track_status FROM lap_summary WHERE driver_number = ? ORDER BY lap_number', [pair[0]]),
+      position_and_gap_per_lap: await time('SELECT driver_number, lap_number, position, gap_to_leader FROM lap_summary ORDER BY lap_number, position', []),
+      last_five_laps: await time('SELECT * FROM lap_summary WHERE lap_number > (SELECT MAX(lap_number) FROM laps) - 5', []),
+    };
+    return { timing_tower: await time(tower, []), gap_evolution: await time(gap, pair), tyre_strategy: await time(sqlFor(0), []), ...lapSummary };
   },
   { key: Number(sessionKey), pair },
 );
