@@ -64,6 +64,15 @@ const playback = {
     { description: 'Move every stream by some seconds: negative goes back.', args: Type.Object({ seconds: Type.Number() }) },
     ({ seconds }) => sessionControl.seekBy(seconds),
   ),
+  seekToDate: write(
+    {
+      description:
+        'Move every stream to a moment on the session data clock, in UTC milliseconds like every date column, kept within the seekable range. ' +
+        "Fails when the video can't be matched to the data yet. Returns where it landed on the session clock, and whether it had to stop short.",
+      args: Type.Object({ dateMs: Type.Number() }),
+    },
+    ({ dateMs }): { timeSec: number; clamped: boolean } => sessionControl.seekToDate(dateMs),
+  ),
   seekToStart: write({ description: 'Go to the very beginning of the session.' }, () => sessionControl.seekToStart()),
   goLive: write({ description: 'Return to the live edge.' }, () => sessionControl.goLive()),
 };
@@ -116,13 +125,15 @@ const data = {
     {
       description:
         'Read the open session with SQL. Tables: car_data, intervals, laps, location, overtakes, pit, position, race_control, stints, weather. ' +
-        'Each holds only what the feed had revealed at the frame on screen. Times are UTC milliseconds. SELECT only.',
+        'Each holds only what the feed had revealed at the frame on screen, unless asOf is "session": then everything the session holds. ' +
+        'Times are UTC milliseconds. SELECT only.',
       args: Type.Object({
         sql: Type.String(),
         params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
+        asOf: Type.Optional(Type.Union([Type.Literal('playhead'), Type.Literal('session')], { description: 'What is visible: "playhead" (the default) or "session".' })),
       }),
     },
-    ({ sql, params }) => sessionSql(sql, params),
+    ({ sql, params, asOf }) => sessionSql(sql, params, asOf),
   ),
 };
 

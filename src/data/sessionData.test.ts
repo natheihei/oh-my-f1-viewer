@@ -120,14 +120,36 @@ describe('session data', () => {
     handle.destroy();
   });
 
-  it('gives SQL the current frame, which a consumer cannot choose', async () => {
+  it('gives SQL the current frame, or the whole session only when asked by name', async () => {
     const handle = openSessionData(session, false);
     emit(ready);
     handle.update(500, null);
     await sessionSql('SELECT 1');
-    expect(data.sql).toHaveBeenCalledWith(20, BASE + 2_000_000, 'SELECT 1', []);
+    expect(data.sql).toHaveBeenLastCalledWith(20, BASE + 2_000_000, 'SELECT 1', []);
+    await sessionSql('SELECT 1', [], 'session');
+    expect(data.sql).toHaveBeenLastCalledWith(20, Number.MAX_SAFE_INTEGER, 'SELECT 1', []);
     handle.destroy();
     await expect(sessionSql('SELECT 1')).rejects.toThrow('No session data is open');
+  });
+
+  it('places a moment back on the video', async () => {
+    const handle = openSessionData(session, false);
+    expect(handle.videoTimeOf(BASE + 2_000_000)).toBeNull();
+    emit(ready);
+    handle.update(1_000, null);
+    // Lights out is video second 500, wherever the video is now.
+    expect(handle.videoTimeOf(BASE + 2_000_000)).toBeCloseTo(500);
+    handle.destroy();
+  });
+
+  it('places a moment on a live session relative to the frame on screen', () => {
+    const handle = openSessionData({ ...session, status: 'live' }, true);
+    emit({ ...ready, clock: null, sessionStartSec: null });
+    handle.update(100, BASE + 123_000);
+    expect(handle.videoTimeOf(BASE + 63_000)).toBe(40);
+    handle.update(100, null);
+    expect(handle.videoTimeOf(BASE + 63_000)).toBeNull();
+    handle.destroy();
   });
 
   it('hands out read-only objects', async () => {

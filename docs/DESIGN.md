@@ -71,7 +71,7 @@ The agent is a consumer like any other. `src/agent/tools.ts` exposes host functi
 
 ```ts
 expose(host.suggestions.offer, { name: 'suggest_tiles', args: streams, adapt: matchNames, gate: sessionOpen });
-expose(host.playback.seekBy, { name: 'seek_back', adapt: negate, gate: [sessionOpen, rewindOnly] });
+expose(host.playback.seekToDate, { name: 'seek_to', adapt: toDateMs, gate: [sessionOpen, dataReady, askIfForward] });
 ```
 
 The tool's name, model-facing wording, name matching ("Hamilton") and gates live here, not in the host. A tool that needs different wording or
@@ -111,9 +111,21 @@ strip.
 
 ### Spoiler approval
 
-The gate belongs to the agent tool, based on the session state and playhead it reads from the host. It must run before any data reaches
-the model, because the model could repeat what it read. Until that approval exists, the agent has no forward seek and no race-state tool.
-The timeline is unaffected: the viewer can seek anywhere.
+The gate belongs to the agent's tools, based on the session state and playhead they read from the host. It must run before any data reaches
+the model, because the model could repeat what it read. `spoilerGate` in `src/agent/spoilerGate.ts` is asked once per tool call, before
+anything runs, in two cases:
+
+- **Reading ahead:** `query_session` with `asOf: 'session'`, which sees the whole session instead of what the feed had revealed at the
+  frame on screen. The request carries the playhead and the SQL. A query as of the playhead doesn't ask.
+- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known. The request carries the playhead
+  and the target. A backward seek doesn't ask.
+
+A refusal makes the tool fail with a message the agent passes on, and the query or seek never runs. For now the gate approves everything:
+it will become a prompt asking the user. The agent is told to read ahead only to find a moment to jump to, and to say nothing about what it
+found beyond the jump ("Jumped to lap 30."). The `seek_to` result says only where playback landed, as session clock time.
+
+A live session works the same way: reading ahead sees what the feed has delivered, and a seek stays within the seekable range. The timeline
+is unaffected: the viewer can seek anywhere.
 
 ## Missing data is part of the data
 

@@ -1,9 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Channel, LiveItem, SessionInfo } from '../../shared/api';
+import type { DriverEntry, SessionDataView, SqlRows } from '../../shared/sessionData';
 
 // The host pulls in the browser-only player and grid.
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
+
+// A test decides what the spoiler gate answers, and what a query returns.
+const { spoilerGate, sessionSql } = vi.hoisted(() => ({
+  spoilerGate: vi.fn(async (_request: unknown) => ({ approved: true }) as { approved: boolean; reason?: string }),
+  sessionSql: vi.fn(async (..._args: unknown[]): Promise<SqlRows> => ({ columns: [], rows: [] })),
+}));
+vi.mock('./spoilerGate', () => ({ spoilerGate }));
+vi.mock('../data/sessionData', async (original) => ({ ...(await original<object>()), sessionSql }));
 
 const { AGENT_TOOLS, runTool, toolDefinitions } = await import('./tools');
 const { resolveChannel } = await import('./matching');
@@ -68,11 +77,10 @@ describe('resolveChannel', () => {
 });
 
 describe('agent tools', () => {
-  it('cannot move playback forward or read race state until spoiler approval exists', () => {
+  it('seek through the spoiler gate, and have no other way forward', () => {
     const names = AGENT_TOOLS.map((t) => t.name);
-    expect(names).toContain('seek_back');
-    expect(names).toContain('seek_to_start');
-    for (const banned of ['seek', 'seek_forward', 'seek_to_lap', 'go_live', 'get_race_state', 'get_standings']) {
+    expect(names).toEqual(expect.arrayContaining(['seek_to', 'seek_to_start', 'query_session']));
+    for (const banned of ['seek', 'seek_back', 'seek_forward', 'seek_to_lap', 'go_live', 'get_race_state', 'get_standings']) {
       expect(names).not.toContain(banned);
     }
   });
@@ -98,25 +106,14 @@ describe('agent tools', () => {
     expect(live?.parameters).toEqual(JSON.parse(JSON.stringify(host.catalog.live.info.args)));
   });
 
-  it('cannot seek forward even if the model sends a negative rewind', async () => {
-    const seek = vi.spyOn((await import('../data/session')).sessionControl, 'seekBy');
-    const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
-    useSession.setState({ session: open, clock: { ...useSession.getState().clock, end: 100 } });
-    await expect(runTool('seek_back', { seconds: -30 })).rejects.toThrow(/must be positive/);
-    expect(seek).not.toHaveBeenCalled();
-    await runTool('seek_back', { seconds: 30 });
-    expect(seek).toHaveBeenCalledWith(-30);
-    useSession.setState({ session: null, clock: { ...useSession.getState().clock, end: 0 } });
-    seek.mockRestore();
-  });
-
   it('reject an unknown tool', async () => {
     await expect(runTool('seek_forward', {})).rejects.toThrow(/Unknown tool/);
   });
 
   it('refuse to act with no session open', async () => {
     await expect(runTool('suggest_tiles', { streams: ['HAM'] })).rejects.toThrow(/No session is open/);
-    await expect(runTool('seek_back', { seconds: 5 })).rejects.toThrow(/No session is open/);
+    await expect(runTool('seek_to', { date: 5 })).rejects.toThrow(/No session is open/);
+    await expect(runTool('query_session', { sql: 'SELECT 1' })).rejects.toThrow(/No session is open/);
     await expect(runTool('set_audio', { stream: 'HAM' })).rejects.toThrow(/No session is open/);
   });
 });
@@ -263,11 +260,10 @@ describe('upcoming sessions', () => {
     expect(JSON.parse(await runTool('load_session', { contentId: 5, title: 'x', fromStart: true })).playingFrom).toBe('start');
   });
 
-  it('refuses to rewind before anything has played', async () => {
+  it('can go back to the start before anything has played', async () => {
     f1tv.sessions.mockResolvedValue([session(5, 'Live race', 'live')]);
     await runTool('list_sessions', { pageId: 1, year: 2026 });
     await runTool('load_session', { contentId: 5, title: 'x' });
-    await expect(runTool('seek_back', { seconds: 30 })).rejects.toThrow(/Nothing is playing/);
     await expect(runTool('seek_to_start', {})).resolves.toMatch(/start/);
   });
 
@@ -306,5 +302,154 @@ describe('upcoming sessions', () => {
     f1tv.liveNow.mockClear();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(f1tv.liveNow).not.toHaveBeenCalled();
+  });
+});
+
+const { sessionControl } = await import('../data/session');
+const { useSessionData } = await import('../data/sessionData');
+const { describeAppState } = await import('./bridge');
+
+describe('seeking to a moment', () => {
+  const open = { contentId: 1, title: 'Race', status: 'replay' } as SessionInfo;
+  const PLAYHEAD = 1_700_000_000_000;
+  const driver = (name_acronym: string, driver_number: number) => ({ driver_number, name_acronym }) as DriverEntry;
+  const ready = (playheadMs: number | null): SessionDataView => ({
+    state: 'ready',
+    sessionKey: 9,
+    coverage: { source: 'archive', datasets: {} as never, missingFeeds: [], gaps: [], capturedFrom: null },
+    revision: 1,
+    playheadMs,
+    drivers: [driver('VER', 1), driver('HAM', 44)],
+    startingGrid: [],
+    sessionResult: [],
+    championshipDrivers: [],
+    championshipTeams: [],
+  });
+  let seekToDate: MockInstance<typeof sessionControl.seekToDate>;
+
+  beforeEach(() => {
+    useSession.setState({ session: open, channels });
+    useSessionData.setState(ready(PLAYHEAD), true);
+    seekToDate = vi.spyOn(sessionControl, 'seekToDate').mockReturnValue({ timeSec: 3_723.4, clamped: false });
+    spoilerGate.mockClear();
+    sessionSql.mockClear();
+  });
+  afterEach(() => {
+    seekToDate.mockRestore();
+    useSessionData.setState({ state: 'idle' }, true);
+    useSession.setState({ session: null, channels: [] });
+  });
+
+  it('a playhead query runs without asking', async () => {
+    sessionSql.mockResolvedValueOnce({ columns: ['lap_number'], rows: [{ lap_number: 3 }] });
+    const out = JSON.parse(await runTool('query_session', { sql: 'SELECT lap_number FROM laps' }));
+    expect(out).toEqual({ columns: ['lap_number'], rows: [[3]] });
+    expect(spoilerGate).not.toHaveBeenCalled();
+    expect(sessionSql).toHaveBeenCalledWith('SELECT lap_number FROM laps', undefined, undefined);
+  });
+
+  it('a whole-session query asks the gate before it runs', async () => {
+    const sql = 'SELECT date_start FROM laps WHERE lap_number = 30';
+    spoilerGate.mockImplementationOnce(async () => {
+      expect(sessionSql).not.toHaveBeenCalled();
+      return { approved: true };
+    });
+    await runTool('query_session', { sql, asOf: 'session' });
+    expect(spoilerGate).toHaveBeenCalledWith({ kind: 'read_ahead', session: 'Race', playheadMs: PLAYHEAD, sql });
+    expect(sessionSql).toHaveBeenCalledWith(sql, undefined, 'session');
+  });
+
+  it('a refused read ahead never runs the query', async () => {
+    spoilerGate.mockResolvedValueOnce({ approved: false, reason: 'not yet' });
+    await expect(runTool('query_session', { sql: 'SELECT 1', asOf: 'session' })).rejects.toThrow(/did not allow that: not yet/);
+    expect(sessionSql).not.toHaveBeenCalled();
+  });
+
+  it('asks every time, not once per turn', async () => {
+    await runTool('query_session', { sql: 'SELECT 1', asOf: 'session' });
+    await runTool('query_session', { sql: 'SELECT 1', asOf: 'session' });
+    expect(spoilerGate).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends the model at most 200 rows, and says so', async () => {
+    sessionSql.mockResolvedValueOnce({ columns: ['n'], rows: Array.from({ length: 250 }, (_, n) => ({ n })) });
+    const out = JSON.parse(await runTool('query_session', { sql: 'SELECT n FROM x' }));
+    expect(out.rows).toHaveLength(200);
+    expect(out.note).toMatch(/200 of 250 rows. Narrow the query/);
+  });
+
+  it('says an empty playhead read may just be too early, but not for a whole-session one', async () => {
+    sessionSql.mockResolvedValue({ columns: ['n'], rows: [] });
+    expect(JSON.parse(await runTool('query_session', { sql: 'SELECT n FROM x' })).note).toMatch(/asOf "session"/);
+    expect(JSON.parse(await runTool('query_session', { sql: 'SELECT n FROM x', asOf: 'session' })).note).toBeUndefined();
+    sessionSql.mockReset();
+  });
+
+  it('refuses a query until the timing data is ready', async () => {
+    useSessionData.setState({ state: 'loading', sessionKey: 9, coverage: null }, true);
+    await expect(runTool('query_session', { sql: 'SELECT 1' })).rejects.toThrow(/timing data isn't available. It is still loading/);
+    useSessionData.setState({ state: 'failed', reason: 'The archive was refused.' }, true);
+    await expect(runTool('seek_to', { date: PLAYHEAD })).rejects.toThrow(/The archive was refused/);
+    expect(sessionSql).not.toHaveBeenCalled();
+    expect(seekToDate).not.toHaveBeenCalled();
+  });
+
+  it('describes every table and its columns, from the schema', () => {
+    const description = toolDefinitions().find((t) => t.name === 'query_session')!.description;
+    expect(description).toMatch(/laps: driver_number, lap_number, date_start,/);
+    expect(description).toMatch(/race_control: date, driver_number, lap_number,/);
+    expect(description).not.toMatch(/row_key/);
+    expect(description).toMatch(/UTC milliseconds/);
+  });
+
+  it('a forward seek asks the gate first', async () => {
+    const date = PLAYHEAD + 60_000;
+    spoilerGate.mockImplementationOnce(async () => {
+      expect(seekToDate).not.toHaveBeenCalled();
+      return { approved: true };
+    });
+    expect(await runTool('seek_to', { date })).toBe('Playback is at 1:02:03.');
+    expect(spoilerGate).toHaveBeenCalledWith({ kind: 'seek_forward', session: 'Race', playheadMs: PLAYHEAD, targetMs: date });
+    expect(seekToDate).toHaveBeenCalledWith(date);
+  });
+
+  it('a backward seek does not ask', async () => {
+    await runTool('seek_to', { date: PLAYHEAD - 60_000 });
+    expect(spoilerGate).not.toHaveBeenCalled();
+    expect(seekToDate).toHaveBeenCalledWith(PLAYHEAD - 60_000);
+  });
+
+  it('asks when the frame on screen is unknown', async () => {
+    useSessionData.setState(ready(null), true);
+    await runTool('seek_to', { date: 5 });
+    expect(spoilerGate).toHaveBeenCalledTimes(1);
+  });
+
+  it('a refused forward seek never moves playback', async () => {
+    spoilerGate.mockResolvedValueOnce({ approved: false });
+    await expect(runTool('seek_to', { date: PLAYHEAD + 1 })).rejects.toThrow(/did not allow that\./);
+    expect(seekToDate).not.toHaveBeenCalled();
+  });
+
+  it('says when playback had to stop short', async () => {
+    seekToDate.mockReturnValue({ timeSec: 7_200, clamped: true });
+    expect(await runTool('seek_to', { date: PLAYHEAD - 1 })).toMatch(/^Playback is at 2:00:00. That moment is outside what can be played/);
+  });
+
+  it('passes on why a moment cannot be placed', async () => {
+    seekToDate.mockImplementation(() => {
+      throw new Error("The video can't be matched to the session data yet.");
+    });
+    await expect(runTool('seek_to', { date: PLAYHEAD - 1 })).rejects.toThrow(/can't be matched/);
+  });
+
+  it('app_state gives the playhead and who is who, nothing more', () => {
+    const state = describeAppState();
+    expect(state).toContain(`playhead: ${PLAYHEAD} (UTC ms, as in date columns)`);
+    expect(state).toContain('drivers: VER 1, HAM 44');
+    useSessionData.setState(ready(null), true);
+    expect(describeAppState()).not.toContain('playhead:');
+    useSessionData.setState({ state: 'loading', sessionKey: 9, coverage: null }, true);
+    expect(describeAppState()).not.toContain('drivers:');
   });
 });
