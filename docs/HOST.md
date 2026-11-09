@@ -198,9 +198,9 @@ index (`live.events`) with every message, so it can work out which weekend the u
 | `list_sessions`, `list_live`, `list_upcoming` | `host.catalog.sessions`, `.live`, `.upcoming` |
 | `load_session`, `list_streams` | `host.session.open`, `.feeds` |
 | `suggest_tiles` | `host.suggestions.offer` |
-| `remove_streams`, `focus_stream`, `reset_layout` | `host.layout.remove`, `.focus`, `.reset` |
+| `remove_streams` | `host.layout.remove` |
 | `set_audio` | `host.audio.set` |
 | `play`, `pause`, `seek_to_start`, `seek_back` | `host.playback.play`, `.pause`, `.seekToStart`, `.seekBy` (backwards only) |
 
-Anything not listed, such as `host.data.sql`, `host.layout.add`, groups, seeking forward or volume, isn't offered to the agent at
+Anything not listed, such as `host.data.sql`, `host.layout.add`, `focus` and `reset`, groups, seeking forward or volume, isn't offered to the agent at
 the moment.

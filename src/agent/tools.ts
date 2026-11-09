@@ -197,22 +197,6 @@ export const AGENT_TOOLS: AgentTool[] = [
       return `Removed: ${labelsOf(feeds) || 'nothing'}.${missingNote(missing)}`;
     },
   }),
-  expose(host.layout.focus, {
-    name: 'focus_stream',
-    description: 'Make a stream the largest thing on screen, for requests like "make Hamilton bigger".',
-    args: Type.Object({ stream: Type.String({ description: 'A stream reference' }) }, { additionalProperties: false }),
-    adapt: ({ stream }) => ({ target: resolveChannel(read().feeds, stream)?.id ?? stream }),
-    gate: [sessionOpen],
-    result: (found, { stream }) => {
-      if (found) return 'Done.';
-      throw new Error(`"${stream}" is not on screen.`);
-    },
-  }),
-  expose(host.layout.reset, {
-    name: 'reset_layout',
-    description: 'Re-tile everything into the default arrangement with the main feed largest, discarding manual moves and resizes.',
-    result: () => 'Layout reset.',
-  }),
   expose(host.audio.set, {
     name: 'set_audio',
     description: 'Choose which single stream is audible, or mute everything with "none".',
