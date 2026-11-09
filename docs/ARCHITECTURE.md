@@ -46,6 +46,8 @@ with no chart library. They may only import from the host, and from the kit besi
   a thumbnail.
 - **Helpers:** linear scales and ticks, axis labels with grid lines only where a value is labelled, polylines, end labels pushed apart,
   text, gap and lap time parsing, tyre age, driver colours from the roster (a team's second driver dashed) and tyre colours from the theme.
+  For lap-based charts (`kit/laps.ts`): the lap axis to the race distance with safety car, VSC and red flag laps shaded, the clean-lap
+  rule, racing pace, and medians.
   The accent red is never used inside a chart: it would read as a team or a soft tyre.
 
 To add one: write the file, keep the rows-to-model function pure and test it, and list the component in `src/components/registry.ts`.
