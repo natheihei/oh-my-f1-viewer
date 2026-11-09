@@ -1,7 +1,7 @@
 /** Every driver's stints as bars in tyre colours, in running order. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
+import { defineComponent, useLive, useSql } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -50,11 +50,8 @@ export interface TyreModel {
   lap: number;
 }
 
-/**
- * Where the lap axis ends. TOTAL LAPS: this should be the race distance, so the bars grow across a
- * fixed axis, but the data doesn't hold it yet. Until it does, the axis ends at the current lap.
- */
-const axisLaps = (model: TyreModel): number => Math.max(1, model.lap);
+/** Where the lap axis ends: the race distance, so the bars grow across a fixed axis, or the current lap without one. */
+const axisLaps = (model: Drawn): number => Math.max(1, model.lap, model.total ?? 0);
 
 /** The rows of the query as one bar row per driver, in running order. */
 export function tyreModel(rows: ReadonlyArray<Record<string, unknown>>): TyreModel {
@@ -79,17 +76,24 @@ export function tyreModel(rows: ReadonlyArray<Record<string, unknown>>): TyreMod
 
 interface Drawn extends TyreModel {
   styles: Map<number, DriverStyle>;
+  /** The scheduled distance, when the session has one. */
+  total: number | null;
 }
+
+/** The tallest a row gets as the tile grows. */
+const MAX_PITCH = 24;
 
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const left = compact ? 4 : 36;
   const right = width - (compact ? 4 : 10);
   const top = compact ? 4 : 6;
-  const bottom = height - (compact ? 4 : 20);
+  const axis = compact ? 4 : 20;
   const laps = axisLaps(m);
   const x = linear([0, laps], [left, right]);
-  const pitch = Math.min(compact ? 10 : 18, (bottom - top) / Math.max(1, m.rows.length));
+  const pitch = Math.min(compact ? 10 : MAX_PITCH, (height - top - axis) / Math.max(1, m.rows.length));
+  // The axis sits right under the last row, however few there are.
+  const bottom = top + pitch * Math.max(1, m.rows.length);
   const bar = Math.max(1, Math.round(pitch * 0.66));
   const size = Math.min(10, Math.max(7, Math.floor(pitch * 0.62)));
 
@@ -98,8 +102,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     const step = [1, 2, 5, 10, 20].find((s) => laps / s <= room) ?? 20;
     const values = ticks(step, laps, 0, step);
     for (const v of values) vline(ctx, x(v), top, bottom);
-    xAxis(ctx, { scale: x, values, y: height - 8 });
-    text(ctx, 'LAP', left, height - 8, { color: c.faint, align: 'center' });
+    xAxis(ctx, { scale: x, values, y: bottom + 12 });
+    text(ctx, 'LAP', left, bottom + 12, { color: c.faint, align: 'center' });
   }
 
   m.rows.forEach(({ driver, stints }, i) => {
@@ -130,7 +134,8 @@ function TyreStrategy({ props }: { props: { drivers?: number[] } }) {
   const drivers = props.drivers ?? [];
   const view = useSql(sqlFor(drivers.length), drivers);
   const styles = useDriverStyles();
-  const model = useMemo(() => (view.state === 'ready' ? { ...tyreModel(view.rows), styles } : null), [view, styles]);
+  const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
+  const model = useMemo(() => (view.state === 'ready' ? { ...tyreModel(view.rows), styles, total } : null), [view, styles, total]);
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} />}

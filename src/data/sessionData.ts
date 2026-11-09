@@ -22,7 +22,7 @@ const EVERYTHING_VISIBLE = Number.MAX_SAFE_INTEGER;
 /** A playhead before anything: the video's position isn't known yet. */
 const NOTHING_VISIBLE = -1;
 
-const NO_OBJECTS: SessionObjects = { drivers: [], startingGrid: [], sessionResult: [], championshipDrivers: [], championshipTeams: [] };
+const NO_OBJECTS: SessionObjects = { drivers: [], startingGrid: [], sessionResult: [], championshipDrivers: [], championshipTeams: [], lapCount: null };
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {

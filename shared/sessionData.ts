@@ -10,6 +10,7 @@ export const FIRST_SUPPORTED_YEAR = 2023;
 export const SQL_TABLES = [
   'car_data',
   'intervals',
+  'lap_summary',
   'laps',
   'location',
   'overtakes',
@@ -17,6 +18,7 @@ export const SQL_TABLES = [
   'position',
   'race_control',
   'stints',
+  'track_status',
   'weather',
 ] as const;
 
@@ -119,6 +121,14 @@ export interface SessionObjects {
   sessionResult: SessionResultEntry[];
   championshipDrivers: ChampionshipDriverEntry[];
   championshipTeams: ChampionshipTeamEntry[];
+  /** The leader's lap and the scheduled distance. Null in a session without them, such as practice. */
+  lapCount: LapCount | null;
+}
+
+export interface LapCount {
+  current: number;
+  /** The scheduled distance, known from the start. */
+  total: number;
 }
 
 export type Dataset = 'timing' | 'telemetry' | 'results';
