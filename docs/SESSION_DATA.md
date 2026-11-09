@@ -3,7 +3,8 @@
 Everything about a session from 2023 onward, in a local SQLite database, read through the host. It follows
 [OpenF1](https://openf1.org/docs)'s schema and logic, and OpenF1 is what it's checked against. Older seasons report `unsupported`.
 
-**A database holding a whole race contains the result.** Consumers only reach it as of the playhead, and nothing up there can write to it.
+**A database holding a whole race contains the result.** Consumers reach it as of the playhead unless they ask for the whole session by name
+(`asOf: 'session'`), and nothing up there can write to it. The agent asks the spoiler gate before it does.
 
 ## What's exposed, and how
 
@@ -76,7 +77,9 @@ The moment is the hard one, because neither timeline starts at the race start. F
 
 A live session compares `visible_from`, its arrival time, with the stream's wall clock. F1 TV's live video runs tens of seconds behind the feed, so rows wait for it. With no wall clock at all, everything is visible, which risks spoilers.
 
-All streams share one clock, kept in step by the sync engine, so one playhead serves every tile. The sync API's per-channel offsets (`channelDiffs`) aren't used. The link only runs from video to data: nothing yet turns a lap or a row into a video position.
+All streams share one clock, kept in step by the sync engine, so one playhead serves every tile. The sync API's per-channel offsets (`channelDiffs`) aren't used. The link also runs the other way: `host.playback.seekToDate` turns a row's time into a video position, through
+`videoTimeOf` in `timeMap.ts`. A replay placed by the lead-in inverts the map exactly. One placed by the wall clock, and a live session, move by
+the difference from the frame on screen. The agent's `seek_to` uses it. `scripts/seek-check.mjs` checked it on a replay with curated sync data; the wall-clock and live paths are unit-tested only.
 
 A session F1 TV lists without keys falls back to matching by name and type, which could find the wrong session. See "Known limits".
 
@@ -114,7 +117,7 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   15 sessions missing from the index are ones OpenF1 marks as cancelled, which is correct.
 - **The archive always replaces a live capture.** For a session like that one, a good capture would be swapped for a shorter archive.
 - **Disk isn't managed.** About 70 MB per race adds up, and nothing removes old sessions.
-- **No query timeout.** A runaway query would block the worker. Add one before giving the agent SQL.
+- **No query timeout.** The agent now has SQL (`query_session`), and a runaway query would still block the worker, which runs SQLite
+  synchronously. The timeout is still missing.
 - **A session with no keys could get another session's data.** The lookup then searches by name and type from the newest meeting back. How often F1 TV omits keys wasn't measured.
-- **The agent has no SQL tool.** It waits on spoiler approval, as `DESIGN.md` says.
 - **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `retired`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.

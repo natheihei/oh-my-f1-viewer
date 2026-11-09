@@ -77,6 +77,8 @@ export const useSession = create<SessionState>(() => ({ ...INITIAL, volume: 1 })
 let lastHeardVolume = 1;
 
 const LIVE_EDGE_TOLERANCE_SEC = 15;
+/** A seek this close to where it was asked for still counts as getting there: seek stops short of the end. */
+const SEEK_CLAMP_TOLERANCE_SEC = 1;
 
 export interface HoldOptions {
   /** A hold that shows the feed without ever making it audible, like a preview. */
@@ -251,7 +253,8 @@ class SessionRuntime {
     this.tick();
   }
 
-  seek(timeSec: number): void {
+  /** Returns where it landed, after keeping to the seekable range. */
+  seek(timeSec: number): number {
     const { start, end } = useSession.getState().clock;
     const target = end > start ? Math.max(start, Math.min(timeSec, end - 0.5)) : Math.max(0, timeSec);
     this.setVirtualTime(target);
@@ -264,6 +267,15 @@ class SessionRuntime {
       else setTimeout(() => { handle.video.currentTime = target; }, stagger);
     }
     this.tick();
+    return target;
+  }
+
+  /** Seeks to a moment on the session database's clock (UTC milliseconds). */
+  seekToDate(dateMs: number): { timeSec: number; clamped: boolean } {
+    const wanted = this.sessionData?.videoTimeOf(dateMs) ?? null;
+    if (wanted === null) throw new Error("The video can't be matched to the session data yet, so that moment can't be found on it.");
+    const timeSec = this.seek(wanted);
+    return { timeSec, clamped: Math.abs(timeSec - wanted) > SEEK_CLAMP_TOLERANCE_SEC };
   }
 
   /** Back to the start of the broadcast, or the start of the seekable window when live. */
@@ -400,7 +412,13 @@ export const sessionControl = {
   handle: (channelId: string) => runtime?.handle(channelId),
   play: () => runtime?.play(),
   pause: () => runtime?.pause(),
-  seek: (timeSec: number) => runtime?.seek(timeSec),
+  seek: (timeSec: number) => {
+    runtime?.seek(timeSec);
+  },
+  seekToDate: (dateMs: number) => {
+    if (!runtime) throw new Error('No session is open.');
+    return runtime.seekToDate(dateMs);
+  },
   seekBy: (deltaSec: number) => {
     if (runtime) runtime.seek(runtime.now() + deltaSec);
   },

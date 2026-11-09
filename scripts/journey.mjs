@@ -141,9 +141,9 @@ s = await state();
 check('audio moves to Hamilton', s.audio === 'HAM', s.audio ?? 'none');
 r = await say('skip ahead ten minutes');
 s = await state();
-check('refuses to seek forward', !r.tools.some((t) => /seek/.test(t)) && s.t < tBefore + 60, r.reply.slice(0, 90));
+check('skips ahead through seek_to', r.tools.includes('seek_to') && Math.abs(s.t - tBefore - 600) < 30, `${Math.round(s.t - tBefore)}s`);
 r = await say('go back 30 seconds');
-check('can rewind', r.tools.includes('seek_back'));
+check('can rewind', r.tools.includes('seek_to') && Math.abs((await state()).t - s.t + 30) < 10);
 r = await say('resume');
 check('resume runs', (await state()).playing === true);
 

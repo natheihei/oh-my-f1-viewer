@@ -1,7 +1,8 @@
 /**
  * The session database, from this side of the process boundary. Ingesting happens by itself when a
  * session opens, and nothing up here can write to it. Everything read is as of the frame on screen,
- * never later, even for results. The video is what moves it: see timeMap.ts for how the two connect.
+ * never later, even for results, unless a caller asks for the whole session by name. The video is what
+ * moves it: see timeMap.ts for how the two connect.
  */
 import { create } from 'zustand';
 import type { SessionInfo, TimingQuery } from '../../shared/api';
@@ -14,7 +15,7 @@ import type {
   SessionObjects,
   SqlRows,
 } from '../../shared/sessionData';
-import { buildTimeMap, playheadOf, type TimeMap } from './timeMap';
+import { buildTimeMap, playheadOf, videoTimeOf, type TimeMap } from './timeMap';
 
 /** A playhead past anything a session could hold. */
 const EVERYTHING_VISIBLE = Number.MAX_SAFE_INTEGER;
@@ -76,15 +77,21 @@ export function archiveQuery(session: SessionInfo): TimingQuery {
 export interface SessionDataHandle {
   /** Where the video is: called on every clock tick. */
   update(timeSec: number, wallClockMs: number | null): void;
+  /** The video second showing a moment on the database's clock, or null when the frame can't be placed. */
+  videoTimeOf(dateMs: number): number | null;
   destroy(): void;
 }
 
 let current: { sessionKey: number; playhead(): number } | null = null;
 
-/** Runs a query against what's visible at the frame on screen. Only reading is possible. */
-export async function sessionSql(sql: string, params: unknown[] = []): Promise<SqlRows> {
+/** What a query sees: what the feed had revealed at the frame on screen, or everything the session holds. */
+export type SqlAsOf = 'playhead' | 'session';
+
+/** Runs a query against what's visible at the frame on screen, or across the session. Only reading is possible. */
+export async function sessionSql(sql: string, params: unknown[] = [], asOf: SqlAsOf = 'playhead'): Promise<SqlRows> {
   if (!current) throw new Error('No session data is open.');
-  return deepFreeze(await window.f1a.data.sql(current.sessionKey, current.playhead(), sql, params));
+  const playhead = asOf === 'session' ? EVERYTHING_VISIBLE : current.playhead();
+  return deepFreeze(await window.f1a.data.sql(current.sessionKey, playhead, sql, params));
 }
 
 export function openSessionData(session: SessionInfo, live: boolean): SessionDataHandle {
@@ -95,6 +102,9 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let map: TimeMap | null = null;
   let ready = false;
   let playhead = NOTHING_VISIBLE;
+  /** The last position the video reported, for placing a moment relative to it. */
+  let videoSec = 0;
+  let videoWallClockMs: number | null = null;
   /** The frame as consumers see it: null when it's not a real time. */
   let shownPlayhead: number | null = null;
   /** The second of the playhead last read. Row visibility is only asked for this often. */
@@ -167,10 +177,15 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
 
   return {
     update(timeSec, wallClockMs) {
+      videoSec = timeSec;
+      videoWallClockMs = wallClockMs;
       const at = playheadOf(live, map, timeSec, wallClockMs);
       playhead = at === 'everything' ? EVERYTHING_VISIBLE : (at ?? NOTHING_VISIBLE);
       shownPlayhead = typeof at === 'number' ? at : null;
       if (ready && Math.floor(playhead / 1000) !== readSecond) void read();
+    },
+    videoTimeOf(dateMs) {
+      return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs);
     },
     destroy() {
       destroyed = true;

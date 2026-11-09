@@ -21,6 +21,7 @@ import {
   INGEST_VERSION,
   quote,
   rowColumns,
+  sqlColumns,
   TABLE_BY_NAME,
   TABLES,
   visibleColumns,
@@ -133,7 +134,7 @@ export class TimingStore {
     this.reader.function('f1a_playhead', { deterministic: true }, () => this.queryPlayhead);
     for (const name of SQL_TABLES) {
       const table = TABLE_BY_NAME.get(name)!;
-      const columns = ['session_key', 'meeting_key', ...visibleColumns(table), 'visible_from'].map(quote).join(', ');
+      const columns = sqlColumns(table).map(quote).join(', ');
       this.reader.exec(`CREATE TEMP VIEW ${quote(name)} AS SELECT ${columns} FROM (${asOfSql(table, 'f1a_session()', 'f1a_playhead()')})`);
     }
     this.reader.setAuthorizer((action, a, b, database, view) => {
