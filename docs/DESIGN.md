@@ -77,7 +77,7 @@ expose(host.playback.seekBy, { name: 'seek_back', adapt: negate, gate: [sessionO
 The tool's name, model-facing wording, name matching ("Hamilton") and gates live here, not in the host. A tool that needs different wording or
 arguments from the host's declares its own, and `adapt` must turn them into the host function's types.
 
-The agent can change layout and groups, as it always could. `/` commands stay a separate set for the user, and the two don't share entries.
+The agent can change the layout, as it always could. It isn't offered groups for now: the host still supports them, so they can come back. `/` commands stay a separate set for the user, and the two don't share entries.
 
 ### Spoiler approval
 
