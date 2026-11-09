@@ -411,6 +411,32 @@ async function fetchArchiveText(url, cacheable) {
   return txt;
 }
 
+/**
+ * One feed's raw archive file, or null when this session doesn't have it. Compressed feeds are too
+ * large to keep twice, and the session database stores what's in them, so they skip the disk cache.
+ */
+async function fetchSessionFeedText(sessionPath, feed) {
+  if (!FEED_NAME.test(feed)) throw new Error('Invalid feed name');
+  const p = safeArchivePath(sessionPath);
+  const url = `${STATIC_BASE}/${p}${feed}.jsonStream`;
+  try {
+    if (isCompressedFeed(feed)) return await fetchLargeText(url);
+    return await fetchArchiveText(url, isCacheableSessionPath(p));
+  } catch (e) {
+    if (/HTTP (403|404)\b/.test(String(e?.message)) && !/refused/.test(String(e?.message))) return null;
+    throw e;
+  }
+}
+
+/** Telemetry files run to hundreds of megabytes, far past the time limit for ordinary requests. */
+async function fetchLargeText(url) {
+  if (USE_CURL) return curlFetchText(url);
+  const headers = archiveHeaders();
+  const res = await undiciFetch(url, { headers, signal: AbortSignal.timeout(10 * 60 * 1000) });
+  if (!res.ok) throw archiveHttpError(url, res.status, headers);
+  return res.text();
+}
+
 /** Fetch + parse one feed's full archived stream for a session Path. */
 async function getSessionFeed(sessionPath, feed) {
   const p = safeArchivePath(sessionPath);
@@ -609,9 +635,9 @@ function splitCoreFrames(raw) {
 
 function recordsFromCoreMessages(msgs) {
   const out = [];
-  const push = (feed, rawData) => {
+  const push = (feed, rawData, extra) => {
     const data = decodeLiveValue(feed, rawData);
-    if (data != null) out.push({ feed, data });
+    if (data != null) out.push({ feed, data, ...extra });
   };
   for (const msg of msgs) {
     const isFeedUpdate = msg
@@ -620,9 +646,10 @@ function recordsFromCoreMessages(msgs) {
       && Array.isArray(msg.arguments)
       && msg.arguments.length >= 2;
     if (isFeedUpdate) {
-      push(String(msg.arguments[0]), msg.arguments[1]);
+      const ts = msg.arguments[2];
+      push(String(msg.arguments[0]), msg.arguments[1], typeof ts === 'string' ? { ts } : undefined);
     } else if (msg && msg.type === 3 && msg.result && typeof msg.result === 'object') {
-      for (const feed of Object.keys(msg.result)) push(feed, msg.result[feed]);
+      for (const feed of Object.keys(msg.result)) push(feed, msg.result[feed], { snapshot: true });
     }
   }
   return out;
@@ -692,6 +719,7 @@ module.exports = {
   COMPRESSED_FEEDS,
   CAR_DATA_CHANNELS,
   DEFAULT_FEEDS,
+  fetchSessionFeedText,
   stripBom,
   parseOffset,
   formatOffset,

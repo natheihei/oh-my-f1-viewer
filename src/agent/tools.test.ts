@@ -139,7 +139,7 @@ describe('upcoming sessions', () => {
   const live = (contentId: number): LiveItem => ({ contentId, title: 'x', meetingKey: '1300', sessionKey: '' });
 
   beforeEach(() => {
-    vi.stubGlobal('window', { f1a: { f1tv, timing: { resolve: vi.fn(async () => null), onLiveUpdate: () => () => {}, liveStart: vi.fn(async () => ({ path: null })), liveStop: vi.fn(async () => {}) } } });
+    vi.stubGlobal('window', { f1a: { f1tv, data: { onStatus: () => () => {}, open: vi.fn(async () => {}), close: vi.fn(async () => {}) } } });
     f1tv.liveNow.mockResolvedValue([]);
   });
   afterEach(() => {

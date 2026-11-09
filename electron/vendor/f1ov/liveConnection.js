@@ -150,7 +150,7 @@ function createLiveConnection(deps) {
       // Consumers (window broadcasts) can throw, e.g. a window destroyed mid-send. That must never
       // escape into the socket's event emitter (uncaught exception in the main process).
       try {
-        for (const rec of deps.toRecords(frames)) deps.onRecord(rec.feed, rec.data);
+        for (const rec of deps.toRecords(frames)) deps.onRecord(rec.feed, rec.data, rec);
       } catch (e) {
         console.warn('[live] record handler failed:', e && e.message);
       }

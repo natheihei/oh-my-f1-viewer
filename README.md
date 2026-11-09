@@ -11,7 +11,7 @@ Hamilton added; Norris and Leclerc grouped together.
 Norris and Leclerc battle closed.
 ```
 
-Every stream, and the timing data, stays locked to one session clock. Needs an F1 TV subscription and a ChatGPT plan.
+Every stream, and the session data, stays locked to one session clock. Needs an F1 TV subscription and a ChatGPT plan.
 
 ## Run it
 
