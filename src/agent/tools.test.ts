@@ -238,9 +238,9 @@ describe('components', () => {
 
   it('are listed in the live state without their code, as plain JSON', () => {
     const list = read().components;
-    expect(list.map((c) => c.name)).toEqual(['video', 'test-chart']);
+    expect(list.map((c) => c.name)).toEqual([...components.map((c) => c.name), 'test-chart']);
     expect(JSON.parse(JSON.stringify(list))).toEqual(list);
-    expect(list[1]).toEqual({
+    expect(list.at(-1)).toEqual({
       name: 'test-chart',
       title: 'Test chart',
       description: 'A chart for one driver.',

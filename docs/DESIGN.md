@@ -238,4 +238,5 @@ Deliberately different:
 6. Build the audit script, once session data is on screen and its findings matter.
 7. Add captions as the next data kind, when the moments feature starts.
 
-Also still to add: an error boundary per tile, so that a broken component can't take the app down.
+Also still to add: an error boundary per tile, so that a broken component can't take the app down. Charts have one already, in
+their shared `ChartFrame`. Video tiles don't.

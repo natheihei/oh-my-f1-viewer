@@ -82,8 +82,9 @@ Queries read things that aren't part of the live state. They return promises, ex
 
 ### Session SQL
 
-`host.data.sql` runs one query. `useSql(sql, params)` runs it again whenever `sessionData.revision` changes and returns
-`{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`.
+`host.data.sql` runs one query. `useSql(sql, params)` runs it again whenever `sessionData.revision` changes, about once a second
+while playing, and returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
+returns the same rows as the last, it keeps returning the previous object, so a chart can redraw only when its data changes.
 
 The tables are `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints` and `weather`. By default
 (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query can't see past the playhead. `asOf: 'session'`
