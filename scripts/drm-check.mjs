@@ -31,7 +31,7 @@ const opened = await page.evaluate(
       session: await import('/src/data/session.ts'),
       sessionData: await import('/src/data/sessionData.ts'),
       layout: await import('/src/layout/store.ts'),
-      video: await import('/src/host/viewing.ts'),
+      host: await import('/src/host/index.ts'),
     };
     return {
       seasons: seasons.length,
@@ -88,12 +88,11 @@ report('main alone, 8s', await sample());
 
 await page.evaluate((drivers) => {
   const { useSession } = window.modules.session;
-  const { layout } = window.modules.layout;
-  const { videoSpec } = window.modules.video;
+  const { host } = window.modules.host;
   const channels = useSession.getState().channels;
   const pick = (code) => channels.find((c) => c.label === code);
-  layout.add(videoSpec(pick(drivers[0]).id, drivers[0]));
-  layout.group([videoSpec(pick(drivers[1]).id, drivers[1]), videoSpec(pick(drivers[2]).id, drivers[2])]);
+  host.layout.add({ items: [{ type: 'video', props: { feed: pick(drivers[0]).id } }] });
+  host.layout.group({ feeds: [pick(drivers[1]).id, pick(drivers[2]).id] });
 }, DRIVERS);
 const addedAt = Date.now();
 await page.waitForTimeout(3000);

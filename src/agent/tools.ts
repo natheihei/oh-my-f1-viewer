@@ -140,6 +140,7 @@ function matchAll(refs: string[]): { feeds: Channel[]; missing: string[] } {
 }
 
 const idsOf = (feeds: Channel[]) => feeds.map((f) => f.id);
+const videosOf = (feeds: Channel[]) => feeds.map((f) => ({ type: 'video', props: { feed: f.id } }));
 const labelsOf = (feeds: Channel[]) => feeds.map((f) => f.label).join(', ');
 const missingNote = (missing: string[]) => (missing.length ? ` Not found: ${missing.join(', ')}. Use list_streams to see the options.` : '');
 const onScreen = (id: string) => tilesOf(read().layout).some((t) => t.component.key === id);
@@ -216,11 +217,11 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: 'suggest_tiles',
     description: `Suggest streams as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time.`,
     args: Type.Object({ streams: StreamRefs }, { additionalProperties: false }),
-    adapt: ({ streams }) => ({ feeds: idsOf(matchAll(streams).feeds) }),
+    adapt: ({ streams }) => ({ items: videosOf(matchAll(streams).feeds) }),
     gate: [
       sessionOpen,
-      ({ feeds }, { streams }) => {
-        if (feeds.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
+      ({ items }, { streams }) => {
+        if (items.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
       },
     ],
     result: ({ suggested, onScreen, repeated, overLimit }, { streams }) => {
@@ -238,7 +239,8 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: 'remove_streams',
     description: 'Take streams off screen.',
     args: Type.Object({ streams: StreamRefs }, { additionalProperties: false }),
-    adapt: ({ streams }) => ({ feeds: idsOf(matchAll(streams).feeds) }),
+    // A video tile's key is its feed id.
+    adapt: ({ streams }) => ({ keys: idsOf(matchAll(streams).feeds) }),
     gate: [sessionOpen],
     result: (_, { streams }) => {
       const { feeds, missing } = matchAll(streams);

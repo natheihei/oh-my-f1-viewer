@@ -12,7 +12,7 @@ await page.evaluate(async () => {
     viewing: await import('/src/host/viewing.ts'),
     session: await import('/src/data/session.ts'),
     layout: await import('/src/layout/store.ts'),
-    video: await import('/src/host/viewing.ts'),
+    host: await import('/src/host/index.ts'),
   };
 });
 const race = await page.evaluate(async () => {
@@ -30,7 +30,7 @@ for (let i = 0; i < cycles; i += 1) {
   await page.evaluate(() => {
     const channels = window.m.session.useSession.getState().channels;
     for (const code of ['HAM', 'NOR', 'LEC']) {
-      window.m.layout.layout.add(window.m.video.videoSpec(channels.find((c) => c.label === code).id, code));
+      window.m.host.host.layout.add({ items: [{ type: 'video', props: { feed: channels.find((c) => c.label === code).id } }] });
     }
   });
   const t0 = Date.now();
