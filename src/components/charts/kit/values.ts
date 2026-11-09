@@ -31,12 +31,13 @@ export function formatGap(gap: Gap | null, digits = 3): string {
   return `+${gap.seconds.toFixed(digits)}`;
 }
 
-/** "1:23.456", or "" for none. */
-export function formatLapTime(seconds: number | null | undefined): string {
+/** "1:23.456", or "1:23.5" with `digits` 1, or "" for none. */
+export function formatLapTime(seconds: number | null | undefined, digits = 3): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '';
-  const ms = Math.round(seconds * 1000);
-  const minutes = Math.floor(ms / 60000);
-  const rest = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0');
+  const unit = 10 ** digits;
+  const ticks = Math.round(seconds * unit);
+  const minutes = Math.floor(ticks / (60 * unit));
+  const rest = ((ticks % (60 * unit)) / unit).toFixed(digits).padStart(digits ? 3 + digits : 2, '0');
   return minutes ? `${minutes}:${rest}` : rest;
 }
 

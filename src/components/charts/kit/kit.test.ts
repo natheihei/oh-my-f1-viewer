@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DriverEntry, SessionDataView } from '../../../host';
 import { driverStyles } from './colors';
 import { spreadLabels } from './labels';
+import { axisLaps, isCleanLap, lapTicks, median, neutralBands, neutralOf, paceRange, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
 import { dataMessage, viewMessage } from './status';
 import { compoundLetter, formatGap, formatLapTime, gapSeconds, parseGap, stintAge } from './values';
@@ -82,6 +83,8 @@ describe('gaps', () => {
     expect(formatLapTime(93.4561)).toBe('1:33.456');
     expect(formatLapTime(59.9999)).toBe('1:00.000');
     expect(formatLapTime(null)).toBe('');
+    expect(formatLapTime(92.46, 1)).toBe('1:32.5');
+    expect(formatLapTime(92, 0)).toBe('1:32');
   });
 
   it('counts tyre age from the stint', () => {
@@ -145,5 +148,76 @@ describe('frame messages', () => {
     expect(viewMessage([{ state: 'loading' }])).toBe('');
     expect(viewMessage([{ state: 'ready', columns: [], rows: [] }])).toBe('No data yet');
     expect(viewMessage([{ state: 'ready', columns: ['a'], rows: [{ a: 1 }] }])).toBeNull();
+  });
+});
+
+describe('laps', () => {
+  const lap = (lap_number: number, track_status: string | null, more: Record<string, unknown> = {}) => ({
+    lap_number,
+    track_status,
+    lap_duration: 92,
+    is_pit_in_lap: 0,
+    is_pit_out_lap: 0,
+    ...more,
+  });
+
+  it('reads safety cars, virtual ones and red flags, but not yellows', () => {
+    expect(['SCDeployed', 'VSCDeployed', 'VSCEnding', 'Red', 'Yellow', 'AllClear', null].map(neutralOf)).toEqual(['SC', 'VSC', 'VSC', 'RED', null, null, null]);
+  });
+
+  it('shades a lap when at least half the cars ran it neutralised, merging runs', () => {
+    const rows = [
+      lap(11, 'AllClear'), lap(11, 'SCDeployed'), lap(11, 'AllClear'),
+      lap(12, 'SCDeployed'), lap(12, 'SCDeployed'), lap(12, 'Yellow'),
+      lap(13, 'SCDeployed'), lap(13, 'SCDeployed'), lap(13, 'SCDeployed'),
+      lap(14, 'AllClear'), lap(14, 'AllClear'), lap(14, 'AllClear'),
+      lap(20, 'VSCDeployed'), lap(20, 'VSCEnding'), lap(21, 'Red'), lap(21, 'Red'),
+    ];
+    expect(neutralBands(rows)).toEqual([
+      { first: 12, last: 13, kind: 'SC' },
+      { first: 20, last: 20, kind: 'VSC' },
+      { first: 21, last: 21, kind: 'RED' },
+    ]);
+    expect(neutralBands([])).toEqual([]);
+  });
+
+  it('counts a lap as clean only when it shows pace', () => {
+    expect(isCleanLap(lap(5, 'AllClear'))).toBe(true);
+    expect(isCleanLap(lap(1, 'AllClear'))).toBe(false);
+    expect(isCleanLap(lap(5, 'Yellow'))).toBe(false);
+    expect(isCleanLap(lap(5, null))).toBe(false);
+    expect(isCleanLap(lap(5, 'AllClear', { is_pit_in_lap: 1 }))).toBe(false);
+    expect(isCleanLap(lap(5, 'AllClear', { is_pit_out_lap: 1 }))).toBe(false);
+    expect(isCleanLap(lap(5, 'AllClear', { lap_duration: null }))).toBe(false);
+  });
+
+  it('counts the tyre age as the tower does, without the lap in progress', () => {
+    expect(tyreAgeNow({ tyre_age: 5, lap_duration: 92 })).toBe(5);
+    expect(tyreAgeNow({ tyre_age: 5, lap_duration: null })).toBe(4);
+    expect(tyreAgeNow({ tyre_age: 0, lap_duration: null })).toBe(0);
+    expect(tyreAgeNow({ tyre_age: null })).toBeNull();
+  });
+
+  it('takes medians', () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(median([4, 1, 2, 3])).toBe(2.5);
+    expect(median([])).toBeNull();
+  });
+
+  it('keeps racing pace, fuel effect included, and drops a spin', () => {
+    const race = [95, 94.6, 94.2, 93.8, 93.5, 93.2, 93, 92.8, 92.6, 104];
+    expect(paceRange(race)).toEqual([92.6, 95]);
+    expect(paceRange([90, 90.2, 90.1])).toEqual([90, 90.2]);
+    expect(paceRange([])).toBeNull();
+  });
+
+  it('ends the lap axis on the distance', () => {
+    expect(axisLaps(31, 57)).toBe(57);
+    expect(axisLaps(12, null)).toBe(12);
+    expect(axisLaps(0, null)).toBe(1);
+    expect(lapTicks(57, 300)).toEqual([10, 20, 30, 40, 50, 57]);
+    expect(lapTicks(52, 300)).toEqual([10, 20, 30, 40, 52]);
+    expect(lapTicks(5, 400)).toEqual([1, 2, 3, 4, 5]);
+    expect(lapTicks(70, 100)).toEqual([70]);
   });
 });
