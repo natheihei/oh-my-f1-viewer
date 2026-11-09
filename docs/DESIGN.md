@@ -58,8 +58,13 @@ await host.catalog.events({ year });
 // A component
 export default defineComponent({
   name: 'video',
+  title: 'Video',
+  description: 'One feed from the open session.',
+  args: Type.Object({ feed: Type.String() }),
+  spec: ({ feed }) => ({ key: feed, label: labelOf(feed) }),
   View: ({ props }) => <Video feed={props.feed} />,
 });
+host.components.register({ components }); // Once, at start: the grid and the agent read them from the host
 ```
 
 Each write and query declares its description and argument schema. The agent's tools are built from them, so a host change that breaks a tool

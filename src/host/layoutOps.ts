@@ -1,32 +1,29 @@
-/** Writes to the layout. Feeds are named by id: matching a name like "Hamilton" is up to the caller. */
+/** Writes to the layout. Feeds are named by id and components by name: matching "Hamilton" to a feed is up to the caller. */
 import Type from 'typebox';
-import { useSession } from '../data/session';
-import type { ComponentSpec } from '../layout/model';
 import { allTiles } from '../layout/model';
 import { layout } from '../layout/store';
+import { Item, specOf } from './components';
 import { write } from './op';
-import { videoSpec } from './viewing';
 
 const Feeds = Type.Array(Type.String(), { description: 'Feed ids' });
 const Target = Type.String({ description: 'A tile key, group id or group title' });
 
-function specOf(feed: string): ComponentSpec {
-  const channel = useSession.getState().channels.find((c) => c.id === feed);
-  if (!channel) throw new Error(`Unknown feed: ${feed}`);
-  return videoSpec(channel.id, channel.label);
-}
+const videoOf = (feed: string) => specOf({ type: 'video', props: { feed } });
 
 export const layoutOps = {
   add: write(
-    { description: 'Put feeds on screen as individual tiles.', args: Type.Object({ feeds: Feeds }) },
-    ({ feeds }) => {
-      for (const spec of feeds.map(specOf)) layout.add(spec);
+    { description: 'Put components on screen as individual tiles.', args: Type.Object({ items: Type.Array(Item) }) },
+    ({ items }) => {
+      for (const spec of items.map(specOf)) layout.add(spec);
     },
   ),
   remove: write(
-    { description: 'Take feeds off screen, whether they are tiles or inside a group.', args: Type.Object({ feeds: Feeds }) },
-    ({ feeds }) => {
-      for (const feed of feeds) layout.remove(feed);
+    {
+      description: 'Take tiles off screen by key, whether they stand alone or are inside a group.',
+      args: Type.Object({ keys: Type.Array(Type.String(), { description: "Tile keys: a video tile's is its feed id" }) }),
+    },
+    ({ keys }) => {
+      for (const key of keys) layout.remove(key);
     },
   ),
   close: write(
@@ -38,7 +35,7 @@ export const layoutOps = {
       description: 'Show feeds side by side as one group. Returns the group id.',
       args: Type.Object({ feeds: Feeds, title: Type.Optional(Type.String()) }),
     },
-    ({ feeds, title }) => layout.group(feeds.map(specOf), title),
+    ({ feeds, title }) => layout.group(feeds.map(videoOf), title),
   ),
   closeGroup: write(
     { description: 'Close a group and take its tiles off screen. Returns their labels, or null if no group matches.', args: Type.Object({ group: Target }) },

@@ -1,6 +1,7 @@
 /** A video feed in the layout. The stream itself belongs to the host. */
 import { useEffect, useState } from 'react';
-import { defineComponent, useLive, Video } from '../host';
+import Type from 'typebox';
+import { defineComponent, read, useLive, Video } from '../host';
 
 function VideoTile({ props, label }: { props: { feed: string }; label: string }) {
   const { feed } = props;
@@ -41,4 +42,16 @@ function VideoTile({ props, label }: { props: { feed: string }; label: string })
   );
 }
 
-export default defineComponent({ name: 'video', View: VideoTile });
+export default defineComponent({
+  name: 'video',
+  title: 'Video',
+  description: 'One feed from the open session: the main broadcast, a driver onboard, the data channel or the tracker.',
+  args: Type.Object({ feed: Type.String({ description: 'A feed id from live.feeds' }) }),
+  // Keyed by feed, so a feed is on screen at most once.
+  spec: ({ feed }) => {
+    const channel = read().feeds.find((c) => c.id === feed);
+    if (!channel) throw new Error(`Unknown feed: ${feed}`);
+    return { key: feed, label: channel.label };
+  },
+  View: VideoTile,
+});

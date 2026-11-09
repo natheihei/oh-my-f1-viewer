@@ -6,8 +6,8 @@ import { create } from 'zustand';
 import type { Channel, SessionInfo } from '../../shared/api';
 import { catalog } from '../data/catalog';
 import { closeSession, openSession } from '../data/session';
-import type { ComponentSpec } from '../layout/model';
 import { layout } from '../layout/store';
+import { specOf } from './components';
 
 export interface Countdown {
   title: string;
@@ -25,11 +25,6 @@ function stopCountdown(): void {
   useCountdown.setState({ countdown: null });
 }
 
-/** A tile showing one feed. The layout only knows the component's name, not what it is. */
-export function videoSpec(channelId: string, label: string): ComponentSpec {
-  return { type: 'video', key: channelId, label, props: { feed: channelId } };
-}
-
 export function mainChannel(channels: Channel[]): Channel | undefined {
   return channels.find((c) => c.kind === 'main') ?? channels[0];
 }
@@ -39,7 +34,7 @@ export async function openViewingSession(session: SessionInfo, options: { fromSt
   layout.clear();
   const channels = await openSession(session, options);
   const main = mainChannel(channels);
-  if (main) layout.add(videoSpec(main.id, main.label));
+  if (main) layout.add(specOf({ type: 'video', props: { feed: main.id } }));
   return channels;
 }
 
