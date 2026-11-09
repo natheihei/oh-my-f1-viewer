@@ -1,23 +1,17 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
-import { useMemo, type ComponentType } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { GridSurface } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
 import { GRID_COLUMNS, GRID_ROWS } from '../layout/model';
 import { Stage, type TileComponent } from '../layout/Stage';
+import { componentOf, useComponents } from './components';
 import { layoutOps } from './layoutOps';
 import { setGridFrame, useSuggestions } from './suggestions';
 
-export interface ComponentDefinition {
-  name: string;
-  View: ComponentType<{ props: Record<string, unknown>; label: string }>;
-}
-
-/** Declares a component that tiles can show by name. */
-export function defineComponent<P extends Record<string, unknown>>(definition: {
-  name: string;
-  View: ComponentType<{ props: P; label: string }>;
-}): ComponentDefinition {
-  return definition as unknown as ComponentDefinition;
+/** Draws a spec with its registered component, or `fallback` if none is registered under its type. */
+export function ComponentView({ spec, fallback = null }: { spec: ComponentSpec; fallback?: ReactNode }) {
+  const View = componentOf(spec.type)?.View;
+  return View ? <View props={spec.props} label={spec.label} /> : <>{fallback}</>;
 }
 
 const onMove = (tile: string, rect: Rect) => layoutOps.move({ tile, rect });
@@ -47,18 +41,21 @@ function DropPreview() {
   );
 }
 
-export function Grid({ components }: { components: ComponentDefinition[] }) {
-  // A stable wrapper per component, because a new one would remount every tile.
-  const registry = useMemo(
-    () =>
-      Object.fromEntries(
-        components.map(({ name, View }): [string, TileComponent] => [
-          name,
-          ({ spec }: { spec: ComponentSpec }) => <View props={spec.props} label={spec.label} />,
-        ]),
-      ),
-    [components],
-  );
+// One wrapper per component name for good, because a new one would remount every tile showing it.
+const wrappers = new Map<string, TileComponent>();
+function wrapperOf(name: string): TileComponent {
+  let wrapper = wrappers.get(name);
+  if (!wrapper) {
+    wrapper = ({ spec }) => <ComponentView spec={spec} />;
+    wrappers.set(name, wrapper);
+  }
+  return wrapper;
+}
+
+/** Every tile, each drawn with the registered component its spec names. */
+export function Grid() {
+  const components = useComponents((s) => s.list);
+  const registry = useMemo(() => Object.fromEntries(components.map(({ name }) => [name, wrapperOf(name)])), [components]);
   const highlight = useSuggestions((s) => s.highlight);
   return (
     <>

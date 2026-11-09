@@ -8,8 +8,7 @@
  */
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { components } from '../components/registry';
-import { host, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
+import { ComponentView, host, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
 
 export interface SuggestionStripHandle {
   /** Gives the strip keyboard focus, on the suggestion it last had. */
@@ -38,7 +37,6 @@ export const SuggestionStrip = forwardRef<
   const [drag, setDrag] = useState<Drag | null>(null);
   const cards = useRef<(HTMLDivElement | null)[]>([]);
   const suppressClick = useRef(false);
-  const views = useMemo(() => Object.fromEntries(components.map((c) => [c.name, c.View])), []);
 
   const current = Math.min(index, items.length - 1);
 
@@ -118,7 +116,6 @@ export const SuggestionStrip = forwardRef<
     <div className="strip" data-testid="suggestion-strip" role="listbox" aria-label="Suggested tiles" aria-orientation="horizontal">
       {items.map((spec, i) => {
         const present = onScreen.has(spec.key);
-        const View = views[spec.type];
         return (
           <div
             key={spec.key}
@@ -151,11 +148,11 @@ export const SuggestionStrip = forwardRef<
             onKeyDown={(e) => onKeyDown(e, spec, i)}
           >
             <div className="strip-view">
-              {present || !View ? (
+              {present ? (
                 <div className="strip-placeholder">{spec.label}</div>
               ) : (
                 <PreviewScope>
-                  <View props={spec.props} label={spec.label} />
+                  <ComponentView spec={spec} fallback={<div className="strip-placeholder">{spec.label}</div>} />
                 </PreviewScope>
               )}
               <div className="strip-overlay" aria-hidden>
