@@ -1,0 +1,120 @@
+# Session data
+
+Everything about a session from 2023 onward, in a local SQLite database, read through the host. It follows
+[OpenF1](https://openf1.org/docs)'s schema and logic, and OpenF1 is what it's checked against. Older seasons report `unsupported`.
+
+**A database holding a whole race contains the result.** Consumers only reach it as of the playhead, and nothing up there can write to it.
+
+## What's exposed, and how
+
+| Data | Exposed as | Filled |
+| --- | --- | --- |
+| Meetings, sessions | `useLive((s) => s.schedule)` | On every app start and sign-in. The last copy stays readable until then, or if that fails |
+| Drivers, championship, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
+| `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
+
+Names match OpenF1, except that all times are UTC milliseconds. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
+upcoming list, not OpenF1's website API, so it lacks `circuit_type`, images and `is_cancelled`. Upcoming meetings also have no location or circuit
+until they've happened.
+
+`useSql` runs again as the playhead moves and as data arrives. Objects are frozen. `sessionData.coverage` says what the database holds and why anything is missing.
+
+## `visible_from`
+
+Each row stores when the feed revealed it, on the same clock as the playhead:
+
+- **Archive:** the clock base plus the message's offset. The replay's playhead uses the same base (`computeFeedBaseUtc`), so the two always agree. It
+  matches OpenF1's timestamps exactly: the median difference was 0ms, as were the 5th and 95th percentiles, on 6 sessions.
+- **Live:** when the message arrived. The playhead is the video's wall clock.
+
+A row's own `date` can't serve, because a message often reports something earlier than when it was sent.
+
+Rows that change as a session goes on (`laps`, `stints`, `pit`, `drivers`, the championship tables) are stored as versions, and a read takes the newest one the playhead has
+reached. So a stint's `lap_end` can't reveal a stop that hasn't happened, and a lap's time doesn't show before it's known. The grid shows from the first message of
+a race or sprint, and the result from when the session finalises.
+
+## Completion and caching
+
+Each dataset has its own mark in `t_ingest`, so a failed scrape can't force the timing to be fetched again:
+
+| Dataset | Feeds | Complete when |
+| --- | --- | --- |
+| `timing` | `TIMING_FEEDS` | Every feed fetched, and the feed reports the session finished or its scheduled end is 3+ days past |
+| `results` | formula1.com's result and grid pages | Timing is complete and the result page has rows, or the session has no page |
+| `telemetry` | `CarData.z`, `Position.z` | The same as timing |
+
+A complete dataset is skipped when the session opens again. Bump `INGEST_VERSION` when a processor or table changes, and each session is ingested again the next time it opens.
+
+`ArchiveStatus` can't be the test: it reads `Generating` in files that have been final for years. Neither can the feed alone, since some archives never report the end.
+
+## How it's built
+
+- **`electron/timingdb/worker.ts`** owns the database on its own thread, since SQLite and parsing whole archives block. It holds no credentials.
+- **`index.ts`** does what needs the network or the token, in the main process.
+- **`processors.ts`** turns messages into rows, **`ingest.ts`** fills the database and decides completion, and **`store.ts`** holds the two connections.
+- **Consumers' SQL** runs on a read-only connection, against temporary views limited to the session and playhead. An authorizer refuses everything else, including the tables behind them.
+
+A live capture also keeps its raw messages, because processors hold state in memory. Restarting mid-session rebuilds from them. Opening the session after it has finished replaces the capture
+with the archive and drops them.
+
+## Linking to the video
+
+The database knows nothing about video. Three things connect them:
+
+| Link | How | Where |
+| --- | --- | --- |
+| **Which session** | F1 TV's listing carries F1's own `meetingKey` and `sessionKey`, which are also the archive's and OpenF1's keys | `archiveQuery`, `resolveSessionPath` |
+| **Which moment** | The video's position becomes a feed offset, then a UTC playhead, which is compared with `visible_from` | `timeMap.ts` |
+| **Which driver** | An onboard feed's `Channel.number` is `driver_number` | No code needed yet: any consumer can join on it |
+
+The moment is the hard one, because neither timeline starts at the race start. For a replay, in order of preference:
+
+1. **Curated:** F1 TV's sync API gives `session_start`, the video second of lights out (or green). The feed's `ExtrapolatedClock` shows the offset where the session clock starts. So
+   `feed offset = video seconds * 1000 + (clock start offset - session_start * 1000)`.
+2. **Wall clock:** the stream's frame time minus the feed's base. It runs about 15s ahead of curated, so data could show up to that early. It's only used when the sync API has nothing.
+3. **Scheduled start:** an estimate within about a minute, when the stream has no wall clock either.
+
+A live session compares `visible_from`, its arrival time, with the stream's wall clock. F1 TV's live video runs tens of seconds behind the feed, so rows wait for it. With no wall clock at all, everything is visible, which risks spoilers.
+
+All streams share one clock, kept in step by the sync engine, so one playhead serves every tile. The sync API's per-channel offsets (`channelDiffs`) aren't used. The link only runs from video to data: nothing yet turns a lap or a row into a video position.
+
+A session F1 TV lists without keys falls back to matching by name and type, which could find the wrong session. See "Known limits".
+
+## Joining a live session late
+
+There's no backfill: the database holds what was captured, and `coverage` lists `capturedFrom` and any `gaps`. The snapshot on joining gives the lap in progress, finished stints, race control and pit
+history. There's no lap-by-lap history from before, as a snapshot doesn't hold it.
+
+## How it was checked
+
+`scripts/openf1-compare.mjs` compares against OpenF1's API, reporting counts only. `scripts/data-check.mjs` runs the real app against the real archive and through a real opened session, muted, at its start.
+
+| Table | Result, session 11396 |
+| --- | --- |
+| `laps`, `stints`, `pit`, `position`, `race_control`, `weather`, `overtakes`, `intervals`, `drivers`, championship, `session_result` | Same rows and values (`intervals`: 24,227 rows) |
+| `car_data`, `location` | Same rows and values, in a 1-minute sample for one car |
+| `sessions`, `meetings` | All 123 of 2025's sessions present, with one meeting and one session's fields compared |
+| `starting_grid` | 7 of 22 differ. The page we read is still the one OpenF1 scrapes, so its copy looks older |
+
+On 4 older races with fewer feeds cached, `laps`, `stints`, `position`, `race_control` and `weather` matched too, as did `drivers` on the 3 of them the API's rate limit allowed. On those races, lap 1's
+duration and first sector were 1ms apart: a rounding difference, not an error. The cut-short archive below is the exception.
+
+That race took about 7 seconds to ingest in full, with 1.5 million telemetry rows, into a 69 MB database. Chart-sized queries took 2-30ms.
+
+## Known limits
+
+- **Live is untested.** No session was on while this was built, so the capture has only run in unit tests. It subscribes to more feeds than before, and any of them being refused
+  would show up only on a live session. Check at the next one.
+- **No live telemetry.** `CarData.z` and `Position.z` likely need the token on the socket, which isn't sent.
+- **Some archives are cut short.** F1's archive of the 2026 Mexico race (session 11404) ends about 2.2 hours in and never reports a finish, where OpenF1 has more rows from recording it live. A fresh
+  download on 2026-11-09 was byte-identical to the cached copy in all 15 feeds checked, so this is F1's file and not a stale cache. It's still marked complete after 3 days, with nothing in `coverage` to say it's short.
+  A scan of all 417 indexed sessions from 2023 to 2026 on 2026-11-09 found no others without a finish status, and 102 of 103 races agreed with OpenF1 on their last lap. It didn't look for holes mid-session.
+- **48 sessions from early 2024 have no session data.** F1's season index leaves out the first nine rounds and pre-season testing, though all 48 archives exist and report a finish. So they aren't in the
+  calendar, and from reading the code, looking one up by key finds nothing; opening one wasn't tried. OpenF1 hardcodes their paths in `MISSING_SESSIONS`, and a small table of them would fix it. Left as is for now, by choice. A further
+  15 sessions missing from the index are ones OpenF1 marks as cancelled, which is correct.
+- **The archive always replaces a live capture.** For a session like that one, a good capture would be swapped for a shorter archive.
+- **Disk isn't managed.** About 70 MB per race adds up, and nothing removes old sessions.
+- **No query timeout.** A runaway query would block the worker. Add one before giving the agent SQL.
+- **A session with no keys could get another session's data.** The lookup then searches by name and type from the newest meeting back. How often F1 TV omits keys wasn't measured.
+- **The agent has no SQL tool.** It waits on spoiler approval, as `DESIGN.md` says.
+- **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `retired`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.

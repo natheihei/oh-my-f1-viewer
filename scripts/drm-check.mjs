@@ -29,7 +29,7 @@ const opened = await page.evaluate(
     window.modules = {
       viewing,
       session: await import('/src/data/session.ts'),
-      timing: await import('/src/data/timing/timingSource.ts'),
+      sessionData: await import('/src/data/sessionData.ts'),
       layout: await import('/src/layout/store.ts'),
       video: await import('/src/host/viewing.ts'),
     };
@@ -140,29 +140,40 @@ s = await sample();
 report('5s after closing main', s);
 console.log('clock kept running without main:', s.clock.t > beforeClose);
 
-// Timing must line up with the picture. The sync API puts lights out at a known video second, so the
-// session clock must be stopped just before it and running just after. Prints no race data.
-const sessionStart = await page.evaluate(async ({ m, k }) => (await window.f1a.timing.syncData(m, k))?.sessionStartSec ?? null, { m: opened.race.meetingKey, k: opened.race.sessionKey });
+// Data must line up with the picture. The sync API puts lights out at a known video second, so the
+// session must not have started just before it, and must have just after. Prints no race data.
+const sessionStart = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const stop = window.f1a.data.onStatus((status) => {
+        if (status.state !== 'ready') return;
+        stop();
+        resolve(status.sessionStartSec);
+      });
+      setTimeout(() => resolve(null), 5000);
+      window.f1a.data.open(window.modules.sessionData.archiveQuery(window.modules.session.useSession.getState().session), false);
+    }),
+);
 if (sessionStart != null) {
-  const clockAt = async (t) => {
+  const startedAt = async (t) => {
     await page.evaluate((x) => window.modules.session.sessionControl.seek(x), t);
     await page.waitForTimeout(3000);
-    return page.evaluate(() => {
-      const timing = window.modules.timing.useTiming.getState();
-      return { running: timing.sessionClock?.extrapolating ?? null, at: +window.modules.session.useSession.getState().clock.timeSec.toFixed(1) };
-    });
+    return page.evaluate(async () => ({
+      started: (await window.modules.sessionData.sessionSql("SELECT COUNT(*) AS n FROM race_control WHERE message = 'SESSION STARTED'")).rows[0].n > 0,
+      at: +window.modules.session.useSession.getState().clock.timeSec.toFixed(1),
+    }));
   };
-  const before = await clockAt(sessionStart - 12);
-  const after = await clockAt(sessionStart + 10);
-  console.log(`lights out at video ${sessionStart}s. clock running at ${before.at}s: ${before.running}; at ${after.at}s: ${after.running}`);
-  console.log('timing lines up with video:', before.running === false && after.running === true);
+  const before = await startedAt(sessionStart - 60);
+  const after = await startedAt(sessionStart + 60);
+  console.log(`lights out at video ${sessionStart}s. started at ${before.at}s: ${before.started}; at ${after.at}s: ${after.started}`);
+  console.log('data lines up with video:', !before.started && after.started);
 }
 
-const timing = await page.evaluate(() => {
-  const t = window.modules.timing.useTiming.getState();
-  return { state: t.state, reason: t.reason, driverRows: t.drivers?.length ?? 0, hasClock: !!t.sessionClock, hasWeather: !!t.weather };
+const data = await page.evaluate(() => {
+  const d = window.modules.sessionData.useSessionData.getState();
+  return { state: d.state, reason: d.reason, drivers: d.drivers?.length ?? 0 };
 });
-console.log('timing:', JSON.stringify(timing));
+console.log('session data:', JSON.stringify(data));
 
 await stop();
 process.exit(0);

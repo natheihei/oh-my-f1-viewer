@@ -8,6 +8,7 @@ import Type from 'typebox';
 import { account, agentLink } from '../data/account';
 import { catalog } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
+import { sessionSql } from '../data/sessionData';
 import { layoutOps } from './layoutOps';
 import { query, write } from './op';
 import { closeViewingSession, openViewingSession, startCountdown } from './viewing';
@@ -15,6 +16,7 @@ import { closeViewingSession, openViewingSession, startCountdown } from './viewi
 export { defineComponent, Grid, type ComponentDefinition } from './Grid';
 export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
+export { useSql, type SqlView } from './useSql';
 export type { Op } from './op';
 export { Video } from './Video';
 export type { Countdown } from './viewing';
@@ -109,12 +111,29 @@ const catalogOps = {
   upcoming: query({ description: "Formula 1 sessions that haven't started, soonest first." }, () => catalog.upcoming()),
 };
 
+const data = {
+  sql: query(
+    {
+      description:
+        'Read the open session with SQL. Tables: car_data, intervals, laps, location, overtakes, pit, position, race_control, stints, weather. ' +
+        'Each holds only what the feed had revealed at the frame on screen. Times are UTC milliseconds. SELECT only.',
+      args: Type.Object({
+        sql: Type.String(),
+        params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
+      }),
+    },
+    ({ sql, params }) => sessionSql(sql, params),
+  ),
+};
+
 export const host = {
   session,
   playback,
   audio,
   layout: layoutOps,
   catalog: catalogOps,
+  /** Session data that isn't in the live state. Nothing here can change it. */
+  data,
   /** Sign-ins, for the user's `/` commands. */
   account,
   /** The link to the agent loop in the main process. */

@@ -23,7 +23,7 @@ app through one write path. f1a adopts the idea, not the machinery.
 │ Frame        timeline · palette · countdown                │
 │ Agent        tools built on the host · spoiler gate        │
 ├ HOST (src/host): the only import consumers may use ────────┤
-│ reads    session · clock · feeds · streams · timing …      │
+│ reads    session · clock · feeds · streams · data …        │
 │ writes   host.session · playback · audio · layout (typed)  │
 │ native   <Video feed />                                    │
 ├ CORE ──────────────────────────────────────────────────────┤
@@ -90,17 +90,18 @@ The timeline is unaffected: the viewer can seek anywhere.
 There's no separate report of what a session has. Each data kind says so itself, and types stop a consumer from reading data without checking:
 
 ```ts
-type Timing =
+type SessionData =
   | { state: 'idle' }                        // No session is open
-  | { state: 'loading'; heldRecords: number }
+  | { state: 'unsupported'; reason: string } // Before 2023
+  | { state: 'loading'; coverage: SessionCoverage | null }
   | { state: 'failed'; reason: string }
-  | { state: 'ready'; drivers: DriverRow[] /* … */ };
+  | { state: 'ready'; drivers: DriverEntry[] /* … */ };
 ```
 
 Feeds and streams already work this way: an empty list means none, and each stream has its status and error.
 
 The cost is that a consumer learns this once a session is open, not before. If something needs to know earlier, a spec would answer it without
-loading anything. A `none` state, meaning we know there's no data, can arrive with the spec: 2022's refused archive shows as `failed` until then.
+loading anything. A `none` state, meaning we know there's no data, can arrive with the spec.
 Reasons can reach the agent, so they must not hint at what happened in the race.
 
 ## Per-year and per-race differences
@@ -174,9 +175,9 @@ Deliberately different:
 1. Commit the 2021+ playback fix and the caption notes. *Done.*
 2. Add `src/host`, route every write through it, and enforce it in the layer test. *Done.*
 3. Move `VideoTile`, the timeline, the palette and the agent onto it, with tools built from it. *Done.*
-4. Have timing report its real state. *Done.*
+4. Have session data report its real state, in `sessionData`. *Done.*
 5. Add the spec and parser registry, when the first real case needs them.
-6. Build the audit script, once timing is on screen and its findings matter.
+6. Build the audit script, once session data is on screen and its findings matter.
 7. Add captions as the next data kind, when the moments feature starts.
 
 Also still to add: an error boundary per tile, so that a broken component can't take the app down.

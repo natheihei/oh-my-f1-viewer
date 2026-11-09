@@ -12,7 +12,8 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
 - The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
   back from the video elements, not checked by ear.
-- Timing lining up with video at lights out on the 2026 Mexico, 2024 Mexico and 2025 Saudi Arabia races.
+- Session data lining up with video at lights out on the 2026 Mexico race: not started 60s before, started 60s after, and hidden again on seeking back. The map itself was checked the same way on 2024 Mexico
+  and 2025 Saudi Arabia through the old timing path it came from.
 - The agent refusing to skip forward or name a winner when asked directly.
 - The production build, including its content security policy.
 - The countdown displaying and ticking. Its automatic start hasn't run: see below.
@@ -27,21 +28,35 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
 - Joining 8-10s behind the live edge, with four streams at 0.04s spread.
 - A three-minute DVR seek, returning to live, and pause and resume. Right after returning to live, streams were still settling, at 0.59s
   spread 12s later and being corrected.
-- Live timing reaching the app and being held back: about 680 records held, against about 660 expected for 50s of video lag.
+- Live timing reaching the app and being held back, through the old `useTiming` path, since replaced: about 680 records held, against about 660 expected for 50s of video lag.
+
+## Verified for session data
+
+The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archive through the real app:
+
+- Ingesting a whole race in about 7 seconds, then skipping that on the next open.
+- Its tables matching OpenF1 row for row, on the same clock. Telemetry was sampled, and 7 of 22 `starting_grid` positions differ, where OpenF1's copy looks older than the page.
+- Opening through the host: results hidden at the start of a replay, reads following the playhead, and direct table reads refused.
+
+Live capture has only run in unit tests. See "Not verified".
 
 ## Not verified
 
-- **How accurately live timing lines up with the picture.** Records are held until the video's wall clock reaches their arrival time.
-  On replays with a wall clock it ran about 15s ahead of lights out, so if live behaves the same, timing would be up to 15s early. Nothing
-  on screen shows timing yet, and checking needs a lights-out or lap change to compare against.
+- Capturing a live session into the database, and the extra feeds it subscribes to. Check at the next live session.
+
+- **How accurately live data lines up with the picture.** Rows are hidden until the video's wall clock reaches their arrival time.
+  On replays with a wall clock it ran about 15s ahead of lights out, so if live behaves the same, data would be up to 15s early. Nothing
+  on screen shows it yet, and checking needs a lights-out or lap change to compare against.
 - **The world feed on a live race.** It's now requested with no `channelId`, as F1 TV's play link says, and the license request is built
   from that. Only replays have run this way, and none of the sampled replays use DRM. Check it on the next live session.
-- **Rewinding live timing.** Unit-tested and exercised during the DVR seek, but its result wasn't compared with the picture.
+- **Rewinding live data.** Unit-tested, but it hasn't run on a live session. `scripts/live-check.mjs` now covers it, and that script's new data checks haven't run either.
 - **The countdown starting a session by itself.** The display is verified, and a unit test covers firing only for its own session and not
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 
 ## Known issues
 
+- **48 sessions from early 2024 have no session data.** F1's season index leaves out pre-season testing and the first nine race weekends, so the lookup can't find them, and they aren't in the
+  calendar. This comes from reading the code, and wasn't confirmed by opening one. Their archives exist, and OpenF1 hardcodes the paths in `MISSING_SESSIONS`. Left as is for now, by choice. See [SESSION_DATA.md](SESSION_DATA.md).
 - **Intermittent CDN stalls.** Sometimes requests to `ott-video-fer-cf.formula1.com` get no response for 10s or more, in clusters
   lasting minutes, and adding streams stops everything. While it happens the app's side is healthy: request hooks take about 1ms
   and the main process isn't blocked. HTTP/2 and QUIC were tested and aren't the cause. It was heaviest after starting many
@@ -49,26 +64,19 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   time, wait out a hang (20s stall limit, 6 attempts), and re-resolve as a last resort. After them, `scripts/stream-soak.mjs` got 10
   of 10 cycles ready (median 4.3s, worst 6.3s). Since stalls come in clusters, that doesn't prove they're gone, and the mitigations
   haven't been seen working during an actual stall.
-- **Per-channel offsets aren't applied.** The sync API gives offsets per channel (0.4s for DATA and TRACKER, 0.08s for F1 LIVE, 0 for
+- **Per-channel offsets aren't applied.** So a data feed or F1 LIVE tile can sit a fraction of a second off the playhead. The sync API gives offsets per channel (0.4s for DATA and TRACKER, 0.08s for F1 LIVE, 0 for
   onboards). F1 OpenViewer fetches them and never uses them. `diff` and `diffV2` have opposite signs on F1 LIVE, so what they mean
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
-- **No timing for 2022.** The timing archive answers HTTP 403 on both 2022 races tried, while other seasons work, so it looks like the
-  whole year. Timing reports `failed`, with a reason that wrongly suggests signing out, because the archive uses the same status for a rejected
-  sign-in. Video is unaffected, and nothing displays timing yet.
-- **Odd timing on some races.** The 2021 Belgian archive has about a tenth of the usual records, and its driver rows only appear once its
-  timing data starts, later in the video. The 2021 Abu Dhabi driver list starts with 19 entries, which is probably the archive's data, but our
-  parser hasn't been ruled out. The 2024 Bahrain race isn't found in the index, and it isn't known whether its entry is missing or its key
-  differs from F1 TV's.
 - **Mouse edits inside groups** are only lightly tested. Dragging a tile between a group and the top level isn't supported: ask the
   agent instead.
-- **No timing while behind the join point of a live session.** Live timing only has records from when the app connected, so watching a
-  live race from its start shows no timing until the video catches up with that moment. Nothing displays timing yet.
+- **No data while behind the join point of a live session.** A capture only has what arrived since the app connected, so watching a
+  live race from its start shows nothing until the video catches up with that moment. Nothing displays session data yet.
 - **Tall windows waste space.** Tiles are sized without regard to 16:9, so a nearly square window shows large black bars.
 
 ## Deferred, by design
 
 - Race-state tools and forward seek for the agent, which wait on spoiler approval.
-- Charts and agent-created dynamic views.
+- Charts and agent-created dynamic views. How pitwall.info draws its charts is researched in [PITWALL.md](PITWALL.md).
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows and macOS, including the VMP signing they need.
 - Saved layouts, pop-out windows, translations and auto-update.
