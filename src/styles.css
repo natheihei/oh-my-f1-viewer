@@ -334,7 +334,7 @@
 }
 
 .strip-item {
-  @apply relative flex w-40 shrink-0 cursor-pointer flex-col outline-none select-none;
+  @apply relative flex w-56 shrink-0 cursor-pointer flex-col outline-none select-none;
   touch-action: none;
 }
 
