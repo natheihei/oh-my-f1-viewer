@@ -70,14 +70,44 @@ fails to compile.
 The agent is a consumer like any other. `src/agent/tools.ts` exposes host functions with one entry per tool:
 
 ```ts
-expose(host.layout.add, { name: 'add_streams', args: streams, adapt: matchNames, gate: sessionOpen });
+expose(host.suggestions.offer, { name: 'suggest_tiles', args: streams, adapt: matchNames, gate: sessionOpen });
 expose(host.playback.seekBy, { name: 'seek_back', adapt: negate, gate: [sessionOpen, rewindOnly] });
 ```
 
 The tool's name, model-facing wording, name matching ("Hamilton") and gates live here, not in the host. A tool that needs different wording or
 arguments from the host's declares its own, and `adapt` must turn them into the host function's types.
 
-The agent can change the layout, as it always could. It isn't offered groups for now: the host still supports them, so they can come back. `/` commands stay a separate set for the user, and the two don't share entries.
+The agent can change the layout, except that it can't add to it: it suggests tiles, and the user adds them. It isn't offered groups for now: the
+host still supports them, so they can come back.
+
+### Finding a session
+
+The app supports seasons from 2023 on. At start it loads F1 TV's events for those seasons, one page per season, and every message to the
+agent carries them at the end of its system prompt: one line per event with its pageId, round, name and dates, so nothing that could spoil
+a result. The agent works out with the user which weekend they mean from that list, and asks when it isn't clear. A weekend's sessions still
+come from `list_sessions`, since their status changes. If the events don't load, the palette says so and `/reload-events` retries; the
+agent isn't asked anything until they're there.
+
+`load_session` opens whatever it's given: a replay or live session plays, and one that hasn't started shows a countdown and opens itself
+once F1 TV has it live.
+
+### Suggested tiles
+
+`suggest_tiles` puts streams in a strip between the palette's history and its input, and returns at once: the turn doesn't wait for the user.
+Each suggestion is a live preview, unless that tile is already on screen. Then it shows its title with an "on screen" badge, and hovering or
+focusing it outlines the tile in the layout. The layout never holds the same component twice, so adding one of those only takes it out of the
+strip.
+
+- Click or Enter adds a suggestion where auto-layout puts it. Dragging one onto the grid splits the tile under the pointer across its longer
+  side, or fills the gap there. Either way it leaves the strip, and an empty strip closes.
+- Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, up to four
+  streams. The user's next message clears it, and tells the agent what they added, dismissed or left.
+- Keys: the first suggestion takes focus. ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
+  dismisses the strip, but while the agent is still working it takes a second Esc, which also stops the turn: otherwise the agent could fill
+  the strip again right after.
+- The palette stays open while the strip is showing.
+- A preview holds its stream quietly: it never becomes audible. Streams are ref-counted, one `<video>` per feed, so adding a previewed
+  suggestion hands the same element to the tile rather than starting the stream again. That matters for DRM and the CDN alike. `/` commands stay a separate set for the user, and the two don't share entries.
 
 ### Spoiler approval
 

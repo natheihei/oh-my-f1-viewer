@@ -52,10 +52,14 @@ spoil a session. Going forward is on the timeline.
 npm run check
 ```
 
-Typecheck and unit tests. The scripts below run the real app in Electron, and all but the first need both sign-ins:
+Typecheck and unit tests. The scripts below run the real app in Electron, and all but the first two need both sign-ins:
 
 ```bash
 node scripts/layout-check.mjs
+```
+
+```bash
+node scripts/suggestions-check.mjs
 ```
 
 ```bash

@@ -10,7 +10,8 @@ import { useLayout } from './store';
 
 export type TileComponent = ComponentType<{ spec: ComponentSpec }>;
 
-export function Stage({ registry }: { registry: Record<string, TileComponent> }) {
+/** `highlight` outlines the tile with that component key. */
+export function Stage({ registry, highlight = null }: { registry: Record<string, TileComponent>; highlight?: string | null }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const hostsRef = useRef(new Map<string, HTMLDivElement>());
   const nodes = useLayout((s) => s.nodes);
@@ -54,7 +55,7 @@ export function Stage({ registry }: { registry: Record<string, TileComponent> })
             key={tile.id}
             data-tile={tile.id}
             data-tile-key={tile.component.key}
-            className="stage-host"
+            className={`stage-host ${tile.component.key === highlight ? 'stage-host-highlight' : ''}`}
             ref={(el) => {
               if (el) hostsRef.current.set(tile.id, el);
               else hostsRef.current.delete(tile.id);

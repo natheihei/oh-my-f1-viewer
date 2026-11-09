@@ -1,6 +1,6 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentToolCall } from '../../shared/api';
-import { host, read, tilesOf, type GroupNode, type LayoutState } from '../host';
+import { FIRST_SEASON, host, read, tilesOf, type EventIndex, type GroupNode, type LayoutState } from '../host';
 import { runTool, toolDefinitions } from './tools';
 
 function describeLayout(state: LayoutState): string {
@@ -17,8 +17,11 @@ function formatClock(t: number): string {
   return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** The state block sent with each user message. Contains nothing about how the race goes. */
-export function describeAppState(): string {
+/**
+ * The state block sent with each user message. Contains nothing about how the race goes. `note` is
+ * what the user did with the last turn's suggestions.
+ */
+export function describeAppState(note: string | null = null): string {
   const { session, audio, feeds, clock, streams, countdown, layout } = read();
   const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
   if (countdown) lines.push(`countdown running for: ${countdown.title}`);
@@ -36,6 +39,7 @@ export function describeAppState(): string {
     `audio: ${feeds.find((f) => f.id === audio)?.label ?? 'muted'}`,
   );
   if (failed.length) lines.push(`failed streams: ${failed.join('; ')}`);
+  if (note) lines.push(`suggestions: ${note}`);
   return lines.join('\n');
 }
 
@@ -57,6 +61,35 @@ export function connectTools(): () => void {
   return host.agent.onToolCall((call) => void handleToolCall(call));
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Oct 24-26", or "Feb 28-Mar 2" across a month, in UTC. */
+function dateRange(startMs: number, endMs: number): string {
+  const a = new Date(startMs);
+  const b = new Date(endMs || startMs);
+  const start = `${MONTHS[a.getUTCMonth()]} ${a.getUTCDate()}`;
+  if (a.getUTCMonth() === b.getUTCMonth()) return a.getUTCDate() === b.getUTCDate() ? start : `${start}-${b.getUTCDate()}`;
+  return `${start}-${MONTHS[b.getUTCMonth()]} ${b.getUTCDate()}`;
+}
+
+/**
+ * Every supported event, for the system prompt: one line each, with the pageId list_sessions takes.
+ * Names, rounds and dates only, so nothing in it can spoil a result.
+ */
+export function describeEvents(index: EventIndex): string {
+  const lines = [`Events on F1 TV, ${FIRST_SEASON} on. Each line: pageId, round, name, dates (UTC).`];
+  for (const { year, events } of index.seasons) {
+    lines.push('', `${year}:`);
+    for (const e of [...events].sort((a, b) => a.startMs - b.startMs)) {
+      const round = e.isTest ? 'test' : `R${e.round}`;
+      lines.push(`${e.pageId} ${round} ${e.shortName || e.name}, ${dateRange(e.startMs, e.endMs)}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/** A message starts a new turn, which clears the suggestion strip. */
 export function askAgent(text: string): Promise<void> {
-  return host.agent.send(text, describeAppState(), toolDefinitions());
+  const note = host.suggestions.newTurn();
+  return host.agent.send(text, describeAppState(note), toolDefinitions(), describeEvents(read().events));
 }

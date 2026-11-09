@@ -21,7 +21,7 @@ await typeInPalette(page, request);
 await page.exposeFunction('logAgentEvent', (m) => log(`agent activity after the countdown started: ${m}`));
 await page.waitForFunction(() => window.events.some((e) => e.type === 'turn_end' || e.type === 'error'), null, { timeout: 90_000 });
 const events = await page.evaluate(() => window.events);
-log(`tools: ${events.filter((e) => e.type === 'tool_start').map((e) => `${e.name}${e.name === 'wait_for_session' ? JSON.stringify(e.args) : ''}`).join(' ')}`);
+log(`tools: ${events.filter((e) => e.type === 'tool_start').map((e) => `${e.name}${e.name === 'load_session' ? JSON.stringify(e.args) : ''}`).join(' ')}`);
 log(`reply: ${events.filter((e) => e.type === 'text_delta').map((e) => e.delta).join('')}`);
 
 const countdown = await page.evaluate(() => {
