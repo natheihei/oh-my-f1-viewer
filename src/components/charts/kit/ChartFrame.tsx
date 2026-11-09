@@ -1,0 +1,68 @@
+/** The shell every chart shares: it says what's missing instead of drawing, and keeps a broken chart in its tile. */
+import { Component, useMemo, type ReactNode } from 'react';
+import { read, useLive, type Dataset, type DriverEntry, type SqlView } from '../../../host';
+import { driverStyles, type DriverStyle } from './colors';
+import { dataMessage, viewMessage } from './status';
+
+interface BoundaryProps {
+  /** Trying again when these change: a chart that broke on some data may draw the next. */
+  views: readonly SqlView[];
+  children: ReactNode;
+}
+
+class ChartBoundary extends Component<BoundaryProps, { error: string | null }> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidUpdate(previous: BoundaryProps) {
+    if (this.state.error && previous.views.some((v, i) => v !== this.props.views[i])) this.setState({ error: null });
+  }
+
+  render() {
+    return this.state.error !== null ? <div className="chart-message">This chart stopped: {this.state.error}</div> : this.props.children;
+  }
+}
+
+/**
+ * Draws `children` once the session has the datasets the chart `needs` and every view has rows, and a
+ * short message until then. `children` is a function, so the chart's own work runs inside the boundary.
+ */
+export function ChartFrame({ needs, views, children }: { needs: readonly Dataset[]; views: readonly SqlView[]; children: () => ReactNode }) {
+  // A string, so the frame re-renders when the message changes, not on every revision.
+  const data = useLive((s) => dataMessage(s.sessionData, needs));
+  const message = data ?? viewMessage(views);
+  return (
+    <div className="tile">
+      {message !== null ? (
+        message ? <div className="chart-message">{message}</div> : null
+      ) : (
+        <ChartBoundary views={views}>
+          <Run render={children} />
+        </ChartBoundary>
+      )}
+    </div>
+  );
+}
+
+/** Calls `render` while rendering inside the boundary, so what it throws is caught there. */
+function Run({ render }: { render: () => ReactNode }) {
+  return <>{render()}</>;
+}
+
+const NO_DRIVERS: DriverEntry[] = [];
+
+/** A car's code for a tile label: from the roster, else its onboard feed, else the number itself. */
+export function codeOf(number: number): string {
+  const { sessionData, feeds } = read();
+  const entry = sessionData.state === 'ready' ? sessionData.drivers.find((d) => d.driver_number === number) : undefined;
+  return entry?.name_acronym ?? feeds.find((f) => f.number === number)?.label ?? String(number);
+}
+
+/** Each driver's code, team colour and dash, by car number, from the session's roster. */
+export function useDriverStyles(): Map<number, DriverStyle> {
+  const drivers = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.drivers : NO_DRIVERS));
+  return useMemo(() => driverStyles(drivers), [drivers]);
+}

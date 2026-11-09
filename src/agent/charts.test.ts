@@ -118,7 +118,7 @@ const weather = defineComponent({
 
 describe('the chart list', () => {
   it('is left out while only video is registered', () => {
-    host.components.register({ components });
+    host.components.register({ components: components.filter((c) => c.name === 'video') });
     expect(describeCharts(read().components)).toBe('');
     const suggest = toolDefinitions().find((t) => t.name === 'suggest_tiles');
     expect(Object.keys((suggest?.parameters as { properties: object }).properties)).toEqual(['streams']);
