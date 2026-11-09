@@ -2,7 +2,7 @@
 
 ```
 ┌ Renderer ─────────────────────────────────────────────────────┐
-│ Components  what a tile can show: video for now               │
+│ Components  what a tile can show: video and charts            │
 │ Shell       palette · timeline · countdown · / commands       │
 │ Agent       tools built on the host · gates                   │
 │ ── Host ──  the only thing the three above may use            │
@@ -31,6 +31,26 @@ Everything a component, the shell or the agent can do goes through here. [HOST.m
   none of them checks who's calling. Policy, such as spoiler approval, belongs to the caller.
 - **Primitives:** `<Video feed={id} />` shows a feed, and `<Grid>` draws the layout. Mounting a `<Video>` is what asks for the stream, the one
   thing that isn't a write function, because a stream's life follows the tile showing it.
+
+## Charts (`src/components/charts`)
+
+Charts are components like video: one file each, holding the `defineComponent` declaration (the description the agent reads, `args`,
+`sessions`, `needs`, `size`), its SQL, a pure function from rows to a drawable model, and the drawing. They draw on Canvas 2D by hand,
+with no chart library, for the reasons in [PITWALL.md](PITWALL.md). They may only import from the host, and from the kit beside them:
+
+- **`kit/ChartFrame`** wraps every chart. It shows a short message instead of the chart while session data isn't ready, a dataset in
+  `needs` is absent or failed, the query failed, or there are no rows yet, and it holds the chart's error boundary. Messages say what's
+  missing, never anything about the race.
+- **`kit/ChartCanvas`** sizes a canvas to its tile at the screen's pixel ratio and calls the chart's `draw(ctx, model, box)` only when the
+  model or size changes. Below 300 × 150 the box is `compact`, and charts drop axes and labels, so the suggestion strip's preview reads as
+  a thumbnail.
+- **Helpers:** linear scales and ticks, axis labels with grid lines only where a value is labelled, polylines, end labels pushed apart,
+  text, gap and lap time parsing, tyre age, driver colours from the roster (a team's second driver dashed) and tyre colours from the theme.
+  The accent red is never used inside a chart: it would read as a team or a soft tyre.
+
+To add one: write the file, keep the rows-to-model function pure and test it, and list the component in `src/components/registry.ts`.
+Keep the model's reference until its rows change (`useSql` already does for its result), so the canvas redraws only then.
+`scripts/charts-check.mjs` puts the charts on screen over a real replay and saves screenshots.
 
 ## Data layer (`src/data`)
 

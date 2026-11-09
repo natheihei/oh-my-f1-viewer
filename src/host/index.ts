@@ -28,6 +28,7 @@ export type { Countdown } from './viewing';
 export type { Service } from '../data/account';
 export { FIRST_SEASON, type EventIndex } from '../data/catalog';
 export type { ComponentSpec, GroupNode, LayoutState } from '../layout/model';
+export type { Dataset, DriverEntry, SessionDataView } from '../../shared/sessionData';
 
 const session = {
   open: write(

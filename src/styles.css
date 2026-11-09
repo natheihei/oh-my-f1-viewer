@@ -11,6 +11,15 @@
   --color-accent: #ff3b30;
 }
 
+/* Tyre compounds. Static, so they exist as variables for the charts' canvases even with no class using them. */
+@theme static {
+  --color-soft: #ff4d4d;
+  --color-medium: #ffd12e;
+  --color-hard: #f0f0f0;
+  --color-intermediate: #3fb54a;
+  --color-wet: #3d8fe0;
+}
+
 @layer base {
   html,
   body,
@@ -167,6 +176,16 @@
 
 .tile-resync {
   @apply absolute top-1 right-1 bg-black/70 px-1.5 text-dim;
+  font-size: 11px;
+}
+
+/* Charts draw on a canvas that fills the tile. */
+.chart-canvas {
+  @apply absolute inset-0 block h-full w-full;
+}
+
+.chart-message {
+  @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
   font-size: 11px;
 }
 
