@@ -78,9 +78,16 @@ let lastHeardVolume = 1;
 
 const LIVE_EDGE_TOLERANCE_SEC = 15;
 
+export interface HoldOptions {
+  /** A hold that shows the feed without ever making it audible, like a preview. */
+  quiet?: boolean;
+}
+
 class SessionRuntime {
   private readonly handles = new Map<string, StreamHandle>();
   private readonly held = new Set<string>();
+  private readonly holds = new Map<string, { loud: number; quiet: number }>();
+  private readonly pendingRelease = new Map<string, ReturnType<typeof setTimeout>>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private referenceId: string | null = null;
   private wantPlaying = true;
@@ -111,23 +118,39 @@ class SessionRuntime {
     useSession.setState({ streams });
   }
 
-  acquire(channelId: string): StreamHandle | null {
-    const existing = this.handles.get(channelId);
-    if (existing) return existing;
+  /**
+   * Takes a hold on a feed's stream, starting it if nobody holds it. There is one stream and one
+   * video element per feed: a second holder gets the same one, and moving the element between
+   * holders keeps it playing. A quiet hold, like a preview, never makes a feed audible.
+   */
+  acquire(channelId: string, { quiet = false }: HoldOptions = {}): StreamHandle | null {
     const channel = this.channelOf(channelId);
     if (!channel) return null;
-    const handle = new StreamHandle(channel, {
-      join: () => joinPoint({ live: this.live, fromStart: this.fromStart, started: this.started }),
-      clockTime: () => this.now(),
-      onChange: () => this.publishStreams(),
-    });
-    this.handles.set(channelId, handle);
-    this.publishStreams();
-    const { audioChannelId, volume } = useSession.getState();
-    handle.video.volume = volume;
-    if (audioChannelId) handle.video.muted = true;
-    else if (channel.kind === 'main') this.setAudio(channelId);
-    this.startQueue = this.startQueue.then(() => this.startInTurn(handle));
+    const pending = this.pendingRelease.get(channelId);
+    if (pending != null) clearTimeout(pending);
+    this.pendingRelease.delete(channelId);
+    const holds = this.holds.get(channelId) ?? { loud: 0, quiet: 0 };
+    const wasHeard = holds.loud > 0;
+    if (quiet) holds.quiet += 1;
+    else holds.loud += 1;
+    this.holds.set(channelId, holds);
+
+    let handle = this.handles.get(channelId);
+    if (!handle) {
+      const created = new StreamHandle(channel, {
+        join: () => joinPoint({ live: this.live, fromStart: this.fromStart, started: this.started }),
+        clockTime: () => this.now(),
+        onChange: () => this.publishStreams(),
+      });
+      handle = created;
+      this.handles.set(channelId, created);
+      this.publishStreams();
+      const { audioChannelId, volume } = useSession.getState();
+      created.video.volume = volume;
+      created.video.muted = channelId !== audioChannelId;
+      this.startQueue = this.startQueue.then(() => this.startInTurn(created));
+    }
+    if (!quiet && !wasHeard && useSession.getState().audioChannelId == null && channel.kind === 'main') this.setAudio(channelId);
     return handle;
   }
 
@@ -141,8 +164,30 @@ class SessionRuntime {
     }
   }
 
-  release(channelId: string): void {
+  /**
+   * Gives a hold back. The stream stops once nobody holds it, a moment later rather than at once:
+   * a preview handing its feed to a tile lets go in the same render the tile takes hold.
+   */
+  release(channelId: string, { quiet = false }: HoldOptions = {}): void {
+    const holds = this.holds.get(channelId);
+    if (!holds) return;
+    if (quiet) holds.quiet = Math.max(0, holds.quiet - 1);
+    else holds.loud = Math.max(0, holds.loud - 1);
+    if (holds.loud === 0 && useSession.getState().audioChannelId === channelId) this.setAudio(this.defaultAudioChannel());
+    if (holds.loud + holds.quiet > 0 || this.pendingRelease.has(channelId)) return;
+    this.pendingRelease.set(
+      channelId,
+      setTimeout(() => {
+        this.pendingRelease.delete(channelId);
+        const now = this.holds.get(channelId);
+        if (now && now.loud + now.quiet === 0) this.stop(channelId);
+      }, 0),
+    );
+  }
+
+  private stop(channelId: string): void {
     const handle = this.handles.get(channelId);
+    this.holds.delete(channelId);
     if (!handle) return;
     if (this.referenceId === channelId) {
       // The clock outlives the reference: remember where we are for whoever takes over.
@@ -152,8 +197,6 @@ class SessionRuntime {
     handle.destroy();
     this.handles.delete(channelId);
     this.held.delete(channelId);
-    const state = useSession.getState();
-    if (state.audioChannelId === channelId) this.setAudio(this.defaultAudioChannel());
     this.publishStreams();
   }
 
@@ -161,8 +204,9 @@ class SessionRuntime {
     return this.handles.get(channelId);
   }
 
+  /** The main feed if something shows it out loud, otherwise the first such feed. */
   private defaultAudioChannel(): string | null {
-    const ids = [...this.handles.keys()];
+    const ids = [...this.handles.keys()].filter((id) => (this.holds.get(id)?.loud ?? 0) > 0);
     return ids.find((id) => this.channelOf(id)?.kind === 'main') ?? ids[0] ?? null;
   }
 
@@ -308,6 +352,9 @@ class SessionRuntime {
     this.timer = null;
     this.sessionData?.destroy();
     this.sessionData = null;
+    for (const timer of this.pendingRelease.values()) clearTimeout(timer);
+    this.pendingRelease.clear();
+    this.holds.clear();
     for (const handle of this.handles.values()) handle.destroy();
     this.handles.clear();
   }
@@ -348,8 +395,8 @@ export function closeSession(): void {
 }
 
 export const sessionControl = {
-  acquire: (channelId: string) => runtime?.acquire(channelId) ?? null,
-  release: (channelId: string) => runtime?.release(channelId),
+  acquire: (channelId: string, options?: HoldOptions) => runtime?.acquire(channelId, options) ?? null,
+  release: (channelId: string, options?: HoldOptions) => runtime?.release(channelId, options),
   handle: (channelId: string) => runtime?.handle(channelId),
   play: () => runtime?.play(),
   pause: () => runtime?.pause(),

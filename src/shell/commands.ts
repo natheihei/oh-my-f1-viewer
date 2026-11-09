@@ -2,7 +2,7 @@
  * `/` commands: account actions the user runs themselves. A separate set from the agent's tools
  * (shared/tools.ts): neither can call the other, and anything to do with viewing goes to the agent.
  */
-import { host } from '../host';
+import { FIRST_SEASON, host } from '../host';
 import { palette } from './palette';
 
 export interface SlashCommand {
@@ -16,16 +16,28 @@ function errorText(e: unknown): string {
   return raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim();
 }
 
-/** Tells the user what still needs signing in, or that they can start. */
+/**
+ * Loads F1 TV's events, which the agent needs to find anything, and says so if that fails. Returns
+ * whether they're loaded. Needs F1 TV signed in.
+ */
+export async function loadEvents(): Promise<boolean> {
+  const index = await host.catalog.loadIndex();
+  if (index.state === 'ready') return true;
+  palette.push('error', `Couldn't load F1 TV's events: ${index.error ?? 'unknown error'}. Retry with /reload-events.`);
+  return false;
+}
+
+/** Tells the user what still needs signing in, or loads the events and says they can start. */
 export async function reportReadiness(): Promise<void> {
   const { f1tv: f1, chatgpt: ai } = await host.account.status();
   const missing: string[] = [];
   if (!f1.signedIn) missing.push('/login-f1tv');
   if (!ai.signedIn) missing.push('/login-chatgpt');
+  if (f1.signedIn && !(await loadEvents())) return;
   if (missing.length) {
     palette.push('system', `Sign in to get started: ${missing.join(', ')}`);
   } else {
-    palette.push('system', 'Ready. Name a session, like "2025 Mexico race".');
+    palette.push('system', `Ready. Name a session from ${FIRST_SEASON} on, like "2025 Mexico race".`);
   }
 }
 
@@ -56,6 +68,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
       } catch (e) {
         palette.push('error', `ChatGPT sign-in failed: ${errorText(e)}`);
       }
+    },
+  },
+  {
+    name: '/reload-events',
+    description: "Load F1 TV's events again",
+    async run() {
+      if (await loadEvents()) palette.push('system', "F1 TV's events loaded.");
     },
   },
   {

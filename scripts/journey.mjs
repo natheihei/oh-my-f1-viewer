@@ -85,7 +85,7 @@ const nextEvent = await page.evaluate(async () => {
 });
 let r = await say(nextEvent ?? '2026 Brazil', 'journey-1-clarify.png');
 let s = await state();
-check('clarifies instead of acting', s.session == null && !r.tools.includes('load_session') && !r.tools.includes('wait_for_session') && r.reply.includes('?'), r.reply.slice(0, 120));
+check('clarifies instead of acting', s.session == null && !r.tools.includes('load_session') && r.reply.includes('?'), r.reply.slice(0, 120));
 check('palette stays open while asking', await paletteVisible());
 
 // A finished weekend is clear.

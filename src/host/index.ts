@@ -5,12 +5,14 @@
  * no view on who's calling or whether they should: policy such as spoiler approval belongs to the caller.
  */
 import Type from 'typebox';
+import type { Channel, SessionInfo } from '../../shared/api';
 import { account, agentLink } from '../data/account';
-import { catalog } from '../data/catalog';
+import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
 import { sessionSql } from '../data/sessionData';
 import { layoutOps } from './layoutOps';
 import { query, write } from './op';
+import { suggestionOps } from './suggestions';
 import { closeViewingSession, openViewingSession, startCountdown } from './viewing';
 
 export { defineComponent, Grid, type ComponentDefinition } from './Grid';
@@ -18,41 +20,35 @@ export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
 export type { Op } from './op';
-export { Video } from './Video';
+export { PreviewScope, Video } from './Video';
+export { MAX_SUGGESTED_STREAMS, type SuggestionsView } from './suggestions';
 export type { Countdown } from './viewing';
 export type { Service } from '../data/account';
-export type { GroupNode, LayoutState } from '../layout/model';
+export { FIRST_SEASON, type EventIndex } from '../data/catalog';
+export type { ComponentSpec, GroupNode, LayoutState } from '../layout/model';
 
 const session = {
   open: write(
     {
-      description: "Open a replay or live session and start its main feed. Replaces whatever is open. Fails if it hasn't started.",
+      description:
+        "Open a session. A replay or live one starts its main feed and replaces whatever is open. One that hasn't started shows a countdown instead, and opens by itself once F1 TV has it live.",
       args: Type.Object({
         contentId: Type.Integer(),
         title: Type.Optional(Type.String()),
         fromStart: Type.Optional(Type.Boolean({ description: 'For a live session: start at the beginning, not the live edge.' })),
       }),
     },
-    async ({ contentId, title, fromStart }) => {
+    async ({ contentId, title, fromStart }): Promise<{ session: SessionInfo; feeds: Channel[] | null }> => {
       const info = await catalog.resolve(contentId, title);
-      if (info.status === 'upcoming') throw new Error(`${info.title} hasn't started.`);
+      if (info.status === 'upcoming') {
+        startCountdown(info, (live) => void openViewingSession(live));
+        return { session: info, feeds: null };
+      }
       const feeds = await openViewingSession(info, { fromStart });
       return { session: info, feeds };
     },
   ),
   close: write({ description: 'Close the open session and clear the screen.' }, () => closeViewingSession()),
-  waitFor: write(
-    {
-      description: 'Show a countdown to an upcoming session that has been listed. It opens by itself once F1 TV has it live.',
-      args: Type.Object({ contentId: Type.Integer() }),
-    },
-    ({ contentId }) => {
-      const info = catalog.known(contentId);
-      if (!info) throw new Error('Unknown contentId.');
-      if (info.status !== 'upcoming') throw new Error(`${info.title} isn't upcoming.`);
-      startCountdown(info, (live) => void openViewingSession(live));
-    },
-  ),
   feeds: query({ description: 'Every feed the open session offers.' }, () => useSession.getState().channels),
 };
 
@@ -98,6 +94,10 @@ const audio = {
 };
 
 const catalogOps = {
+  loadIndex: write(
+    { description: `Load every event from ${FIRST_SEASON} on, or retry a load that failed. Resolves to the index, whether it loaded or not.` },
+    () => catalog.loadIndex(),
+  ),
   seasons: query({ description: 'The seasons F1 TV has.' }, () => catalog.seasons()),
   events: query(
     { description: 'The Grand Prix events of a season, including future ones.', args: Type.Object({ year: Type.Integer() }) },
@@ -131,6 +131,8 @@ export const host = {
   playback,
   audio,
   layout: layoutOps,
+  /** Tiles the agent suggests, which the user adds or dismisses. */
+  suggestions: suggestionOps,
   catalog: catalogOps,
   /** Session data that isn't in the live state. Nothing here can change it. */
   data,

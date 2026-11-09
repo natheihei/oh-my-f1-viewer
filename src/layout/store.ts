@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import {
   addTile,
+  addTileAt,
   allTiles,
   applyMouseEdit,
   closeGroup,
@@ -13,6 +14,7 @@ import {
   resetLayout,
   swap,
   ungroup,
+  type Cell,
   type ComponentSpec,
   type LayoutState,
   type Rect,
@@ -26,6 +28,8 @@ const get = () => useLayout.getState();
 export const layout = {
   clear: () => set(EMPTY_LAYOUT),
   add: (component: ComponentSpec) => set(addTile(get(), component)),
+  /** Adds a tile where it was dropped on the grid. */
+  addAt: (component: ComponentSpec, cell: Cell, cellAspect?: number) => set(addTileAt(get(), component, cell, cellAspect)),
   remove: (key: string) => set(removeTile(get(), key)),
   /** Removes a tile by its id, as the close button on its title bar does. */
   close(id: string): boolean {

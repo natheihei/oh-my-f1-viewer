@@ -170,7 +170,8 @@ export interface F1aApi {
     status(): Promise<AiStatus>;
     login(): Promise<AiStatus>;
     logout(): Promise<void>;
-    send(text: string, context: string, tools: AgentToolDefinition[]): Promise<void>;
+    /** `reference` is appended to the system prompt: what the agent should know up front, like the event list. */
+    send(text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void>;
     cancel(): Promise<void>;
     reset(): Promise<void>;
     onEvent(cb: (event: AgentEvent) => void): () => void;
