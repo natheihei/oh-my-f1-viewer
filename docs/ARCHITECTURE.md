@@ -70,7 +70,7 @@ at low quality.
 ## Layout layer (`src/layout`)
 
 `model.ts` holds the tree and all changes to it as pure functions. It allows one level of nesting: the root holds tiles and
-groups, and groups hold tiles.
+groups, and groups hold tiles. Nothing offers groups at the moment, to the agent or the mouse, so every tile sits at the root.
 
 Components don't live in the grid. `Stage.tsx` keeps a flat list of hosts, one per tile, under transparent GridStack placeholders,
 and each host follows its placeholder every frame. This is what makes GridStack safe: moving a node into a nested grid removes and
@@ -78,6 +78,8 @@ re-adds it in the DOM, which would stop a `<video>`, but placeholders hold nothi
 tree changes.
 
 - Auto-layout is broadcast-first: the primary node is largest, with the rest in a rail and then a band below it.
+- Each tile has a title bar drawn by the grid, with its label and a close button. Only the title bar drags and only the edges resize:
+  everything else on the grid lets the mouse through to the component underneath.
 - A full grid has no empty cells to drag into, so dropping a tile on another swaps them.
 - After a mouse edit the layout stays as arranged, and new tiles go in the largest free space, or re-tile if there is none.
 

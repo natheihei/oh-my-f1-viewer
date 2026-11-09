@@ -96,14 +96,6 @@ const labelsOf = (feeds: Channel[]) => feeds.map((f) => f.label).join(', ');
 const missingNote = (missing: string[]) => (missing.length ? ` Not found: ${missing.join(', ')}. Use list_streams to see the options.` : '');
 const onScreen = (id: string) => tilesOf(read().layout).some((t) => t.component.key === id);
 
-/** A group can be named by a stream inside it, so translate stream names to their tile key. */
-function groupRef(ref: string): string {
-  const feed = resolveChannel(read().feeds, ref);
-  return feed && onScreen(feed.id) ? feed.id : ref;
-}
-
-const GroupRef = Type.String({ description: 'Group id or title, or any stream inside it' });
-
 function isoDate(ms: number | null): string | null {
   return ms ? new Date(ms).toISOString().slice(0, 16) + 'Z' : null;
 }
@@ -191,7 +183,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   }),
   expose(host.layout.add, {
     name: 'add_streams',
-    description: 'Put streams on screen as individual tiles. To show drivers battling, use create_group instead.',
+    description: 'Put streams on screen, each as its own tile.',
     args: Type.Object({ streams: StreamRefs }, { additionalProperties: false }),
     adapt: ({ streams }) => ({ feeds: idsOf(matchAll(streams).feeds) }),
     gate: [
@@ -207,7 +199,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   }),
   expose(host.layout.remove, {
     name: 'remove_streams',
-    description: 'Take streams off screen, whether they are individual tiles or inside a group.',
+    description: 'Take streams off screen.',
     args: Type.Object({ streams: StreamRefs }, { additionalProperties: false }),
     adapt: ({ streams }) => ({ feeds: idsOf(matchAll(streams).feeds) }),
     gate: [sessionOpen],
@@ -216,57 +208,14 @@ export const AGENT_TOOLS: AgentTool[] = [
       return `Removed: ${labelsOf(feeds) || 'nothing'}.${missingNote(missing)}`;
     },
   }),
-  expose(host.layout.group, {
-    name: 'create_group',
-    description: 'Show streams side by side as one group, for a battle or comparison. Adds any stream that is not on screen and moves those that are.',
-    args: Type.Object(
-      { streams: StreamRefs, title: Type.Optional(Type.String({ description: 'Short label, e.g. "NOR / LEC"' })) },
-      { additionalProperties: false },
-    ),
-    adapt: ({ streams, title }) => ({ feeds: idsOf(matchAll(streams).feeds), title }),
-    gate: [
-      sessionOpen,
-      ({ feeds }, { streams }) => {
-        if (feeds.length < 2) throw new Error(`A group needs at least two streams.${missingNote(matchAll(streams).missing)}`);
-      },
-    ],
-    result: (id, { streams }) => {
-      const { feeds, missing } = matchAll(streams);
-      return `Group ${id} showing ${labelsOf(feeds)}.${missingNote(missing)}`;
-    },
-  }),
-  expose(host.layout.closeGroup, {
-    name: 'close_group',
-    description: 'Close a group and take all its streams off screen.',
-    args: Type.Object({ group: GroupRef }, { additionalProperties: false }),
-    adapt: ({ group }) => ({ group: groupRef(group) }),
-    gate: [sessionOpen],
-    result: (labels, { group }) => {
-      if (!labels) throw new Error(`No group matches "${group}".`);
-      return `Closed group: ${labels.join(', ')}.`;
-    },
-  }),
-  expose(host.layout.ungroup, {
-    name: 'ungroup',
-    description: 'Dissolve a group but keep its streams on screen as individual tiles.',
-    args: Type.Object({ group: GroupRef }, { additionalProperties: false }),
-    adapt: ({ group }) => ({ group: groupRef(group) }),
-    gate: [sessionOpen],
-    result: (found, { group }) => {
-      if (!found) throw new Error(`No group matches "${group}".`);
-      return 'Group dissolved; its streams stay on screen.';
-    },
-  }),
   expose(host.layout.focus, {
     name: 'focus_stream',
-    description: 'Make a stream or group the largest thing on screen, for requests like "make Hamilton bigger".',
-    args: Type.Object({ stream: Type.String({ description: 'A stream reference or group title' }) }, { additionalProperties: false }),
+    description: 'Make a stream the largest thing on screen, for requests like "make Hamilton bigger".',
+    args: Type.Object({ stream: Type.String({ description: 'A stream reference' }) }, { additionalProperties: false }),
     adapt: ({ stream }) => ({ target: resolveChannel(read().feeds, stream)?.id ?? stream }),
     gate: [sessionOpen],
     result: (found, { stream }) => {
       if (found) return 'Done.';
-      // It may name a group by a stream that isn't itself a tile's key.
-      if (host.layout.focus({ target: groupRef(stream) })) return 'Done.';
       throw new Error(`"${stream}" is not on screen.`);
     },
   }),
