@@ -30,6 +30,14 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   spread 12s later and being corrected.
 - Live timing reaching the app and being held back, through the old `useTiming` path, since replaced: about 680 records held, against about 660 expected for 50s of video lag.
 
+## Verified for finding a session
+
+Three fresh conversations per request, against the real agent at medium reasoning, with the event list in its prompt:
+
+- "2026" and "2025" alone: asked which event every time. At low reasoning it picked the weekend nearest today's date, São Paulo, in most
+  runs, with either wording of the prompt.
+- "2025 Mexico": asked which session every time.
+
 ## Verified for session data
 
 The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archive through the real app:
@@ -41,6 +49,10 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 Live capture has only run in unit tests. See "Not verified".
 
 ## Not verified
+
+- **The agent using `suggest_tiles`.** The strip, keys, drag and drop, and Esc are covered by `scripts/suggestions-check.mjs` in the real
+  app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,
+  still playing and ready, with the audio left on the main feed. The real agent hasn't been asked for a stream since it lost `add_streams`.
 
 - Capturing a live session into the database, and the extra feeds it subscribes to. Check at the next live session.
 
@@ -54,6 +66,11 @@ Live capture has only run in unit tests. See "Not verified".
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 
 ## Known issues
+
+- **"Next race" mostly starts a countdown to Practice 1,** not the race: 2 of 3 runs. Starting a countdown is now just `load_session`, so
+  the agent treats it as lightly as loading.
+- **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
+  reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.
 
 - **48 sessions from early 2024 have no session data.** F1's season index leaves out pre-season testing and the first nine race weekends, so the lookup can't find them, and they aren't in the
   calendar. This comes from reading the code, and wasn't confirmed by opening one. Their archives exist, and OpenF1 hardcodes the paths in `MISSING_SESSIONS`. Left as is for now, by choice. See [SESSION_DATA.md](SESSION_DATA.md).

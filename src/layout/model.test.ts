@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addTile,
+  addTileAt,
   allTiles,
   applyMouseEdit,
   autoLayout,
@@ -9,6 +10,7 @@ import {
   EMPTY_LAYOUT,
   findTile,
   focus,
+  freeRectAt,
   GRID_COLUMNS,
   GRID_ROWS,
   largestFreeRect,
@@ -221,5 +223,54 @@ describe('largestFreeRect', () => {
       w: 8,
       h: 16,
     });
+  });
+});
+
+describe('dropping a tile', () => {
+  it('splits the tile under the pointer across its longer side', () => {
+    const one = build('main');
+    const next = addTileAt(one, spec('ham'), { x: 20, y: 5 });
+    expect(next.manual).toBe(true);
+    const rects = Object.fromEntries(allTiles(next).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
+    expect(rects.main).toEqual({ x: 0, y: 0, w: 12, h: GRID_ROWS });
+    expect(rects.ham).toEqual({ x: 12, y: 0, w: 12, h: GRID_ROWS });
+    assertTilesGrid(Object.values(rects));
+  });
+
+  it('takes the half the pointer is over', () => {
+    const next = addTileAt(build('main'), spec('ham'), { x: 2, y: 5 });
+    const ham = allTiles(next).find((t) => t.component.key === 'ham');
+    expect(ham).toMatchObject({ x: 0, w: 12 });
+  });
+
+  it('splits a tall tile top and bottom', () => {
+    const state = build('main', 'a');
+    const a = allTiles(state).find((t) => t.component.key === 'a')!;
+    const next = addTileAt(state, spec('b'), { x: a.x, y: a.y + a.h - 1 });
+    const b = allTiles(next).find((t) => t.component.key === 'b')!;
+    expect(b.w).toBe(a.w);
+    expect(b.y).toBeGreaterThan(a.y);
+    assertTilesGrid(allTiles(next));
+  });
+
+  it('splits across the side that looks longer on screen', () => {
+    // 16 by 24 cells, but cells twice as wide as tall: wider than tall on screen.
+    const state = build('main', 'a');
+    const main = allTiles(state).find((t) => t.component.key === 'main')!;
+    const next = addTileAt(state, spec('b'), { x: 1, y: 1 }, 2);
+    expect(allTiles(next).find((t) => t.component.key === 'b')).toMatchObject({ x: 0, y: 0, w: main.w / 2, h: main.h });
+  });
+
+  it('fills the gap on empty space', () => {
+    const state: LayoutState = { ...EMPTY_LAYOUT, manual: true };
+    const withMain = { ...state, nodes: [{ kind: 'tile' as const, id: 't', component: spec('main'), x: 0, y: 0, w: 12, h: 24 }] };
+    expect(freeRectAt(withMain.nodes, { x: 18, y: 3 })).toEqual({ x: 12, y: 0, w: 12, h: 24 });
+    const next = addTileAt(withMain, spec('ham'), { x: 18, y: 3 });
+    expect(allTiles(next).find((t) => t.component.key === 'ham')).toMatchObject({ x: 12, y: 0, w: 12, h: 24 });
+  });
+
+  it('ignores a component already on screen', () => {
+    const state = build('main');
+    expect(addTileAt(state, spec('main'), { x: 1, y: 1 })).toBe(state);
   });
 });

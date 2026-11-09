@@ -1,0 +1,191 @@
+/**
+ * Tiles the agent suggests, waiting in a strip for the user to add, drag in or dismiss. The agent
+ * can't put anything on screen itself: this is its only way to offer it.
+ *
+ * Suggestions belong to one turn. More in the same turn join the strip, skipping any already in it
+ * or already added from it, and the next message clears it. What the user did with them goes back
+ * to the agent with that message.
+ */
+import Type from 'typebox';
+import { create } from 'zustand';
+import { useSession } from '../data/session';
+import { findTile, GRID_COLUMNS, GRID_ROWS, dropTarget, type Cell, type ComponentSpec, type Rect } from '../layout/model';
+import { layout, useLayout } from '../layout/store';
+import { write } from './op';
+import { videoSpec } from './viewing';
+
+/** Each suggested stream is a live preview, and so a real stream from the CDN. */
+export const MAX_SUGGESTED_STREAMS = 4;
+
+export interface SuggestionsView {
+  items: ComponentSpec[];
+  /** The key of the tile to outline in the layout: the suggestion under the mouse is already on screen. */
+  highlight: string | null;
+  /** Where a suggestion being dragged would land, in grid cells. */
+  drop: Rect | null;
+}
+
+export const useSuggestions = create<SuggestionsView>(() => ({ items: [], highlight: null, drop: null }));
+
+/** What happened to this turn's suggestions, for the agent's next message. */
+let added: string[] = [];
+let dismissed: string[] = [];
+/** Keys added from the strip this turn, so suggesting them again doesn't bring them back. */
+let taken = new Set<string>();
+/** The user dismissed the strip: nothing joins it until the next turn. */
+let closed = false;
+
+let frame: HTMLElement | null = null;
+
+/** The grid's box on screen, for turning a pointer position into a cell. Set by the grid. */
+export function setGridFrame(el: HTMLElement | null): void {
+  frame = el;
+}
+
+/** The grid cell under a pointer, and a cell's width over its height, or null off the grid. */
+function cellAt(clientX: number, clientY: number): { cell: Cell; aspect: number } | null {
+  const box = frame?.getBoundingClientRect();
+  if (!box || box.width === 0 || box.height === 0) return null;
+  const fx = (clientX - box.left) / box.width;
+  const fy = (clientY - box.top) / box.height;
+  if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) return null;
+  return {
+    cell: { x: Math.floor(fx * GRID_COLUMNS), y: Math.floor(fy * GRID_ROWS) },
+    aspect: box.width / GRID_COLUMNS / (box.height / GRID_ROWS),
+  };
+}
+
+const itemOf = (key: string) => useSuggestions.getState().items.find((s) => s.key === key);
+const onScreen = (key: string) => findTile(useLayout.getState(), key) != null;
+
+/** Takes a suggestion out of the strip once it's been answered. */
+function settleItem(spec: ComponentSpec): void {
+  taken.add(spec.key);
+  useSuggestions.setState((s) => ({
+    items: s.items.filter((i) => i.key !== spec.key),
+    highlight: s.highlight === spec.key ? null : s.highlight,
+    drop: null,
+  }));
+}
+
+const Key = Type.String({ description: 'The key of a suggested component' });
+const Point = { key: Key, x: Type.Number({ description: 'Client x in pixels' }), y: Type.Number({ description: 'Client y in pixels' }) };
+
+export const suggestionOps = {
+  offer: write(
+    {
+      description: `Suggest feeds as tiles, for the user to add. Joins what's already suggested this turn, up to ${MAX_SUGGESTED_STREAMS} streams.`,
+      args: Type.Object({ feeds: Type.Array(Type.String(), { description: 'Feed ids' }) }),
+    },
+    ({ feeds }) => {
+      const result = { suggested: [] as string[], onScreen: [] as string[], repeated: [] as string[], overLimit: [] as string[] };
+      if (closed) throw new Error('The user dismissed the suggestions this turn.');
+      const channels = useSession.getState().channels;
+      const items = [...useSuggestions.getState().items];
+      for (const feed of feeds) {
+        const channel = channels.find((c) => c.id === feed);
+        if (!channel) throw new Error(`Unknown feed: ${feed}`);
+        const spec = videoSpec(channel.id, channel.label);
+        if (taken.has(spec.key) || items.some((i) => i.key === spec.key)) {
+          result.repeated.push(spec.label);
+          continue;
+        }
+        if (items.filter((i) => i.type === 'video').length >= MAX_SUGGESTED_STREAMS) {
+          result.overLimit.push(spec.label);
+          continue;
+        }
+        items.push(spec);
+        (onScreen(spec.key) ? result.onScreen : result.suggested).push(spec.label);
+      }
+      useSuggestions.setState({ items });
+      return result;
+    },
+  ),
+  add: write(
+    {
+      description: "Add a suggestion to the layout, where auto-layout puts it, and take it out of the strip. One that's already on screen only leaves the strip.",
+      args: Type.Object({ key: Key }),
+    },
+    ({ key }) => {
+      const spec = itemOf(key);
+      if (!spec) return false;
+      // The layout first: a preview hands its stream to the new tile rather than stopping it.
+      if (!onScreen(key)) {
+        layout.add(spec);
+        added.push(spec.label);
+      }
+      settleItem(spec);
+      return true;
+    },
+  ),
+  dragOver: write(
+    { description: 'Show where a suggestion being dragged would land.', args: Type.Object(Point) },
+    ({ key, x, y }) => {
+      const at = cellAt(x, y);
+      const target = at && itemOf(key) && !onScreen(key) ? dropTarget(useLayout.getState(), at.cell, at.aspect) : null;
+      const drop = target?.rect ?? null;
+      const current = useSuggestions.getState().drop;
+      if (JSON.stringify(drop) !== JSON.stringify(current)) useSuggestions.setState({ drop });
+    },
+  ),
+  drop: write(
+    {
+      description: 'Drop a suggestion on the grid: it splits the tile under the pointer, or fills the gap there. Returns whether it landed.',
+      args: Type.Object(Point),
+    },
+    ({ key, x, y }) => {
+      useSuggestions.setState({ drop: null });
+      const spec = itemOf(key);
+      const at = cellAt(x, y);
+      if (!spec || !at || onScreen(key)) return false;
+      layout.addAt(spec, at.cell, at.aspect);
+      added.push(spec.label);
+      settleItem(spec);
+      return true;
+    },
+  ),
+  cancelDrag: write({ description: 'Stop showing where a drag would land.' }, () => useSuggestions.setState({ drop: null })),
+  highlight: write(
+    {
+      description: 'Outline the tile in the layout a suggestion duplicates, or nothing.',
+      args: Type.Object({ key: Type.Union([Key, Type.Null()]) }),
+    },
+    ({ key }) => {
+      const highlight = key != null && onScreen(key) ? key : null;
+      if (useSuggestions.getState().highlight !== highlight) useSuggestions.setState({ highlight });
+    },
+  ),
+  dismiss: write({ description: "Dismiss the whole strip. Nothing joins it again until the user's next message." }, () => {
+    dismissed.push(...useSuggestions.getState().items.map((i) => i.label));
+    closed = true;
+    useSuggestions.setState({ items: [], highlight: null, drop: null });
+  }),
+  /**
+   * Starts a new turn: clears the strip, and returns what the user did with the last one, for the
+   * agent, or null if there was nothing to tell.
+   */
+  newTurn: write({ description: 'Clear the strip for a new turn. Returns what became of the suggestions, for the agent.' }, () => {
+    const ignored = useSuggestions.getState().items.map((i) => i.label);
+    const parts = [
+      added.length ? `added ${added.join(', ')}` : '',
+      dismissed.length ? `dismissed ${dismissed.join(', ')}` : '',
+      ignored.length ? `left ${ignored.join(', ')} unanswered` : '',
+    ].filter(Boolean);
+    clearSuggestions();
+    return parts.length ? `From your last suggestions the user ${parts.join('; ')}.` : null;
+  }),
+};
+
+/** Forgets every suggestion, as opening or closing a session does. */
+export function clearSuggestions(): void {
+  added = [];
+  dismissed = [];
+  taken = new Set();
+  closed = false;
+  useSuggestions.setState({ items: [], highlight: null, drop: null });
+}
+
+// A suggestion only makes sense for the session it was made in.
+useSession.subscribe((state, prev) => {
+  if (state.session !== prev.session) clearSuggestions();
+});
