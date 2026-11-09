@@ -11,8 +11,8 @@ import { create } from 'zustand';
 import { useSession } from '../data/session';
 import { findTile, GRID_COLUMNS, GRID_ROWS, dropTarget, type Cell, type ComponentSpec, type Rect } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
+import { Item, specOf } from './components';
 import { write } from './op';
-import { videoSpec } from './viewing';
 
 /** Each suggested stream is a live preview, and so a real stream from the CDN. */
 export const MAX_SUGGESTED_STREAMS = 4;
@@ -74,23 +74,20 @@ const Point = { key: Key, x: Type.Number({ description: 'Client x in pixels' }),
 export const suggestionOps = {
   offer: write(
     {
-      description: `Suggest feeds as tiles, for the user to add. Joins what's already suggested this turn, up to ${MAX_SUGGESTED_STREAMS} streams.`,
-      args: Type.Object({ feeds: Type.Array(Type.String(), { description: 'Feed ids' }) }),
+      description: `Suggest components as tiles, for the user to add. Joins what's already suggested this turn, up to ${MAX_SUGGESTED_STREAMS} video streams.`,
+      args: Type.Object({ items: Type.Array(Item) }),
     },
-    ({ feeds }) => {
+    ({ items: offered }) => {
       const result = { suggested: [] as string[], onScreen: [] as string[], repeated: [] as string[], overLimit: [] as string[] };
       if (closed) throw new Error('The user dismissed the suggestions this turn.');
-      const channels = useSession.getState().channels;
       const items = [...useSuggestions.getState().items];
-      for (const feed of feeds) {
-        const channel = channels.find((c) => c.id === feed);
-        if (!channel) throw new Error(`Unknown feed: ${feed}`);
-        const spec = videoSpec(channel.id, channel.label);
+      for (const spec of offered.map(specOf)) {
         if (taken.has(spec.key) || items.some((i) => i.key === spec.key)) {
           result.repeated.push(spec.label);
           continue;
         }
-        if (items.filter((i) => i.type === 'video').length >= MAX_SUGGESTED_STREAMS) {
+        // Only streams count: each previewed one is a real stream from the CDN.
+        if (spec.type === 'video' && items.filter((i) => i.type === 'video').length >= MAX_SUGGESTED_STREAMS) {
           result.overLimit.push(spec.label);
           continue;
         }

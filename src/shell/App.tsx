@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { components } from '../components/registry';
 import { Grid, host, useLive } from '../host';
 import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
@@ -54,7 +53,7 @@ export function App() {
   return (
     <div className="app" data-has-session={hasSession}>
       <div className="surface">
-        <Grid components={components} />
+        <Grid />
         <Countdown />
         <CommandPalette />
       </div>

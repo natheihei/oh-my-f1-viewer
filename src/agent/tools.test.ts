@@ -119,9 +119,14 @@ describe('agent tools', () => {
   });
 });
 
-const { host, read } = await import('../host');
+const { defineComponent, host, read } = await import('../host');
 const { layout } = await import('../layout/store');
-const { videoSpec } = await import('../host/viewing');
+const { components } = await import('../components/registry');
+const Type = (await import('typebox')).default;
+
+// The app registers its components at start; tests do it here.
+host.components.register({ components });
+const video = (feed: string) => ({ type: 'video', props: { feed } });
 
 describe('suggested tiles', () => {
   const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
@@ -130,7 +135,7 @@ describe('suggested tiles', () => {
   beforeEach(() => {
     useSession.setState({ session: open, channels });
     layout.clear();
-    layout.add(videoSpec('1:101', 'F1 LIVE'));
+    host.layout.add({ items: [video('1:101')] });
   });
   afterEach(() => {
     host.suggestions.newTurn();
@@ -203,6 +208,78 @@ describe('suggested tiles', () => {
     await runTool('suggest_tiles', { streams: ['HAM'] });
     useSession.setState({ session: { ...open, contentId: 2 } });
     expect(keys()).toEqual([]);
+  });
+});
+
+describe('components', () => {
+  // A stand-in for a chart: anything that isn't a stream.
+  const chart = defineComponent({
+    name: 'test-chart',
+    title: 'Test chart',
+    description: 'A chart for one driver.',
+    args: Type.Object({ driver: Type.String() }),
+    spec: ({ driver }) => ({ key: `test-chart:${driver}`, label: `Chart ${driver}` }),
+    needs: ['timing'],
+    View: () => null,
+  });
+  const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
+  const labels = () => read().suggestions.items.map((i) => i.label);
+
+  beforeEach(() => {
+    host.components.register({ components: [chart] });
+    useSession.setState({ session: open, channels });
+    layout.clear();
+  });
+  afterEach(() => {
+    host.suggestions.newTurn();
+    layout.clear();
+    useSession.setState({ session: null, channels: [] });
+  });
+
+  it('are listed in the live state without their code, as plain JSON', () => {
+    const list = read().components;
+    expect(list.map((c) => c.name)).toEqual(['video', 'test-chart']);
+    expect(JSON.parse(JSON.stringify(list))).toEqual(list);
+    expect(list[1]).toEqual({
+      name: 'test-chart',
+      title: 'Test chart',
+      description: 'A chart for one driver.',
+      args: expect.objectContaining({ type: 'object', required: ['driver'] }),
+      sessions: null,
+      needs: ['timing'],
+      size: null,
+    });
+    // The same reference until something registers, so a useLive selector over it is stable.
+    expect(read().components).toBe(list);
+  });
+
+  it('build a video spec keyed by feed and labelled by channel', () => {
+    host.layout.add({ items: [video('1:44')] });
+    expect(layout.tiles().map((t) => t.component)).toEqual([{ type: 'video', key: '1:44', label: 'HAM', props: { feed: '1:44' } }]);
+    expect(() => host.layout.add({ items: [video('1:999')] })).toThrow(/Unknown feed/);
+  });
+
+  it('reject an unknown type, or props that do not fit', () => {
+    expect(() => host.suggestions.offer({ items: [{ type: 'nope', props: {} }] })).toThrow(/Unknown component: nope/);
+    expect(() => host.layout.add({ items: [{ type: 'nope', props: {} }] })).toThrow(/Unknown component: nope/);
+    expect(() => host.suggestions.offer({ items: [{ type: 'test-chart', props: { driver: 44 } }] })).toThrow(/Invalid props for test-chart/);
+    expect(() => host.layout.add({ items: [{ type: 'video', props: {} }] })).toThrow(/Invalid props for video/);
+    expect(labels()).toEqual([]);
+    expect(layout.tiles()).toEqual([]);
+  });
+
+  it('only video counts toward the stream limit', () => {
+    const out = host.suggestions.offer({
+      items: [...['1:44', '1:1', '1:4', '1:16'].map(video), { type: 'test-chart', props: { driver: 'HAM' } }, video('1:11')],
+    });
+    expect(out.overLimit).toEqual(['PER']);
+    expect(labels()).toEqual(['HAM', 'VER', 'NOR', 'LEC', 'Chart HAM']);
+  });
+
+  it('come off screen by key', () => {
+    host.layout.add({ items: [video('1:44'), { type: 'test-chart', props: { driver: 'HAM' } }] });
+    host.layout.remove({ keys: ['test-chart:HAM'] });
+    expect(layout.tiles().map((t) => t.component.label)).toEqual(['HAM']);
   });
 });
 

@@ -4,8 +4,9 @@ This is everything a consumer (a tile component, the shell or the agent) can rea
 `tests/layers.test.ts` fails if a consumer imports from below it. [DESIGN.md](DESIGN.md) explains why the host is shaped this way.
 This page lists what it offers.
 
-The source is the reference: each write and query is defined in [src/host/index.ts](../src/host/index.ts) and
-[src/host/layoutOps.ts](../src/host/layoutOps.ts) with its own description and argument schema. If this page and the code
+The source is the reference: each write and query is defined in [src/host/index.ts](../src/host/index.ts),
+[src/host/layoutOps.ts](../src/host/layoutOps.ts), [src/host/suggestions.ts](../src/host/suggestions.ts) and
+[src/host/components.ts](../src/host/components.ts) with its own description and argument schema. If this page and the code
 disagree, the code is right and this page needs fixing.
 
 There are three kinds of things:
@@ -14,7 +15,7 @@ There are three kinds of things:
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
 | Queries | `host.catalog.*`, `host.session.feeds`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.catalog.loadIndex` | Yes |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.components.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -42,6 +43,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
 | `schedule` | `ScheduleView` | Every meeting and session from 2023 on, refreshed each time the app starts, plus `state` and `reason` |
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
+| `components` | `ComponentInfo[]` | Every component a tile can show, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers |
 
 `tilesOf(layout)` flattens `layout.nodes` into its tiles, including those inside groups.
 
@@ -91,8 +93,12 @@ of the playhead. Only `SELECT` is allowed. The table and column definitions are 
 
 ## Writes
 
-Each write takes one object argument, or none. The schema describes it, and TypeScript checks it, but nothing checks it at runtime. Feeds are named by their `id` from `live.feeds`.
-Matching a name like "Hamilton" to an id is the caller's job.
+Each write takes one object argument, or none. The schema describes it, and TypeScript checks it, but nothing checks it at runtime.
+The exception is a component's props: `host.layout.add` and `host.suggestions.offer` check them against the component's `args`, and
+throw if they don't fit. Feeds are named by their `id` from `live.feeds`. Matching a name like "Hamilton" to an id is the caller's job.
+
+A *component item* is `{ type, props }`: a component's `name` from `live.components`, and props that fit its `args`. The host turns it
+into a tile with the component's own key and label, and throws on a type that isn't registered.
 
 ### `host.session`
 
@@ -133,12 +139,12 @@ All of these act on every stream at once.
 
 ### `host.layout`
 
-A *target* is a tile key, a group id or a group title. A video tile's key is its feed id.
+A *target* is a tile key, a group id or a group title. A video tile's key is its feed id, and its label is the feed's label.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `add` | `feeds: string[]` | Puts the feeds on screen as separate tiles. A feed already on screen is skipped |
-| `remove` | `feeds: string[]` | Takes the feeds off screen, whether they're tiles or inside a group |
+| `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. One whose key is already on screen is skipped |
+| `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group |
 | `close` | `tile: string` | Takes one tile off screen. Returns whether a tile matched |
 | `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
@@ -150,6 +156,15 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 
 `<Grid>` sends mouse moves, swaps and closes through `move`, `swap` and `close`, the same functions any other caller uses.
 
+### `host.components`
+
+The app registers its components once at start, from `src/main.tsx`. The host keeps their definitions, draws tiles with them, and
+lists what's safe to share in `live.components`.
+
+| Function | Arguments | Effect |
+| --- | --- | --- |
+| `register` | `components: ComponentDefinition[]` | Makes the components available to tiles. One with a name that's already registered replaces it |
+
 ### `host.suggestions`
 
 Suggested tiles wait in a strip for the user to add, drag onto the grid or dismiss. Suggestions belong to one turn: the user's next
@@ -158,7 +173,7 @@ feed id.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `offer` | `feeds: string[]` | Adds the feeds to the strip, up to `MAX_SUGGESTED_STREAMS` (4) streams. A feed already suggested or added this turn is skipped. Fails once the user has dismissed the strip this turn. Returns `{ suggested, onScreen, repeated, overLimit }`, as labels |
+| `offer` | `items: { type, props }[]` | Adds the components to the strip. Videos stop at `MAX_SUGGESTED_STREAMS` (4), since each preview is a real stream; other components don't count. One already suggested or added this turn is skipped. Fails once the user has dismissed the strip this turn. Returns `{ suggested, onScreen, repeated, overLimit }`, as labels |
 | `add` | `key: string` | Adds the suggestion where auto-layout puts it, and takes it out of the strip. A suggestion that's already on screen only leaves the strip. Returns whether the key matched |
 | `dragOver` | `key: string`, `x: number`, `y: number` | Shows where a suggestion dragged to that pointer position (client pixels) would land |
 | `drop` | `key: string`, `x: number`, `y: number` | Drops a suggestion there, splitting the tile under the pointer or filling the gap. Returns whether it landed |
@@ -182,10 +197,14 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   isn't a write, because a stream lasts exactly as long as the tile showing it.
 - `<PreviewScope>` marks the `<Video>`s inside it as previews: they show their feed without taking its audio. The suggestion strip
   uses it.
-- `<Grid components={[...]} />` draws the layout, showing each tile with the component its spec names, along with where a dragged
+- `<Grid />` draws the layout, showing each tile with the registered component its spec names, along with where a dragged
   suggestion would land.
-- `defineComponent({ name, View })` declares a component for tiles. `View` receives the tile's `props` and `label`, and may only use
-  the host.
+- `<ComponentView spec={spec} fallback={...} />` draws one spec with its registered component, or `fallback` if none is registered.
+  The suggestion strip uses it for previews.
+- `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.
+  `args` is a TypeBox object schema for its props, which must stay JSON-safe. `spec(props)` returns the tile's unique `key` and
+  title-bar `label`. `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is a hint in grid
+  cells that nothing uses yet. `View` receives the tile's `props` and `label`, and may only use the host.
 
 ## The agent's view
 

@@ -6,6 +6,7 @@ import { useSession, type ClockState, type StreamView } from '../data/session';
 import { useSchedule, useSessionData } from '../data/sessionData';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
+import { useComponents, type ComponentInfo } from './components';
 import { useSuggestions, type SuggestionsView } from './suggestions';
 import { useCountdown, type Countdown } from './viewing';
 
@@ -28,6 +29,8 @@ export interface Live {
   schedule: ScheduleView;
   /** The open session's roster and results, as they stood at the frame on screen. */
   sessionData: SessionDataView;
+  /** Every component a tile can show, without its code: what the agent picks from. */
+  components: ComponentInfo[];
 }
 
 export function read(): Live {
@@ -45,6 +48,7 @@ export function read(): Live {
     events: useEventIndex.getState(),
     schedule: useSchedule.getState(),
     sessionData: useSessionData.getState(),
+    components: useComponents.getState().list,
   };
 }
 
@@ -57,6 +61,7 @@ function subscribe(onChange: () => void): () => void {
     useEventIndex.subscribe(onChange),
     useSchedule.subscribe(onChange),
     useSessionData.subscribe(onChange),
+    useComponents.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }

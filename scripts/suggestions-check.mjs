@@ -30,20 +30,20 @@ const settle = () => page.waitForTimeout(250);
 
 await page.waitForSelector('[data-testid=palette]');
 await page.evaluate(async () => {
-  const [{ host, read }, { useSession }, { layout }, { palette }, { videoSpec }] = await Promise.all([
+  const [{ host, read }, { useSession }, { layout }, { palette }] = await Promise.all([
     import('/src/host/index.ts'),
     import('/src/data/session.ts'),
     import('/src/layout/store.ts'),
     import('/src/shell/palette.ts'),
-    import('/src/host/viewing.ts'),
   ]);
   const channel = (id, kind, label) => ({ id, contentId: 1, channelId: Number(id.split(':')[1]), kind, label, title: label });
   useSession.setState({
     session: { contentId: 1, title: 'Test GP', status: 'replay' },
     channels: [channel('1:101', 'main', 'F1 LIVE'), channel('1:44', 'onboard', 'HAM'), channel('1:1', 'onboard', 'VER'), channel('1:4', 'onboard', 'NOR')],
   });
-  layout.add(videoSpec('1:101', 'F1 LIVE'));
-  Object.assign(window, { host, read, layout, palette });
+  host.layout.add({ items: [{ type: 'video', props: { feed: '1:101' } }] });
+  const videos = (feeds) => feeds.map((feed) => ({ type: 'video', props: { feed } }));
+  Object.assign(window, { host, read, layout, palette, videos });
 });
 
 const labels = () => page.evaluate(() => window.read().suggestions.items.map((i) => i.label));
@@ -51,7 +51,7 @@ const onScreen = () => page.evaluate(() => window.layout.tiles().map((t) => t.co
 const focused = () => page.evaluate(() => document.activeElement?.dataset.key ?? document.activeElement?.dataset.testid ?? null);
 
 // The agent suggests: one new feed each, and one already on screen.
-await page.evaluate(() => window.host.suggestions.offer({ feeds: ['1:44', '1:1', '1:101'] }));
+await page.evaluate(() => window.host.suggestions.offer({ items: window.videos(['1:44', '1:1', '1:101']) }));
 await settle();
 check('strip shows every suggestion', (await page.locator('[data-testid=suggestion]').count()) === 3);
 check('the first suggestion has focus', (await focused()) === '1:44', String(await focused()));
@@ -98,7 +98,7 @@ check('an empty strip closes', (await page.locator('[data-testid=suggestion-stri
 check('focus returns to the input', (await focused()) === 'palette-input');
 
 // More in the same turn: what was added doesn't come back.
-const again = await page.evaluate(() => window.host.suggestions.offer({ feeds: ['1:44', '1:4'] }));
+const again = await page.evaluate(() => window.host.suggestions.offer({ items: window.videos(['1:44', '1:4']) }));
 await settle();
 check('a repeat in the same turn is skipped', JSON.stringify(again.repeated) === '["HAM"]' && JSON.stringify(await labels()) === '["NOR"]');
 await page.keyboard.press('Escape');
@@ -109,7 +109,7 @@ check('the palette stays open', await page.locator('[data-testid=palette-input]'
 // While the agent is working, it takes two.
 await page.evaluate(() => {
   window.host.suggestions.newTurn();
-  window.host.suggestions.offer({ feeds: ['1:4'] });
+  window.host.suggestions.offer({ items: window.videos(['1:4']) });
   window.palette.setBusy(true);
 });
 await settle();
@@ -125,7 +125,7 @@ check('a second esc dismisses and stops the turn', (await labels()).length === 0
 // Suggestions keep the palette from hiding.
 await page.evaluate(() => {
   window.host.suggestions.newTurn();
-  window.host.suggestions.offer({ feeds: ['1:4'] });
+  window.host.suggestions.offer({ items: window.videos(['1:4']) });
   window.palette.hide();
 });
 await settle();
