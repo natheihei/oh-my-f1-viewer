@@ -71,6 +71,10 @@ node scripts/journey.mjs
 ```
 
 ```bash
+node scripts/seek-check.mjs
+```
+
+```bash
 npm run build && node scripts/prod-check.mjs
 ```
 

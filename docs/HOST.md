@@ -76,15 +76,17 @@ Queries read things that aren't part of the live state. They return promises, ex
 | `host.catalog.live()` | none | What F1 TV has live now |
 | `host.catalog.upcoming()` | none | Formula 1 sessions that haven't started, soonest first |
 | `host.session.feeds()` | none | The open session's feeds (the same as `live.feeds`) |
-| `host.data.sql({ sql, params? })` | `sql: string`, `params?: (string \| number \| null)[]` | The rows from a read-only query on the open session |
+| `host.data.sql({ sql, params?, asOf? })` | `sql: string`, `params?: (string \| number \| null)[]`, `asOf?: 'playhead' \| 'session'` | The rows from a read-only query on the open session |
 
 ### Session SQL
 
 `host.data.sql` runs one query. `useSql(sql, params)` runs it again whenever `sessionData.revision` changes and returns
 `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`.
 
-The tables are `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints` and `weather`. Each
-holds only what the feed had revealed at the frame on screen, so a query can't see past the playhead. Only `SELECT` is allowed.
+The tables are `car_data`, `intervals`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints` and `weather`. By default
+(`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query can't see past the playhead. `asOf: 'session'`
+sees everything the session holds, results included, so a caller that shows what it reads to the user must ask first. `useSql` always reads as
+of the playhead. Only `SELECT` is allowed. The table and column definitions are in [shared/sessionTables.ts](../shared/sessionTables.ts).
 [SESSION_DATA.md](SESSION_DATA.md) covers the columns, where the data comes from, and when it loads.
 
 ## Writes
@@ -116,6 +118,7 @@ All of these act on every stream at once.
 | `toggle` | none | Plays if paused, pauses if playing |
 | `seek` | `time: number` | Moves to a time on the session clock (`clock.timeSec`) |
 | `seekBy` | `seconds: number` | Moves by that many seconds. A negative number goes back |
+| `seekToDate` | `dateMs: number` | Moves to a moment on the session data clock, in UTC milliseconds like every `date` column, kept within the seekable range. Fails when the video can't be matched to the data yet (no time map, or a live stream with no wall clock). Returns `{ timeSec, clamped }`: where it landed on the session clock, and whether it had to stop short |
 | `seekToStart` | none | Goes to the very beginning |
 | `goLive` | none | Returns to the live edge |
 
@@ -200,7 +203,10 @@ index (`live.events`) with every message, so it can work out which weekend the u
 | `suggest_tiles` | `host.suggestions.offer` |
 | `remove_streams` | `host.layout.remove` |
 | `set_audio` | `host.audio.set` |
-| `play`, `pause`, `seek_to_start`, `seek_back` | `host.playback.play`, `.pause`, `.seekToStart`, `.seekBy` (backwards only) |
+| `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
+| `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
+| `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
-Anything not listed, such as `host.data.sql`, `host.layout.add`, `focus` and `reset`, groups, seeking forward or volume, isn't offered to the agent at
-the moment.
+`app_state` also carries the playhead in UTC milliseconds and the roster as driver code and number, so the agent can write a query and pass
+a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add`, `focus` and `reset`, groups, `seekBy`, `goLive` or volume, isn't
+offered to the agent at the moment.

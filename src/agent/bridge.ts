@@ -1,7 +1,7 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentToolCall } from '../../shared/api';
 import { FIRST_SEASON, host, read, tilesOf, type EventIndex, type GroupNode, type LayoutState } from '../host';
-import { runTool, toolDefinitions } from './tools';
+import { formatClock, runTool, toolDefinitions } from './tools';
 
 function describeLayout(state: LayoutState): string {
   if (state.nodes.length === 0) return 'nothing';
@@ -10,19 +10,12 @@ function describeLayout(state: LayoutState): string {
     .join('; ');
 }
 
-function formatClock(t: number): string {
-  const s = Math.max(0, Math.floor(t));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-}
-
 /**
- * The state block sent with each user message. Contains nothing about how the race goes. `note` is
- * what the user did with the last turn's suggestions.
+ * The state block sent with each user message. Contains nothing about how the race goes: the roster is
+ * who is entered, not where they are. `note` is what the user did with the last turn's suggestions.
  */
 export function describeAppState(note: string | null = null): string {
-  const { session, audio, feeds, clock, streams, countdown, layout } = read();
+  const { session, audio, feeds, clock, streams, countdown, layout, sessionData } = read();
   const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
   if (countdown) lines.push(`countdown running for: ${countdown.title}`);
   if (!session) {
@@ -38,6 +31,16 @@ export function describeAppState(note: string | null = null): string {
     `on screen: ${describeLayout(layout)}`,
     `audio: ${feeds.find((f) => f.id === audio)?.label ?? 'muted'}`,
   );
+  if (sessionData.state === 'ready') {
+    if (sessionData.playheadMs != null) lines.push(`playhead: ${Math.round(sessionData.playheadMs)} (UTC ms, as in date columns)`);
+    const roster = sessionData.drivers
+      .filter((d) => d.name_acronym)
+      .map((d) => `${d.name_acronym} ${d.driver_number}`)
+      .join(', ');
+    if (roster) lines.push(`drivers: ${roster}`);
+  } else {
+    lines.push(`timing data: ${sessionData.state}`);
+  }
   if (failed.length) lines.push(`failed streams: ${failed.join('; ')}`);
   if (note) lines.push(`suggestions: ${note}`);
   return lines.join('\n');

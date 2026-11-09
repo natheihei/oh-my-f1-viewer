@@ -104,9 +104,11 @@ that refuse a call.
 - **Why not `codex app-server`.** It keeps built-in tools even with every feature flag off. In testing it still offered
   `apply_patch`, sub-agents and image generation, and tried to read `/etc/hostname` with `view_image`. With pi-ai, the model can
   only call what we define.
-- **Spoilers.** There is deliberately no forward seek and no race-state tool until there is a spoiler approval gate, which will sit in the
-  agent's tools, not the host. Tool results and `app_state` hold nothing about how a session turned out. The host exposes session data, but no tool
-  reads it.
+- **Spoilers.** The agent can seek to a moment (`seek_to`) and query the session's SQL (`query_session`). Reading past the playhead and
+  seeking forward ask `spoilerGate` (`src/agent/spoilerGate.ts`) first, on every call, in the agent's tools, not the host. The gate approves
+  everything for now and will become a prompt to the user. The agent reads ahead only to find a moment to jump to, and is told never to say
+  what it found. Other tool results, the `seek_to` result and `app_state` hold nothing about how a session turned out: `app_state` adds only
+  the playhead and the roster. There is still no race-state tool. See [DESIGN.md](DESIGN.md).
 - **Model.** `gpt-6-luna` by default, the fastest tested. Override with `F1A_MODEL`.
 
 ## Sign-in
