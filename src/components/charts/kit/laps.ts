@@ -5,7 +5,7 @@
 import { colors } from './colors';
 import { text, type Ctx } from './draw';
 import type { Scale } from './scale';
-import { num } from './values';
+import { gapSeconds, num } from './values';
 
 /** A neutralised lap: under a safety car, a virtual one, or a red flag. */
 export type Neutral = 'SC' | 'VSC' | 'RED';
@@ -73,6 +73,35 @@ export function tyreAgeNow(r: Record<string, unknown>): number | null {
   const age = num(r.tyre_age);
   if (age === null) return null;
   return num(r.lap_duration) === null ? Math.max(0, age - 1) : age;
+}
+
+/** `lap_summary.gap_to_leader` in seconds: the leader has none, which is 0; a lapped car's is null. */
+export const toLeader = (r: Record<string, unknown>): number | null => (r.gap_to_leader == null ? 0 : gapSeconds(r.gap_to_leader));
+
+/**
+ * How much the gap between two drivers grew per lap over the last `over` laps both have finished,
+ * from their gaps to the leader as each crossed the line: negative is closing. Takes `lap_summary`
+ * rows of both, with `driver_number`, `lap_number`, `date_end`, `gap_to_leader` and `stint_number`.
+ * Null without both ends, or when at either end one driver has stopped and the other not yet: the
+ * gap there is a pit stop, not the battle. The line after an out-lap is where a stop shows in the gap.
+ */
+export function gapTrend(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: readonly [number, number], over: number): number | null {
+  const ended = (driver: number) =>
+    new Map(rows.filter((r) => num(r.driver_number) === driver && r.date_end != null && num(r.lap_number) !== null).map((r) => [num(r.lap_number)!, r]));
+  const [ea, eb] = [ended(a), ended(b)];
+  const between = (lap: number): number | null => {
+    const [ra, rb] = [ea.get(lap), eb.get(lap)];
+    if (!ra || !rb) return null;
+    const [sa, sb] = [num(ra.stint_number), num(rb.stint_number)];
+    if (sa !== null && sb !== null && sa !== sb) return null;
+    const [ga, gb] = [toLeader(ra), toLeader(rb)];
+    return ga === null || gb === null ? null : Math.abs(gb - ga);
+  };
+  const common = [...ea.keys()].filter((lap) => eb.has(lap));
+  if (!common.length) return null;
+  const last = Math.max(...common);
+  const [now, then] = [between(last), between(last - over)];
+  return now !== null && then !== null ? (now - then) / over : null;
 }
 
 /** The middle value, or the mean of the two middle ones; null for none. */
