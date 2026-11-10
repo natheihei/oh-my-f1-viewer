@@ -1,5 +1,5 @@
 // Uses the real app the way an outside agent would: only through bin/f1a-mcp, as an MCP client. It finds
-// and opens a replay race, mutes it, jumps to a lap, builds a mod from examples/mods/lap_form, checks it,
+// and opens a replay race, mutes it, jumps to a lap, sets a background and puts the user's back, builds a mod from examples/mods/lap_form, checks it,
 // puts it on screen, looks at it, saves a change and a broken version, and removes it. Saves each
 // screenshot. Uses the real profile's mods folder, and removes the mod at the end. Needs the F1 TV sign-in.
 // Usage: node scripts/mcp-check.mjs <screenshot-dir> [year] [event name] [lap]
@@ -94,6 +94,19 @@ state = await must('state');
 check(`it's at lap ${lap}`, state.sessionData.lapCount?.current === lap, JSON.stringify(state.sessionData.lapCount));
 const atPlayhead = (await must('data_sql', { sql: 'SELECT MAX(lap_number) AS lap FROM laps' })).rows[0].lap;
 check('a read without the flag stops at the playhead', atPlayhead <= lap + 1, `latest lap ${atPlayhead}`);
+
+// The background in the gaps. It's saved across restarts, so the user's own is put back after.
+const before = state.background.style;
+const starsBefore = state.backgrounds.find((b) => b.name === 'stars')?.settings;
+await must('appearance_set_background', { style: 'stars', params: { brightness: 9 } });
+state = await must('state');
+const stars = state.backgrounds.find((b) => b.name === 'stars');
+check('it shows a background, with settings kept in range', state.background.style === 'stars' && stars?.settings.brightness === 0.5, JSON.stringify(stars?.settings));
+const unknown = await call('appearance_set_background', { style: 'no_such_style' });
+check('an unknown background is refused', unknown.error?.includes('Unknown background'), unknown.error);
+await must('appearance_set_background', { style: 'stars', params: starsBefore ?? {} });
+await must('appearance_set_background', { style: before });
+check('the background is back as it was', (await must('state')).background.style === before);
 
 // Building a mod.
 mkdirSync(modDir, { recursive: true });

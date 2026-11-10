@@ -14,10 +14,10 @@ export interface ExternalTool extends ExternalToolDefinition {
 }
 
 /**
- * The host groups an outside agent can use. Left out: `components` (its argument is code), `suggestions`
- * (the strip belongs to the app's own agent and the user's pointer), and the sign-ins.
+ * The host groups an outside agent can use. Left out: `components` and `backgrounds` (their arguments
+ * are code), `suggestions` (the strip belongs to the app's own agent and the user's pointer), and the sign-ins.
  */
-const GROUPS = ['session', 'catalog', 'playback', 'audio', 'layout', 'data'] as const;
+const GROUPS = ['session', 'catalog', 'playback', 'audio', 'layout', 'appearance', 'data'] as const;
 
 /** What an outside agent needs to know that the host's own description leaves out. */
 const NOTES: Record<string, string> = {
@@ -29,6 +29,7 @@ const NOTES: Record<string, string> = {
   layout_close: ' Tile ids are in state().tiles.',
   layout_move: ' The grid is 24 by 24 cells. tile is a tile key or group id from state().tiles.',
   session_open: ' contentId comes from catalog_sessions, catalog_live or catalog_upcoming.',
+  appearance_set_background: " Names, settings' schemas and current settings are in state().backgrounds.",
 };
 
 const MAX_ROWS = 500;
@@ -96,6 +97,8 @@ export function describeState(): Record<string, unknown> {
     circuit: s.circuit.state === 'ready' ? { state: 'ready', name: s.circuit.name, circuitKey: s.circuit.circuitKey } : { state: s.circuit.state },
     components: s.components,
     mods: s.mods,
+    background: { style: s.background.style, unavailable: s.background.unavailable },
+    backgrounds: s.backgrounds.map((b) => ({ ...b, settings: s.background.params[b.name] ?? {} })),
     spec: s.spec,
     events: { state: s.events.state, error: s.events.error },
   };
@@ -105,7 +108,7 @@ const stateTool: ExternalTool = {
   name: 'state',
   description:
     "What's open and on screen: the session, the clock, feeds, tiles (with each tile's key, type and props), audio, the session data's " +
-    'state, roster, tables and playhead (UTC ms, as in date columns), the components a tile can show with their props schemas, and the mods. ' +
+    'state, roster, tables and playhead (UTC ms, as in date columns), the components a tile can show with their props schemas, the mods, and the backgrounds for the gaps between tiles. ' +
     'Nothing in it is past the playhead.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   run: async () => JSON.stringify(describeState()),

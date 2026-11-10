@@ -39,16 +39,17 @@ doesn't do.
 | `playback` | `playback_play`, `playback_pause`, `playback_toggle`, `playback_seek`, `playback_seek_by`, `playback_seek_to_date`, `playback_seek_to_start`, `playback_go_live` |
 | `audio` | `audio_set`, `audio_set_volume`, `audio_change_volume_by`, `audio_toggle_mute` |
 | `layout` | `layout_add`, `layout_remove`, `layout_close`, `layout_group`, `layout_close_group`, `layout_ungroup`, `layout_focus`, `layout_reset`, `layout_move`, `layout_swap` |
+| `appearance` | `appearance_set_background`, which picks what fills the gaps between tiles and changes its settings |
 | `data` | `data_sql`, which returns at most 500 rows and says when it cut some |
 
-Left out: `components`, whose arguments are code, `suggestions`, the strip that belongs to the app's own agent and the user's pointer,
+Left out: `components` and `backgrounds`, whose arguments are code, `suggestions`, the strip that belongs to the app's own agent and the user's pointer,
 and the sign-ins. A few tools carry a note the host's description leaves out, such as where to find a tile's key.
 
 On top of those:
 
 | Tool | Runs in | What it does |
 | --- | --- | --- |
-| `state` | Renderer | What's open and on screen: the session, clock, feeds, tiles (id, key, type, label, props and grid cells), groups, streams, audio, the session data's state, roster, tables, lap count and playhead, the circuit, the components with their props' schemas, and the mods |
+| `state` | Renderer | What's open and on screen: the session, clock, feeds, tiles (id, key, type, label, props and grid cells), groups, streams, audio, the session data's state, roster, tables, lap count and playhead, the circuit, the components with their props' schemas, the mods, and the backgrounds with their settings' schemas and current settings |
 | `screenshot` | Main | A PNG of the whole window, or with `tile` only that tile's component. It comes with each tile in the image: key, type, label, rectangle in CSS pixels, what each of its queries last returned (row count and the first three rows), and a mod's state, version and last 10 log lines |
 | `mods_list` | Main | Every mod: state, version and error |
 | `mods_logs` | Main | A mod's recent console output and render errors, 50 lines by default |
@@ -68,8 +69,9 @@ landed.
 ## Checking it
 
 `node scripts/mcp-check.mjs <screenshot-dir>` uses the real app only through `bin/f1a-mcp`, as an MCP client. It connects before the
-app starts, finds and opens a replay race, mutes it, jumps to a lap, builds a mod, checks it, puts it on screen, screenshots it, saves
-a change and checks at once, saves a broken version, sends wrong arguments and removes the mod.
+app starts, finds and opens a replay race, mutes it, jumps to a lap, sets a background and puts the user's back, builds a mod, checks
+it, puts it on screen, screenshots it, saves a change and checks at once, saves a broken version, sends wrong arguments and removes
+the mod.
 
 ## Limits
 
