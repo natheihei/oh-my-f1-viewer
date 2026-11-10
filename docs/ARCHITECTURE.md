@@ -123,6 +123,12 @@ tree changes.
 
 Both use the host, but neither can call the other.
 
+## UI state across restarts
+
+Small UI state that should survive a restart, so far only the master volume, is kept by the shell, above the host. The host holds it
+while the app runs. `src/shell/uiState.ts` saves it to `localStorage`. At start, before the first render, the shell gives it back to
+the host through the host's ordinary writes (`src/shell/persistVolume.ts`). The host doesn't know any of this happens.
+
 ## Agent
 
 `electron/agent/agent.ts` is a short tool loop on [pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai), using OpenAI's
