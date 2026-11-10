@@ -18,6 +18,10 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
   landed at the start of that lap by the session database, "go to when VER catches up to HAM" went to a moment it found in `overtakes`, and
   a lap that doesn't exist moved nothing. Its replies said only where it jumped. The model's first query for a lap used a column `laps` doesn't have, both runs, and it corrected itself.
 - The agent refusing to skip forward or name a winner when asked directly. That was before it could seek forward through the spoiler gate.
+- The spoiler check, on the same race with `scripts/seek-check.mjs` (2026-11-09), which clicks the answers in the real palette. Answering
+  No to "go to lap 30" left the video at 0:00 with nothing read ahead, and the agent said it couldn't look. Yes (once) then covered both the
+  read ahead and the forward seek of that turn with one check, and a backward seek didn't ask. The 50s timeout, the session approval and the
+  live edge are covered by unit tests only.
 - The production build, including its content security policy.
 - The countdown displaying and ticking. Its automatic start hasn't run: see below.
 - Every season's world feed from 2021 on, opened directly and through the agent. 2021 races start with it as the main feed, and from 2022
@@ -97,7 +101,7 @@ Live capture has only run in unit tests. See "Not verified".
 
 ## Deferred, by design
 
-- Race-state tools for the agent, and a real prompt behind the spoiler gate, which approves everything for now.
+- Race-state tools for the agent.
 - Charts and agent-created dynamic views.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows and macOS, including the VMP signing they need.
