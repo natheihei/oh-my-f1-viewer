@@ -30,10 +30,10 @@ import {
 const NEEDS = ['timing' as const];
 
 /**
- * Each completed lap's end, and its status for the shading. The gap comes from lap ends rather than
- * `gap_to_leader`, which turns into text such as "+1 LAP" for a lapped car.
+ * Each completed lap's end, and its status for the shading, and the lap a car retired on, which never
+ * ends. The gap comes from lap ends rather than `gap_to_leader`, which turns into text such as "+1 LAP" for a lapped car.
  */
-export const SQL = `SELECT driver_number, lap_number, date_end, track_status FROM lap_summary WHERE date_end IS NOT NULL`;
+export const SQL = `SELECT driver_number, lap_number, date_end, track_status, is_out FROM lap_summary WHERE date_end IS NOT NULL OR is_out`;
 
 export interface TraceLine {
   driver: number;
@@ -53,15 +53,12 @@ export interface TraceModel {
 
 /** Share of the cars on the lead lap that the y axis fits: the rest run off the bottom with an arrow. */
 const FIT = 0.6;
-/** A car whose latest lap is this many behind has stopped, and doesn't count towards the range. */
-const STOPPED = 3;
-
 /**
  * The y axis's end: the first `FIT` of the running cars on the lead lap, with room, and the highlighted
- * drivers. Lapped cars and those just out of the pits can run off the bottom.
+ * drivers. Lapped cars and those just out of the pits can run off the bottom. Retired cars, in `out`, don't count.
  */
-function traceRange(lines: TraceLine[], lap: number, lapTime: number, highlight: readonly number[]): number {
-  const running = lines.map((l) => l.points.at(-1)!).filter((p) => p.lap >= lap - STOPPED && p.gap < lapTime);
+function traceRange(lines: TraceLine[], out: ReadonlySet<number>, lapTime: number, highlight: readonly number[]): number {
+  const running = lines.filter((l) => !out.has(l.driver)).map((l) => l.points.at(-1)!).filter((p) => p.gap < lapTime);
   const sorted = running.map((p) => p.gap).sort((a, b) => a - b);
   const most = sorted[Math.max(0, Math.ceil(sorted.length * FIT) - 1)] ?? 0;
   const extra = lines.filter((l) => highlight.includes(l.driver)).map((l) => l.points.at(-1)!.gap);
@@ -72,7 +69,9 @@ function traceRange(lines: TraceLine[], lap: number, lapTime: number, highlight:
  * The rows of `SQL` as one line per driver. A lap's leader is whoever ended it first, and each car's
  * gap is how much later it ended the same lap. `highlight` keeps those drivers' latest gaps in range.
  */
-export function traceModel(rows: ReadonlyArray<Record<string, unknown>>, highlight: readonly number[] = []): TraceModel {
+export function traceModel(all: ReadonlyArray<Record<string, unknown>>, highlight: readonly number[] = []): TraceModel {
+  const out = new Set(all.filter((r) => r.is_out).map((r) => num(r.driver_number)).filter((d): d is number => d !== null));
+  const rows = all.filter((r) => num(r.date_end) !== null);
   const first = new Map<number, number>();
   for (const r of rows) {
     const lap = num(r.lap_number);
@@ -98,7 +97,7 @@ export function traceModel(rows: ReadonlyArray<Record<string, unknown>>, highlig
   // A lap's length is the time between leaders crossing the line; lapped cars are a lap or more behind.
   const ends = [...first].sort((a, b) => a[0] - b[0]);
   const lapTime = median(ends.slice(1).flatMap(([n, t], i) => (ends[i][0] === n - 1 ? [(t - ends[i][1]) / 1000] : []))) ?? Infinity;
-  return { lines, bands: neutralBands(rows), lap, yMax: traceRange(lines, lap, lapTime, highlight) };
+  return { lines, bands: neutralBands(rows), lap, yMax: traceRange(lines, out, lapTime, highlight) };
 }
 
 interface Drawn extends TraceModel {
