@@ -30,11 +30,9 @@ const LAPS = 5;
 const MIN_LAPS = 3;
 /** Only laps this recent count. */
 const LOOKBACK = 10;
-/** A car whose latest lap is this many behind the field's has stopped: it shows a dash. */
-const STOPPED = 3;
 
-/** Every lap with what makes it clean, and the tyre on it. */
-export const SQL = `SELECT driver_number, lap_number, lap_duration, compound, tyre_age, is_pit_in_lap, is_pit_out_lap, track_status FROM lap_summary`;
+/** Every lap with what makes it clean, the tyre on it, and whether the car retired on it. */
+export const SQL = `SELECT driver_number, lap_number, lap_duration, compound, tyre_age, is_pit_in_lap, is_pit_out_lap, track_status, is_out FROM lap_summary`;
 
 export interface PaceRow {
   driver: number;
@@ -46,15 +44,12 @@ export interface PaceRow {
 
 /**
  * The rows of `SQL` as one row per driver, quickest first, with those without enough clean laps last.
- * Only laps from the last ten the field has finished count, and a car that has stopped gets a dash.
+ * Only laps from the last ten the field has finished count, and a car that has retired gets a dash.
  */
 export function paceModel(rows: ReadonlyArray<Record<string, unknown>>): PaceRow[] {
   let latest = 0;
-  let reached = 0;
-  for (const r of rows) {
-    if (num(r.lap_duration) !== null) latest = Math.max(latest, num(r.lap_number) ?? 0);
-    reached = Math.max(reached, num(r.lap_number) ?? 0);
-  }
+  for (const r of rows) if (num(r.lap_duration) !== null) latest = Math.max(latest, num(r.lap_number) ?? 0);
+  const retired = new Set(rows.filter((r) => r.is_out).map((r) => num(r.driver_number)));
   const byDriver = new Map<number, { laps: Array<{ lap: number; time: number }>; last: Record<string, unknown> }>();
   for (const r of rows) {
     const driver = num(r.driver_number);
@@ -67,10 +62,9 @@ export function paceModel(rows: ReadonlyArray<Record<string, unknown>>): PaceRow
   }
   const out = [...byDriver].map(([driver, { laps, last }]): PaceRow => {
     const recent = laps.sort((a, b) => b.lap - a.lap).slice(0, LAPS);
-    const running = (num(last.lap_number) ?? 0) > reached - STOPPED;
     return {
       driver,
-      pace: running && recent.length >= MIN_LAPS ? median(recent.map((l) => l.time)) : null,
+      pace: !retired.has(driver) && recent.length >= MIN_LAPS ? median(recent.map((l) => l.time)) : null,
       compound: typeof last.compound === 'string' ? last.compound : null,
       age: tyreAgeNow(last),
     };

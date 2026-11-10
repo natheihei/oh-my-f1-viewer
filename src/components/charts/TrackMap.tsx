@@ -1,4 +1,4 @@
-/** Every car as a dot on the circuit, where it is now, from `location` and MultiViewer's outline. */
+/** Every running car as a dot on the circuit, where it is now, from `location` and MultiViewer's outline. Retired cars are left off. */
 import { useMemo } from 'react';
 import Type from 'typebox';
 import { defineComponent, useLive, useSql, type CircuitView } from '../../host';
@@ -32,6 +32,9 @@ export const WINDOW_MS = 5000;
  */
 export const SQL = `SELECT driver_number, x, y, MAX(date) AS date FROM location WHERE date > ?1 - ${WINDOW_MS} AND date <= ?1 GROUP BY driver_number`;
 
+/** Cars that have retired, as of the playhead. They keep reporting where they stopped, or the garage. */
+export const OUT_SQL = `SELECT DISTINCT driver_number FROM laps WHERE is_out`;
+
 export interface Car {
   driver: number;
   x: number;
@@ -39,14 +42,15 @@ export interface Car {
 }
 
 /**
- * The rows of `SQL` as cars, by car number. A position of exactly (0, 0) is the feed's placeholder for a car
- * with none yet, before it leaves the garage, so it's left out.
+ * The rows of `SQL` as cars, by car number, without those in `out`, the rows of `OUT_SQL`. A position of
+ * exactly (0, 0) is the feed's placeholder for a car with none yet, before it leaves the garage, so it's left out.
  */
-export function trackModel(rows: ReadonlyArray<Record<string, unknown>>): Car[] {
+export function trackModel(rows: ReadonlyArray<Record<string, unknown>>, out: ReadonlyArray<Record<string, unknown>> = []): Car[] {
+  const retired = new Set(out.map((r) => num(r.driver_number)));
   const latest = new Map<number, { date: number; car: Car }>();
   for (const r of rows) {
     const [driver, x, y, date] = [num(r.driver_number), num(r.x), num(r.y), num(r.date) ?? 0];
-    if (driver === null || x === null || y === null || (x === 0 && y === 0)) continue;
+    if (driver === null || x === null || y === null || (x === 0 && y === 0) || retired.has(driver)) continue;
     const seen = latest.get(driver);
     if (!seen || date > seen.date) latest.set(driver, { date, car: { driver, x, y } });
   }
@@ -233,12 +237,15 @@ function TrackMap({ props }: { props: { drivers?: number[] } }) {
   const key = props.drivers?.join(',') ?? '';
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const view = useSql(SQL, [playhead ?? NO_PLAYHEAD]);
+  // Without timing there are no laps, so no one is out: the map still draws.
+  const out = useSql(OUT_SQL);
   const styles = useDriverStyles();
   const circuit = useLive((s) => s.circuit);
   const model = useMemo(() => {
     if (view.state !== 'ready' || circuit.state !== 'ready') return null;
-    return { cars: trackModel(view.rows), highlight: key ? key.split(',').map(Number) : [], circuit, styles };
-  }, [view, circuit, styles, key]);
+    const retired = out.state === 'ready' ? out.rows : [];
+    return { cars: trackModel(view.rows, retired), highlight: key ? key.split(',').map(Number) : [], circuit, styles };
+  }, [view, out, circuit, styles, key]);
   return (
     <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit)]} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} />}
@@ -250,7 +257,7 @@ export default defineComponent({
   name: 'track_map',
   title: 'Track',
   description:
-    'Every car as a dot on the circuit, where it is right now. Suggest it when the user asks where cars are on track, or wants to see traffic. Replays only: a live session has no car positions.',
+    'Every running car as a dot on the circuit, where it is right now. Retired cars are left off. Suggest it when the user asks where cars are on track, or wants to see traffic. Replays only: a live session has no car positions.',
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   needs: NEEDS,
   size: { aspect: 10 / 7, min: [10, 7] },
