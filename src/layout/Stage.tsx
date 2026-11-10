@@ -15,7 +15,7 @@ export function Stage({ registry, highlight = null }: { registry: Record<string,
   const rootRef = useRef<HTMLDivElement | null>(null);
   const hostsRef = useRef(new Map<string, HTMLDivElement>());
   const nodes = useLayout((s) => s.nodes);
-  const tiles = useMemo(() => allTiles({ nodes, primaryId: null, manual: false }), [nodes]);
+  const tiles = useMemo(() => allTiles({ nodes }), [nodes]);
 
   useEffect(() => {
     let frame = 0;

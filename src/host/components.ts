@@ -23,8 +23,11 @@ interface Declared {
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
-  /** A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by the least height. */
-  size?: { aspect: number; min: [number, number] };
+  /**
+   * A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by
+   * the least height. `width` is the widest its content draws, in pixels: the tile is narrowed to it.
+   */
+  size?: { aspect: number; min: [number, number]; width?: number };
 }
 
 export interface ComponentDefinition extends Declared {
@@ -45,7 +48,7 @@ export interface ComponentInfo {
   /** Null means any session type. */
   sessions: SessionType[] | null;
   needs: Dataset[];
-  size: { aspect: number; min: [number, number] } | null;
+  size: { aspect: number; min: [number, number]; width?: number } | null;
 }
 
 /** Declares a component that tiles can show by name. */
