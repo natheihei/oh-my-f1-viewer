@@ -14,11 +14,29 @@ export interface ComponentSpec {
   props: Record<string, unknown>;
   /**
    * The component's size hint in grid cells, when it has one: its shape, and the least room it reads
-   * in. Auto-layout shares a column of tiles by their least height when every one of them has a hint.
-   * `width`, in pixels, is the widest its content ever draws: auto-layout narrows the tile to it and
-   * leaves the rest of its slot empty, for a later tile to fill.
+   * in. Auto-layout shares a column of tiles by their least height when every one of them has a hint,
+   * and puts a new one into the gap closest to its shape.
    */
-  size?: { aspect: number; min: [number, number]; width?: number };
+  size?: { aspect: number; min: [number, number] };
+  /** How its content draws, when it doesn't simply fill the tile. Auto-layout shrinks the tile to it. */
+  fit?: ContentFit;
+}
+
+/**
+ * `width` and `height` are the most its content ever draws, in pixels; `aspect` is a fixed shape it
+ * draws at, as large as fits, such as a video's 16:9. A tile keeps its top-left corner and leaves what
+ * it doesn't need empty, for a later tile to fill.
+ */
+export interface ContentFit {
+  width?: number;
+  height?: number;
+  aspect?: number;
+}
+
+/** A grid cell's size on screen, in pixels. */
+export interface CellPx {
+  w: number;
+  h: number;
 }
 
 export interface Rect {
@@ -49,11 +67,11 @@ export interface LayoutState {
   primaryId: string | null;
   /** The mouse has moved something, so auto-layout leaves existing tiles where they are. */
   manual: boolean;
-  /** A grid column's width on screen, in pixels. Zero until the grid is measured, and nothing is narrowed till then. */
-  columnPx: number;
+  /** A grid cell's size on screen. Zero until the grid is measured, and nothing is fitted till then. */
+  cell: CellPx;
 }
 
-export const EMPTY_LAYOUT: LayoutState = { nodes: [], primaryId: null, manual: false, columnPx: 0 };
+export const EMPTY_LAYOUT: LayoutState = { nodes: [], primaryId: null, manual: false, cell: { w: 0, h: 0 } };
 
 export const GRID_COLUMNS = 24;
 export const GRID_ROWS = 24;
@@ -177,16 +195,43 @@ function withChildren(node: LayoutNode): LayoutNode {
   return node.kind === 'group' ? { ...node, children: layoutChildren(node.children) } : node;
 }
 
-/** Columns a tile's content needs at this column width, or null when it fills whatever it gets. */
-function contentColumns(node: LayoutNode, columnPx: number): number | null {
-  const width = node.kind === 'tile' ? node.component.size?.width : undefined;
-  return width && columnPx > 0 ? Math.max(1, Math.ceil(width / columnPx)) : null;
+/** The columns and rows a tile's content needs out of `rect`. All of it when the tile has no fit, or before the grid is measured. */
+function contentSize(node: LayoutNode, rect: Rect, cell: CellPx): { w: number; h: number } {
+  const hint = node.kind === 'tile' ? node.component.fit : undefined;
+  if (!hint || !(cell.w > 0 && cell.h > 0)) return { w: rect.w, h: rect.h };
+  let { w, h } = rect;
+  if (hint.width) w = Math.min(w, Math.ceil(hint.width / cell.w));
+  if (hint.height) h = Math.min(h, Math.ceil((hint.height + TITLE_BAR_PX) / cell.h));
+  if (hint.aspect) {
+    const boxW = w * cell.w;
+    const boxH = h * cell.h - TITLE_BAR_PX;
+    // Shapes are compared with a hair of slack, so rounding a pixel doesn't take a whole row off.
+    if (boxW / boxH < hint.aspect * 0.99) h = Math.min(h, Math.ceil((boxW / hint.aspect + TITLE_BAR_PX) / cell.h));
+    else if (boxW / boxH > hint.aspect * 1.01) w = Math.min(w, Math.ceil((boxH * hint.aspect) / cell.w));
+  }
+  return { w: Math.max(1, w), h: Math.max(1, h) };
 }
 
-/** Narrows a tile to its content, keeping its left edge: what it doesn't need stays empty. */
-function fit<T extends LayoutNode>(node: T, columnPx: number): T {
-  const columns = contentColumns(node, columnPx);
-  return columns !== null && columns < node.w ? { ...node, w: columns } : node;
+/** Shrinks a tile to its content, keeping its top-left corner: what it doesn't need stays empty. */
+function fit<T extends LayoutNode>(node: T, cell: CellPx): T {
+  const { w, h } = contentSize(node, node, cell);
+  return w === node.w && h === node.h ? node : { ...node, w, h };
+}
+
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** Moves each node up into empty rows above it, top first, so the space tiles leave collects at the bottom. */
+function rise<T extends Rect & { id: string }>(nodes: T[]): T[] {
+  const placed: Rect[] = [];
+  const moved = new Map<string, T>();
+  for (const n of [...nodes].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    let y = n.y;
+    while (y > 0 && !placed.some((p) => overlaps({ x: n.x, y: y - 1, w: n.w, h: 1 }, p))) y -= 1;
+    const node = y === n.y ? n : { ...n, y };
+    placed.push(node);
+    moved.set(n.id, node);
+  }
+  return nodes.map((n) => moved.get(n.id)!);
 }
 
 /** Re-tile everything. Node order is insertion order and doesn't change, so a reset finds the main feed again. */
@@ -196,33 +241,38 @@ export function autoLayout(state: LayoutState): LayoutState {
   const heights = ranked.map((n) => (n.kind === 'tile' ? (n.component.size?.min[1] ?? null) : null));
   const rects = solveRects(ranked.length, ranked.some((n) => n.kind === 'group'), heights);
   const rectOf = new Map(ranked.map((n, i) => [n.id, rects[i]]));
-  return { ...state, nodes: state.nodes.map((n) => fit({ ...withChildren(n), ...rectOf.get(n.id) }, state.columnPx)) };
+  return { ...state, nodes: rise(state.nodes.map((n) => fit({ ...withChildren(n), ...rectOf.get(n.id) }, state.cell))) };
 }
 
+const rectsOf = (nodes: LayoutNode[]) => JSON.stringify(nodes.map(({ id, x, y, w, h }) => [id, x, y, w, h]));
+
 /**
- * The grid was measured. An auto layout re-tiles when that changes how many columns some tile's
- * content needs; otherwise nothing moves, so a window drag doesn't shuffle tiles every frame.
+ * The grid was measured. An auto layout re-tiles when that changes where re-tiling would put things;
+ * otherwise nothing moves, so a window drag doesn't shuffle tiles every frame, and a tile that went
+ * into a gap stays there.
  */
-export function measure(state: LayoutState, columnPx: number): LayoutState {
-  if (columnPx === state.columnPx || !(columnPx > 0)) return state;
-  const next = { ...state, columnPx };
+export function measure(state: LayoutState, cell: CellPx): LayoutState {
+  if ((cell.w === state.cell.w && cell.h === state.cell.h) || !(cell.w > 0 && cell.h > 0)) return state;
+  const next = { ...state, cell };
   if (state.manual) return next;
-  const changed = allTiles(state).some((t) => contentColumns(t, state.columnPx) !== contentColumns(t, columnPx));
-  return changed ? autoLayout(next) : next;
+  const retiled = autoLayout(next);
+  return rectsOf(retiled.nodes) === rectsOf(autoLayout(state).nodes) ? next : retiled;
 }
 
-/**
- * The biggest empty rectangle on the grid that is at least `min` cells, by brute force: the grid is
- * small. Empty when there is none.
- */
-export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
+function occupancy(nodes: Rect[], columns: number, rows: number): boolean[][] {
   const occupied = Array.from({ length: rows }, () => new Array<boolean>(columns).fill(false));
   for (const n of nodes) {
-    for (let y = n.y; y < Math.min(rows, n.y + n.h); y += 1) {
-      for (let x = n.x; x < Math.min(columns, n.x + n.w); x += 1) occupied[y][x] = true;
+    for (let y = Math.max(0, n.y); y < Math.min(rows, n.y + n.h); y += 1) {
+      for (let x = Math.max(0, n.x); x < Math.min(columns, n.x + n.w); x += 1) occupied[y][x] = true;
     }
   }
-  let best: Rect = ZERO;
+  return occupied;
+}
+
+/** Every empty rectangle at least `min` cells that is as wide as it can be for its rows, by brute force: the grid is small. */
+function freeRects(nodes: Rect[], min: [number, number], columns: number, rows: number): Rect[] {
+  const occupied = occupancy(nodes, columns, rows);
+  const out: Rect[] = [];
   for (let y0 = 0; y0 < rows; y0 += 1) {
     for (let x0 = 0; x0 < columns; x0 += 1) {
       if (occupied[y0][x0]) continue;
@@ -233,9 +283,42 @@ export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], c
         maxWidth = w;
         if (maxWidth < min[0]) break;
         const h = y1 - y0 + 1;
-        if (h >= min[1] && maxWidth * h > best.w * best.h) best = { x: x0, y: y0, w: maxWidth, h };
+        if (h >= min[1]) out.push({ x: x0, y: y0, w: maxWidth, h });
       }
     }
+  }
+  return out;
+}
+
+/** True when no side of `r` can move out a cell into empty space. */
+function maximal(r: Rect, occupied: boolean[][], columns: number, rows: number): boolean {
+  const free = (x0: number, y0: number, w: number, h: number) => {
+    if (x0 < 0 || y0 < 0 || x0 + w > columns || y0 + h > rows) return false;
+    for (let y = y0; y < y0 + h; y += 1) for (let x = x0; x < x0 + w; x += 1) if (occupied[y][x]) return false;
+    return true;
+  };
+  return !free(r.x - 1, r.y, 1, r.h) && !free(r.x + r.w, r.y, 1, r.h) && !free(r.x, r.y - 1, r.w, 1) && !free(r.x, r.y + r.h, r.w, 1);
+}
+
+/**
+ * The biggest empty rectangle on the grid that is at least `min` cells. Empty when there is none.
+ */
+export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
+  return freeRects(nodes, min, columns, rows).reduce((best, r) => (area(r) > area(best) ? r : best), ZERO);
+}
+
+/**
+ * The gap for a tile of this shape: of the gaps at least `min` cells that can't grow any further, the
+ * one closest to `aspect` as it looks on screen, then the biggest. Empty when there is none.
+ */
+export function gapFor(nodes: Rect[], min: [number, number], aspect: number, cell: CellPx, columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
+  const occupied = occupancy(nodes, columns, rows);
+  const [cw, ch] = cell.w > 0 && cell.h > 0 ? [cell.w, cell.h] : [1, 1];
+  const off = (r: Rect) => Math.abs(Math.log((r.w * cw) / Math.max(1, r.h * ch - (cell.h > 0 ? TITLE_BAR_PX : 0)) / aspect));
+  let best: Rect = ZERO;
+  for (const r of freeRects(nodes, min, columns, rows)) {
+    if (!maximal(r, occupied, columns, rows)) continue;
+    if (area(best) === 0 || off(r) < off(best) - 1e-9 || (Math.abs(off(r) - off(best)) <= 1e-9 && area(r) > area(best))) best = r;
   }
   return best;
 }
@@ -244,8 +327,8 @@ export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], c
 const MIN_FREE_AREA = 36;
 
 /**
- * After a structural change. An auto layout puts a tile with a size hint into the biggest gap that
- * meets its least size, so nothing on screen moves, and re-tiles when no gap does. A hand-arranged
+ * After a structural change. An auto layout puts a tile with a size hint into the gap closest to its
+ * shape that meets its least size, so nothing on screen moves, and re-tiles when no gap does. A hand-arranged
  * layout uses its biggest gap for anything, and re-tiles only when that is too small.
  */
 function place(state: LayoutState, added: LayoutNode | null): LayoutState {
@@ -253,11 +336,11 @@ function place(state: LayoutState, added: LayoutNode | null): LayoutState {
   const others = state.nodes.filter((n) => n !== added);
   const into = (free: Rect) => ({
     ...state,
-    nodes: state.nodes.map((n) => (n === added ? fit({ ...withChildren(n), ...free }, state.columnPx) : n)),
+    nodes: state.nodes.map((n) => (n === added ? fit({ ...withChildren(n), ...free }, state.cell) : n)),
   });
   if (!state.manual) {
-    const min = added.kind === 'tile' ? added.component.size?.min : undefined;
-    const free = min ? largestFreeRect(others, min) : ZERO;
+    const size = added.kind === 'tile' ? added.component.size : undefined;
+    const free = size ? gapFor(others, size.min, size.aspect, state.cell) : ZERO;
     return area(free) > 0 ? into(free) : autoLayout(state);
   }
   const free = largestFreeRect(others);
