@@ -26,6 +26,9 @@ await page.waitForTimeout(2500);
 await page.evaluate(async () => {
   window.events = [];
   window.f1a.ai.onEvent((e) => window.events.push(e));
+  // The capture's source and gaps only travel in the status message, not in `sessionData`.
+  window.lastStatus = null;
+  window.f1a.data.onStatus((s) => { window.lastStatus = s; });
   window.m = {
     session: await import('/src/data/session.ts'),
     sessionData: await import('/src/data/sessionData.ts'),
@@ -158,7 +161,8 @@ check('pause holds, then resume plays on', s.clock.t > p1.clock.t + 4 && s.strea
 // The capture, held back to the video. Reports shape only.
 const captured = await page.evaluate(() => {
   const d = window.m.sessionData.useSessionData.getState();
-  return { state: d.state, reason: d.reason, drivers: d.drivers?.length ?? 0, source: d.coverage?.source, capturedFrom: !!d.coverage?.capturedFrom, gaps: d.coverage?.gaps?.length, timing: d.coverage?.datasets?.timing?.state };
+  const c = window.lastStatus?.coverage;
+  return { state: d.state, reason: d.reason, drivers: d.drivers?.length ?? 0, source: c?.source, capturedFrom: !!c?.capturedFrom, gaps: c?.gaps?.length, timing: d.datasets?.timing?.state };
 });
 console.log('session data:', JSON.stringify(captured));
 check('live data reaches the database', captured.state === 'ready' && captured.source === 'live' && captured.drivers > 0);

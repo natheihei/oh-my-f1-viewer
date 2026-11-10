@@ -21,7 +21,7 @@ doesn't follow its naming, and `lap_summary` is our own (see below). Team radio 
 upcoming list, not OpenF1's website API, so it lacks `circuit_type`, images and `is_cancelled`. Upcoming meetings also have no location or circuit
 until they've happened.
 
-`useSql` runs again as the playhead moves and as data arrives. Objects are frozen. `sessionData.coverage` says what the database holds and why anything is missing.
+`useSql` runs again as the playhead moves and as data arrives. Objects are frozen. `sessionData.datasets` says what the database holds and why anything is missing.
 
 ## The circuit
 
@@ -132,7 +132,7 @@ A session F1 TV lists without keys falls back to matching by name and type, whic
 
 ## Joining a live session late
 
-There's no backfill: the database holds what was captured, and `coverage` lists `capturedFrom` and any `gaps`. The snapshot on joining gives the lap in progress, finished stints, race control and pit
+There's no backfill: the database holds what was captured. The main process records when the capture began and any gaps, but `sessionData` doesn't show them yet. The snapshot on joining gives the lap in progress, finished stints, race control and pit
 history. There's no lap-by-lap history from before, as a snapshot doesn't hold it.
 
 ## How it was checked
@@ -161,7 +161,7 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   the same way. Check at the next live session.
 - **No live telemetry.** `CarData.z` and `Position.z` likely need the token on the socket, which isn't sent.
 - **Some archives are cut short.** F1's archive of the 2026 Mexico race (session 11404) ends about 2.2 hours in and never reports a finish, where OpenF1 has more rows from recording it live. A fresh
-  download on 2026-11-09 was byte-identical to the cached copy in all 15 feeds checked, so this is F1's file and not a stale cache. It's still marked complete after 3 days, with nothing in `coverage` to say it's short.
+  download on 2026-11-09 was byte-identical to the cached copy in all 15 feeds checked, so this is F1's file and not a stale cache. It's still marked complete after 3 days, with nothing in `datasets` to say it's short.
   A scan of all 417 indexed sessions from 2023 to 2026 on 2026-11-09 found no others without a finish status, and 102 of 103 races agreed with OpenF1 on their last lap. It didn't look for holes mid-session.
 - **48 sessions from early 2024 have no session data.** F1's season index leaves out the first nine rounds and pre-season testing, though all 48 archives exist and report a finish. So they aren't in the
   calendar, and from reading the code, looking one up by key finds nothing; opening one wasn't tried. OpenF1 hardcodes their paths in `MISSING_SESSIONS`, and a small table of them would fix it. Left as is for now, by choice. A further

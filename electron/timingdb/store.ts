@@ -9,7 +9,7 @@ import {
   SQL_TABLES,
   type Circuit,
   type Dataset,
-  type DatasetCoverage,
+  type DatasetState,
   type Schedule,
   type SessionCoverage,
   type SessionObjects,
@@ -37,7 +37,7 @@ const MAX_SQL_ROWS = 200_000;
 /** Bump when table definitions change. It's a cache of what F1 publishes, so old tables are just dropped. */
 const SCHEMA_VERSION = 2;
 
-const EMPTY_COVERAGE: DatasetCoverage = { state: 'absent', reason: null };
+const EMPTY_COVERAGE: DatasetState = { state: 'absent', reason: null };
 
 interface IngestRow {
   dataset: Dataset;
@@ -282,7 +282,7 @@ export class TimingStore {
   }
 
   coverage(sessionKey: number): SessionCoverage {
-    const of = (dataset: Dataset): DatasetCoverage => {
+    const of = (dataset: Dataset): DatasetState => {
       const row = this.ingestRow(sessionKey, dataset);
       if (!row || row.version !== INGEST_VERSION) return EMPTY_COVERAGE;
       return { state: row.status, reason: (JSON.parse(row.detail ?? '{}') as IngestDetail).reason ?? null };
