@@ -1,12 +1,15 @@
 /**
  * The app's only control surface besides the timeline: an input box, plus a short history box when
- * there is history, and the agent's suggested tiles between them. Older history is a scroll away.
- * Sits above the timeline, over the video. It stays open while there are suggestions.
+ * there is history, and between them the spoiler check and the agent's suggested tiles. Older history
+ * is a scroll away. Sits above the timeline, over the video. It stays open while there are suggestions
+ * or a spoiler check.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { host, useLive } from '../host';
+import { host, read, useLive } from '../host';
 import { sendToAgent, stopTurn } from './agentFeed';
 import { matchCommands, SLASH_COMMANDS } from './commands';
+import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
+import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { palette, usePalette, type EntryRole } from './palette';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
 
@@ -30,13 +33,17 @@ export function CommandPalette() {
   const sentRef = useRef<string[]>([]);
   const recallRef = useRef<number | null>(null);
   const stripRef = useRef<SuggestionStripHandle | null>(null);
+  const promptRef = useRef<LookAheadPromptHandle | null>(null);
+  const asking = useLookAhead((s) => s.asking);
+  const contentId = useLive((s) => s.session?.contentId ?? null);
+  const peekAllowed = useLookAhead((s) => sessionAllowed(s, contentId));
   const tiles = useLive((s) => s.suggestions.items);
   const [armed, setArmed] = useState(false);
   const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
-  const showing = open || blank || hasTiles;
+  const showing = open || blank || hasTiles || asking;
   const suggestions = matchCommands(value);
 
   useEffect(() => {
@@ -51,8 +58,19 @@ export function CommandPalette() {
       return;
     }
     palette.show();
-    requestAnimationFrame(() => stripRef.current?.focus());
+    if (!useLookAhead.getState().asking) requestAnimationFrame(() => stripRef.current?.focus());
   }, [hasTiles]);
+
+  // A spoiler check takes focus, and gives it back once answered.
+  const askedBefore = useRef(false);
+  useEffect(() => {
+    if (asking) {
+      askedBefore.current = true;
+      requestAnimationFrame(() => promptRef.current?.focus());
+    } else if (askedBefore.current) {
+      requestAnimationFrame(() => (read().suggestions.items.length > 0 ? stripRef.current?.focus() : inputRef.current?.focus()));
+    }
+  }, [asking]);
 
   function disarm(): void {
     if (armedTimer.current != null) clearTimeout(armedTimer.current);
@@ -146,6 +164,7 @@ export function CommandPalette() {
           ))}
         </div>
       ) : null}
+      {asking ? <LookAheadPrompt ref={promptRef} /> : null}
       {hasTiles ? (
         <>
           <SuggestionStrip ref={stripRef} items={tiles} onLeave={() => inputRef.current?.focus()} onEscape={escapeTiles} />
@@ -217,6 +236,17 @@ export function CommandPalette() {
             }
           }}
         />
+        {peekAllowed ? (
+          <button
+            type="button"
+            className="palette-tag"
+            data-testid="spoiler-session-tag"
+            title="Looking ahead is allowed for this session. Click to ask again."
+            onClick={lookAhead.revokeSession}
+          >
+            looks ahead · ×
+          </button>
+        ) : null}
       </div>
     </div>
   );

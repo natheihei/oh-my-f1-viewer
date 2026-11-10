@@ -436,3 +436,32 @@
   @apply pointer-events-none absolute inset-0 border-2 border-accent;
   content: '';
 }
+
+/* The spoiler check: between the palette's history and the suggested tiles. */
+.spoiler {
+  @apply flex flex-col gap-2 border-b border-line px-2.5 py-2;
+}
+
+.spoiler-label {
+  @apply font-semibold text-accent;
+}
+
+.spoiler-actions {
+  @apply flex flex-wrap gap-2;
+}
+
+.spoiler-answer {
+  @apply cursor-pointer border border-faint bg-transparent px-2.5 text-ink outline-none;
+  padding-block: 2px;
+}
+
+.spoiler-answer:hover,
+.spoiler-answer:focus-visible {
+  @apply border-ink bg-white/10;
+}
+
+.palette-tag {
+  @apply shrink-0 cursor-pointer border border-faint bg-transparent px-1 text-dim hover:text-ink;
+  font-size: 10px;
+  line-height: 14px;
+}

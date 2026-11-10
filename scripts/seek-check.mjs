@@ -1,6 +1,7 @@
 // Asks the real agent to seek a real session by what happened in it, and checks where playback landed
 // against the session database. Needs both sign-ins. Prints the agent's queries and replies, which can
-// give away the race: use a session you've watched.
+// give away the race: use a session you've watched. It answers the spoiler check itself: No first,
+// to check that a refusal leaves the video where it was, then Yes (once).
 // Usage: node scripts/seek-check.mjs [lap]
 //   F1A_YEAR and F1A_EVENT pick the race (2025, mexic).
 import { startApp, typeInPalette } from './harness.mjs';
@@ -74,6 +75,27 @@ const lapWindow = async (lap) => {
   return row;
 };
 
+/** Answers each spoiler check with whatever `answer` holds when it shows, and counts them. */
+let answer = 'once';
+let asked = 0;
+let answering = false;
+const answerer = setInterval(async () => {
+  if (answering) return;
+  answering = true;
+  try {
+    const button = await page.$(`[data-testid="spoiler-${answer}"]`);
+    if (button) {
+      asked += 1;
+      console.log(`  spoiler check: ${answer}`);
+      await button.click();
+    }
+  } catch {
+    // The check closed between finding the button and clicking it.
+  } finally {
+    answering = false;
+  }
+}, 250);
+
 /** Sends a message, waits for the agent to finish and the seek to settle, and reports what it did. */
 async function say(text) {
   console.log(`\n> ${text}`);
@@ -85,7 +107,10 @@ async function say(text) {
   const events = await page.evaluate(() => window.events);
   const end = events.find((e) => e.type === 'turn_end' || e.type === 'error');
   const calls = events.filter((e) => e.type === 'tool_start');
-  const failed = events.filter((e) => e.type === 'tool_end' && !e.ok).map((e) => e.name);
+  const ends = events.filter((e) => e.type === 'tool_end');
+  // Tool calls run one at a time, so each start pairs with the end in the same place.
+  calls.forEach((call, i) => (call.ok = ends[i]?.ok));
+  const failed = ends.filter((e) => !e.ok).map((e) => e.name);
   const reply = events.filter((e) => e.type === 'text_delta').map((e) => e.delta).join('');
   if (end.type === 'error') console.log(`  ERROR: ${end.message}`);
   for (const call of calls) console.log(`  tool: ${call.name}(${JSON.stringify(call.args)})`);
@@ -102,9 +127,21 @@ const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
 const start = await where();
 console.log(`start: video ${start.t.toFixed(1)}s`);
 
-// Forward, to a lap: the plain case.
+// Refused: nothing is read past the playhead and the video stays put.
+answer = 'no';
+asked = 0;
 let r = await say(`go to lap ${LAP}`);
 let at = await where();
+check('it asked before peeking', asked > 0);
+check('no read ahead ran', !r.calls.some((c) => c.name === 'query_session' && c.args.asOf === 'session' && c.ok));
+check('the video stayed where it was', Math.abs(at.t - start.t) < 2, `video ${start.t.toFixed(1)}s to ${at.t.toFixed(1)}s`);
+answer = 'once';
+asked = 0;
+
+// Forward, to a lap: the plain case.
+r = await say(`go to lap ${LAP}`);
+at = await where();
+check('it asked before peeking', asked > 0);
 let lap = await lapWindow(LAP);
 check('the turn finished', r.ok);
 check('it read ahead to find the lap', readAhead(r));
@@ -153,6 +190,7 @@ r = await say('go to lap 500');
 const last = await where();
 check('a lap that does not exist moves nothing', Math.abs(last.t - at.t) < 30, r.reply.slice(0, 120));
 
+clearInterval(answerer);
 console.log(`\n${failures ? `${failures} check(s) failed` : 'all checks passed'}`);
 await stop();
 process.exit(failures ? 1 : 0);

@@ -140,12 +140,26 @@ anything runs, in two cases:
 - **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known. The request carries the playhead
   and the target. A backward seek doesn't ask.
 
-A refusal makes the tool fail with a message the agent passes on, and the query or seek never runs. For now the gate approves everything:
-it will become a prompt asking the user. The agent is told to read ahead only to find a moment to jump to, and to say nothing about what it
-found beyond the jump ("Jumped to lap 30."). The `seek_to` result says only where playback landed, as session clock time.
+The gate hands the request to an asker the shell registers (`src/shell/lookAhead.ts`), which shows a spoiler check in the palette,
+between the history and any suggested tiles: a red `! spoiler check`, then "Peeking past where you are now?". It never shows the SQL, the
+target time or how far ahead it is, since any of those could give something away. Reading ahead and seeking forward ask the same question.
+The viewer answers:
 
-A live session works the same way: reading ahead sees what the feed has delivered, and a seek stays within the seekable range. The timeline
-is unaffected: the viewer can seek anywhere.
+- **Yes (once):** allowed for the rest of the agent's turn, since one request often takes a few queries and then a seek.
+- **Yes (for the session):** allowed until another session opens. A `looks ahead · ×` tag beside the input shows it, and clicking it asks
+  again next time.
+- **No**, or Esc: refused.
+
+A yes covers both kinds. A refusal makes the tool fail with a message the agent passes on, and the query or seek never runs. A check left
+unanswered for 50s is refused as "they didn't answer", under the 60s a tool call gets before the agent reads it as the app not responding.
+A turn that ends, is stopped or is replaced by a new message refuses its open check. Each outcome leaves a line in the palette's history.
+
+The agent is told to read ahead only to find a moment to jump to, and to say nothing about what it found beyond the jump ("Jumped to lap
+30."). The `seek_to` result says only where playback landed, as session clock time.
+
+A live session works the same way, except that reading ahead at the live edge doesn't ask: it only sees the seconds the feed is ahead of
+the video. Behind the live edge it asks as a replay does, and a seek stays within the seekable range. The timeline is unaffected: the
+viewer can seek anywhere.
 
 ## Missing data is part of the data
 
