@@ -2,6 +2,7 @@
 import type { ComponentDefinition } from '../host';
 import GapEvolution from './charts/GapEvolution';
 import LapTimeCompare from './charts/LapTimeCompare';
+import PitWindow from './charts/PitWindow';
 import PositionChart from './charts/PositionChart';
 import RaceTrace from './charts/RaceTrace';
 import StintPace from './charts/StintPace';
@@ -20,4 +21,5 @@ export const components: ComponentDefinition[] = [
   TyreStrategy,
   TyreDegradation,
   StintPace,
+  PitWindow,
 ];

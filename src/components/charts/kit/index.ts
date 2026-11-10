@@ -5,5 +5,6 @@ export { colors, DASH, driverStyles, styleOf, tyreColour, type DriverStyle } fro
 export * from './draw';
 export * from './laps';
 export { spreadLabels } from './labels';
+export { circuitMessage } from './status';
 export { linear, niceCeil, niceStep, ticks, type Scale } from './scale';
 export * from './values';

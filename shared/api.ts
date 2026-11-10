@@ -131,6 +131,8 @@ export type AgentEvent =
   | { type: 'error'; turnId: string; message: string };
 
 export type {
+  Circuit,
+  CircuitView,
   DataStatus,
   Schedule,
   ScheduleView,
@@ -163,6 +165,11 @@ export interface F1aApi {
     open(query: TimingQuery, live: boolean): Promise<void>;
     close(): Promise<void>;
     onStatus(cb: (status: import('./sessionData').DataStatus) => void): () => void;
+    /**
+     * The open session's circuit: the cached copy first if there is one, then a fresh one. `query` is the
+     * one the session was opened with, so an update for a session since closed can be told apart.
+     */
+    onCircuit(cb: (update: { query: TimingQuery; circuit: import('./sessionData').CircuitView }) => void): () => void;
     objects(sessionKey: number, playheadMs: number): Promise<import('./sessionData').SessionObjects>;
     sql(sessionKey: number, playheadMs: number, sql: string, params: unknown[]): Promise<import('./sessionData').SqlRows>;
   };

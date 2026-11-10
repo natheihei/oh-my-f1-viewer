@@ -12,6 +12,7 @@ const { positionModel } = await import('./PositionChart');
 const { compareModel } = await import('./LapTimeCompare');
 const { degModel, fitLine, formatSlope } = await import('./TyreDegradation');
 const { paceModel } = await import('./StintPace');
+const { pitWindowModel, CLEAR_AIR } = await import('./PitWindow');
 const { components } = await import('../registry');
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
@@ -316,6 +317,79 @@ describe('stint_pace', () => {
   });
 });
 
+describe('pit_window', () => {
+  // A 90 s lap. The leader has finished laps 1 to 6 and is on lap 7; everyone else shows their lap in progress.
+  const T0 = 1_000_000;
+  const LAP = 90_000;
+  const running = (driver: number, position: number, gap: unknown, more: Record<string, unknown> = {}) =>
+    ls(driver, 7, { position, gap_to_leader: gap, date_start: T0 + 6 * LAP + (typeof gap === 'number' ? gap * 1000 : 0), lap_duration: null, ...more });
+  const field = () => [
+    ...[1, 2, 3, 4, 5, 6].map((n) => ls(1, n, { date_start: T0 + (n - 1) * LAP, date_end: T0 + n * LAP, lap_duration: 90, position: 1 })),
+    running(1, 1, null),
+    running(44, 2, 5, { compound: 'HARD', tyre_age: 12 }),
+    running(16, 3, 18),
+    running(4, 4, 22.5),
+    running(81, 5, 30),
+    running(77, 6, 85),
+    // Lapped, 12 s behind 77: 97 s behind the leader, so 7 s behind it on the road. Its lap ends say 96.5 s.
+    ls(63, 5, { date_start: T0 + 4 * LAP + 96_500, date_end: T0 + 5 * LAP + 96_500, position: 7 }),
+    ls(63, 6, { date_start: T0 + 5 * LAP + 96_500, lap_duration: null, position: 7, gap_to_leader: '+1 LAP', interval: 12 }),
+    // Retired: its last lap started four laps before the field's latest.
+    ls(99, 3, { date_start: T0 + 2 * LAP, lap_duration: null, position: 8, gap_to_leader: 40 }),
+  ];
+
+  it("rings the field by the leader's clean laps, with lapped cars where they are on the road and retired ones left off", () => {
+    const m = pitWindowModel(field(), 44, 20);
+    expect(m.lapTime).toBe(90);
+    expect(m.cars.map((c) => c.driver)).toEqual([1, 44, 16, 4, 81, 77, 63]);
+    const lapped = m.cars.find((c) => c.driver === 63)!;
+    expect(lapped).toMatchObject({ lapped: true, gap: 97 });
+    expect(lapped.ring).toBeCloseTo(7);
+  });
+
+  it("measures a lapped car from its lap ends when the car ahead can't be built on", () => {
+    const rows = field().filter((r) => r.driver_number !== 77);
+    expect(pitWindowModel(rows, 44, 20).cars.find((c) => c.driver === 63)?.gap).toBe(96.5);
+  });
+
+  it('plays the stop out: where they rejoin, who is either side on the road, and whether that is clear air', () => {
+    const m = pitWindowModel(field(), 44, 20);
+    expect(m.from).toBe(2);
+    expect(m.out).toMatchObject({ gap: 25, position: 4, behind: { driver: 4, by: 2.5, lapped: false }, aheadOf: { driver: 81, by: 5 }, clearAir: true });
+    expect(m.compound).toBe('HARD');
+    expect(m.age).toBe(11);
+
+    const close = pitWindowModel(field(), 44, 26).out!;
+    expect(close).toMatchObject({ position: 5, behind: { driver: 81 }, clearAir: false });
+    expect(close.behind!.by).toBeCloseTo(1);
+    expect(close.behind!.by).toBeLessThan(CLEAR_AIR);
+  });
+
+  it("counts a lapped car as traffic on the road, but not as a place lost", () => {
+    const out = pitWindowModel(field(), 1, 8).out!;
+    expect(out.position).toBe(2);
+    expect(out.behind).toMatchObject({ driver: 63, lapped: true });
+    expect(out.behind!.by).toBeCloseTo(1);
+    expect(out.clearAir).toBe(false);
+  });
+
+  it('draws the ring but plays nothing out without a pit loss, or for a car that has stopped', () => {
+    const none = pitWindowModel(field(), 44, null);
+    expect(none.out).toBeNull();
+    expect(none.me?.gap).toBe(5);
+    expect(none.cars).toHaveLength(7);
+    const stopped = pitWindowModel(field(), 99, 20);
+    expect(stopped.me).toBeNull();
+    expect(stopped.out).toBeNull();
+  });
+
+  it('has no ring before there is a clean lap', () => {
+    const m = pitWindowModel([running(1, 1, null), running(44, 2, 1.5)], 44, 20);
+    expect(m.lapTime).toBeNull();
+    expect(m.out).toMatchObject({ position: 2, behind: { driver: 1, by: 21.5 } });
+  });
+});
+
 describe('the registry', () => {
   it('declares the charts the agent can suggest', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
@@ -330,5 +404,7 @@ describe('the registry', () => {
     expect(byName.race_trace.spec({})).toEqual({ key: 'race_trace:all', label: 'Race trace' });
     expect(byName.lap_time_compare.spec({ drivers: [44, 1] })).toEqual({ key: 'lap_time_compare:44-1', label: 'Lap times 44 · 1' });
     expect(byName.tyre_degradation.spec({})).toEqual({ key: 'tyre_degradation:top', label: 'Deg' });
+    expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
+    expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
   });
 });

@@ -33,6 +33,8 @@ const operations = {
   },
   saveSchedule: (schedule: Parameters<TimingStore['saveSchedule']>[0]) => store.saveSchedule(schedule),
   schedule: () => store.schedule(),
+  saveCircuit: (circuit: Parameters<TimingStore['saveCircuit']>[0]) => store.saveCircuit(circuit),
+  circuit: (circuitKey: number) => store.circuit(circuitKey),
 };
 
 export type WorkerOperations = typeof operations;

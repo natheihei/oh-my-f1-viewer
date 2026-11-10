@@ -43,6 +43,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
 | `schedule` | `ScheduleView` | Every meeting and session from 2023 on, refreshed each time the app starts, plus `state` and `reason` |
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
+| `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers |
 
 `tilesOf(layout)` flattens `layout.nodes` into its tiles, including those inside groups.
@@ -67,6 +68,25 @@ A selector must return a value or an existing reference. Building a new object o
     without them, such as practice or qualifying.
 
 Types are in [shared/sessionData.ts](../shared/sessionData.ts). Field names follow OpenF1, except that times are UTC milliseconds.
+
+### `circuit`
+
+The open session's circuit, from [MultiViewer](https://multiviewer.app)'s public API. It's refreshed each time a session
+opens: the cached copy shows at once if there is one, then the fresh one replaces it. If the fetch fails, the last copy stays
+with a `reason`. It doesn't depend on the playhead, since a circuit can't spoil a race. `circuit.state` is one of:
+
+- `idle`: no session is open.
+- `loading`: the circuit's key isn't known yet, or it's being fetched with no cached copy. The key comes from the schedule's
+  meeting, or for a meeting that hasn't happened yet, from the live feed's `SessionInfo`.
+- `failed`, with a `reason`: the fetch failed and there's no cached copy.
+- `ready`. In this state it also holds:
+  - `circuitKey`: F1's own key, as the schedule's `circuit_key`.
+  - `name`, and `refreshedAt`, when it was last fetched.
+  - `outline`: `{ x, y }`, the track as one closed line, in the same units as `location`.
+  - `corners`: `{ number, x, y, angle, distance }`, where `distance` is how far along the lap it is.
+  - `rotation`: degrees to turn the outline by so it reads the usual way up.
+  - `pitLoss`: `{ normal, safetyCar, virtualSafetyCar }`, the seconds a stop costs, or null where MultiViewer has none.
+  - `reason`: null, or why the copy is stale.
 
 ## Queries
 
