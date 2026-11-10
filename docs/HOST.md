@@ -45,6 +45,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers |
+| `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 
 `tilesOf(layout)` flattens `layout.nodes` into its tiles, including those inside groups.
 
