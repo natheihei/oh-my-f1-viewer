@@ -553,7 +553,7 @@ describe('the master volume', () => {
   beforeEach(() => {
     useSession.setState({ session: open, channels, audioChannelId: '1:44', volume: 0.6 });
     layout.clear();
-    layout.add(videoSpec('1:44', 'HAM'));
+    host.layout.add({ items: [video('1:44')] });
     setAudio = vi.spyOn(sessionControl, 'setAudio').mockImplementation((id) => useSession.setState({ audioChannelId: id }));
   });
   afterEach(() => {
