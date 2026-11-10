@@ -47,6 +47,8 @@ export default defineComponent({
   title: 'Video',
   description: 'One feed from the open session: the main broadcast, a driver onboard, the data channel or the tracker.',
   args: Type.Object({ feed: Type.String({ description: 'A feed id from live.feeds' }) }),
+  // Every feed is 16:9, letterboxed in whatever room it gets: the tile keeps only the picture.
+  fit: { aspect: 16 / 9 },
   // Keyed by feed, so a feed is on screen at most once.
   spec: ({ feed }) => {
     const channel = read().feeds.find((c) => c.id === feed);

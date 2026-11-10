@@ -102,57 +102,71 @@ describe('size hints', () => {
 });
 
 describe('fitting content', () => {
-  /** 1680px wide, so a column is 70px. */
-  const sized = measure(EMPTY_LAYOUT, 70);
-  const tower: ComponentSpec = { type: 'chart', key: 'tower', label: 'tower', props: {}, size: { aspect: 0.6, min: [6, 12], width: 352 } };
-  const chart = (key: string, min: [number, number]): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect: 1, min } });
+  /** 1680 by 960, so a cell is 70 by 40. */
+  const cell = { w: 70, h: 40 };
+  const sized = measure(EMPTY_LAYOUT, cell);
+  const video = (key: string): ComponentSpec => ({ ...spec(key), fit: { aspect: 16 / 9 } });
+  /** 352 by 500 pixels at most: 6 columns and 13 rows with the title bar. */
+  const tower: ComponentSpec = { type: 'chart', key: 'tower', label: 'tower', props: {}, size: { aspect: 0.6, min: [6, 12] }, fit: { width: 352, height: 500 } };
+  const chart = (key: string, min: [number, number], aspect = 1.6): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect, min } });
   const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
-  const withTower = addTile(addTile(sized, spec('main')), tower);
+  const withTower = addTile(addTile(sized, video('main')), tower);
 
-  it('narrows a tile to its content and leaves the rest of its slot empty, at the window edge', () => {
-    expect(rects(withTower)).toEqual({ main: { x: 0, y: 0, w: 16, h: 24 }, tower: { x: 16, y: 0, w: 6, h: 24 } });
+  it('shrinks the video to its picture and the tower to its content, leaving gaps right and below', () => {
+    expect(rects(withTower)).toEqual({ main: { x: 0, y: 0, w: 16, h: 17 }, tower: { x: 16, y: 0, w: 6, h: 13 } });
   });
 
-  it('fills nothing before the grid is measured', () => {
-    expect(rects(addTile(addTile(EMPTY_LAYOUT, spec('main')), tower)).tower).toEqual({ x: 16, y: 0, w: 8, h: 24 });
+  it('narrows a video that is limited by height instead', () => {
+    expect(rects(addTile(measure(EMPTY_LAYOUT, { w: 100, h: 40 }), video('main'))).main).toEqual({ x: 0, y: 0, w: 17, h: 24 });
   });
 
-  it('puts a new tile into a gap that meets its least size, and moves nothing else', () => {
-    const next = addTile(withTower, chart('flags', [2, 6]));
-    expect(rects(next)).toEqual({ ...rects(withTower), flags: { x: 22, y: 0, w: 2, h: 24 } });
-    expect(next.manual).toBe(false);
+  it('fits nothing before the grid is measured', () => {
+    expect(rects(addTile(addTile(EMPTY_LAYOUT, video('main')), tower))).toEqual({
+      main: { x: 0, y: 0, w: 16, h: 24 },
+      tower: { x: 16, y: 0, w: 8, h: 24 },
+    });
+  });
+
+  it('puts a new tile into the gap closest to its shape, and moves nothing else', () => {
+    const card = addTile(withTower, chart('card', [6, 5]));
+    expect(rects(card)).toEqual({ ...rects(withTower), card: { x: 16, y: 13, w: 8, h: 11 } });
+    expect(card.manual).toBe(false);
+    expect(rects(addTile(withTower, chart('trace', [12, 7], 16 / 9))).trace).toEqual({ x: 0, y: 17, w: 24, h: 7 });
+    expect(rects(addTile(withTower, chart('flags', [2, 6], 0.2))).flags).toEqual({ x: 22, y: 0, w: 2, h: 24 });
   });
 
   it('re-tiles when no gap is big enough', () => {
-    const next = addTile(withTower, chart('card', [6, 5]));
+    const next = addTile(withTower, chart('big', [8, 12]));
     expect(rects(next)).toEqual({
-      main: { x: 0, y: 0, w: 16, h: 24 },
-      tower: { x: 16, y: 0, w: 6, h: 17 },
-      card: { x: 16, y: 17, w: 8, h: 7 },
+      main: { x: 0, y: 0, w: 16, h: 17 },
+      tower: { x: 16, y: 0, w: 6, h: 12 },
+      big: { x: 16, y: 12, w: 8, h: 12 },
     });
   });
 
   it('never puts a video into a gap', () => {
-    const next = addTile(withTower, spec('onboard'));
-    expect(rects(next).onboard.w).toBe(8);
+    expect(rects(addTile(withTower, spec('onboard'))).onboard.w).toBe(8);
   });
 
-  it('leaves tiles alone on a resize that needs no more or fewer columns', () => {
-    const next = measure(withTower, 65);
+  it('leaves tiles alone on a resize that changes nothing re-tiling would do', () => {
+    const next = measure(withTower, { w: 70, h: 39.9 });
     expect(next.nodes).toBe(withTower.nodes);
-    expect(next.columnPx).toBe(65);
+    expect(next.cell).toEqual({ w: 70, h: 39.9 });
   });
 
-  it('re-fits on a resize that changes what the content needs', () => {
-    const filled = addTile(withTower, chart('flags', [2, 6]));
-    const narrow = measure(filled, 50);
-    expect(rects(narrow).tower).toEqual({ x: 16, y: 0, w: 8, h: 16 });
-    expect(rects(narrow).flags).toEqual({ x: 16, y: 16, w: 8, h: 8 });
+  it('re-fits on a resize that does, lifting tiles into the rows others leave', () => {
+    const filled = addTile(withTower, chart('flags', [2, 6], 0.2));
+    const narrow = measure(filled, { w: 50, h: 40 });
+    expect(rects(narrow)).toEqual({
+      main: { x: 0, y: 0, w: 16, h: 12 },
+      tower: { x: 16, y: 0, w: 8, h: 13 },
+      flags: { x: 16, y: 13, w: 8, h: 8 },
+    });
   });
 
   it('leaves a hand-arranged layout alone on a resize', () => {
     const manual = applyMouseEdit(withTower, withTower.nodes[1].id, { x: 14, y: 0, w: 10, h: 24 });
-    expect(measure(manual, 50).nodes).toBe(manual.nodes);
+    expect(measure(manual, { w: 50, h: 40 }).nodes).toBe(manual.nodes);
   });
 });
 

@@ -255,7 +255,7 @@ describe('components', () => {
 
   it('build a video spec keyed by feed and labelled by channel', () => {
     host.layout.add({ items: [video('1:44')] });
-    expect(layout.tiles().map((t) => t.component)).toEqual([{ type: 'video', key: '1:44', label: 'HAM', props: { feed: '1:44' } }]);
+    expect(layout.tiles().map((t) => t.component)).toEqual([{ type: 'video', key: '1:44', label: 'HAM', props: { feed: '1:44' }, fit: { aspect: 16 / 9 } }]);
     expect(() => host.layout.add({ items: [video('1:999')] })).toThrow(/Unknown feed/);
   });
 

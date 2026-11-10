@@ -96,10 +96,15 @@ const COLUMNS: Array<{ key: Key; head: string; chars: number; drop: number }> = 
   { key: 'tyre', head: 'TYRE', chars: 4, drop: 2 },
 ];
 
-/** The most size, spacing and padding `draw` ever uses, so how wide the tower draws at most. */
+/** The most size, spacing, padding and row pitch `draw` ever uses, so how large the tower draws at most. */
 const MAX_SIZE = 12;
 const MAX_SPACING = 3;
 const PAD = 8;
+const HEAD = 16;
+const MAX_PITCH = 22;
+/** A full grid. A session with fewer cars leaves a little room at the bottom, rather than resizing as cars retire. */
+const MAX_CARS = 22;
+const TALLEST = HEAD + MAX_CARS * MAX_PITCH;
 /** JetBrains Mono's advance is 0.6 of its size. */
 const WIDEST = Math.ceil(
   COLUMNS.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'bar' || col.key === 'code' ? 0.6 : MAX_SPACING), 0) * MAX_SIZE * 0.6 + PAD * 2,
@@ -113,8 +118,8 @@ interface Drawn {
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const pad = compact ? 4 : PAD;
-  const head = compact ? 0 : 16;
-  const pitch = Math.min(22, Math.max(compact ? 9 : 12, (height - head - pad) / Math.max(1, m.rows.length)));
+  const head = compact ? 0 : HEAD;
+  const pitch = Math.min(MAX_PITCH, Math.max(compact ? 9 : 12, (height - head - pad) / Math.max(1, m.rows.length)));
   const size = Math.min(MAX_SIZE, Math.max(8, Math.floor(pitch * 0.58)));
   const ch = textWidth(ctx, '0', size);
 
@@ -205,7 +210,8 @@ export default defineComponent({
     'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview of the race, or whenever the user asks where someone is.',
   args: Type.Object({}),
   needs: NEEDS,
-  size: { aspect: 0.6, min: [6, 12], width: WIDEST },
+  size: { aspect: 0.6, min: [6, 12] },
+  fit: { width: WIDEST, height: TALLEST },
   spec: () => ({ key: 'timing_tower', label: 'Timing' }),
   View: TimingTower,
 });
