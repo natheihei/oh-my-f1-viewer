@@ -5,8 +5,8 @@ This is everything a consumer (a tile component, the shell or the agent) can rea
 This page lists what it offers.
 
 The source is the reference: each write and query is defined in [src/host/index.ts](../src/host/index.ts),
-[src/host/layoutOps.ts](../src/host/layoutOps.ts), [src/host/suggestions.ts](../src/host/suggestions.ts) and
-[src/host/components.ts](../src/host/components.ts) with its own description and argument schema. If this page and the code
+[src/host/layoutOps.ts](../src/host/layoutOps.ts), [src/host/suggestions.ts](../src/host/suggestions.ts),
+[src/host/components.ts](../src/host/components.ts) and [src/host/backgrounds.ts](../src/host/backgrounds.ts) with its own description and argument schema. If this page and the code
 disagree, the code is right and this page needs fixing.
 
 There are three kinds of things:
@@ -15,7 +15,7 @@ There are three kinds of things:
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
 | Queries | `host.catalog.*`, `host.session.feeds`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.components.*`, `host.catalog.loadIndex` | Yes |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -46,6 +46,8 @@ A selector must return a value or an existing reference. Building a new object o
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
+| `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
+| `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
 
 `tilesOf(layout)` flattens `layout.nodes` into its tiles, including those inside groups.
 
@@ -195,6 +197,16 @@ lists what's safe to share in `live.components`.
 | --- | --- | --- |
 | `register` | `components: ComponentDefinition[]` | Makes the components available to tiles. One with a name that's already registered replaces it |
 
+### `host.backgrounds` and `host.appearance`
+
+The app registers its backgrounds once at start, from `src/main.tsx`, like components. `<Backdrop />` paints the one showing, and the
+shell's `/settings-background` panel changes it.
+
+| Function | Arguments | Effect |
+| --- | --- | --- |
+| `backgrounds.register` | `backgrounds: BackgroundDefinition[]` | Makes the backgrounds available. One with a name that's already registered replaces it |
+| `appearance.setBackground` | `style: string`, `params?: Record<string, number \| boolean>` | Shows that style, or `'off'` for none, and changes some of its settings. Settings are checked against the style's schema: numbers are clamped to their range and snapped to their step, and anything else that doesn't fit is ignored. Throws on a style that isn't registered |
+
 ### `host.suggestions`
 
 Suggested tiles wait in a strip for the user to add, drag onto the grid or dismiss. Suggestions belong to one turn: the user's next
@@ -229,6 +241,14 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   uses it.
 - `<Grid />` draws the layout, showing each tile with the registered component its spec names, along with where a dragged
   suggestion would land.
+- `<Backdrop />` paints the background `live.background` names, on a canvas under the grid, so it shows only in the gaps. It paints
+  when something changes, and every frame only while the background animates with its settings. With reduced motion it paints still
+  frames.
+- `defineBackground({ name, title, params, animated, followsPointer?, useData?, unavailable?, prepare?, draw })` declares a background.
+  `params` is a TypeBox object schema whose settings each carry a `title` and `default`: a number with `minimum`, `maximum`, `step` and
+  an optional `unit` (`'%'` shows 0 to 1 as a percentage), a boolean, or a union of literals; `shownWhen` names another setting it
+  only applies with. `useData(params)` is a hook for what it needs from the host, `prepare` makes what it keeps between frames, and
+  `draw(ctx, frame, params, state, data)` paints one frame in CSS pixels.
 - `<ComponentView spec={spec} fallback={...} />` draws one spec with its registered component, or `fallback` if none is registered.
   The suggestion strip uses it for previews.
 - `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.

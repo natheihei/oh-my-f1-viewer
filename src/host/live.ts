@@ -7,6 +7,7 @@ import { useCircuit, useSchedule, useSessionData } from '../data/sessionData';
 import { specFor, type Spec } from '../data/spec';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
+import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
 import { useComponents, type ComponentInfo } from './components';
 import { useSuggestions, type SuggestionsView } from './suggestions';
 import { useCountdown, type Countdown } from './viewing';
@@ -36,6 +37,10 @@ export interface Live {
   components: ComponentInfo[];
   /** What differs by season, Grand Prix or session, for the open one. The defaults when none is open. */
   spec: Spec;
+  /** What fills the gaps between tiles, and every style's settings. */
+  background: BackgroundView;
+  /** Every background the settings panel offers, without its code. */
+  backgrounds: BackgroundInfo[];
 }
 
 export function read(): Live {
@@ -56,6 +61,8 @@ export function read(): Live {
     circuit: useCircuit.getState(),
     components: useComponents.getState().list,
     spec: specFor(session),
+    background: useBackground.getState(),
+    backgrounds: useBackgrounds.getState().list,
   };
 }
 
@@ -70,6 +77,8 @@ function subscribe(onChange: () => void): () => void {
     useSessionData.subscribe(onChange),
     useCircuit.subscribe(onChange),
     useComponents.subscribe(onChange),
+    useBackground.subscribe(onChange),
+    useBackgrounds.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }
