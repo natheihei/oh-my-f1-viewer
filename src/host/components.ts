@@ -23,7 +23,7 @@ interface Declared {
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
-  /** A size hint in grid cells. Unused for now. */
+  /** A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by the least height. */
   size?: { aspect: number; min: [number, number] };
 }
 
@@ -108,5 +108,5 @@ export function specOf({ type, props }: Static<typeof Item>): ComponentSpec {
     const error = Value.Errors(definition.args, props)[0];
     throw new Error(`Invalid props for ${type}: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}`);
   }
-  return { type, ...definition.spec(props), props };
+  return { type, ...definition.spec(props), props, ...(definition.size ? { size: definition.size } : {}) };
 }

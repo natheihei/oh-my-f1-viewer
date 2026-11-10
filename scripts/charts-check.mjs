@@ -74,6 +74,18 @@ const allGroups = {
     { type: 'tyre_degradation', props: {} },
     { type: 'race_trace', props: { drivers: pair } },
   ],
+  small: [
+    { type: 'battle_card', props: { drivers: pair } },
+    { type: 'sector_delta', props: { drivers: pair } },
+    { type: 'pit_stops', props: {} },
+    { type: 'race_control', props: {} },
+    { type: 'weather', props: {} },
+  ],
+  // The strip shows four at a time: these two again, so the weather's preview is on screen.
+  context: [
+    { type: 'race_control', props: {} },
+    { type: 'weather', props: {} },
+  ],
 };
 const groups = Object.fromEntries(Object.entries(allGroups).filter(([name]) => !only || only.includes(name)));
 
@@ -142,6 +154,22 @@ async function shoot(moment) {
       }, front);
       console.log(`pit window: ${JSON.stringify(check)}`);
     }
+    if (name === 'small') {
+      // The battle card and the latest stops in numbers, beside the tower's rows for the pair, to check by hand.
+      const check = await page.evaluate(async (pair) => {
+        const { host } = await import('/src/host/index.ts');
+        const battle = await import('/src/components/charts/BattleCard.tsx');
+        const stops = await import('/src/components/charts/PitStops.tsx');
+        const tower = await import('/src/components/charts/TimingTower.tsx');
+        const sectors = await import('/src/components/charts/SectorDelta.tsx');
+        const b = battle.battleModel((await host.data.sql({ sql: battle.SQL, params: pair })).rows, pair);
+        const s = sectors.sectorModel((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
+        const p = stops.stopsModel((await host.data.sql({ sql: stops.sqlFor(0) })).rows).stops.slice(0, 4);
+        const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));
+        return { battle: b, sectors: { laps: s.laps, averages: s.averages, skipped: s.skipped }, stops: p, tower: t };
+      }, pair);
+      console.log(`small: ${JSON.stringify(check)}`);
+    }
     await page.evaluate(async () => {
       const { host, read, tilesOf } = await import('/src/host/index.ts');
       host.layout.remove({ keys: tilesOf(read().layout).filter((t) => t.component.type !== 'video').map((t) => t.component.key) });
@@ -170,10 +198,11 @@ if (count?.total) {
 // Each query at the end of the race, as the worker runs it.
 const timings = await page.evaluate(
   async ({ key, pair }) => {
-    const [tower, gap, tyres, trace, positions, compare, deg, pace, pit] = await Promise.all(
-      ['TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'PositionChart', 'LapTimeCompare', 'TyreDegradation', 'StintPace', 'PitWindow'].map(
-        (name) => import(`/src/components/charts/${name}.tsx`),
-      ),
+    const [tower, gap, tyres, trace, positions, compare, deg, pace, pit, battle, sectors, stops, control, weather] = await Promise.all(
+      [
+        'TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'PositionChart', 'LapTimeCompare', 'TyreDegradation', 'StintPace', 'PitWindow',
+        'BattleCard', 'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
+      ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
     const time = async (sql, params) => {
       const runs = [];
@@ -197,6 +226,11 @@ const timings = await page.evaluate(
       tyre_degradation_pair: await time(deg.sqlFor(2), pair),
       stint_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),
+      battle_card: await time(battle.SQL, pair),
+      sector_delta: await time(sectors.SQL, pair),
+      pit_stops: await time(stops.sqlFor(0), []),
+      race_control: await time(control.SQL, []),
+      weather: await time(weather.SQL, []),
     };
   },
   { key: Number(sessionKey), pair },
