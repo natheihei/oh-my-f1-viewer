@@ -82,9 +82,11 @@ with a `reason`. It doesn't depend on the playhead, since a circuit can't spoil 
 - `ready`. In this state it also holds:
   - `circuitKey`: F1's own key, as the schedule's `circuit_key`.
   - `name`, and `refreshedAt`, when it was last fetched.
-  - `outline`: `{ x, y }`, the track as one closed line, in the same units as `location`.
-  - `corners`: `{ number, x, y, angle, distance }`, where `distance` is how far along the lap it is.
-  - `rotation`: degrees to turn the outline by so it reads the usual way up.
+  - `outline`: `{ x, y }`, the track as one closed line, in the same units as `location`: tenths of a metre, with y up. Its first
+    point is at the timing line.
+  - `corners`: `{ number, x, y, angle, distance }`, where `distance` is how far along the outline it is from its first point, in the
+    same units.
+  - `rotation`: degrees to turn the outline by, anticlockwise with y up, so it reads the usual way up.
   - `pitLoss`: `{ normal, safetyCar, virtualSafetyCar }`, the seconds a stop costs, or null where MultiViewer has none.
   - `reason`: null, or why the copy is stale.
 
