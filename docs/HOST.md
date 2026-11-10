@@ -203,10 +203,11 @@ index (`live.events`) with every message, so it can work out which weekend the u
 | `suggest_tiles` | `host.suggestions.offer` |
 | `remove_streams` | `host.layout.remove` |
 | `set_audio` | `host.audio.set` |
+| `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
 | `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
-`app_state` also carries the playhead in UTC milliseconds and the roster as driver code and number, so the agent can write a query and pass
-a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add`, `focus` and `reset`, groups, `seekBy`, `goLive` or volume, isn't
+`app_state` also carries the master volume next to the audible feed, so the agent never calls a feed audible at volume 0. It carries the
+playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add`, `focus` and `reset`, groups, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
