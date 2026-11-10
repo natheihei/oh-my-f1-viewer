@@ -115,6 +115,7 @@ describe('agent tools', () => {
     await expect(runTool('seek_to', { date: 5 })).rejects.toThrow(/No session is open/);
     await expect(runTool('query_session', { sql: 'SELECT 1' })).rejects.toThrow(/No session is open/);
     await expect(runTool('set_audio', { stream: 'HAM' })).rejects.toThrow(/No session is open/);
+    await expect(runTool('set_volume', { volume: 50 })).rejects.toThrow(/No session is open/);
   });
 });
 
@@ -451,5 +452,47 @@ describe('seeking to a moment', () => {
     expect(describeAppState()).not.toContain('playhead:');
     useSessionData.setState({ state: 'loading', sessionKey: 9, coverage: null }, true);
     expect(describeAppState()).not.toContain('drivers:');
+  });
+});
+
+describe('the master volume', () => {
+  const open = { contentId: 1, title: 'Race', status: 'replay' } as SessionInfo;
+  let setAudio: MockInstance<typeof sessionControl.setAudio>;
+
+  beforeEach(() => {
+    useSession.setState({ session: open, channels, audioChannelId: '1:44', volume: 0.6 });
+    layout.clear();
+    layout.add(videoSpec('1:44', 'HAM'));
+    setAudio = vi.spyOn(sessionControl, 'setAudio').mockImplementation((id) => useSession.setState({ audioChannelId: id }));
+  });
+  afterEach(() => {
+    setAudio.mockRestore();
+    layout.clear();
+    useSession.setState({ session: null, channels: [], audioChannelId: null, volume: 1 });
+  });
+
+  it('is in app_state next to the audible feed', () => {
+    expect(describeAppState()).toContain('audio: HAM at 60% volume');
+    useSession.setState({ volume: 0 });
+    expect(describeAppState()).toContain('audio: HAM, but the volume is 0 so nothing can be heard');
+    useSession.setState({ audioChannelId: null });
+    expect(describeAppState()).toContain('audio: muted');
+  });
+
+  it('is set as a percentage', async () => {
+    expect(await runTool('set_volume', { volume: 35 })).toBe('Volume is now 35%.');
+    expect(useSession.getState().volume).toBe(0.35);
+    expect(useSession.getState().audioChannelId).toBe('1:44');
+  });
+
+  it('says when no stream is audible to hear it', async () => {
+    useSession.setState({ audioChannelId: null });
+    expect(await runTool('set_volume', { volume: 80 })).toBe('Volume is now 80%. No stream is audible; choose one with set_audio.');
+  });
+
+  it('makes set_audio warn when nothing can be heard', async () => {
+    expect(await runTool('set_audio', { stream: 'HAM' })).toBe('Audio is now HAM.');
+    useSession.setState({ volume: 0 });
+    expect(await runTool('set_audio', { stream: 'HAM' })).toBe('Audio is now HAM, but the volume is 0, so nothing can be heard.');
   });
 });
