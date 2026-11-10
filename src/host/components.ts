@@ -9,7 +9,7 @@ import type { ComponentType } from 'react';
 import { create } from 'zustand';
 import type { SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
-import type { ComponentSpec } from '../layout/model';
+import type { ComponentSpec, ContentFit } from '../layout/model';
 import { write } from './op';
 
 interface Declared {
@@ -23,11 +23,10 @@ interface Declared {
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
-  /**
-   * A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by
-   * the least height. `width` is the widest its content draws, in pixels: the tile is narrowed to it.
-   */
-  size?: { aspect: number; min: [number, number]; width?: number };
+  /** A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by the least height. */
+  size?: { aspect: number; min: [number, number] };
+  /** How its content draws, when it doesn't simply fill the tile: the tile is shrunk to it. See `ContentFit`. */
+  fit?: ContentFit;
 }
 
 export interface ComponentDefinition extends Declared {
@@ -48,7 +47,7 @@ export interface ComponentInfo {
   /** Null means any session type. */
   sessions: SessionType[] | null;
   needs: Dataset[];
-  size: { aspect: number; min: [number, number]; width?: number } | null;
+  size: { aspect: number; min: [number, number] } | null;
 }
 
 /** Declares a component that tiles can show by name. */
@@ -111,5 +110,5 @@ export function specOf({ type, props }: Static<typeof Item>): ComponentSpec {
     const error = Value.Errors(definition.args, props)[0];
     throw new Error(`Invalid props for ${type}: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}`);
   }
-  return { type, ...definition.spec(props), props, ...(definition.size ? { size: definition.size } : {}) };
+  return { type, ...definition.spec(props), props, ...(definition.size ? { size: definition.size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
 }

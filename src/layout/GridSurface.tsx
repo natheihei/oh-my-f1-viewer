@@ -121,7 +121,7 @@ export function GridSurface({
     });
 
     const applyCellHeights = () => {
-      layout.measure(host.clientWidth / GRID_COLUMNS);
+      layout.measure({ w: host.clientWidth / GRID_COLUMNS, h: host.clientHeight / GRID_ROWS });
       grid.cellHeight(cellHeight());
       for (const node of grid.engine.nodes) {
         const el = node.el;
