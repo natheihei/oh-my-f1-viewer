@@ -17,6 +17,8 @@
 # (ready_for_agent -> agent_working, plus a comment); fetches origin/main and
 # creates branch issue-<n>-<slug> from it in ~/.herdr/worktrees/<repo>/<branch>;
 # opens a Herdr space there running claude with worker-prompt.md filled in.
+# After its PR merges, the worker removes its worktree and closes its space
+# once the user confirms.
 # If anything after the claim fails, the labels are put back and the issue is
 # not retried until the script restarts. Workers are never touched afterwards.
 set -uo pipefail
@@ -36,7 +38,7 @@ while [ $# -gt 0 ]; do
     --max) max=${2:?--max needs a number}; shift ;;
     --guidance) guidance_file=${2:?--guidance needs a file}; shift ;;
     --create-labels) create_labels=1 ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -127,12 +129,12 @@ start_worker() {
   [ -n "$guidance_file" ] && [ -s "$guidance_file" ] && guidance="Guidance from the user for this work:
 $(cat "$guidance_file")"
 
-  task=$(W_ISSUE=$n W_REPO=$repo W_TITLE=$title W_URL=$url W_WORKTREE=$worktree \
+  task=$(W_ISSUE=$n W_MAIN=$main W_REPO=$repo W_TITLE=$title W_URL=$url W_WORKTREE=$worktree \
     W_BRANCH=$branch W_BASE=origin/main W_GUIDANCE=$guidance \
     python3 -I -c '
 import os, sys
 t = open(sys.argv[1]).read()
-for k in ("ISSUE", "REPO", "TITLE", "URL", "WORKTREE", "BRANCH", "BASE", "GUIDANCE"):
+for k in ("ISSUE", "MAIN", "REPO", "TITLE", "URL", "WORKTREE", "BRANCH", "BASE", "GUIDANCE"):
     t = t.replace("{{" + k + "}}", os.environ["W_" + k])
 print(t.rstrip())
 ' "$here/worker-prompt.md")
