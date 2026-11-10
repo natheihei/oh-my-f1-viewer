@@ -16,6 +16,7 @@ import {
   swap,
   ungroup,
   type Cell,
+  type CellPx,
   type ComponentSpec,
   type LayoutState,
   type Rect,
@@ -61,8 +62,8 @@ export const layout = {
     return next != null;
   },
   reset: () => set(resetLayout(get())),
-  /** The grid's column width on screen changed, in pixels. */
-  measure: (columnPx: number) => set(measure(get(), columnPx)),
+  /** The grid's cell size on screen changed, in pixels. */
+  measure: (cell: CellPx) => set(measure(get(), cell)),
   mouseEdit: (id: string, rect: Rect) => set(applyMouseEdit(get(), id, rect)),
   swap: (idA: string, idB: string) => set(swap(get(), idA, idB)),
   tiles: () => allTiles(get()),
