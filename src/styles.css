@@ -31,6 +31,9 @@
   }
   * {
     border-radius: 0 !important;
+    /* Every scrollable area (the suggestion strip, the palette history) gets a thin themed bar, not Chromium's default. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-faint) transparent;
   }
 }
 
