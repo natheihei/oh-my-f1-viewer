@@ -1,8 +1,10 @@
 /** Connects the agent to the palette: what the user types goes to it, and what it says comes back. */
 import type { AgentEvent } from '../../shared/api';
 import { askAgent, connectTools } from '../agent/bridge';
+import { setSpoilerAsker } from '../agent/spoilerGate';
 import { host, read } from '../host';
 import { loadEvents } from './commands';
+import { askViewer, lookAhead } from './lookAhead';
 import { palette, usePalette } from './palette';
 
 const AUTO_HIDE_MS = 2000;
@@ -14,6 +16,7 @@ export function connectAgent(): () => void {
   const onEvent = (event: AgentEvent) => {
     switch (event.type) {
       case 'turn_start':
+        lookAhead.endTurn();
         streaming = null;
         finalText = '';
         palette.setBusy(true);
@@ -31,6 +34,7 @@ export function connectAgent(): () => void {
         streaming = null;
         break;
       case 'turn_end': {
+        lookAhead.endTurn();
         palette.setBusy(false);
         // Only hide once the agent did something and isn't waiting on an answer, or on suggestions.
         const asking = finalText.includes('?');
@@ -39,6 +43,7 @@ export function connectAgent(): () => void {
         break;
       }
       case 'error':
+        lookAhead.endTurn();
         palette.setBusy(false);
         palette.push('error', event.message);
         break;
@@ -47,9 +52,11 @@ export function connectAgent(): () => void {
 
   const offEvent = host.agent.onEvent(onEvent);
   const offTools = connectTools();
+  const offAsker = setSpoilerAsker(askViewer);
   return () => {
     offEvent();
     offTools();
+    offAsker();
   };
 }
 
@@ -76,6 +83,7 @@ export async function sendToAgent(text: string): Promise<void> {
 /** Stops the agent mid-turn. A stopped turn never reports its end, so the palette stops waiting here. */
 export async function stopTurn(): Promise<void> {
   await host.agent.cancel();
+  lookAhead.endTurn();
   palette.setBusy(false);
   palette.push('system', 'Stopped.');
 }
