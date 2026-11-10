@@ -168,8 +168,10 @@ Reasons can reach the agent, so they must not hint at what happened in the race.
 
 ## Per-year and per-race differences
 
-**Not built, and waiting for its first real case.** Today nothing needs one: the default parser handles every season, and a season with no data just
-fails to load, which `state: 'failed'` reports. Build this when a season or Grand Prix needs its own parser, or needs the app to behave differently.
+**Started, with one rule.** [src/data/spec.ts](../src/data/spec.ts) holds the tree below, and `specFor` resolves it for the open session
+into `live.spec`. Its first entry is `chaseAid`: 2026's cars have no DRS, so the 1 second line in the gap chart and the battle card is called
+Overtake ("OT") from 2026. Parsers aren't in it yet, since the default parser still handles every season and a season with no data just fails
+to load, which `state: 'failed'` reports. Add them when a season or Grand Prix needs its own.
 
 The spec is a tree that follows how F1 is organised: defaults at the root, then year, Grand Prix and session. Each level overrides the one above
 it. The file names parsers and the registry holds their code, so a new case means at most one parser and one entry:
