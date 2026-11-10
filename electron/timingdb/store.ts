@@ -14,13 +14,14 @@ import {
   type SessionCoverage,
   type SessionObjects,
   type SqlRows,
+  type SqlTableInfo,
 } from '../../shared/sessionData';
 import type { Emission } from './processors';
 import {
   asOfSql,
   createTableSql,
   INGEST_VERSION,
-  LAP_SUMMARY_SQL,
+  DERIVED_VIEWS,
   quote,
   rowColumns,
   sqlColumns,
@@ -73,13 +74,15 @@ export class TimingStore {
   private statements = new Map<string, StatementSync>();
   private querySession = -1;
   private queryPlayhead = -1;
+  /** Every table SQL can read, and its columns, as SQLite reports them, by name. */
+  readonly tables: SqlTableInfo[];
 
   constructor(file: string) {
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.migrate();
     this.reader = new DatabaseSync(file, { readOnly: true });
-    this.setUpReader();
+    this.tables = this.setUpReader();
   }
 
   close(): void {
@@ -129,19 +132,29 @@ export class TimingStore {
 
   // --- Reads for consumers ---
 
-  private setUpReader(): void {
+  /** Builds the views consumers read, and returns what they are. */
+  private setUpReader(): SqlTableInfo[] {
     // Marked deterministic so SQLite reads each once per query instead of once per row. They only
     // change between queries.
     this.reader.function('f1a_session', { deterministic: true }, () => this.querySession);
     this.reader.function('f1a_playhead', { deterministic: true }, () => this.queryPlayhead);
+    // One view per stored table, limited to the session and the playhead.
+    const derived = new Map(DERIVED_VIEWS.map((view) => [view.name as string, view]));
     for (const name of SQL_TABLES) {
-      if (name === 'lap_summary') continue;
-      const table = TABLE_BY_NAME.get(name)!;
+      if (derived.has(name)) continue;
+      const table = TABLE_BY_NAME.get(name as RowTable)!;
       const columns = sqlColumns(table).map(quote).join(', ');
       this.reader.exec(`CREATE TEMP VIEW ${quote(name)} AS SELECT ${columns} FROM (${asOfSql(table, 'f1a_session()', 'f1a_playhead()')})`);
     }
-    // Built on the views above, so it's limited to the playhead just as they are.
-    this.reader.exec(`CREATE TEMP VIEW lap_summary AS ${LAP_SUMMARY_SQL}`);
+    // Built on the views above, so they're limited to the playhead just as those are.
+    for (const view of DERIVED_VIEWS) this.reader.exec(`CREATE TEMP VIEW ${quote(view.name)} AS ${view.sql}`);
+    // What there is to read, as SQLite sees it. Asked before the authorizer below, which would refuse it.
+    const columns = this.reader.prepare("SELECT name FROM pragma_table_info(?, 'temp') ORDER BY cid");
+    const views = this.reader.prepare("SELECT name FROM sqlite_temp_master WHERE type = 'view' ORDER BY name").all() as Array<{ name: string }>;
+    const tables = views.map(({ name }) => {
+      const about = derived.get(name)?.about;
+      return { name, columns: (columns.all(name) as Array<{ name: string }>).map((column) => column.name), ...(about ? { about } : {}) };
+    });
     this.reader.setAuthorizer((action, a, b, database, view) => {
       switch (action) {
         case constants.SQLITE_SELECT:
@@ -157,6 +170,7 @@ export class TimingStore {
           return constants.SQLITE_DENY;
       }
     });
+    return tables;
   }
 
   /** Runs a consumer's query as of the playhead. Fails on anything but reading the views. */

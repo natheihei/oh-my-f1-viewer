@@ -9,9 +9,9 @@
  *   version, and a read picks the newest one the playhead has reached. So the table reads as it stood
  *   at that moment, and a stint's `lap_end` can't reveal a pit stop that hasn't happened yet.
  *
- * The definitions live in shared/sessionTables.ts, so the renderer can describe them. This builds the SQL.
+ * The definitions live in shared/sessionTables.ts. This builds the SQL, and the views derived from the others.
  */
-import type { TableDefinition } from '../../shared/sessionTables';
+import type { DerivedTable, TableDefinition } from '../../shared/sessionTables';
 
 export { rowColumns, sqlColumns, TABLE_BY_NAME, TABLES, visibleColumns, type RowTable, type TableDefinition } from '../../shared/sessionTables';
 
@@ -66,7 +66,7 @@ const OPEN_END = Number.MAX_SAFE_INTEGER;
  * gaps are the last before the lap's end, and the lap in progress, which has no end yet, gets the latest.
  * `track_status` is the worst during the lap: Red, SCDeployed, VSCDeployed, VSCEnding, Yellow, then AllClear.
  */
-export const LAP_SUMMARY_SQL = `
+const LAP_SUMMARY_SQL = `
 WITH l AS MATERIALIZED (
   SELECT session_key, meeting_key, driver_number, lap_number, date_start, lap_duration,
     duration_sector_1, duration_sector_2, duration_sector_3, is_pit_out_lap,
@@ -103,3 +103,17 @@ SELECT b.session_key, b.meeting_key, b.driver_number, b.lap_number, b.date_start
 FROM b
 LEFT JOIN s st ON st.driver_number = b.driver_number
   AND st.stint_number = (SELECT MAX(stint_number) FROM s WHERE driver_number = b.driver_number AND lap_start <= b.lap_number)`;
+
+/**
+ * Views built from the other views rather than over a stored table, so they only show what those show
+ * at the playhead. Each is created after the others, in this order. `about` goes to the agent with the
+ * view's columns.
+ */
+export const DERIVED_VIEWS: Array<{ name: DerivedTable; sql: string; about?: string }> = [
+  {
+    name: 'lap_summary',
+    sql: LAP_SUMMARY_SQL,
+    about:
+      'One row per driver per lap. Its date_start and date_end work with seek_to, so it is the easiest table for going to lap N, or for finding when something changed between two drivers.',
+  },
+];

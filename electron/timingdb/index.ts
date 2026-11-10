@@ -134,12 +134,12 @@ export class TimingDb {
   // --- A session ---
 
   private async status(sessionKey: number, state: DataStatus['state'], reason: string | null = null): Promise<void> {
-    const { coverage, clock } = await this.call('status', sessionKey);
-    this.deps.send('data:status', { sessionKey, state, reason, coverage, clock, sessionStartSec: this.sessionStartSec } satisfies DataStatus);
+    const { coverage, clock, tables } = await this.call('status', sessionKey);
+    this.deps.send('data:status', { sessionKey, state, reason, coverage, clock, sessionStartSec: this.sessionStartSec, tables } satisfies DataStatus);
   }
 
   private refuse(state: 'unsupported' | 'failed', reason: string): void {
-    this.deps.send('data:status', { sessionKey: null, state, reason, coverage: null, clock: null, sessionStartSec: null } satisfies DataStatus);
+    this.deps.send('data:status', { sessionKey: null, state, reason, coverage: null, clock: null, sessionStartSec: null, tables: null } satisfies DataStatus);
   }
 
   /** Called when a session opens. Replies at once, and reports progress through `data:status`. */
@@ -276,7 +276,7 @@ export class TimingDb {
     const session = { meta: null as SessionMeta | null, buffer: [] as LiveRecord[], timer: null as ReturnType<typeof setInterval> | null, query };
     this.live = session;
     session.timer = setInterval(() => void this.flushLive(), LIVE_FLUSH_MS);
-    this.deps.send('data:status', { sessionKey: null, state: 'loading', reason: null, coverage: null, clock: null, sessionStartSec: null } satisfies DataStatus);
+    this.deps.send('data:status', { sessionKey: null, state: 'loading', reason: null, coverage: null, clock: null, sessionStartSec: null, tables: null } satisfies DataStatus);
     this.deps.connectLive(TIMING_FEEDS, (record) => this.liveRecord(record), (status) => this.liveConnection(status));
     const found = await this.deps.resolveSession(year, query).catch(() => null);
     if (this.live !== session) return;

@@ -16,6 +16,7 @@ import type {
   SessionDataView,
   SessionObjects,
   SqlRows,
+  SqlTableInfo,
 } from '../../shared/sessionData';
 import { buildTimeMap, playheadOf, videoTimeOf, type TimeMap } from './timeMap';
 
@@ -118,10 +119,13 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let revision = 0;
   let lastObjects = '';
   let objects: SessionObjects = NO_OBJECTS;
+  let lastTables = '';
+  /** Kept as one object while it's unchanged, so it never makes anything render again. */
+  let tables: SqlTableInfo[] = [];
 
   const publish = () => {
     if (destroyed || !ready || sessionKey === null || !datasets) return;
-    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, ...objects }), true);
+    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);
   };
 
   const read = async () => {
@@ -162,6 +166,11 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     sessionKey = status.sessionKey;
     datasets = status.coverage?.datasets ?? null;
     if (status.clock) map = buildTimeMap(status.clock, status.sessionStartSec);
+    const sentTables = JSON.stringify(status.tables);
+    if (status.tables && sentTables !== lastTables) {
+      lastTables = sentTables;
+      tables = deepFreeze(status.tables);
+    }
     if (status.state === 'loading') {
       if (!ready) useSessionData.setState({ state: 'loading', sessionKey, datasets }, true);
       return;

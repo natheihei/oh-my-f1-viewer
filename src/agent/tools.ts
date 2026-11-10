@@ -13,8 +13,6 @@
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentToolDefinition, Channel, SessionType } from '../../shared/api';
-import { SQL_TABLES } from '../../shared/sessionData';
-import { LAP_SUMMARY_COLUMNS, sqlColumns, TABLE_BY_NAME } from '../../shared/sessionTables';
 import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
@@ -104,21 +102,15 @@ export function formatClock(t: number): string {
 /** At most this many rows go back to the model. */
 export const MAX_QUERY_ROWS = 200;
 
-/** Generated from the table definitions, so it can't drift from what the database holds. */
-function describeTables(): string {
-  const shared = new Set(['session_key', 'meeting_key', 'visible_from']);
-  const columnsOf = (name: (typeof SQL_TABLES)[number]) =>
-    name === 'lap_summary' ? LAP_SUMMARY_COLUMNS : sqlColumns(TABLE_BY_NAME.get(name)!).filter((c) => !shared.has(c));
-  return SQL_TABLES.map((name) => `${name}: ${columnsOf(name).join(', ')}`).join('\n');
-}
-
-const QUERY_DESCRIPTION = [
-  'Read the open session\'s timing data with SQLite. SELECT only.',
+/**
+ * The same on every turn, so it stays in the cached part of the request. The tables are in the system
+ * prompt's reference instead, from `sessionData.tables`: see describeTables in bridge.ts.
+ */
+export const QUERY_DESCRIPTION = [
+  'Read the open session\'s timing data with SQLite. SELECT only. The tables and their columns are in the table list at the end of the system prompt, once the session\'s data is ready.',
   'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen. asOf "session" reads everything the session holds, including what the user has not watched yet: use it only to find a moment to jump to with seek_to, and never tell the user what it showed.',
-  'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
+  'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from, in the tables that have it, is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
   `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
-  'Every table also has session_key, meeting_key and visible_from. Tables and their other columns:',
-  describeTables(),
 ].join('\n');
 
 const AsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
