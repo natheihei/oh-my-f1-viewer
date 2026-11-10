@@ -65,7 +65,8 @@ describe('session data', () => {
     handle.update(500, null);
     await flush();
     expect(data.objects).toHaveBeenLastCalledWith(20, BASE + 2_000_000);
-    expect(useSessionData.getState()).toMatchObject({ state: 'ready', playheadMs: BASE + 2_000_000 });
+    expect(useSessionData.getState()).toMatchObject({ state: 'ready', datasets: coverage.datasets, playheadMs: BASE + 2_000_000 });
+    expect(useSessionData.getState()).not.toHaveProperty('coverage');
     handle.destroy();
   });
 

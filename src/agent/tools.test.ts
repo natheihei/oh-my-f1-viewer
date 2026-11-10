@@ -394,7 +394,7 @@ describe('seeking to a moment', () => {
   const ready = (playheadMs: number | null): SessionDataView => ({
     state: 'ready',
     sessionKey: 9,
-    coverage: { source: 'archive', datasets: {} as never, missingFeeds: [], gaps: [], capturedFrom: null },
+    datasets: {} as never,
     revision: 1,
     playheadMs,
     drivers: [driver('VER', 1), driver('HAM', 44)],
@@ -465,7 +465,7 @@ describe('seeking to a moment', () => {
   });
 
   it('refuses a query until the timing data is ready', async () => {
-    useSessionData.setState({ state: 'loading', sessionKey: 9, coverage: null }, true);
+    useSessionData.setState({ state: 'loading', sessionKey: 9, datasets: null }, true);
     await expect(runTool('query_session', { sql: 'SELECT 1' })).rejects.toThrow(/timing data isn't available. It is still loading/);
     useSessionData.setState({ state: 'failed', reason: 'The archive was refused.' }, true);
     await expect(runTool('seek_to', { date: PLAYHEAD })).rejects.toThrow(/The archive was refused/);
@@ -528,7 +528,7 @@ describe('seeking to a moment', () => {
     expect(state).toContain('drivers: VER 1, HAM 44');
     useSessionData.setState(ready(null), true);
     expect(describeAppState()).not.toContain('playhead:');
-    useSessionData.setState({ state: 'loading', sessionKey: 9, coverage: null }, true);
+    useSessionData.setState({ state: 'loading', sessionKey: 9, datasets: null }, true);
     expect(describeAppState()).not.toContain('drivers:');
   });
 });
