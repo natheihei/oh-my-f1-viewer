@@ -4,6 +4,7 @@ import type { Channel, CircuitView, ScheduleView, SessionDataView, SessionInfo }
 import { useEventIndex, type EventIndex } from '../data/catalog';
 import { useSession, type ClockState, type StreamView } from '../data/session';
 import { useCircuit, useSchedule, useSessionData } from '../data/sessionData';
+import { specFor, type Spec } from '../data/spec';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useComponents, type ComponentInfo } from './components';
@@ -33,6 +34,8 @@ export interface Live {
   circuit: CircuitView;
   /** Every component a tile can show, without its code: what the agent picks from. */
   components: ComponentInfo[];
+  /** What differs by season, Grand Prix or session, for the open one. The defaults when none is open. */
+  spec: Spec;
 }
 
 export function read(): Live {
@@ -52,6 +55,7 @@ export function read(): Live {
     sessionData: useSessionData.getState(),
     circuit: useCircuit.getState(),
     components: useComponents.getState().list,
+    spec: specFor(session),
   };
 }
 

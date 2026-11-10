@@ -469,16 +469,16 @@ describe('battle_card', () => {
   ];
 
   it('sets the two drivers side by side, in the order asked for', () => {
-    const m = battleModel(rows, [1, 44]);
+    const m = battleModel(rows, [1, 44], 1);
     expect(m.sides[0]).toEqual({ driver: 1, position: 2, last: 90.3, best: 90, compound: 'HARD', age: 2, trap: 324 });
     expect(m.sides[1]).toMatchObject({ driver: 44, position: 1, last: 90.6, best: 90.4, trap: 318 });
     expect(m.ahead).toBe(1);
   });
 
-  it("takes the gap from the car behind's interval, says it is within DRS range, and closing over three laps", () => {
-    const m = battleModel(rows, [44, 1]);
+  it("takes the gap from the car behind's interval, says it is within range, and closing over three laps", () => {
+    const m = battleModel(rows, [44, 1], 1);
     expect(m.gap).toBeCloseTo(0.8);
-    expect(m.drs).toBe(true);
+    expect(m.inRange).toBe(true);
     // Lap 5 is in progress, so the trend runs from the end of lap 1 to the end of lap 4: (1.9 − 3) / 3.
     expect(m.trend).toBeCloseTo(-0.3667, 3);
   });
@@ -488,26 +488,26 @@ describe('battle_card', () => {
     const withStints = (of44: number[], of1: number[]) =>
       rows.map((r) => (r.kind === 'lap' && typeof r.lap_number === 'number' ? { ...r, stint_number: (r.driver_number === 44 ? of44 : of1)[r.lap_number - 1] } : r));
     // 1 stopped in that time and 44 didn't: the change in the gap is a pit stop.
-    expect(battleModel(withStints([1, 1, 1, 1, 1], [1, 2, 2, 2, 2]), [44, 1]).trend).toBeNull();
+    expect(battleModel(withStints([1, 1, 1, 1, 1], [1, 2, 2, 2, 2]), [44, 1], 1).trend).toBeNull();
     // Both stopped in that time: the stops roughly cancel.
-    expect(battleModel(withStints([1, 2, 2, 2, 2], [1, 1, 2, 2, 2]), [44, 1]).trend).toBeCloseTo(-0.3667, 3);
+    expect(battleModel(withStints([1, 2, 2, 2, 2], [1, 1, 2, 2, 2]), [44, 1], 1).trend).toBeCloseTo(-0.3667, 3);
     // A two-stopper catching a one-stopper, both stops long past: the trend shows.
-    expect(battleModel(withStints([2, 2, 2, 2, 2], [3, 3, 3, 3, 3]), [44, 1]).trend).toBeCloseTo(-0.3667, 3);
+    expect(battleModel(withStints([2, 2, 2, 2, 2], [3, 3, 3, 3, 3]), [44, 1], 1).trend).toBeCloseTo(-0.3667, 3);
   });
 
   it('uses the difference of the gaps to the leader when they are not nose to tail', () => {
     const apart = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 3, gap_to_leader: 1.4, interval: 0.3 } : r));
-    const m = battleModel(apart, [44, 1]);
+    const m = battleModel(apart, [44, 1], 1);
     expect(m.gap).toBeCloseTo(1.4);
-    expect(m.drs).toBe(false);
+    expect(m.inRange).toBe(false);
   });
 
   it("can't tell the gap to a lapped car, and has no trend without three laps", () => {
     const lapped = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 9, gap_to_leader: '+1 LAP', interval: 2 } : r));
-    expect(battleModel(lapped, [44, 1])).toMatchObject({ gap: null, drs: null });
+    expect(battleModel(lapped, [44, 1], 1)).toMatchObject({ gap: null, inRange: null });
     const early = rows.filter((r) => r.kind === 'trap' || (r.lap_number as number) <= 2);
-    expect(battleModel(early, [44, 1]).trend).toBeNull();
-    expect(battleModel([], [44, 1])).toMatchObject({ ahead: null, gap: null, trend: null, drs: null });
+    expect(battleModel(early, [44, 1], 1).trend).toBeNull();
+    expect(battleModel([], [44, 1], 1)).toMatchObject({ ahead: null, gap: null, trend: null, inRange: null });
   });
 });
 

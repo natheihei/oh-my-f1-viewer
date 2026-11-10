@@ -175,12 +175,12 @@ async function shoot(moment) {
     if (name === 'small') {
       // The battle card and the latest stops in numbers, beside the tower's rows for the pair, to check by hand.
       const check = await page.evaluate(async (pair) => {
-        const { host } = await import('/src/host/index.ts');
+        const { host, read } = await import('/src/host/index.ts');
         const battle = await import('/src/components/charts/BattleCard.tsx');
         const stops = await import('/src/components/charts/PitStops.tsx');
         const tower = await import('/src/components/charts/TimingTower.tsx');
         const sectors = await import('/src/components/charts/SectorDelta.tsx');
-        const b = battle.battleModel((await host.data.sql({ sql: battle.SQL, params: pair })).rows, pair);
+        const b = battle.battleModel((await host.data.sql({ sql: battle.SQL, params: pair })).rows, pair, read().spec.chaseAid.within);
         const s = sectors.sectorModel((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
         const p = stops.stopsModel((await host.data.sql({ sql: stops.sqlFor(0) })).rows).stops.slice(0, 4);
         const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));

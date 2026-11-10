@@ -1,7 +1,7 @@
-/** Two drivers side by side in numbers: positions, the gap and its trend, laps, tyres, speed trap and DRS range. */
+/** Two drivers side by side in numbers: positions, the gap and its trend, laps, tyres, speed trap and DRS or Overtake range. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
+import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -30,8 +30,6 @@ const NEEDS = ['timing' as const];
 
 /** The trend is the change over this many laps. */
 const TREND_LAPS = 3;
-/** Within a second of the car ahead, DRS opens. From the interval, so it works live too. */
-const DRS = 1;
 
 // Both drivers' laps, then each one's best speed-trap reading so far.
 export const SQL = `
@@ -62,12 +60,15 @@ export interface BattleModel {
   gap: number | null;
   /** How much the gap grew per lap over the last laps: negative is closing. */
   trend: number | null;
-  /** The car behind is within a second of the one ahead. Null when the gap isn't known. */
-  drs: boolean | null;
+  /** The car behind is close enough for the season's DRS or Overtake. Null when the gap isn't known. */
+  inRange: boolean | null;
 }
 
-/** The rows of `SQL` as the two sides of the card, and what's between them. */
-export function battleModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: readonly [number, number]): BattleModel {
+/**
+ * The rows of `SQL` as the two sides of the card, and what's between them. `within` is the gap, in seconds, under
+ * which the car behind gets DRS or Overtake. It's from the interval, so it works live too.
+ */
+export function battleModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: readonly [number, number], within: number): BattleModel {
   const laps = (driver: number) =>
     rows.filter((r) => r.kind === 'lap' && num(r.driver_number) === driver && num(r.lap_number) !== null).sort((x, y) => num(x.lap_number)! - num(y.lap_number)!);
   const own = [laps(a), laps(b)];
@@ -106,11 +107,13 @@ export function battleModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]
 
   const trend = gapTrend([...own[0], ...own[1]], [a, b], TREND_LAPS);
 
-  return { sides, ahead, gap, trend, drs: gap === null ? null : gap < DRS };
+  return { sides, ahead, gap, trend, inRange: gap === null ? null : gap < within };
 }
 
 interface Drawn extends BattleModel {
   styles: [DriverStyle, DriverStyle];
+  /** The season's DRS or Overtake, from the spec. */
+  aid: ChaseAid;
 }
 
 /** Which side has the better value, so it's set in weight: lower for times, higher for speed. */
@@ -148,7 +151,7 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
   });
   text(ctx, m.gap === null ? '—' : m.gap.toFixed(m.gap < 10 ? 2 : 1), mid, headY, { align: 'center', color: c.ink, size: big, weight: 600 });
   if (compact) {
-    if (m.drs) text(ctx, 'DRS', mid, headY + big, { align: 'center', color: c.ink, size: 9, weight: 600 });
+    if (m.inRange) text(ctx, m.aid.label, mid, headY + big, { align: 'center', color: c.ink, size: 9, weight: 600 });
     return;
   }
   if (m.trend !== null) {
@@ -164,13 +167,13 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
     { value: va, weight: win === 0 ? 600 : 400 },
     { value: vb, weight: win === 1 ? 600 : 400 },
   ];
-  const drs = (i: 0 | 1): Cell => ({ value: m.drs === null || i !== behind ? '' : m.drs ? 'IN RANGE' : '—', weight: m.drs ? 600 : 400 });
+  const range = (i: 0 | 1): Cell => ({ value: m.inRange === null || i !== behind ? '' : m.inRange ? 'IN RANGE' : '—', weight: m.inRange ? 600 : 400 });
   const rows: Array<[string, Cell, Cell]> = [
     ['LAST', ...pair(formatLapTime(a.last), formatLapTime(b.last), better(a.last, b.last, true))],
     ['BEST', ...pair(formatLapTime(a.best), formatLapTime(b.best), better(a.best, b.best, true))],
     ['TYRE', { value: '' }, { value: '' }],
     ['TRAP', ...pair(a.trap === null ? '' : `${a.trap}`, b.trap === null ? '' : `${b.trap}`, better(a.trap, b.trap, false))],
-    ['DRS', drs(0), drs(1)],
+    [m.aid.label, range(0), range(1)],
   ];
   const first = headY + big / 2 + 18;
   const pitch = Math.min(26, Math.max(13, (height - first - 4) / rows.length));
@@ -213,9 +216,13 @@ function BattleCard({ props }: { props: { drivers: number[] } }) {
   const [a, b] = props.drivers;
   const view = useSql(SQL, [a, b]);
   const styles = useDriverStyles();
+  const aid = useLive((s) => s.spec.chaseAid);
   const model = useMemo(
-    () => (view.state === 'ready' ? { ...battleModel(view.rows, [a, b]), styles: [styleOf(styles, a), styleOf(styles, b)] as [DriverStyle, DriverStyle] } : null),
-    [view, styles, a, b],
+    () =>
+      view.state === 'ready'
+        ? { ...battleModel(view.rows, [a, b], aid.within), styles: [styleOf(styles, a), styleOf(styles, b)] as [DriverStyle, DriverStyle], aid }
+        : null,
+    [view, styles, a, b, aid],
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
@@ -228,7 +235,7 @@ export default defineComponent({
   name: 'battle_card',
   title: 'Battle card',
   description:
-    'Two drivers side by side in numbers: positions, the gap and whether it is closing, last and best lap, tyres and their age, speed trap, and whether the car behind is within DRS range. Suggest it with a battle when there is little room on screen.',
+    'Two drivers side by side in numbers: positions, the gap and whether it is closing, last and best lap, tyres and their age, speed trap, and whether the car behind is within range of DRS (Overtake from 2026). Suggest it with a battle when there is little room on screen.',
   args: Type.Object({ drivers: Drivers }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

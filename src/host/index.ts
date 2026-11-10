@@ -27,6 +27,7 @@ export { MAX_SUGGESTED_STREAMS, type SuggestionsView } from './suggestions';
 export type { Countdown } from './viewing';
 export type { Service } from '../data/account';
 export { FIRST_SEASON, type EventIndex } from '../data/catalog';
+export type { ChaseAid, Spec } from '../data/spec';
 export type { ComponentSpec, GroupNode, LayoutState } from '../layout/model';
 export type { Circuit, CircuitView, Dataset, DriverEntry, SessionDataView, StartingGridEntry } from '../../shared/sessionData';
 
