@@ -531,13 +531,21 @@ interface Lap {
   segments_sector_1: Array<number | null> | null;
   segments_sector_2: Array<number | null> | null;
   segments_sector_3: Array<number | null> | null;
+  /** The car retired during this lap. */
+  is_out: boolean;
 }
 
 type SectorNumber = 1 | 2 | 3;
 
+/**
+ * A car is out from when `DriverRaceInfo` says `IsOut`, or `TimingData` says `Retired`: the second
+ * only for archives without the first, since it's missing for some retirements. `Stopped` doesn't
+ * count, as a car can restart. Neither has been seen to go back, so once out a car stays out.
+ */
 class LapsProcessor implements Processor {
-  topics = ['SessionInfo', 'RaceControlMessages', 'TimingAppData', 'TimingData', 'SessionData'];
+  topics = ['SessionInfo', 'RaceControlMessages', 'TimingAppData', 'TimingData', 'SessionData', 'DriverRaceInfo'];
   private started = false;
+  private out = new Set<number>();
   private isRace: boolean | null;
   private chequeredFlag: number | null = null;
   private laps = new Map<number, Lap[]>();
@@ -562,6 +570,7 @@ class LapsProcessor implements Processor {
       segments_sector_1: null,
       segments_sector_2: null,
       segments_sector_3: null,
+      is_out: this.out.has(driver),
     };
     const laps = this.laps.get(driver) ?? [];
     laps.push(lap);
@@ -630,6 +639,11 @@ class LapsProcessor implements Processor {
       }
       return;
     }
+    if (topic === 'DriverRaceInfo') {
+      for (const [driver, data] of driverEntries(content)) if (data.IsOut === true) this.markOut(driver, snapshot === true);
+      yield* this.flush();
+      return;
+    }
     if (snapshot) {
       this.fromSnapshot(topic, content);
       yield* this.flush();
@@ -652,11 +666,23 @@ class LapsProcessor implements Processor {
     }
     if (topic !== 'TimingData') return;
     for (const [driver, data] of driverEntries(content?.Lines)) {
+      if (data.Retired === true) this.markOut(driver, true);
       if (typeof data.NumberOfLaps !== 'number') continue;
       const lapNumber = data.NumberOfLaps + (this.isRace ? 1 : 0);
       const laps = this.laps.get(driver);
       if (!laps?.length || laps[laps.length - 1].lap_number < lapNumber) this.updated.add(this.add(driver, lapNumber));
     }
+  }
+
+  /**
+   * Marks the lap the car is on. A snapshot can say a car is out before saying which lap it's on, so
+   * then the mark waits for the lap to be made.
+   */
+  private markOut(driver: number, snapshot: boolean): void {
+    if (this.out.has(driver)) return;
+    this.out.add(driver);
+    if (snapshot && !this.laps.has(driver)) return;
+    this.update(driver, 'is_out', true);
   }
 
   private fromTiming(driver: number, data: Record<string, any>, time: number): void {
@@ -704,6 +730,7 @@ class LapsProcessor implements Processor {
 
     // F1 also sends `PitOut: false`, which marked every car's first lap until it was read as a value.
     if (data.PitOut === true) this.update(driver, 'is_pit_out_lap', true);
+    if (data.Retired === true) this.markOut(driver, false);
   }
 
   /** Lap 1 has no lap time of its own. It runs from the start to the beginning of lap 2. */
