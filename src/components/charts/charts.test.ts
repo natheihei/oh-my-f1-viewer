@@ -18,6 +18,9 @@ const { sectorModel, spanOf } = await import('./SectorDelta');
 const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, wrap } = await import('./RaceControl');
 const { weatherModel } = await import('./Weather');
+const { trackModel, placeLabels } = await import('./TrackMap');
+const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
+const { telemetryModel } = await import('./TelemetryLive');
 const { components } = await import('../registry');
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
@@ -613,6 +616,114 @@ describe('weather', () => {
   });
 });
 
+describe('track_map', () => {
+  it("keeps each car's latest position, and leaves out the feed's (0, 0) placeholder", () => {
+    const rows = [
+      { driver_number: 44, x: 100, y: 200, date: 1000 },
+      { driver_number: 44, x: 110, y: 210, date: 2000 },
+      { driver_number: 1, x: 0, y: 0, date: 2000 },
+      { driver_number: 4, x: -5, y: 7, date: 2000 },
+    ];
+    expect(trackModel(rows)).toEqual([
+      { driver: 4, x: -5, y: 7 },
+      { driver: 44, x: 110, y: 210 },
+    ]);
+  });
+
+  it('pushes labels off the line, and apart when cars are close', () => {
+    const overlap = (a: { x: number; y: number; w: number; h: number }, b: typeof a) => Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
+    // A horizontal line, its outside up; two cars nearly on top of each other.
+    const line = Array.from({ length: 41 }, (_, i) => [i * 5, 100] as const);
+    const label = (x: number) => ({ x, y: 100, nx: 0, ny: -1, w: 24, h: 10 });
+    const [a, b] = placeLabels([label(100), label(102)], [], line);
+    expect(a.y).toBeLessThan(100 - 5);
+    expect(overlap(a, b)).toBe(false);
+    // Kept inside the tile: with no room above, the label goes below the line.
+    expect(placeLabels([{ x: 100, y: 8, nx: 0, ny: -1, w: 24, h: 10 }], [], [], { width: 200, height: 200 })[0].y).toBeGreaterThan(8);
+    for (const box of [a, b]) expect(line.some(([x, y]) => Math.abs(x - box.x) * 2 < box.w && Math.abs(y - box.y) * 2 < box.h)).toBe(false);
+  });
+});
+
+describe('speed_trace', () => {
+  const lap = (driver_number: number, lap_number: number, date_start: number, more: Record<string, unknown> = {}) => ({
+    driver_number,
+    lap_number,
+    date_start,
+    lap_duration: 10,
+    is_pit_in_lap: 0,
+    is_pit_out_lap: 0,
+    track_status: 'AllClear',
+    ...more,
+  });
+
+  it("takes each driver's last completed lap, or the latest clean one when that isn't", () => {
+    const rows = [lap(1, 4, 30_000), lap(1, 5, 40_000), lap(44, 4, 31_000), lap(44, 5, 41_000, { is_pit_in_lap: 1 }), lap(16, 1, 0)];
+    expect(pickLaps(rows, [1, 44])).toEqual([
+      { driver: 1, lap: 5, start: 40_000, end: 50_000, latest: true },
+      { driver: 44, lap: 4, start: 31_000, end: 41_000, latest: false },
+    ]);
+    expect(pickLaps(rows, [16, 1])[0]).toBeNull();
+    expect(speedParams(pickLaps(rows, [16, 1]), [16, 1])).toEqual([16, 0, -1, 1, 37_000, 53_000]);
+  });
+
+  it('runs each lap between its own crossings of the line, scaled to the outline, and compares them at the same distance', () => {
+    // A 1,000-unit square, 100 m round. Car 1 does 10 m/s, car 44 8 m/s; both cross the line 0.3 s before the timing says.
+    const outline = { x: [0, 250, 250, 0], y: [0, 0, 250, 250] };
+    const corners = [{ number: 1, x: 250, y: 0, angle: 0, distance: 250 }];
+    const at = (u: number) => {
+      const s = ((u % 1000) + 1000) % 1000;
+      if (s < 250) return { x: s, y: 0 };
+      if (s < 500) return { x: 250, y: s - 250 };
+      if (s < 750) return { x: 750 - s, y: 250 };
+      return { x: 0, y: 1000 - s };
+    };
+    const rows: Array<Record<string, unknown>> = [];
+    for (const [driver, v, start] of [
+      [1, 100, 10_000],
+      [44, 80, 10_000],
+    ]) {
+      for (let date = start - 2000; date <= start + 1000 * (1000 / v) + 2000; date += 250) {
+        const u = ((date - start) / 1000) * v;
+        rows.push({ driver_number: driver, date, ...at(u), speed: null });
+        rows.push({ driver_number: driver, date: date + 100, x: null, y: null, speed: v * 0.36 });
+      }
+    }
+    const picks = pickLaps([lap(1, 5, 10_300), lap(44, 5, 10_300, { lap_duration: 12.5 })], [1, 44]);
+    const m = speedModel(picks, rows, { outline, corners });
+    expect(m.length).toBe(100);
+    expect(m.corners).toEqual([{ number: 1, d: 25 }]);
+    const [a, b] = m.laps;
+    expect(a!.lapTime).toBeCloseTo(10);
+    expect(b!.lapTime).toBeCloseTo(12.5);
+    expect(a!.speed[0].d).toBe(0);
+    expect(a!.speed.at(-1)!.d).toBeCloseTo(100);
+    expect(a!.speed.every((p) => p.speed === 36)).toBe(true);
+    expect(m.delta.at(-1)!.delta).toBeCloseTo(2.5);
+    expect(m.delta[200].delta).toBeCloseTo(1.25);
+    // Without positions round a whole lap, nothing to draw for that driver.
+    expect(speedModel(picks, rows.filter((r) => r.driver_number === 1), { outline, corners }).laps[1]).toBeNull();
+  });
+});
+
+describe('telemetry_live', () => {
+  const sample = (date: number, more: Record<string, unknown> = {}) => ({ date, speed: 300, rpm: 11420, n_gear: 8, throttle: 100, brake: 0, drs: null, ...more });
+
+  it('shows the latest sample, with the minute before it as a trace broken at gaps', () => {
+    const m = telemetryModel([sample(0, { speed: 100 }), sample(1000), sample(5000, { speed: 250, brake: 104, throttle: 104 })]);
+    expect(m).toMatchObject({ speed: 250, gear: 8, rpm: 11420, throttle: 100, brake: 100, drs: null });
+    expect(m.trace).toEqual([{ t: -5, speed: 100 }, { t: -4, speed: 300 }, null, { t: 0, speed: 250 }]);
+    expect(telemetryModel([]).speed).toBeNull();
+  });
+
+  it("reads DRS only when the channel holds DRS's own codes", () => {
+    expect(telemetryModel([sample(0, { drs: 8 }), sample(1000, { drs: 12 })]).drs).toBe('open');
+    expect(telemetryModel([sample(0, { drs: 0 }), sample(1000, { drs: 8 })]).drs).toBe('available');
+    expect(telemetryModel([sample(0, { drs: 1 }), sample(1000, { drs: 1 })]).drs).toBe('off');
+    // 2026's cars have no DRS, and the channel carries other codes.
+    expect(telemetryModel([sample(0, { drs: 17 }), sample(1000, { drs: 1 })]).drs).toBeNull();
+  });
+});
+
 describe('the registry', () => {
   it('declares the charts the agent can suggest', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
@@ -636,5 +747,12 @@ describe('the registry', () => {
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
+    for (const name of ['track_map', 'speed_trace', 'telemetry_live']) {
+      expect(byName[name].sessions).toBeUndefined();
+      expect(byName[name].needs).toEqual(['telemetry']);
+    }
+    expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
+    expect(byName.speed_trace.spec({ drivers: [44, 1] })).toEqual({ key: 'speed_trace:44-1', label: 'Speed 44 · 1' });
+    expect(byName.telemetry_live.spec({ drivers: [44] })).toEqual({ key: 'telemetry_live:44', label: 'Telemetry 44' });
   });
 });

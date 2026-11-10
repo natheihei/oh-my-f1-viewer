@@ -33,6 +33,14 @@ keeping it: the outline must be there, and a corner or pit loss that doesn't rea
 The key is F1's own. The schedule's meeting has it once the meeting has happened; before that, it comes from the live feed's
 `SessionInfo` (`Meeting.Circuit.Key`). Until it's known, the circuit is `loading`.
 
+**Units, checked on Austin (session 11396, circuit 9).** The outline is in `location`'s own coordinates, tenths of a metre, with y up:
+NOR's lap 20 sat a median 0.5 units (5 cm) from the outline, 1.7 at the 95th percentile and 3.7 at most, on an outline 18,100 by 10,500
+units. The outline runs 54,280 units round, 5,428 m against the official 5.513 km, and a car's path round a lap measured 53,954 to 54,237.
+Each corner's `distance` is exactly how far along the outline its point is from the outline's first point (all 20 corners matched to the
+unit), so it's in tenths of a metre too: the last corner, at 52,753, is 5,275 m from the line. The first point is at the timing line: cars
+start their laps there, give or take a few metres. The outline runs anticlockwise with y up, as Austin does, so the y axis isn't flipped.
+`rotation` is 0 there, so which way it turns is untested: the charts turn anticlockwise with y up, as FastF1 does with the same field.
+
 ## Track status, lap count and `lap_summary`
 
 - **`track_status`** (`date`, `status`) comes from F1's `TrackStatus` feed, one row per change. `status` keeps F1's own words: `AllClear`,
@@ -166,4 +174,16 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 - **The circuit is third-party and unofficial.** MultiViewer returns data dated 2021 whatever year is asked for, so a rebuilt
   pit lane or a circuit added since may be wrong or missing. An archive session whose meeting isn't in the schedule never learns
   its key, so its circuit stays `loading`.
+- **Telemetry is coarse.** `car_data` comes about 3.7 times a second and `location` 3.9, at irregular intervals (median 0.26 s, up to
+  1.4 s apart). All cars share each sample's `date`. Rows are revealed 0 to 1.9 s after their `date` (median 0.4 s), never before it. At
+  300 km/h a sample is every 20 m or so, so braking points are approximate.
+- **`laps.date_start` isn't exactly the line.** By each car's positions, it comes 0.34 s after the car crosses the outline's first point
+  (median over 4 drivers' laps 3 to 45), give or take 0.1 to 0.2 s from lap to lap, and once 1.35 s. `speed_trace` finds each lap's ends from
+  the positions instead.
+- **`car_data.drs` isn't DRS in 2026.** It's null throughout session 11396, and session 11404 has codes such as 17, 49 and 151 that aren't
+  DRS's (2026's cars have no DRS). 2025's session 9877 has the usual 0 to 14. `telemetry_live` shows DRS only when every code in its minute
+  is one of DRS's own.
+- **Odd values when stopped.** `brake` is 0 or 100, and 104 (nearly always with `throttle` 104) 47,595 times in session 11396, 46,565 of
+  them at 0 km/h. Charts cap both at 100. `location` is exactly (0, 0) before a car first leaves the garage. A retired car keeps
+  reporting where it stopped, or the garage, so `track_map` still shows it.
 - **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `retired`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.

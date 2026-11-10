@@ -7,4 +7,5 @@ export * from './laps';
 export { spreadLabels } from './labels';
 export { circuitMessage } from './status';
 export { linear, niceCeil, niceStep, ticks, type Scale } from './scale';
+export * from './track';
 export * from './values';
