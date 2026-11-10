@@ -24,6 +24,14 @@ export const SQL_TABLES = [
 
 export type SqlTable = (typeof SQL_TABLES)[number];
 
+/** A table as SQL sees it, with its columns as SQLite reports them. */
+export interface SqlTableInfo {
+  name: string;
+  columns: string[];
+  /** What it's for, on a table the agent can't tell from its columns alone. */
+  about?: string;
+}
+
 export interface Meeting {
   meeting_key: number;
   meeting_name: string;
@@ -206,6 +214,8 @@ export type SessionDataView =
       revision: number;
       /** The frame on screen, on the feed's clock in UTC milliseconds. Null when it isn't known. */
       playheadMs: number | null;
+      /** Every table SQL can read, and its columns. The same for every session. */
+      tables: SqlTableInfo[];
     } & SessionObjects);
 
 import type { FeedClock } from './feedTime';
@@ -225,4 +235,6 @@ export interface DataStatus {
   clock: FeedClock | null;
   /** The video second of lights out, from F1 TV's own sync data. Null when it has none. */
   sessionStartSec: number | null;
+  /** The tables SQL can read, as the database reports them. Null when there's no session to read. */
+  tables: SqlTableInfo[] | null;
 }

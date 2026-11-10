@@ -1,5 +1,6 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentToolCall } from '../../shared/api';
+import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
 import { driverCount, formatClock, runTool, toolDefinitions } from './tools';
 
@@ -115,10 +116,29 @@ export function describeCharts(components: ComponentInfo[]): string {
   return lines.join('\n');
 }
 
+/** Columns said once for every table that has them, instead of on each line. */
+const EVERY_TABLE = ['session_key', 'meeting_key'];
+
+/**
+ * Every table query_session can read, for the system prompt: one line each, with its columns as the
+ * database reports them. Nothing until the session's data is ready, since only then can it be queried.
+ */
+export function describeTables(data: SessionDataView): string {
+  if (data.state !== 'ready' || data.tables.length === 0) return '';
+  const shared = EVERY_TABLE.filter((column) => data.tables.every((t) => t.columns.includes(column)));
+  const lines = [`Tables for query_session. Each line: name: columns.${shared.length ? ` Every table also has ${shared.join(' and ')}.` : ''}`];
+  for (const t of data.tables) {
+    const columns = t.columns.filter((column) => !shared.includes(column)).join(', ');
+    lines.push(`${t.name}: ${columns}${t.about ? `. ${t.about}` : ''}`);
+  }
+  return lines.join('\n');
+}
+
 /** A message starts a new turn, which clears the suggestion strip. */
 export function askAgent(text: string): Promise<void> {
   const note = host.suggestions.newTurn();
-  const { events, components } = read();
-  const reference = [describeEvents(events), describeCharts(components)].filter(Boolean).join('\n\n');
+  const { events, components, sessionData } = read();
+  // Least likely to change last: opening a session only changes what follows the charts.
+  const reference = [describeEvents(events), describeCharts(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
   return host.agent.send(text, describeAppState(note), toolDefinitions(), reference);
 }

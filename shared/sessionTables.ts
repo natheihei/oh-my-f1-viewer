@@ -1,12 +1,17 @@
 /**
- * The tables behind the session database: names, keys and columns. Shared so the renderer can describe
- * them, to the agent for one. Building SQL from them is electron/timingdb/schema.ts's job.
+ * The tables behind the session database: names, keys and columns. Building SQL from them is
+ * electron/timingdb/schema.ts's job. What SQL can read, and its columns, reaches the renderer through
+ * `sessionData.tables`, as SQLite reports it.
  */
 import type { Dataset, SqlTable } from './sessionData';
 
-/** `lap_summary` is a view over the others, built in electron/timingdb/schema.ts. */
+/** Names SQL can read that have no stored table: views over the others, built in electron/timingdb/schema.ts. */
+export const DERIVED_TABLES = ['lap_summary'] as const satisfies readonly SqlTable[];
+
+export type DerivedTable = (typeof DERIVED_TABLES)[number];
+
 export type RowTable =
-  | Exclude<SqlTable, 'lap_summary'>
+  | Exclude<SqlTable, DerivedTable>
   | 'drivers'
   | 'championship_drivers'
   | 'championship_teams'
@@ -231,24 +236,3 @@ export function visibleColumns(table: TableDefinition): string[] {
 export function sqlColumns(table: TableDefinition): string[] {
   return ['session_key', 'meeting_key', ...visibleColumns(table), 'visible_from'];
 }
-
-/** What a query sees of `lap_summary`, which is a view and so has no table definition. Kept in step with LAP_SUMMARY_SQL by a test. */
-export const LAP_SUMMARY_COLUMNS = [
-  'driver_number',
-  'lap_number',
-  'date_start',
-  'date_end',
-  'lap_duration',
-  'duration_sector_1',
-  'duration_sector_2',
-  'duration_sector_3',
-  'position',
-  'gap_to_leader',
-  'interval',
-  'stint_number',
-  'compound',
-  'tyre_age',
-  'is_pit_in_lap',
-  'is_pit_out_lap',
-  'track_status',
-];

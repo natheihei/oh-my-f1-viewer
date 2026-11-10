@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventInfo } from '../../shared/api';
+import type { SessionDataView, SqlTableInfo } from '../../shared/sessionData';
 
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { describeEvents } = await import('./bridge');
+const { describeEvents, describeTables } = await import('./bridge');
 
 const day = (iso: string) => Date.parse(`${iso}T12:00:00Z`);
 const event = (pageId: number, round: number, shortName: string, start: string, end: string, isTest = false): EventInfo => ({
@@ -43,5 +44,37 @@ describe('the event list for the agent', () => {
       '10520 R21 São Paulo Grand Prix, Oct 31-Nov 2',
     ]);
     expect(text).toMatch(/^Events on F1 TV, 2023 on\./);
+  });
+});
+
+describe('the table list for the agent', () => {
+  const tables: SqlTableInfo[] = [
+    { name: 'laps', columns: ['session_key', 'meeting_key', 'driver_number', 'lap_number', 'date_start', 'visible_from'] },
+    { name: 'lap_summary', columns: ['session_key', 'meeting_key', 'driver_number', 'lap_number', 'date_start', 'date_end'], about: 'One row per driver per lap.' },
+  ];
+  const ready = (list: SqlTableInfo[]) => ({ state: 'ready', tables: list }) as unknown as SessionDataView;
+
+  it('has one line per table once the data is ready, with the columns every table has said once', () => {
+    expect(describeTables(ready(tables)).split('\n')).toEqual([
+      'Tables for query_session. Each line: name: columns. Every table also has session_key and meeting_key.',
+      'laps: driver_number, lap_number, date_start, visible_from',
+      'lap_summary: driver_number, lap_number, date_start, date_end. One row per driver per lap.',
+    ]);
+  });
+
+  it('claims visible_from only for the tables that have it', () => {
+    const text = describeTables(ready(tables));
+    expect(text).not.toMatch(/Every table also has[^\n]*visible_from/);
+    expect(text).toMatch(/^lap_summary: (?!.*visible_from)/m);
+  });
+
+  it('only claims a column for every table when every table has it', () => {
+    expect(describeTables(ready([...tables, { name: 'x', columns: ['session_key', 'a'] }]))).toMatch(/Every table also has session_key\.\n/);
+  });
+
+  it('is left out until the data is ready', () => {
+    expect(describeTables({ state: 'loading', sessionKey: 1, datasets: null })).toBe('');
+    expect(describeTables({ state: 'idle' })).toBe('');
+    expect(describeTables(ready([]))).toBe('');
   });
 });
