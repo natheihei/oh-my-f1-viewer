@@ -63,16 +63,16 @@ console.log(`     missing feeds: ${coverage?.missingFeeds.join(', ') || 'none'}`
 
 const counts = await page.evaluate(async (key) => {
   const out = {};
-  for (const table of ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps']) {
+  for (const table of ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary']) {
     out[table] = (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
   }
   const objects = await window.f1a.data.objects(key, Number.MAX_SAFE_INTEGER);
-  out.objects = Object.fromEntries(Object.entries(objects).map(([k, v]) => [k, v.length]));
+  out.objects = Object.fromEntries(Object.entries(objects).map(([k, v]) => [k, Array.isArray(v) ? v.length : v]));
   return out;
 }, sessionKey);
 console.log(`     rows: ${JSON.stringify(counts)}`);
-check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps'].every((t) => counts[t] > 0));
-check('roster and results filled', Object.values(counts.objects).every((n) => n > 0));
+check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary'].every((t) => counts[t] > 0));
+check('roster and results filled', Object.values(counts.objects).every((v) => (typeof v === 'number' ? v > 0 : v?.current > 0 && v.total > 0)));
 
 const database = path.join(os.homedir(), '.config/f1a/timing.sqlite');
 console.log(`     database: ${(statSync(database).size / 1e6).toFixed(0)} MB`);
