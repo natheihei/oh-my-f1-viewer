@@ -160,10 +160,16 @@ describe('timing_tower', () => {
   it('writes each row: the leader on its lap, the rest with gaps', () => {
     const rows = towerModel([row(4, 1, null, null), row(1, 2, 1.2, 1.2), row(44, 3, '+1 LAP', 20.5, { last_lap: null, compound: null, lap_start: null })]);
     expect(rows).toEqual([
-      { driver: 4, position: 1, gap: 'LAP 31', interval: '', last: '1:32.345', compound: 'MEDIUM', age: 19 },
-      { driver: 1, position: 2, gap: '+1.200', interval: '+1.200', last: '1:32.345', compound: 'MEDIUM', age: 19 },
-      { driver: 44, position: 3, gap: '+1 LAP', interval: '+20.500', last: '', compound: null, age: null },
+      { driver: 4, position: 1, gap: 'LAP 31', interval: '', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 1, position: 2, gap: '+1.200', interval: '+1.200', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 44, position: 3, gap: '+1 LAP', interval: '+20.500', last: '', compound: null, age: null, out: false },
     ]);
+  });
+
+  it('marks a retired car OUT, with no interval or last lap, never as the leader', () => {
+    const [first, second] = towerModel([row(4, 1, null, null, { is_out: 1 }), row(1, 2, '+2 LAPS', 30, { is_out: 1 })]);
+    expect(first).toMatchObject({ gap: 'OUT', interval: '', last: '', out: true, compound: 'MEDIUM' });
+    expect(second).toMatchObject({ gap: 'OUT', interval: '', last: '', out: true });
   });
 
   it('gives the leader the race distance when it is known', () => {
@@ -225,6 +231,15 @@ describe('race_trace', () => {
     rows.push(ls(99, 1, { date_end: 100_000 + 120_000 }));
     expect(traceModel(rows).yMax).toBe(20);
     expect(traceModel(rows, [99]).yMax).toBe(120);
+  });
+
+  it("leaves a retired car's line where it stopped, out of the range", () => {
+    // Ten cars 3 seconds apart; the last six retired, and their unfinished lap isn't a point.
+    const rows = Array.from({ length: 10 }, (_, i) => ls(i + 1, 1, { date_end: 100_000 + i * 3000 }));
+    rows.push(...[5, 6, 7, 8, 9, 10].map((d) => ls(d, 2, { date_end: null, is_out: 1 })));
+    const m = traceModel(rows);
+    expect(m.lines.find((l) => l.driver === 10)!.points).toEqual([{ lap: 1, gap: 27 }]);
+    expect(m.yMax).toBe(10);
   });
 
   it('shades the neutralised laps', () => {
@@ -343,9 +358,14 @@ describe('stint_pace', () => {
     expect(paceModel(rows).find((r) => r.driver === 4)?.pace).toBeNull();
   });
 
-  it('gives a car that has stopped a dash, even with recent clean laps', () => {
-    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ...Array.from({ length: 7 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
+  it('gives a car that has retired a dash, even with recent clean laps', () => {
+    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ls(4, 6, { lap_duration: null, is_out: 1 }), ...Array.from({ length: 7 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
     expect(paceModel(rows).map((r) => [r.driver, r.pace])).toEqual([[1, 91], [4, null]]);
+  });
+
+  it('keeps ranking a car that is laps down but still running', () => {
+    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ...Array.from({ length: 7 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
+    expect(paceModel(rows).map((r) => [r.driver, r.pace])).toEqual([[4, 90], [1, 91]]);
   });
 });
 
@@ -366,8 +386,8 @@ describe('pit_window', () => {
     // Lapped, 12 s behind 77: 97 s behind the leader, so 7 s behind it on the road. Its lap ends say 96.5 s.
     ls(63, 5, { date_start: T0 + 4 * LAP + 96_500, date_end: T0 + 5 * LAP + 96_500, position: 7 }),
     ls(63, 6, { date_start: T0 + 5 * LAP + 96_500, lap_duration: null, position: 7, gap_to_leader: '+1 LAP', interval: 12 }),
-    // Retired: its last lap started four laps before the field's latest.
-    ls(99, 3, { date_start: T0 + 2 * LAP, lap_duration: null, position: 8, gap_to_leader: 40 }),
+    // Retired on lap 3, with a gap the feed still gives.
+    ls(99, 3, { date_start: T0 + 2 * LAP, lap_duration: null, position: 8, gap_to_leader: 40, is_out: 1 }),
   ];
 
   it("rings the field by the leader's clean laps, with lapped cars where they are on the road and retired ones left off", () => {
@@ -405,7 +425,7 @@ describe('pit_window', () => {
     expect(out.clearAir).toBe(false);
   });
 
-  it('draws the ring but plays nothing out without a pit loss, or for a car that has stopped', () => {
+  it('draws the ring but plays nothing out without a pit loss, or for a car that has retired', () => {
     const none = pitWindowModel(field(), 44, null);
     expect(none.out).toBeNull();
     expect(none.me?.gap).toBe(5);
@@ -664,6 +684,14 @@ describe('track_map', () => {
       { driver: 4, x: -5, y: 7 },
       { driver: 44, x: 110, y: 210 },
     ]);
+  });
+
+  it('leaves retired cars off, wherever they still report', () => {
+    const rows = [
+      { driver_number: 44, x: 100, y: 200, date: 1000 },
+      { driver_number: 4, x: -5, y: 7, date: 1000 },
+    ];
+    expect(trackModel(rows, [{ driver_number: 44 }])).toEqual([{ driver: 4, x: -5, y: 7 }]);
   });
 
   it('pushes labels off the line, and apart when cars are close', () => {

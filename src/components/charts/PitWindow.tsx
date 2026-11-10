@@ -34,14 +34,10 @@ const NEEDS = ['timing' as const];
 export const CLEAR_AIR = 2;
 /** The ring's lap time is the leader's median over this many of their latest clean laps. */
 const RING_LAPS = 5;
-/** A car whose lap started this many ring laps before the field's latest has stopped, and leaves the ring. */
-const STOPPED_LAPS = 2;
-/** The lap time assumed for spotting stopped cars before there's a clean lap to go by. */
-const FALLBACK_LAP = 120;
 
-/** Every driver's laps: what makes one clean, where they are, and their tyre. */
+/** Every driver's laps: what makes one clean, where they are, their tyre, and whether they retired. */
 export const SQL = `SELECT driver_number, lap_number, date_start, date_end, lap_duration, position, gap_to_leader, interval, compound, tyre_age,
-  is_pit_in_lap, is_pit_out_lap, track_status FROM lap_summary`;
+  is_pit_in_lap, is_pit_out_lap, track_status, is_out FROM lap_summary`;
 
 export interface RingCar {
   driver: number;
@@ -95,18 +91,19 @@ const wrap = (value: number, m: number) => ((value % m) + m) % m;
  * gives. A lapped car's gap is text such as "+1 LAP", so it's the car ahead's gap plus the interval
  * between them, as the timing tower adds up, or failing that measured from lap ends: when it finished
  * its latest lap, after the first car to finish that lap. Either way it's more than a lap, which places
- * it on the ring where it is on the road, and counts it behind in race order. A car whose lap began more
- * than two ring laps before the field's latest has stopped, and is left off.
+ * it on the ring where it is on the road, and counts it behind in race order. A retired car is left off.
  */
 export function pitWindowModel(rows: ReadonlyArray<Record<string, unknown>>, driver: number, pitLoss: number | null): PitWindowModel {
   const latest = new Map<number, Record<string, unknown>>();
   const ends = new Map<number, Map<number, number>>();
   const firstEnd = new Map<number, number>();
   const clean = new Map<number, Array<{ lap: number; time: number }>>();
+  const retired = new Set<number>();
   for (const r of rows) {
     const d = num(r.driver_number);
     const lap = num(r.lap_number);
     if (d === null || lap === null) continue;
+    if (r.is_out) retired.add(d);
     const last = latest.get(d);
     if (!last || lap >= (num(last.lap_number) ?? 0)) latest.set(d, r);
     const end = num(r.date_end);
@@ -135,18 +132,13 @@ export function pitWindowModel(rows: ReadonlyArray<Record<string, unknown>>, dri
     return lap !== null && first !== undefined ? (own!.get(lap)! - first) / 1000 : null;
   };
 
-  const starts = [...latest.values()].map((r) => num(r.date_start)).filter((t): t is number => t !== null);
-  const fieldStart = starts.length ? Math.max(...starts) : null;
-  const stoppedAfter = STOPPED_LAPS * (lapTime ?? FALLBACK_LAP) * 1000;
-
   // In running order, so a lapped car's gap can build on the car ahead's.
   const order = [...latest].sort(([a, ra], [b, rb]) => (num(ra.position) ?? Infinity) - (num(rb.position) ?? Infinity) || a - b);
   const cars: RingCar[] = [];
   let ahead: RingCar | null = null;
   for (const [d, r] of order) {
-    const start = num(r.date_start);
     const position = num(r.position);
-    const running = !(fieldStart !== null && start !== null && fieldStart - start > stoppedAfter);
+    const running = !retired.has(d);
     const parsed = parseGap(r.gap_to_leader);
     const lapped = !!parsed && 'laps' in parsed;
     let gap: number | null = null;
@@ -155,7 +147,7 @@ export function pitWindowModel(rows: ReadonlyArray<Record<string, unknown>>, dri
     else if (lapped) gap = lappedGap(d, r, ahead);
     const car = running && gap !== null && gap >= 0 ? { driver: d, gap, ring: lapTime ? wrap(gap, lapTime) : gap, position, lapped } : null;
     if (car) cars.push(car);
-    // A stopped car, or one without a gap, breaks the chain.
+    // A retired car, or one without a gap, breaks the chain.
     ahead = car;
   }
   cars.sort((a, b) => a.gap - b.gap || a.driver - b.driver);
