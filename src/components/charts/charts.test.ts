@@ -25,6 +25,7 @@ const { components } = await import('../registry');
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
 const gap = (driver: number, date: number, value: unknown) => ({ kind: 'gap', n: driver, date, gap: value });
+const end = (driver: number, n: number, value: unknown, stint: number | null = 1) => ({ kind: 'end', n: driver, date: (n + 1) * 100, gap: value, lap: n, stint });
 
 describe('gap_evolution', () => {
   it('follows the difference of the two gaps to the leader, sample by sample', () => {
@@ -70,11 +71,34 @@ describe('gap_evolution', () => {
     expect(now.current).toBeNull();
   });
 
-  it('gives the trend over the last three laps, as the gap grows or shrinks', () => {
+  it('gives the trend over the last three laps, from the gaps as both crossed the line', () => {
     const rows = [lap(1, 0), lap(2, 100), lap(3, 200), lap(4, 300), lap(5, 400)];
     rows.push(gap(44, 0, 0), gap(1, 0, 3), gap(1, 400, 1.5));
+    [3, 2.6, 2.2, 1.8].forEach((g, i) => rows.push(end(44, i + 1, 0), end(1, i + 1, g)));
     const m = gapModel(rows, [44, 1]);
-    expect(m.trend).toBeCloseTo(-0.375);
+    expect(m.trend).toBeCloseTo(-0.4);
+  });
+
+  it("isn't swung by a pit-stop spike three laps back", () => {
+    // 1 runs 4s behind 44, closing 0.5 a lap. 44 stops at the end of lap 17 and 1 a lap later, so
+    // through lap 18 the gap is a pit stop, about 17s the other way. Lap 21 is in progress.
+    const rows: Array<Record<string, unknown>> = [];
+    for (let n = 14; n <= 21; n++) rows.push(lap(n, n * 100));
+    const behind = (t: number) => 4 - 0.005 * (t - 1400);
+    for (let t = 1400; t <= 2150; t += 10) rows.push(gap(44, t, 10 + (t >= 1800 ? 21 : 0)), gap(1, t, 10 + behind(t) + (t >= 1900 ? 21 : 0)));
+    // At the line: the stop shows in the gap from the end of the out-lap, with the new stint.
+    const ends = (n: number) => {
+      const [s44, s1] = [n >= 18 ? 2 : 1, n >= 19 ? 2 : 1];
+      return [end(44, n, 10 + (s44 - 1) * 21, s44), end(1, n, 10 + behind((n + 1) * 100) + (s1 - 1) * 21, s1)];
+    };
+    for (let n = 14; n <= 20; n++) rows.push(...ends(n));
+    const m = gapModel(rows, [44, 1]);
+    // The raw sample three laps back, at 18.5, is on the stop.
+    expect(m.points.some((p) => p && p.x > 18 && p.x < 19 && Math.abs(p.gap) > 10)).toBe(true);
+    // From the end of lap 17 to the end of lap 20: closing 0.5 a lap.
+    expect(m.trend).toBeCloseTo(-0.5);
+    // A lap later the line three back is lap 18's, where 44 had stopped and 1 not yet: no trend.
+    expect(gapModel([...rows, lap(22, 2200), ...ends(21)], [44, 1]).trend).toBeNull();
   });
 
   it('is empty before the first lap', () => {
@@ -437,6 +461,14 @@ describe('battle_card', () => {
     expect(m.drs).toBe(true);
     // Lap 5 is in progress, so the trend runs from the end of lap 1 to the end of lap 4: (1.9 − 3) / 3.
     expect(m.trend).toBeCloseTo(-0.3667, 3);
+  });
+
+  it('has no trend while one has stopped and the other not yet, at either end', () => {
+    // 1 came out of the pits at the end of lap 1, a stint ahead of 44 there: that gap is a stop.
+    const stopped = rows.map((r) => (r.lap_number === 1 && r.kind === 'lap' ? { ...r, stint_number: r.driver_number === 1 ? 2 : 1 } : r));
+    expect(battleModel(stopped, [44, 1]).trend).toBeNull();
+    const both = rows.map((r) => (r.lap_number === 1 && r.kind === 'lap' ? { ...r, stint_number: 2 } : r));
+    expect(battleModel(both, [44, 1]).trend).toBeCloseTo(-0.3667, 3);
   });
 
   it('uses the difference of the gaps to the leader when they are not nose to tail', () => {
