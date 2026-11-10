@@ -15,8 +15,10 @@ export interface ComponentSpec {
   /**
    * The component's size hint in grid cells, when it has one: its shape, and the least room it reads
    * in. Auto-layout shares a column of tiles by their least height when every one of them has a hint.
+   * `width`, in pixels, is the widest its content ever draws: auto-layout narrows the tile to it and
+   * leaves the rest of its slot empty, for a later tile to fill.
    */
-  size?: { aspect: number; min: [number, number] };
+  size?: { aspect: number; min: [number, number]; width?: number };
 }
 
 export interface Rect {
@@ -47,9 +49,11 @@ export interface LayoutState {
   primaryId: string | null;
   /** The mouse has moved something, so auto-layout leaves existing tiles where they are. */
   manual: boolean;
+  /** A grid column's width on screen, in pixels. Zero until the grid is measured, and nothing is narrowed till then. */
+  columnPx: number;
 }
 
-export const EMPTY_LAYOUT: LayoutState = { nodes: [], primaryId: null, manual: false };
+export const EMPTY_LAYOUT: LayoutState = { nodes: [], primaryId: null, manual: false, columnPx: 0 };
 
 export const GRID_COLUMNS = 24;
 export const GRID_ROWS = 24;
@@ -173,6 +177,18 @@ function withChildren(node: LayoutNode): LayoutNode {
   return node.kind === 'group' ? { ...node, children: layoutChildren(node.children) } : node;
 }
 
+/** Columns a tile's content needs at this column width, or null when it fills whatever it gets. */
+function contentColumns(node: LayoutNode, columnPx: number): number | null {
+  const width = node.kind === 'tile' ? node.component.size?.width : undefined;
+  return width && columnPx > 0 ? Math.max(1, Math.ceil(width / columnPx)) : null;
+}
+
+/** Narrows a tile to its content, keeping its left edge: what it doesn't need stays empty. */
+function fit<T extends LayoutNode>(node: T, columnPx: number): T {
+  const columns = contentColumns(node, columnPx);
+  return columns !== null && columns < node.w ? { ...node, w: columns } : node;
+}
+
 /** Re-tile everything. Node order is insertion order and doesn't change, so a reset finds the main feed again. */
 export function autoLayout(state: LayoutState): LayoutState {
   const primary = state.nodes.find((n) => n.id === state.primaryId) ?? state.nodes[0];
@@ -180,11 +196,26 @@ export function autoLayout(state: LayoutState): LayoutState {
   const heights = ranked.map((n) => (n.kind === 'tile' ? (n.component.size?.min[1] ?? null) : null));
   const rects = solveRects(ranked.length, ranked.some((n) => n.kind === 'group'), heights);
   const rectOf = new Map(ranked.map((n, i) => [n.id, rects[i]]));
-  return { ...state, nodes: state.nodes.map((n) => ({ ...withChildren(n), ...rectOf.get(n.id) })) };
+  return { ...state, nodes: state.nodes.map((n) => fit({ ...withChildren(n), ...rectOf.get(n.id) }, state.columnPx)) };
 }
 
-/** The biggest empty rectangle on the grid, by brute force: the grid is small. */
-export function largestFreeRect(nodes: Rect[], columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
+/**
+ * The grid was measured. An auto layout re-tiles when that changes how many columns some tile's
+ * content needs; otherwise nothing moves, so a window drag doesn't shuffle tiles every frame.
+ */
+export function measure(state: LayoutState, columnPx: number): LayoutState {
+  if (columnPx === state.columnPx || !(columnPx > 0)) return state;
+  const next = { ...state, columnPx };
+  if (state.manual) return next;
+  const changed = allTiles(state).some((t) => contentColumns(t, state.columnPx) !== contentColumns(t, columnPx));
+  return changed ? autoLayout(next) : next;
+}
+
+/**
+ * The biggest empty rectangle on the grid that is at least `min` cells, by brute force: the grid is
+ * small. Empty when there is none.
+ */
+export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
   const occupied = Array.from({ length: rows }, () => new Array<boolean>(columns).fill(false));
   for (const n of nodes) {
     for (let y = n.y; y < Math.min(rows, n.y + n.h); y += 1) {
@@ -200,9 +231,9 @@ export function largestFreeRect(nodes: Rect[], columns = GRID_COLUMNS, rows = GR
         let w = 0;
         while (w < maxWidth && !occupied[y1][x0 + w]) w += 1;
         maxWidth = w;
-        if (maxWidth === 0) break;
+        if (maxWidth < min[0]) break;
         const h = y1 - y0 + 1;
-        if (maxWidth * h > best.w * best.h) best = { x: x0, y: y0, w: maxWidth, h };
+        if (h >= min[1] && maxWidth * h > best.w * best.h) best = { x: x0, y: y0, w: maxWidth, h };
       }
     }
   }
@@ -212,20 +243,28 @@ export function largestFreeRect(nodes: Rect[], columns = GRID_COLUMNS, rows = GR
 /** A new node needs at least this much room before a manual layout gets re-tiled to make space. */
 const MIN_FREE_AREA = 36;
 
-/** After a structural change: re-tile, unless the user arranged things by hand and there's room. */
+/**
+ * After a structural change. An auto layout puts a tile with a size hint into the biggest gap that
+ * meets its least size, so nothing on screen moves, and re-tiles when no gap does. A hand-arranged
+ * layout uses its biggest gap for anything, and re-tiles only when that is too small.
+ */
 function place(state: LayoutState, added: LayoutNode | null): LayoutState {
-  if (!state.manual) return autoLayout(state);
-  if (!added) return state;
+  if (!added) return state.manual ? state : autoLayout(state);
   const others = state.nodes.filter((n) => n !== added);
-  const free = largestFreeRect(others);
-  if (free.w * free.h < MIN_FREE_AREA) return autoLayout({ ...state, manual: false });
-  return {
+  const into = (free: Rect) => ({
     ...state,
-    nodes: state.nodes.map((n) => (n === added ? { ...withChildren(n), ...free } : n)),
-  };
+    nodes: state.nodes.map((n) => (n === added ? fit({ ...withChildren(n), ...free }, state.columnPx) : n)),
+  });
+  if (!state.manual) {
+    const min = added.kind === 'tile' ? added.component.size?.min : undefined;
+    const free = min ? largestFreeRect(others, min) : ZERO;
+    return area(free) > 0 ? into(free) : autoLayout(state);
+  }
+  const free = largestFreeRect(others);
+  return area(free) < MIN_FREE_AREA ? autoLayout({ ...state, manual: false }) : into(free);
 }
 
-export function allTiles(state: LayoutState): TileNode[] {
+export function allTiles(state: Pick<LayoutState, 'nodes'>): TileNode[] {
   return state.nodes.flatMap((n) => (n.kind === 'tile' ? [n] : n.children));
 }
 

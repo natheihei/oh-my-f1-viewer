@@ -10,6 +10,7 @@ import {
   EMPTY_LAYOUT,
   findTile,
   focus,
+  measure,
   removeTile,
   resetLayout,
   swap,
@@ -60,6 +61,8 @@ export const layout = {
     return next != null;
   },
   reset: () => set(resetLayout(get())),
+  /** The grid's column width on screen changed, in pixels. */
+  measure: (columnPx: number) => set(measure(get(), columnPx)),
   mouseEdit: (id: string, rect: Rect) => set(applyMouseEdit(get(), id, rect)),
   swap: (idA: string, idB: string) => set(swap(get(), idA, idB)),
   tiles: () => allTiles(get()),
