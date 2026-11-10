@@ -25,49 +25,59 @@ import {
 
 const NEEDS = ['timing' as const];
 
-// Each driver's latest position, gaps, lap, last completed lap and stint. `laps` is read once.
+// Each driver's latest position, gaps, lap, last completed lap and stint, and whether they're out, with
+// those that are out last. `laps` is read once.
 export const SQL = `
-WITH l AS MATERIALIZED (SELECT driver_number, lap_number, lap_duration FROM laps),
+WITH l AS MATERIALIZED (SELECT driver_number, lap_number, lap_duration, is_out FROM laps),
 pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
 gap AS (SELECT driver_number, gap_to_leader, interval, MAX(date) AS gap_date FROM intervals GROUP BY driver_number),
 lap AS (SELECT driver_number, MAX(lap_number) AS lap FROM l GROUP BY driver_number),
 last AS (SELECT driver_number, lap_duration AS last_lap, MAX(lap_number) FROM l WHERE lap_duration IS NOT NULL GROUP BY driver_number),
-tyre AS (SELECT driver_number, compound, lap_start, lap_end, tyre_age_at_start, MAX(stint_number) FROM stints GROUP BY driver_number)
+tyre AS (SELECT driver_number, compound, lap_start, lap_end, tyre_age_at_start, MAX(stint_number) FROM stints GROUP BY driver_number),
+out AS (SELECT DISTINCT driver_number FROM l WHERE is_out)
 SELECT pos.driver_number, pos.position, gap.gap_to_leader, gap.interval, gap.gap_date, lap.lap, last.last_lap,
-  tyre.compound, tyre.lap_start, tyre.lap_end, tyre.tyre_age_at_start
+  tyre.compound, tyre.lap_start, tyre.lap_end, tyre.tyre_age_at_start, out.driver_number IS NOT NULL AS is_out
 FROM pos
 LEFT JOIN gap USING (driver_number) LEFT JOIN lap USING (driver_number) LEFT JOIN last USING (driver_number) LEFT JOIN tyre USING (driver_number)
-ORDER BY pos.position`;
+LEFT JOIN out USING (driver_number)
+ORDER BY is_out, pos.position`;
 
 export interface TowerRow {
   driver: number;
   position: number | null;
-  /** "+1.234", "+1 LAP", or "LAP 31" for the leader, "LAP 31/56" when the distance is known. */
+  /** "+1.234", "+1 LAP", or "LAP 31" for the leader, "LAP 31/56" when the distance is known. "OUT" once retired. */
   gap: string;
   interval: string;
   last: string;
   compound: string | null;
   age: number | null;
+  /** Retired: drawn dimmed, with no interval or last lap. */
+  out: boolean;
 }
 
-/** The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN. `total` is the race distance. */
+/**
+ * The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN, and retired ones "OUT".
+ * `total` is the race distance.
+ */
 export function towerModel(rows: ReadonlyArray<Record<string, unknown>>, total: number | null = null): TowerRow[] {
   return rows.flatMap((r, i): TowerRow[] => {
     const driver = num(r.driver_number);
     if (driver === null) return [];
     const lap = num(r.lap);
     const start = num(r.lap_start);
+    const out = Boolean(r.is_out);
     // The leader's gap is the lap it's on, once the session has gaps at all.
-    const leader = i === 0;
+    const leader = i === 0 && !out;
     return [
       {
         driver,
         position: num(r.position),
-        gap: leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}${total ? `/${total}` : ''}` : '') : formatGap(parseGap(r.gap_to_leader)),
-        interval: leader ? '' : formatGap(parseGap(r.interval)),
-        last: formatLapTime(num(r.last_lap)),
+        gap: out ? 'OUT' : leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}${total ? `/${total}` : ''}` : '') : formatGap(parseGap(r.gap_to_leader)),
+        interval: out || leader ? '' : formatGap(parseGap(r.interval)),
+        last: out ? '' : formatLapTime(num(r.last_lap)),
         compound: typeof r.compound === 'string' ? r.compound : null,
         age: start === null ? null : stintAge(start, num(r.lap_end), num(r.tyre_age_at_start)),
+        out,
       },
     ];
   });
@@ -131,6 +141,9 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     const y = top + pitch / 2 + 0.5;
     if (!compact) hline(ctx, pad, width - pad, top);
     const style = styleOf(m.styles, row.driver);
+    // A retired car's row is all dim: no ink, and its team colour faded.
+    const ink = row.out ? c.dim : c.ink;
+    ctx.globalAlpha = row.out ? 0.5 : 1;
     for (const col of columns) {
       const { x0, x1 } = edges.get(col.key)!;
       switch (col.key) {
@@ -142,16 +155,16 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
           ctx.fillRect(x0, top + pitch * 0.22, Math.max(2, x1 - x0), pitch * 0.56);
           break;
         case 'code':
-          text(ctx, style.code, x0, y, { color: c.ink, size, weight: 500 });
+          text(ctx, style.code, x0, y, { color: ink, size, weight: 500 });
           break;
         case 'gap':
-          text(ctx, row.gap, x1, y, { align: 'right', color: c.ink, size });
+          text(ctx, row.gap, x1, y, { align: 'right', color: ink, size });
           break;
         case 'interval':
           text(ctx, row.interval, x1, y, { align: 'right', size });
           break;
         case 'last':
-          text(ctx, row.last, x1, y, { align: 'right', color: c.ink, size });
+          text(ctx, row.last, x1, y, { align: 'right', color: ink, size });
           break;
         case 'tyre':
           if (!row.compound) break;
@@ -160,6 +173,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
           break;
       }
     }
+    ctx.globalAlpha = 1;
   });
 }
 
@@ -179,7 +193,7 @@ export default defineComponent({
   name: 'timing_tower',
   title: 'Timing tower',
   description:
-    'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age. Suggest it for an overview of the race, or whenever the user asks where someone is.',
+    'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview of the race, or whenever the user asks where someone is.',
   args: Type.Object({}),
   needs: NEEDS,
   size: { aspect: 0.6, min: [6, 12] },
