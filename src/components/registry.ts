@@ -9,8 +9,11 @@ import PositionChart from './charts/PositionChart';
 import RaceControl from './charts/RaceControl';
 import RaceTrace from './charts/RaceTrace';
 import SectorDelta from './charts/SectorDelta';
+import SpeedTrace from './charts/SpeedTrace';
 import StintPace from './charts/StintPace';
+import TelemetryLive from './charts/TelemetryLive';
 import TimingTower from './charts/TimingTower';
+import TrackMap from './charts/TrackMap';
 import TyreDegradation from './charts/TyreDegradation';
 import TyreStrategy from './charts/TyreStrategy';
 import Weather from './charts/Weather';
@@ -32,4 +35,7 @@ export const components: ComponentDefinition[] = [
   PitStops,
   RaceControl,
   Weather,
+  TrackMap,
+  SpeedTrace,
+  TelemetryLive,
 ];

@@ -1,7 +1,8 @@
 // Puts the charts on screen in the real app, over a real replay race, muted, and saves screenshots: at
 // a moment in the race and again near its end, each group of charts first as previews in the
 // suggestion strip, then as tiles beside the main feed and the timing tower. Also times each chart's
-// query at the end of the race. Needs the F1 TV sign-in; it stops if that has expired.
+// query at the end of the race. Needs the F1 TV sign-in; it stops if that has expired. The telemetry group
+// waits for the session's telemetry to finish loading first.
 // Usage: node scripts/charts-check.mjs <screenshot-dir> [sessionKey] [year] [laps, such as 20,40] [groups, such as pit]
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -86,8 +87,25 @@ const allGroups = {
     { type: 'race_control', props: {} },
     { type: 'weather', props: {} },
   ],
+  telemetry: [
+    { type: 'track_map', props: { drivers: pair } },
+    { type: 'speed_trace', props: { drivers: pair } },
+    { type: 'telemetry_live', props: { drivers: [pair[0]] } },
+  ],
 };
 const groups = Object.fromEntries(Object.entries(allGroups).filter(([name]) => !only || only.includes(name)));
+
+if (groups.telemetry) {
+  const telemetry = await page.evaluate(async () => {
+    const { read } = await import('/src/host/index.ts');
+    const deadline = Date.now() + 300_000;
+    const state = () => read().sessionData.coverage?.datasets.telemetry.state;
+    while (Date.now() < deadline && state() !== 'complete') await new Promise((r) => setTimeout(r, 1000));
+    return state();
+  });
+  if (telemetry !== 'complete') await fail(`Telemetry is ${telemetry}`);
+  console.log('telemetry loaded');
+}
 
 /** Seeks the replay to `time` and pauses there. Returns the lap count it shows. */
 async function seekTo(time) {
@@ -170,6 +188,32 @@ async function shoot(moment) {
       }, pair);
       console.log(`small: ${JSON.stringify(check)}`);
     }
+    if (name === 'telemetry') {
+      // Cars in order round the lap from the timing line, by the outline point nearest each, beside the
+      // tower, to check by hand; and the laps the speed trace picked.
+      const check = await page.evaluate(async (pair) => {
+        const { host, read } = await import('/src/host/index.ts');
+        const map = await import('/src/components/charts/TrackMap.tsx');
+        const speed = await import('/src/components/charts/SpeedTrace.tsx');
+        const tower = await import('/src/components/charts/TimingTower.tsx');
+        const { playheadMs } = read().sessionData;
+        const circuit = read().circuit;
+        const cars = map.trackModel((await host.data.sql({ sql: map.SQL, params: [playheadMs] })).rows);
+        const { x, y } = circuit.outline;
+        const along = (car) => {
+          let best = 0;
+          x.forEach((_, i) => (Math.hypot(x[i] - car.x, y[i] - car.y) < Math.hypot(x[best] - car.x, y[best] - car.y) ? (best = i) : null));
+          return { driver: car.driver, at: Math.round((best / x.length) * 1000) / 10, off: Math.round(Math.hypot(x[best] - car.x, y[best] - car.y)) };
+        };
+        const road = cars.map(along).sort((a, b) => b.at - a.at);
+        const picks = speed.pickLaps((await host.data.sql({ sql: speed.LAPS_SQL, params: pair })).rows, pair);
+        const trace = speed.speedModel(picks, (await host.data.sql({ sql: speed.SPEED_SQL, params: speed.speedParams(picks, pair) })).rows, circuit);
+        const laps = trace.laps.map((l) => l && { driver: l.driver, lap: l.lap, timed: (l.end - l.start) / 1000, byPositions: Math.round(l.lapTime * 1000) / 1000, samples: l.speed.length });
+        const gaps = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).map((r) => `${r.position}:${r.driver} ${r.gap}`);
+        return { road: road.map((c) => `${c.driver}@${c.at}%${c.off > 150 ? ` off ${c.off}` : ''}`).join(' '), tower: gaps.join(' | '), laps, deltaAtLine: trace.delta.at(-1)?.delta };
+      }, pair);
+      console.log(`telemetry: ${JSON.stringify(check)}`);
+    }
     await page.evaluate(async () => {
       const { host, read, tilesOf } = await import('/src/host/index.ts');
       host.layout.remove({ keys: tilesOf(read().layout).filter((t) => t.component.type !== 'video').map((t) => t.component.key) });
@@ -195,21 +239,24 @@ if (count?.total) {
   await shoot(`lap${late?.current ?? 'end'}`);
 }
 
-// Each query at the end of the race, as the worker runs it.
+// Each query at the end of the race, as the worker runs it. The telemetry queries are bounded by the
+// playhead, so they're timed at the frame on screen there, as they'd run.
 const timings = await page.evaluate(
   async ({ key, pair }) => {
+    const { read } = await import('/src/host/index.ts');
+    const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
     const [tower, gap, tyres, trace, positions, compare, deg, pace, pit, battle, sectors, stops, control, weather] = await Promise.all(
       [
         'TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'PositionChart', 'LapTimeCompare', 'TyreDegradation', 'StintPace', 'PitWindow',
         'BattleCard', 'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
-    const time = async (sql, params) => {
+    const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
       const runs = [];
       let rows = 0;
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
-        rows = (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, sql, params)).rows.length;
+        rows = (await window.f1a.data.sql(key, at, sql, params)).rows.length;
         runs.push(performance.now() - started);
       }
       runs.sort((a, b) => a - b);
@@ -231,6 +278,16 @@ const timings = await page.evaluate(
       pit_stops: await time(stops.sqlFor(0), []),
       race_control: await time(control.SQL, []),
       weather: await time(weather.SQL, []),
+      ...(await (async () => {
+        const [map, speed, live] = await Promise.all(['TrackMap', 'SpeedTrace', 'TelemetryLive'].map((name) => import(`/src/components/charts/${name}.tsx`)));
+        const picks = speed.pickLaps((await window.f1a.data.sql(key, playhead, speed.LAPS_SQL, pair)).rows, pair);
+        return {
+          track_map: await time(map.SQL, [playhead], playhead),
+          speed_trace_laps: await time(speed.LAPS_SQL, pair, playhead),
+          speed_trace_speed: await time(speed.SPEED_SQL, speed.speedParams(picks, pair), playhead),
+          telemetry_live: await time(live.SQL, [pair[0], playhead], playhead),
+        };
+      })()),
     };
   },
   { key: Number(sessionKey), pair },
