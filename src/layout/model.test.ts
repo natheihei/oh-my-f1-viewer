@@ -59,6 +59,45 @@ describe('solveRects', () => {
   it('widens the rail when a group needs room', () => {
     expect(solveRects(2, true)[1].w).toBeGreaterThan(solveRects(2, false)[1].w);
   });
+
+  it('shares the column beside the primary by least height when every tile there has a hint', () => {
+    // A timing tower (12 rows), a pace chart (9) and a small card (5) beside the main feed.
+    const rail = solveRects(4, false, [null, 12, 9, 5]);
+    assertTilesGrid(rail);
+    expect(rail.slice(1).map((r) => r.h)).toEqual([11, 8, 5]);
+    expect(rail[0]).toEqual(solveRects(4, false)[0]);
+    // Further down the layout, the two beside the primary share its height the same way; the band below doesn't change.
+    const band = solveRects(5, false, [null, 12, 5, 6, 6]);
+    assertTilesGrid(band);
+    expect(band.slice(1, 3).map((r) => r.h)).toEqual([11, 5]);
+    expect(band.slice(3)).toEqual(solveRects(5, false).slice(3));
+  });
+
+  it('splits evenly as before when any tile in the column has no hint, such as a video', () => {
+    for (const slots of [2, 3, 4, 5, 7, 9]) {
+      const heights = Array.from({ length: slots }, (_, i) => (i === 2 ? null : 6 + i));
+      expect(solveRects(slots, false, heights)).toEqual(solveRects(slots, false));
+    }
+    expect(solveRects(3, false, [null, 5, 5])).toEqual(solveRects(3, false));
+  });
+});
+
+describe('size hints', () => {
+  const chart = (key: string, h: number): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect: 1, min: [6, h] } });
+
+  it('gives a tall chart more of the rail than a small one, and leaves the main feed where it was', () => {
+    const s = [chart('tower', 12), chart('card', 5)].reduce(addTile, build('main'));
+    const [main, tower, card] = s.nodes;
+    expect(main).toMatchObject({ x: 0, y: 0, w: 16, h: GRID_ROWS });
+    expect(tower).toMatchObject({ x: 16, y: 0, w: 8, h: 17 });
+    expect(card).toMatchObject({ x: 16, y: 17, w: 8, h: 7 });
+  });
+
+  it('places a video beside charts exactly as without hints', () => {
+    const hinted = [chart('tower', 12), spec('onboard')].reduce(addTile, build('main'));
+    const plain = [spec('tower'), spec('onboard')].reduce(addTile, build('main'));
+    expect(hinted.nodes.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual(plain.nodes.map(({ x, y, w, h }) => ({ x, y, w, h })));
+  });
 });
 
 describe('the session journey', () => {

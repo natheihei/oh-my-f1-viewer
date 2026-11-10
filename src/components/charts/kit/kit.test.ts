@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DriverEntry, SessionDataView } from '../../../host';
+import { compactSmall } from './ChartCanvas';
 import { driverStyles } from './colors';
 import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, lapTicks, median, neutralBands, neutralOf, paceRange, tyreAgeNow } from './laps';
@@ -36,6 +37,14 @@ describe('scales', () => {
     expect(niceCeil(23, 4)).toBe(30);
     expect(niceCeil(23, 5)).toBe(25);
     expect(niceCeil(0)).toBe(0);
+  });
+});
+
+describe('compact boxes', () => {
+  it('keeps a small text tile full while it is wide enough and not very short', () => {
+    expect(compactSmall({ width: 570, height: 122 })).toBe(false);
+    expect(compactSmall({ width: 180, height: 100 })).toBe(true);
+    expect(compactSmall({ width: 400, height: 80 })).toBe(true);
   });
 });
 

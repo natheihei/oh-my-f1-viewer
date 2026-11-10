@@ -15,6 +15,12 @@ export interface Box {
 /** Below either of these, in CSS pixels, a chart is compact. */
 export const COMPACT_BELOW = { width: 300, height: 150 };
 
+/**
+ * For the small tiles that are mostly rows of text: they still read full down to 90 pixels high, so
+ * they're compact only when narrow, as in the suggestion strip, or very short.
+ */
+export const compactSmall = ({ width, height }: Pick<Box, 'width' | 'height'>): boolean => width < COMPACT_BELOW.width || height < 90;
+
 export type Draw<M> = (ctx: Ctx, model: M, box: Box) => void;
 
 interface Size {
