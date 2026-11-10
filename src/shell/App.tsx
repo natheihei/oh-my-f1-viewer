@@ -4,6 +4,7 @@ import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { palette } from './palette';
+import { usePersistVolume } from './persistVolume';
 import { Timeline } from './Timeline';
 
 function formatRemaining(ms: number): string {
@@ -35,6 +36,7 @@ function Countdown() {
 
 export function App() {
   const hasSession = useLive((s) => s.session != null);
+  usePersistVolume();
 
   useEffect(() => {
     const offAgent = connectAgent();

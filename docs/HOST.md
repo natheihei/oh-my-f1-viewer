@@ -35,7 +35,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `feeds` | `Channel[]` | The feeds the open session offers: `id` (`${contentId}:${channelId ?? 0}`), `kind` (`main`, `onboard`, `data`, `tracker`, `other`), `label` (a driver code like HAM, or the channel name), `title`, and for onboards `driverName`, `driverCode`, `team`, `number` |
 | `streams` | `Record<feedId, StreamView>` | Each mounted stream's `status` and `error` |
 | `audio` | `string \| null` | The audible feed, or null if everything is muted |
-| `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next |
+| `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
 | `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects), `primaryId` (the largest node), `manual` (whether the mouse has moved something) |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
