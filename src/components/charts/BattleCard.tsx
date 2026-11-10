@@ -11,11 +11,13 @@ import {
   compoundLetter,
   formatLapTime,
   gapSeconds,
+  gapTrend,
   hline,
   num,
   styleOf,
   text,
   textWidth,
+  toLeader,
   tyreAgeNow,
   tyreColour,
   useDriverStyles,
@@ -33,10 +35,10 @@ const DRS = 1;
 
 // Both drivers' laps, then each one's best speed-trap reading so far.
 export const SQL = `
-SELECT 'lap' AS kind, driver_number, lap_number, date_end, lap_duration, position, gap_to_leader, interval, compound, tyre_age, NULL AS trap
+SELECT 'lap' AS kind, driver_number, lap_number, date_end, lap_duration, position, gap_to_leader, interval, stint_number, compound, tyre_age, NULL AS trap
 FROM lap_summary WHERE driver_number IN (?1, ?2)
 UNION ALL
-SELECT 'trap', driver_number, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, MAX(st_speed)
+SELECT 'trap', driver_number, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, MAX(st_speed)
 FROM laps WHERE driver_number IN (?1, ?2) GROUP BY driver_number`;
 
 export interface BattleSide {
@@ -63,9 +65,6 @@ export interface BattleModel {
   /** The car behind is within a second of the one ahead. Null when the gap isn't known. */
   drs: boolean | null;
 }
-
-/** A gap to the leader in seconds: the leader has none, which is 0; a lapped car's is null. */
-const toLeader = (r: Record<string, unknown>): number | null => (r.gap_to_leader == null ? 0 : gapSeconds(r.gap_to_leader));
 
 /** The rows of `SQL` as the two sides of the card, and what's between them. */
 export function battleModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: readonly [number, number]): BattleModel {
@@ -105,19 +104,7 @@ export function battleModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]
     }
   }
 
-  // The trend, from the gap as each crossed the line on the laps both have finished.
-  const ended = (mine: Array<Record<string, unknown>>) =>
-    new Map(mine.filter((r) => r.date_end != null).map((r) => [num(r.lap_number)!, toLeader(r)]));
-  const [ea, eb] = [ended(own[0]), ended(own[1])];
-  const between = (lap: number): number | null => {
-    const [ga, gb] = [ea.get(lap), eb.get(lap)];
-    return ga == null || gb == null ? null : Math.abs(gb - ga);
-  };
-  const common = [...ea.keys()].filter((lap) => eb.has(lap));
-  const last = common.length ? Math.max(...common) : null;
-  const now = last === null ? null : between(last);
-  const then = last === null ? null : between(last - TREND_LAPS);
-  const trend = now !== null && then !== null ? (now - then) / TREND_LAPS : null;
+  const trend = gapTrend([...own[0], ...own[1]], [a, b], TREND_LAPS);
 
   return { sides, ahead, gap, trend, drs: gap === null ? null : gap < DRS };
 }

@@ -452,7 +452,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         rows.length > MAX_QUERY_ROWS
           ? `Showing ${MAX_QUERY_ROWS} of ${rows.length} rows. Narrow the query to see the rest.`
           : rows.length === 0 && asOf !== 'session'
-            ? 'Nothing up to the frame on screen. If the moment may be later, ask again with asOf "session".'
+            ? 'Nothing up to the frame on screen. If the moment may be later, call query_session again with asOf "session": the app asks the user, so do not ask them yourself.'
             : undefined;
       return JSON.stringify({ columns, rows: shown, ...(note ? { note } : {}) });
     },
