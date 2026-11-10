@@ -131,26 +131,26 @@ describe('driver colours', () => {
   });
 });
 
-const coverage = (timing: string, reason: string | null = null) =>
+const datasets = (timing: string, reason: string | null = null) =>
   ({
     state: 'ready',
-    coverage: { datasets: { timing: { state: timing, reason }, telemetry: { state: 'absent', reason: null }, results: { state: 'complete', reason: null } } },
+    datasets: { timing: { state: timing, reason }, telemetry: { state: 'absent', reason: null }, results: { state: 'complete', reason: null } },
   }) as unknown as SessionDataView;
 
 describe('frame messages', () => {
   it('says why session data is not there', () => {
     expect(dataMessage({ state: 'idle' }, ['timing'])).toBe('No session open');
     expect(dataMessage({ state: 'unsupported', reason: 'Before 2023' }, ['timing'])).toBe('Before 2023');
-    expect(dataMessage({ state: 'loading', sessionKey: 1, coverage: null }, ['timing'])).toMatch(/Loading/);
-    expect(dataMessage(coverage('failed', 'The archive refused the request'), ['timing'])).toBe('The archive refused the request');
-    expect(dataMessage(coverage('absent'), ['timing'])).toBe('No timing data for this session');
-    expect(dataMessage(coverage('absent'), ['telemetry'])).toBe('No telemetry data for this session');
+    expect(dataMessage({ state: 'loading', sessionKey: 1, datasets: null }, ['timing'])).toMatch(/Loading/);
+    expect(dataMessage(datasets('failed', 'The archive refused the request'), ['timing'])).toBe('The archive refused the request');
+    expect(dataMessage(datasets('absent'), ['timing'])).toBe('No timing data for this session');
+    expect(dataMessage(datasets('absent'), ['telemetry'])).toBe('No telemetry data for this session');
   });
 
   it('lets a chart draw when what it needs is there, even in part', () => {
-    expect(dataMessage(coverage('complete'), ['timing'])).toBeNull();
-    expect(dataMessage(coverage('partial', 'Captured live from 14:02'), ['timing'])).toBeNull();
-    expect(dataMessage(coverage('absent'), [])).toBeNull();
+    expect(dataMessage(datasets('complete'), ['timing'])).toBeNull();
+    expect(dataMessage(datasets('partial', 'Captured live from 14:02'), ['timing'])).toBeNull();
+    expect(dataMessage(datasets('absent'), [])).toBeNull();
   });
 
   it('says when a query failed or has nothing yet', () => {

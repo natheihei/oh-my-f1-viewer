@@ -16,7 +16,7 @@ export function dataMessage(data: SessionDataView, needs: readonly Dataset[]): s
       return 'Loading session data…';
   }
   for (const dataset of needs) {
-    const { state, reason } = data.coverage.datasets[dataset];
+    const { state, reason } = data.datasets[dataset];
     if (state === 'absent') return reason ?? `No ${dataset} data for this session`;
     if (state === 'failed') return reason ?? `The ${dataset} data failed to load`;
     if (state === 'loading') return `Loading ${dataset} data…`;

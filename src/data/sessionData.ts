@@ -9,9 +9,10 @@ import type { SessionInfo, TimingQuery } from '../../shared/api';
 import type {
   CircuitView,
   DataStatus,
+  Dataset,
+  DatasetState,
   Schedule,
   ScheduleView,
-  SessionCoverage,
   SessionDataView,
   SessionObjects,
   SqlRows,
@@ -101,7 +102,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   const query = archiveQuery(session);
   let destroyed = false;
   let sessionKey: number | null = null;
-  let coverage: SessionCoverage | null = null;
+  let datasets: Record<Dataset, DatasetState> | null = null;
   let map: TimeMap | null = null;
   let ready = false;
   let playhead = NOTHING_VISIBLE;
@@ -119,8 +120,8 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let objects: SessionObjects = NO_OBJECTS;
 
   const publish = () => {
-    if (destroyed || !ready || sessionKey === null || !coverage) return;
-    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, coverage, revision, playheadMs: shownPlayhead, ...objects }), true);
+    if (destroyed || !ready || sessionKey === null || !datasets) return;
+    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, ...objects }), true);
   };
 
   const read = async () => {
@@ -159,20 +160,20 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       return;
     }
     sessionKey = status.sessionKey;
-    coverage = status.coverage;
+    datasets = status.coverage?.datasets ?? null;
     if (status.clock) map = buildTimeMap(status.clock, status.sessionStartSec);
     if (status.state === 'loading') {
-      if (!ready) useSessionData.setState({ state: 'loading', sessionKey, coverage }, true);
+      if (!ready) useSessionData.setState({ state: 'loading', sessionKey, datasets }, true);
       return;
     }
-    if (sessionKey === null || !coverage) return;
+    if (sessionKey === null || !datasets) return;
     ready = true;
     current = { sessionKey, playhead: () => playhead };
     // Results and telemetry arrive after the first `ready`: what can be seen may have changed.
     void read();
   };
 
-  useSessionData.setState({ state: 'loading', sessionKey: null, coverage: null }, true);
+  useSessionData.setState({ state: 'loading', sessionKey: null, datasets: null }, true);
   useCircuit.setState({ state: 'loading' }, true);
   const asked = JSON.stringify(query);
   const stopCircuit = window.f1a.data.onCircuit(({ query: sent, circuit }) => {

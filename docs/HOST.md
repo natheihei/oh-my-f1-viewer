@@ -54,12 +54,12 @@ A selector must return a value or an existing reference. Building a new object o
 
 - `idle`: no session is open.
 - `unsupported`, with a `reason`, such as a session from before 2023.
-- `loading`, with a `sessionKey` and `coverage`.
+- `loading`, with a `sessionKey` and `datasets` (null until known).
 - `failed`, with a `reason`.
 - `ready`. In this state it also holds:
   - `sessionKey`.
-  - `coverage`: which `source` it came from (`archive` or `live`), each dataset's (`timing`, `telemetry`, `results`) state and reason,
-    `missingFeeds`, the `gaps` a live capture missed, and `capturedFrom`.
+  - `datasets`: each dataset's (`timing`, `telemetry`, `results`) `state` (`absent`, `loading`, `partial`, `complete` or `failed`)
+    and `reason`.
   - `revision`: goes up each time what can be seen may have changed.
   - `playheadMs`: the frame on screen, in UTC milliseconds.
   - The roster and results as they stood at the playhead: `drivers`, `startingGrid` (races and sprints, from the grid on),
