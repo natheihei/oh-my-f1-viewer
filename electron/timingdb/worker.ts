@@ -15,7 +15,7 @@ let capture: LiveCapture | null = null;
 
 const operations = {
   isComplete: (sessionKey: number, dataset: 'timing' | 'telemetry' | 'results') => store.isComplete(sessionKey, dataset),
-  status: (sessionKey: number) => ({ coverage: store.coverage(sessionKey), clock: store.detail(sessionKey, 'timing').clock ?? null }),
+  status: (sessionKey: number) => ({ coverage: store.coverage(sessionKey), clock: store.detail(sessionKey, 'timing').clock ?? null, tables: store.tables }),
   ingestTiming: (meta: SessionMeta, feeds: FeedFiles, scheduledEndMs: number | null) => ingestTiming(store, meta, feeds, scheduledEndMs, Date.now()),
   ingestTelemetry: (meta: SessionMeta, feeds: FeedFiles, scheduledEndMs: number | null) =>
     ingestTelemetry(store, meta, feeds, scheduledEndMs, Date.now(), () => yieldNow()),
