@@ -257,8 +257,25 @@ export const AGENT_TOOLS: AgentTool[] = [
       },
     ],
     result: () => {
-      const { audio, feeds } = read();
-      return audio == null ? 'All streams muted.' : `Audio is now ${feeds.find((f) => f.id === audio)?.label}.`;
+      const { audio, feeds, volume } = read();
+      if (audio == null) return 'All streams muted.';
+      const label = feeds.find((f) => f.id === audio)?.label;
+      return volume === 0 ? `Audio is now ${label}, but the volume is 0, so nothing can be heard.` : `Audio is now ${label}.`;
+    },
+  }),
+  expose(host.audio.setVolume, {
+    name: 'set_volume',
+    description: 'Set the master volume, as a percentage. 0 silences everything. The audible stream stays the same.',
+    args: Type.Object(
+      { volume: Type.Number({ minimum: 0, maximum: 100, description: 'Percent, from 0 to 100. The current level is in app_state.' }) },
+      { additionalProperties: false },
+    ),
+    adapt: ({ volume }) => ({ volume: volume / 100 }),
+    gate: [sessionOpen],
+    result: () => {
+      const { audio, volume } = read();
+      const level = `Volume is now ${Math.round(volume * 100)}%.`;
+      return audio == null ? `${level} No stream is audible; choose one with set_audio.` : level;
     },
   }),
   expose(host.playback.play, {
