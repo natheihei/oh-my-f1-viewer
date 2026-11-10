@@ -99,7 +99,7 @@ if (groups.telemetry) {
   const telemetry = await page.evaluate(async () => {
     const { read } = await import('/src/host/index.ts');
     const deadline = Date.now() + 300_000;
-    const state = () => read().sessionData.coverage?.datasets.telemetry.state;
+    const state = () => read().sessionData.datasets?.telemetry.state;
     while (Date.now() < deadline && state() !== 'complete') await new Promise((r) => setTimeout(r, 1000));
     return state();
   });

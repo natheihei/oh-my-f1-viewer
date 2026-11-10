@@ -152,7 +152,7 @@ There's no separate report of what a session has. Each data kind says so itself,
 type SessionData =
   | { state: 'idle' }                        // No session is open
   | { state: 'unsupported'; reason: string } // Before 2023
-  | { state: 'loading'; coverage: SessionCoverage | null }
+  | { state: 'loading'; datasets: Record<Dataset, DatasetState> | null }
   | { state: 'failed'; reason: string }
   | { state: 'ready'; drivers: DriverEntry[] /* … */ };
 ```

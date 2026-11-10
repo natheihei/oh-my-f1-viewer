@@ -173,16 +173,17 @@ export interface LapCount {
 
 export type Dataset = 'timing' | 'telemetry' | 'results';
 
-/** How much of a session the database holds, and whether that's final. */
-export interface DatasetCoverage {
+/** How much of a dataset the database holds, and whether that's final. */
+export interface DatasetState {
   state: 'absent' | 'loading' | 'partial' | 'complete' | 'failed';
   /** Why it's partial or failed. Never says anything about how the session went. */
   reason: string | null;
 }
 
+/** What the main process knows about a session's data. Only `datasets` reaches `sessionData`. */
 export interface SessionCoverage {
   source: 'archive' | 'live' | null;
-  datasets: Record<Dataset, DatasetCoverage>;
+  datasets: Record<Dataset, DatasetState>;
   /** Feeds the archive doesn't have for this session. */
   missingFeeds: string[];
   /** Spans a live capture missed. `from` is null when the capture began after the session did. */
@@ -195,12 +196,12 @@ export interface SessionCoverage {
 export type SessionDataView =
   | { state: 'idle' }
   | { state: 'unsupported'; reason: string }
-  | { state: 'loading'; sessionKey: number | null; coverage: SessionCoverage | null }
+  | { state: 'loading'; sessionKey: number | null; datasets: Record<Dataset, DatasetState> | null }
   | { state: 'failed'; reason: string }
   | ({
       state: 'ready';
       sessionKey: number;
-      coverage: SessionCoverage;
+      datasets: Record<Dataset, DatasetState>;
       /** Goes up each time what can be seen may have changed. */
       revision: number;
       /** The frame on screen, on the feed's clock in UTC milliseconds. Null when it isn't known. */
