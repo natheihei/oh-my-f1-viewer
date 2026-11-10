@@ -10,12 +10,23 @@ import { account, agentLink } from '../data/account';
 import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
 import { sessionSql } from '../data/sessionData';
+import { appearanceOps, backgroundOps } from './backgrounds';
 import { componentOps } from './components';
 import { layoutOps } from './layoutOps';
 import { query, write } from './op';
 import { suggestionOps } from './suggestions';
 import { closeViewingSession, openViewingSession, startCountdown } from './viewing';
 
+export { Backdrop } from './Backdrop';
+export {
+  defineBackground,
+  NO_BACKGROUND,
+  type BackgroundDefinition,
+  type BackgroundFrame,
+  type BackgroundInfo,
+  type BackgroundParams,
+  type BackgroundView,
+} from './backgrounds';
 export { defineComponent, type ComponentDefinition, type ComponentInfo } from './components';
 export { ComponentView, Grid } from './Grid';
 export { tilesOf } from './layoutOps';
@@ -148,6 +159,10 @@ export const host = {
   layout: layoutOps,
   /** What tiles can show. The app registers its components once at start. */
   components: componentOps,
+  /** What can fill the gaps between tiles. The app registers its backgrounds once at start. */
+  backgrounds: backgroundOps,
+  /** How the app looks: the background in the gaps. */
+  appearance: appearanceOps,
   /** Tiles the agent suggests, which the user adds or dismisses. */
   suggestions: suggestionOps,
   catalog: catalogOps,

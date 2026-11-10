@@ -51,8 +51,13 @@
 }
 
 .stage-host {
-  @apply absolute overflow-hidden;
+  @apply absolute overflow-hidden bg-black;
   visibility: hidden;
+}
+
+/* Under the tiles: it shows only in the gaps between them. */
+.backdrop {
+  @apply pointer-events-none absolute inset-0 z-0 block h-full w-full;
 }
 
 .grid-surface {
@@ -467,4 +472,110 @@
   @apply shrink-0 cursor-pointer border border-faint bg-transparent px-1 text-dim hover:text-ink;
   font-size: 10px;
   line-height: 14px;
+}
+
+/* Background settings, in the palette's place. */
+.bg-panel-head {
+  @apply flex items-center justify-between border-b border-line pl-2.5;
+}
+
+.bg-panel-body {
+  @apply grid;
+  grid-template-columns: 170px 1fr;
+  min-height: 162px;
+}
+
+.bg-styles {
+  @apply border-r border-line py-1;
+}
+
+.bg-styles button {
+  @apply w-full cursor-pointer bg-transparent px-2.5 text-left text-dim hover:text-ink;
+}
+
+.bg-styles button::before {
+  content: ' ';
+  white-space: pre;
+  @apply mr-1.5 inline-block w-[1ch];
+}
+
+.bg-styles button[aria-pressed='true'] {
+  @apply bg-white/10 text-ink;
+}
+
+.bg-styles button[aria-pressed='true']::before {
+  content: '>';
+  @apply text-accent;
+}
+
+.bg-settings {
+  @apply grid content-start gap-1.5 px-3 py-1.5;
+}
+
+.bg-note {
+  @apply text-faint;
+}
+
+.bg-setting {
+  @apply grid items-center gap-3;
+  grid-template-columns: 150px 1fr 120px 1.2em;
+}
+
+.bg-setting label {
+  @apply text-dim;
+}
+
+.bg-value {
+  @apply text-right whitespace-nowrap tabular-nums;
+}
+
+.bg-setting:focus-within label {
+  @apply text-ink;
+}
+
+.bg-panel button:focus-visible,
+.bg-panel [data-control]:focus-visible {
+  outline: 1px solid var(--color-dim);
+  outline-offset: 1px;
+}
+
+.bg-styles button:focus-visible {
+  outline-offset: -1px;
+}
+
+.bg-panel-foot {
+  @apply border-t border-line px-2.5 py-0.5 text-faint;
+  font-size: 11px;
+}
+
+.bg-reset {
+  @apply cursor-pointer bg-transparent p-0 text-faint hover:text-ink;
+}
+
+.bg-choices {
+  @apply flex gap-1;
+}
+
+.bg-toggle {
+  @apply cursor-pointer border border-line bg-transparent px-2 text-dim hover:text-ink;
+}
+
+.bg-toggle[aria-pressed='true'] {
+  @apply border-ink text-ink;
+}
+
+.bg-slider {
+  @apply m-0 h-3.5 w-full cursor-pointer appearance-none bg-transparent;
+}
+
+.bg-slider::-webkit-slider-runnable-track {
+  height: 1px;
+  background: linear-gradient(var(--color-ink), var(--color-ink)) 0 / var(--fill, 50%) 100% no-repeat, var(--color-faint);
+}
+
+.bg-slider::-webkit-slider-thumb {
+  @apply appearance-none border-0 bg-ink;
+  width: 7px;
+  height: 13px;
+  margin-top: -6px;
 }
