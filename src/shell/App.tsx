@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Grid, host, useLive } from '../host';
+import { Backdrop, Grid, host, useLive } from '../host';
 import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { palette } from './palette';
+import { usePersistBackground } from './persistBackground';
 import { usePersistVolume } from './persistVolume';
 import { Timeline } from './Timeline';
 
@@ -37,6 +38,7 @@ function Countdown() {
 export function App() {
   const hasSession = useLive((s) => s.session != null);
   usePersistVolume();
+  usePersistBackground();
 
   useEffect(() => {
     const offAgent = connectAgent();
@@ -55,6 +57,7 @@ export function App() {
   return (
     <div className="app" data-has-session={hasSession}>
       <div className="surface">
+        <Backdrop />
         <Grid />
         <Countdown />
         <CommandPalette />

@@ -24,11 +24,12 @@ const RULES: Record<string, string[]> = {
   'src/data': ['src/layout', 'src/host', 'src/components', 'src/shell', 'src/agent'],
   'src/layout': ['src/data', 'src/host', 'src/components', 'src/shell', 'src/agent'],
   // The host serves consumers, and knows none of them.
-  'src/host': ['src/components', 'src/shell', 'src/agent'],
+  'src/host': ['src/components', 'src/backgrounds', 'src/shell', 'src/agent'],
   // Consumers use the host and nothing below it.
-  'src/components': ['src/data', 'src/layout', 'src/shell', 'src/agent'],
-  'src/agent': ['src/data', 'src/layout', 'src/components', 'src/shell'],
-  'src/shell': ['src/data', 'src/layout'],
+  'src/components': ['src/data', 'src/layout', 'src/backgrounds', 'src/shell', 'src/agent'],
+  'src/backgrounds': ['src/data', 'src/layout', 'src/components', 'src/shell', 'src/agent'],
+  'src/agent': ['src/data', 'src/layout', 'src/components', 'src/backgrounds', 'src/shell'],
+  'src/shell': ['src/data', 'src/layout', 'src/backgrounds'],
 };
 
 describe('layer boundaries', () => {
