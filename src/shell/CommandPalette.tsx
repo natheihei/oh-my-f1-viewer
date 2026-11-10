@@ -6,6 +6,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { host, read, useLive } from '../host';
+import { BackgroundPanel } from './BackgroundPanel';
 import { sendToAgent, stopTurn } from './agentFeed';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
@@ -24,7 +25,7 @@ const ROLE_PREFIX: Record<EntryRole, string> = {
 };
 
 export function CommandPalette() {
-  const { open, busy, entries } = usePalette();
+  const { open, busy, entries, panel } = usePalette();
   const blank = useLive((s) => s.session == null);
   const [value, setValue] = useState('');
   const [selected, setSelected] = useState(0);
@@ -43,7 +44,7 @@ export function CommandPalette() {
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
-  const showing = open || blank || hasTiles || asking;
+  const showing = open || blank || hasTiles || asking || panel != null;
   const suggestions = matchCommands(value);
 
   useEffect(() => {
@@ -115,6 +116,20 @@ export function CommandPalette() {
   }, [blank]);
 
   if (!showing) return null;
+
+  if (panel === 'background') {
+    const closePanel = () => {
+      palette.closePanel();
+      const { style } = read().background;
+      palette.push('system', `Background: ${read().backgrounds.find((b) => b.name === style)?.title ?? 'off'}.`);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+    return (
+      <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
+        <BackgroundPanel onClose={closePanel} />
+      </div>
+    );
+  }
 
   const submit = () => {
     const text = value.trim();

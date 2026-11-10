@@ -19,13 +19,15 @@ app through one write path. f1a adopts the idea, not the machinery.
 
 ```
 ┌ CONSUMERS ─────────────────────────────────────────────────┐
-│ Components   video now, more later (the "mods")            │
-│ Frame        timeline · palette · countdown                │
+│ Components   video and charts (the "mods")                 │
+│ Backgrounds  what fills the gaps between tiles (mods too)  │
+│ Frame        timeline · palette · countdown · settings     │
 │ Agent        tools built on the host · spoiler gate        │
 ├ HOST (src/host): the only import consumers may use ────────┤
 │ reads    session · clock · feeds · streams · data …        │
-│ writes   host.session · playback · audio · layout (typed)  │
-│ native   <Video feed />                                    │
+│ writes   host.session · playback · audio · layout ·        │
+│          appearance (typed)                                │
+│ native   <Video feed /> · <Grid /> · <Backdrop />          │
 ├ CORE ──────────────────────────────────────────────────────┤
 │ Data · Playback (streams, sync) · Layout (tree, GridStack) │
 │ Per-year/race spec → parser registry → one output shape    │

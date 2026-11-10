@@ -9,13 +9,17 @@ export interface PaletteEntry {
   text: string;
 }
 
+/** A settings panel the palette shows in its place. */
+export type PalettePanel = 'background';
+
 interface PaletteState {
   open: boolean;
   busy: boolean;
   entries: PaletteEntry[];
+  panel: PalettePanel | null;
 }
 
-export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [] }));
+export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [], panel: null }));
 
 let nextEntry = 1;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -58,4 +62,12 @@ export const palette = {
   },
   /** Typing or focusing the palette keeps it open. */
   keepOpen: cancelHide,
+  /** Shows a settings panel where the palette is, until it's closed. */
+  openPanel(panel: PalettePanel): void {
+    cancelHide();
+    usePalette.setState({ open: true, panel });
+  },
+  closePanel(): void {
+    usePalette.setState({ panel: null });
+  },
 };

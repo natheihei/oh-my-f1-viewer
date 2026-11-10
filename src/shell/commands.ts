@@ -43,6 +43,13 @@ export async function reportReadiness(): Promise<void> {
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   {
+    name: '/settings-background',
+    description: 'Choose the background in the gaps between tiles',
+    async run() {
+      palette.openPanel('background');
+    },
+  },
+  {
     name: '/login-f1tv',
     description: 'Sign in to F1 TV',
     async run() {
