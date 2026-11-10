@@ -89,7 +89,8 @@ host still supports them, so they can come back.
 
 Every registered component but video is a chart. Each message carries a list of them at the end of the system prompt: name, title, how many
 drivers it takes, session types and description. The agent picks one by its description and suggests it next to the onboards it's about.
-It never sees race data, which is what keeps charts free of spoilers without an approval gate:
+Suggesting a chart shows the agent no race data, so it needs no approval gate of its own. Its SQL tool is separate, and has the gate
+described below:
 
 - Props carry only the drivers the user named, as car numbers. A chart given none picks its own from the data at the playhead.
 - A refusal never depends on how the session is going. It may say no session is open, the chart is for another session type, the session
