@@ -12,6 +12,11 @@ export interface ComponentSpec {
   key: string;
   label: string;
   props: Record<string, unknown>;
+  /**
+   * The component's size hint in grid cells, when it has one: its shape, and the least room it reads
+   * in. Auto-layout shares a column of tiles by their least height when every one of them has a hint.
+   */
+  size?: { aspect: number; min: [number, number] };
 }
 
 export interface Rect {
@@ -64,6 +69,33 @@ function split(total: number, parts: number): number[] {
   return Array.from({ length: parts }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
+/**
+ * Splits `total` in proportion to `weights`, in whole numbers of at least one. Without a weight for
+ * every part, or with too little to go round, it splits evenly instead.
+ */
+function share(total: number, weights: ReadonlyArray<number | null>): number[] {
+  const known = weights.filter((w): w is number => w !== null && w > 0);
+  const sum = known.reduce((a, w) => a + w, 0);
+  if (known.length !== weights.length || total < weights.length) return split(total, weights.length);
+  const exact = known.map((w) => (total * w) / sum);
+  const out = exact.map((v) => Math.max(1, Math.floor(v)));
+  // What rounding down left over goes to the largest remainders, and any excess comes off the largest parts.
+  const byRemainder = exact.map((v, i) => ({ i, r: v - Math.floor(v) })).sort((a, b) => b.r - a.r || a.i - b.i);
+  for (let k = 0, left = total - out.reduce((a, v) => a + v, 0); left > 0; k += 1, left -= 1) out[byRemainder[k % out.length].i] += 1;
+  while (out.reduce((a, v) => a + v, 0) > total) out[out.indexOf(Math.max(...out))] -= 1;
+  return out;
+}
+
+/** Stacks `heights` rows down a column of `area`, top to bottom. */
+function column(area: Rect, heights: number[]): Rect[] {
+  let y = area.y;
+  return heights.map((h) => {
+    const rect = { x: area.x, y, w: area.w, h };
+    y += h;
+    return rect;
+  });
+}
+
 /** Fills a rectangle with `count` cells in the most even grid that fits. */
 function tile(area: Rect, count: number): Rect[] {
   if (count === 0) return [];
@@ -92,24 +124,28 @@ function tile(area: Rect, count: number): Rect[] {
  * Broadcast-first: the primary node stays largest, and the rest fill a rail beside it, then the
  * band below it as the rail runs out of room. A group needs width for its members side by side,
  * so its presence widens the rail.
+ *
+ * `heights` holds each slot's least height from its size hint, or null without one. Tiles stacked
+ * in the column beside the primary share it in proportion to those, so a tall timing tower gets more
+ * rows than a small card, but only when every tile in that column has a hint: a video's never
+ * changes. Nothing else moves.
  */
-export function solveRects(slots: number, hasGroup: boolean): Rect[] {
+export function solveRects(slots: number, hasGroup: boolean, heights: ReadonlyArray<number | null> = []): Rect[] {
   const rest = slots - 1;
   if (slots <= 0) return [];
   if (rest === 0) return [{ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS }];
+  const hint = (i: number) => heights[i] ?? null;
   if (rest <= 3) {
     const mainW = hasGroup ? 14 : 16;
-    let y = 0;
-    const rail = split(GRID_ROWS, rest).map((h) => {
-      const rect = { x: mainW, y, w: GRID_COLUMNS - mainW, h };
-      y += h;
-      return rect;
-    });
+    const rail = column(
+      { x: mainW, y: 0, w: GRID_COLUMNS - mainW, h: GRID_ROWS },
+      share(GRID_ROWS, Array.from({ length: rest }, (_, i) => hint(i + 1))),
+    );
     return [{ x: 0, y: 0, w: mainW, h: GRID_ROWS }, ...rail];
   }
   if (rest <= 6) {
     const main = { x: 0, y: 0, w: 16, h: 16 };
-    const right = tile({ x: 16, y: 0, w: 8, h: 16 }, 2);
+    const right = column({ x: 16, y: 0, w: 8, h: 16 }, share(16, [hint(1), hint(2)]));
     const below = tile({ x: 0, y: 16, w: GRID_COLUMNS, h: 8 }, rest - 2);
     return [main, ...right, ...below];
   }
@@ -141,7 +177,8 @@ function withChildren(node: LayoutNode): LayoutNode {
 export function autoLayout(state: LayoutState): LayoutState {
   const primary = state.nodes.find((n) => n.id === state.primaryId) ?? state.nodes[0];
   const ranked = primary ? [primary, ...state.nodes.filter((n) => n !== primary)] : [];
-  const rects = solveRects(ranked.length, ranked.some((n) => n.kind === 'group'));
+  const heights = ranked.map((n) => (n.kind === 'tile' ? (n.component.size?.min[1] ?? null) : null));
+  const rects = solveRects(ranked.length, ranked.some((n) => n.kind === 'group'), heights);
   const rectOf = new Map(ranked.map((n, i) => [n.id, rects[i]]));
   return { ...state, nodes: state.nodes.map((n) => ({ ...withChildren(n), ...rectOf.get(n.id) })) };
 }

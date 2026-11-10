@@ -13,6 +13,11 @@ const { compareModel } = await import('./LapTimeCompare');
 const { degModel, fitLine, formatSlope } = await import('./TyreDegradation');
 const { paceModel } = await import('./StintPace');
 const { pitWindowModel, CLEAR_AIR } = await import('./PitWindow');
+const { battleModel } = await import('./BattleCard');
+const { sectorModel, spanOf } = await import('./SectorDelta');
+const { stopsModel } = await import('./PitStops');
+const { messagesModel, signalOf, wrap } = await import('./RaceControl');
+const { weatherModel } = await import('./Weather');
 const { components } = await import('../registry');
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
@@ -390,6 +395,224 @@ describe('pit_window', () => {
   });
 });
 
+const blap = (driver: number, lap: number, more: Record<string, unknown> = {}): Record<string, unknown> => ({
+  kind: 'lap',
+  driver_number: driver,
+  lap_number: lap,
+  date_end: lap * 100,
+  lap_duration: 90,
+  position: null,
+  gap_to_leader: null,
+  interval: null,
+  compound: 'MEDIUM',
+  tyre_age: lap,
+  trap: null,
+  ...more,
+});
+
+describe('battle_card', () => {
+  // 44 leads; 1 runs second, 3.0s behind after lap 1, then 2.5, 2.2, 1.9, and 0.8 now on lap 5.
+  const rows = [
+    ...[1, 2, 3, 4].map((n) => blap(44, n, { position: 1, lap_duration: [91, 90.5, 90.4, 90.6][n - 1] })),
+    blap(44, 5, { position: 1, date_end: null, lap_duration: null }),
+    ...[3, 2.5, 2.2, 1.9].map((g, i) => blap(1, i + 1, { position: 2, gap_to_leader: g, interval: g, lap_duration: [92, 90, 90.1, 90.3][i] })),
+    blap(1, 5, { position: 2, gap_to_leader: 0.9, interval: 0.8, date_end: null, lap_duration: null, compound: 'HARD', tyre_age: 3 }),
+    { kind: 'trap', driver_number: 44, trap: 318 },
+    { kind: 'trap', driver_number: 1, trap: 324 },
+  ];
+
+  it('sets the two drivers side by side, in the order asked for', () => {
+    const m = battleModel(rows, [1, 44]);
+    expect(m.sides[0]).toEqual({ driver: 1, position: 2, last: 90.3, best: 90, compound: 'HARD', age: 2, trap: 324 });
+    expect(m.sides[1]).toMatchObject({ driver: 44, position: 1, last: 90.6, best: 90.4, trap: 318 });
+    expect(m.ahead).toBe(1);
+  });
+
+  it("takes the gap from the car behind's interval, says it is within DRS range, and closing over three laps", () => {
+    const m = battleModel(rows, [44, 1]);
+    expect(m.gap).toBeCloseTo(0.8);
+    expect(m.drs).toBe(true);
+    // Lap 5 is in progress, so the trend runs from the end of lap 1 to the end of lap 4: (1.9 − 3) / 3.
+    expect(m.trend).toBeCloseTo(-0.3667, 3);
+  });
+
+  it('uses the difference of the gaps to the leader when they are not nose to tail', () => {
+    const apart = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 3, gap_to_leader: 1.4, interval: 0.3 } : r));
+    const m = battleModel(apart, [44, 1]);
+    expect(m.gap).toBeCloseTo(1.4);
+    expect(m.drs).toBe(false);
+  });
+
+  it("can't tell the gap to a lapped car, and has no trend without three laps", () => {
+    const lapped = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 9, gap_to_leader: '+1 LAP', interval: 2 } : r));
+    expect(battleModel(lapped, [44, 1])).toMatchObject({ gap: null, drs: null });
+    const early = rows.filter((r) => r.kind === 'trap' || (r.lap_number as number) <= 2);
+    expect(battleModel(early, [44, 1]).trend).toBeNull();
+    expect(battleModel([], [44, 1])).toMatchObject({ ahead: null, gap: null, trend: null, drs: null });
+  });
+});
+
+const sec = (driver: number, lap: number, s: [number | null, number | null, number | null], more: Record<string, unknown> = {}) => ({
+  driver_number: driver,
+  lap_number: lap,
+  duration_sector_1: s[0],
+  duration_sector_2: s[1],
+  duration_sector_3: s[2],
+  is_pit_in_lap: 0,
+  is_pit_out_lap: 0,
+  track_status: 'AllClear',
+  ...more,
+});
+
+describe('sector_delta', () => {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let lap = 1; lap <= 12; lap++) {
+    rows.push(sec(44, lap, [30, 40, 20]));
+    rows.push(sec(1, lap, [30.2, 39.9, 20], lap === 7 ? { is_pit_in_lap: 1 } : lap === 9 ? { track_status: 'VSCDeployed' } : {}));
+  }
+  // The lap in progress: both have the first sector, only one the second.
+  rows.push(sec(44, 13, [30, 40, null]), sec(1, 13, [30.1, null, null]));
+
+  it('shows the last ten laps both have started, positive where the first driver was faster', () => {
+    const m = sectorModel(rows, [44, 1]);
+    expect(m.laps).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(m.deltas[0][0]).toBeCloseTo(0.2);
+    expect(m.deltas[1][0]).toBeCloseTo(-0.1);
+    expect(m.deltas[2][0]).toBe(0);
+    expect(m.deltas[0][9]).toBeCloseTo(0.1);
+    expect(m.deltas[1][9]).toBeNull();
+  });
+
+  it('leaves pit laps and neutralised laps empty, and averages the rest', () => {
+    const m = sectorModel(rows, [44, 1]);
+    expect(m.skipped).toEqual([null, null, null, 'PIT', null, 'VSC', null, null, null, null]);
+    expect(m.deltas.map((row) => row[3])).toEqual([null, null, null]);
+    expect(m.averages[0]).toBeCloseTo((0.2 * 7 + 0.1) / 8);
+    expect(m.averages[1]).toBeCloseTo(-0.1);
+  });
+
+  it('counts an out-lap of either driver as a pit lap', () => {
+    const out = rows.map((r) => (r.driver_number === 44 && r.lap_number === 12 ? { ...r, is_pit_out_lap: 1 } : r));
+    expect(sectorModel(out, [44, 1]).skipped[8]).toBe('PIT');
+  });
+
+  it('has nothing before both have a sector, and scales between 0.2 and 1 second', () => {
+    expect(sectorModel([sec(44, 1, [30, null, null])], [44, 1]).laps).toEqual([]);
+    expect(spanOf([[0.04, null], [-0.1]])).toBe(0.2);
+    expect(spanOf([[0.34]])).toBe(0.4);
+    expect(spanOf([[-8]])).toBe(1);
+  });
+});
+
+describe('pit_stops', () => {
+  const stop = (driver: number, lap: number, lane: number | null, stop: number | null, compound: string | null) => ({
+    driver_number: driver,
+    lap_number: lap,
+    lane,
+    stop_duration: stop,
+    compound,
+  });
+
+  it('keeps the order given, newest first, with the tyre fitted and a shared lane scale', () => {
+    const m = stopsModel([stop(1, 20, 23.4, 2.1, 'HARD'), stop(44, 18, 25.76, null, null)]);
+    expect(m.stops).toEqual([
+      { driver: 1, lap: 20, compound: 'HARD', lane: 23.4, stop: 2.1 },
+      { driver: 44, lap: 18, compound: null, lane: 25.76, stop: null },
+    ]);
+    expect(m.hasStop).toBe(true);
+    expect(m.lane).toEqual([21, 26]);
+  });
+
+  it('hides the stationary time when no stop has one', () => {
+    const m = stopsModel([stop(1, 20, 23.4, null, 'HARD')]);
+    expect(m.hasStop).toBe(false);
+    expect(m.lane).toEqual([21, 26]);
+    expect(stopsModel([stop(1, 20, null, null, null)]).lane).toBeNull();
+  });
+});
+
+describe('race_control', () => {
+  const rc = (lap: number, category: string, flag: string | null, message: string, driver: number | null = null) => ({
+    lap_number: lap,
+    category,
+    flag,
+    message,
+    driver_number: driver,
+  });
+
+  it('gives each message the colour of its flag, and a safety car the yellow', () => {
+    expect(signalOf(rc(1, 'Flag', 'DOUBLE YELLOW', ''))).toBe('yellow');
+    expect(signalOf(rc(1, 'Flag', 'CLEAR', ''))).toBe('green');
+    expect(signalOf(rc(1, 'SafetyCar', null, 'VSC DEPLOYED'))).toBe('yellow');
+    expect(signalOf(rc(1, 'Flag', 'BLACK AND WHITE', ''))).toBe('blackwhite');
+    expect(signalOf(rc(1, 'Flag', 'CHEQUERED', ''))).toBe('chequered');
+    expect(signalOf(rc(1, 'Other', null, 'CAR 1 (NOR) TIME 1:41.931 DELETED'))).toBe('note');
+  });
+
+  it('collapses each run of blue flags into one line, keeping the messages as issued', () => {
+    const rows = [
+      rc(30, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 11 (PER)', 11),
+      rc(30, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 87 (BEA)', 87),
+      rc(29, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 11 (PER)', 11),
+      rc(28, 'Other', null, 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12'),
+      rc(27, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 43 (COL)', 43),
+    ];
+    expect(messagesModel(rows)).toEqual([
+      { kind: 'blue', lap: 30, count: 3, drivers: [11, 87] },
+      { kind: 'message', lap: 28, signal: 'note', text: 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12' },
+      { kind: 'blue', lap: 27, count: 1, drivers: [43] },
+    ]);
+    expect(messagesModel(rows, true)).toHaveLength(5);
+  });
+
+  it('wraps a message to the lines it may take, the last taking the rest', () => {
+    const measure = (s: string) => s.length;
+    expect(wrap(measure, 'FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 63', 14, 2)).toEqual(['FIA STEWARDS:', '5 SECOND TIME PENALTY FOR CAR 63']);
+    expect(wrap(measure, 'TRACK CLEAR', 20, 2)).toEqual(['TRACK CLEAR']);
+    expect(wrap(measure, 'DOUBLE YELLOW IN TRACK SECTOR 2', 10, 1)).toEqual(['DOUBLE YELLOW IN TRACK SECTOR 2']);
+  });
+});
+
+describe('weather', () => {
+  const w = (date: number, track: number, rainfall = 0) => ({
+    date,
+    track_temperature: track,
+    air_temperature: 26.9,
+    wind_speed: 3.1,
+    humidity: 42.3,
+    rainfall,
+  });
+
+  it('draws each measure on its own scale, at least its span wide, with the latest value', () => {
+    const m = weatherModel([w(0, 38.3), w(60, 37), w(120, 34.1)]);
+    expect(m.from).toBe(0);
+    expect(m.to).toBe(120);
+    const [track, air] = m.series;
+    expect(track.current).toBe(34.1);
+    expect(track.range[0]).toBeCloseTo(34.1);
+    expect(track.range[1]).toBeCloseTo(38.3);
+    expect(air.range).toEqual([25.9, 27.9]);
+    expect(m.raining).toBe(false);
+    expect(m.rain).toEqual([]);
+  });
+
+  it('leaves out a temperature of exactly 0, which the feed sends between real readings', () => {
+    const [track] = weatherModel([w(0, 36), w(60, 0), w(120, 37)]).series;
+    expect(track.points.map((p) => p.v)).toEqual([36, 37]);
+    expect(track.range).toEqual([34.5, 38.5]);
+  });
+
+  it('fills the rain strip while rainfall is reported, until the next reading', () => {
+    const m = weatherModel([w(0, 30), w(60, 30, 1), w(120, 30, 1), w(180, 30), w(240, 30, 1)]);
+    expect(m.rain).toEqual([
+      [60, 180],
+      [240, 240],
+    ]);
+    expect(m.raining).toBe(true);
+    expect(weatherModel([]).raining).toBeNull();
+  });
+});
+
 describe('the registry', () => {
   it('declares the charts the agent can suggest', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
@@ -406,5 +629,12 @@ describe('the registry', () => {
     expect(byName.tyre_degradation.spec({})).toEqual({ key: 'tyre_degradation:top', label: 'Deg' });
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
+    for (const name of ['battle_card', 'pit_stops']) expect(byName[name].sessions).toEqual(['race', 'sprint']);
+    for (const name of ['sector_delta', 'race_control', 'weather']) expect(byName[name].sessions).toBeUndefined();
+    expect(byName.battle_card.spec({ drivers: [44, 1] })).toEqual({ key: 'battle_card:44-1', label: '44 v 1' });
+    expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
+    expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
+    expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
+    expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
   });
 });
