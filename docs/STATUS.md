@@ -57,7 +57,25 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 
 Live capture has only run in unit tests. See "Not verified".
 
+## Verified for mods and MCP
+
+On Linux, in the real app, over replay races (2026-11-09):
+
+- A mod's life, with `scripts/mods-check.mjs` on the 2026 United States race at lap 25: a new folder loaded and drew, a save while
+  playing replaced the tile's drawing while the session, tile and clock carried on, a broken save kept the last good version and wrote
+  `mod.error` with the file and line, a mod that threw showed the error in its tile with the rest of the app still playing and its
+  console and error in `mod.log`, a fixed save drew again, and deleting the folder took the tile off.
+- An outside agent over MCP, with `scripts/mcp-check.mjs` and by hand, through `bin/f1a-mcp` on the 2026 Mexico City race: tools
+  appeared once the app started after the agent connected, it found and opened the race, muted it and jumped to lap 30, a read without
+  the flag stopped at the playhead, a new mod was checked, added and screenshotted with its query's rows, a check right after a save
+  waited for it, a broken save failed the check with the compiler's error, and wrong argument types were refused. A tyre age view was
+  built from scratch the same way and changed after looking at its screenshot; its compounds matched the broadcast's tower.
+- The production build loading a mod under its content security policy, with no errors.
+- The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
+
 ## Not verified
+
+- **Mods and MCP on macOS and Windows,** a screenshot of a DRM-protected stream, and an agent connected while the app reloads.
 
 - **The agent using `suggest_tiles`.** The strip, keys, drag and drop, and Esc are covered by `scripts/suggestions-check.mjs` in the real
   app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,

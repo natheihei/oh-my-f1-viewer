@@ -1,6 +1,6 @@
 /**
- * The components tiles can show. The app registers them once at start, so the host can build their
- * specs and draw them without knowing any: the agent picks one from `live.components`, which is the
+ * The components tiles can show. The app registers its own once at start, and mods register theirs
+ * on every save (src/host/mods.ts), so the host can build their specs and draw them without knowing any: the agent picks one from `live.components`, which is the
  * JSON-safe half of each definition.
  */
 import Type, { type Static, type TObject } from 'typebox';
@@ -9,7 +9,8 @@ import type { ComponentType } from 'react';
 import { create } from 'zustand';
 import type { SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
-import type { ComponentSpec, ContentFit } from '../layout/model';
+import { allTiles, type ComponentSpec, type ContentFit } from '../layout/model';
+import { layout, useLayout } from '../layout/store';
 import { write } from './op';
 
 interface Declared {
@@ -89,6 +90,22 @@ export const componentOps = {
     ({ components }) => {
       for (const c of components) definitions.set(c.name, c);
       useComponents.setState({ list: [...definitions.values()].map(infoOf) });
+    },
+  ),
+  unregister: write(
+    {
+      description: 'Make components unavailable, and take their tiles off screen. Returns the names that were registered.',
+      args: Type.Object({ names: Type.Array(Type.String()) }),
+    },
+    ({ names }) => {
+      const gone = names.filter((name) => definitions.delete(name));
+      if (!gone.length) return gone;
+      const keys = allTiles(useLayout.getState())
+        .filter((t) => gone.includes(t.component.type))
+        .map((t) => t.component.key);
+      for (const key of keys) layout.remove(key);
+      useComponents.setState({ list: [...definitions.values()].map(infoOf) });
+      return gone;
     },
   ),
 };

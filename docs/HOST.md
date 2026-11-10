@@ -1,6 +1,6 @@
 # Host reference
 
-This is everything a consumer (a tile component, the shell or the agent) can read or change. It all comes from `src/host`, and
+This is everything a consumer (a tile component, a [mod](MODS.md), the shell, the agent or an [outside agent](MCP.md)) can read or change. It all comes from `src/host`, and
 `tests/layers.test.ts` fails if a consumer imports from below it. [DESIGN.md](DESIGN.md) explains why the host is shaped this way.
 This page lists what it offers.
 
@@ -44,7 +44,8 @@ A selector must return a value or an existing reference. Building a new object o
 | `schedule` | `ScheduleView` | Every meeting and session from 2023 on, refreshed each time the app starts, plus `state` and `reason` |
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
-| `components` | `ComponentInfo[]` | Every component a tile can show, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers |
+| `components` | `ComponentInfo[]` | Every component a tile can show, mods that loaded included, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers or unregisters |
+| `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -190,12 +191,13 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 
 ### `host.components`
 
-The app registers its components once at start, from `src/main.tsx`. The host keeps their definitions, draws tiles with them, and
-lists what's safe to share in `live.components`.
+The app registers its components once at start, from `src/main.tsx`, and each [mod](MODS.md) registers again on every save. The host
+keeps their definitions, draws tiles with them, and lists what's safe to share in `live.components`.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `register` | `components: ComponentDefinition[]` | Makes the components available to tiles. One with a name that's already registered replaces it |
+| `register` | `components: ComponentDefinition[]` | Makes the components available to tiles. One with a name that's already registered replaces it, and its tiles redraw with the new one |
+| `unregister` | `names: string[]` | Makes the components unavailable and takes their tiles off screen. Returns the names that were registered. A mod's folder being deleted does this |
 
 ### `host.backgrounds` and `host.appearance`
 
@@ -232,6 +234,11 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   them, for the user's `/` commands and to notice an expired sign-in.
 - `host.agent`: the link to the agent loop in the main process (`status`, `send`, `cancel`, `onEvent`, `onToolCall`, `toolResult`). The shell's
   agent feed and `src/agent/bridge.ts` use it.
+- `host.external`: the link to outside agents, which main serves over MCP (`onRequest`, `reply`, `ready`). `src/mcp` uses it to
+  answer tool calls with the ops above. See [MCP.md](MCP.md).
+- `startMods(shared)`: starts loading mods, with the modules they share with the app. `src/main.tsx` calls it once, after registering
+  the app's own components.
+- `tileQueries(key)`: what each `useSql` in a tile last returned, which an outside agent's screenshot reports.
 
 ## Primitives
 
@@ -240,7 +247,8 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 - `<PreviewScope>` marks the `<Video>`s inside it as previews: they show their feed without taking its audio. The suggestion strip
   uses it.
 - `<Grid />` draws the layout, showing each tile with the registered component its spec names, along with where a dragged
-  suggestion would land.
+  suggestion would land. Every tile has an error boundary: a component that throws while drawing shows the error in its own tile, and
+  a new version of the component gets a fresh try.
 - `<Backdrop />` paints the background `live.background` names, on a canvas under the grid, so it shows only in the gaps. It paints
   when something changes, and every frame only while the background animates with its settings. With reduced motion it paints still
   frames.

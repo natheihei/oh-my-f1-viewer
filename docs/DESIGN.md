@@ -246,8 +246,9 @@ Deliberately different:
   We have none of those, and typed calls give compile errors and real return types. A name-based bridge can be added if sandboxed views need one.
 - **Writes return results.** Herdr's are fire-and-forget, but the agent needs answers such as which feeds loaded.
 - **No per-actor rules.** The agent's powers are its tool list, and the user's are the UI.
-- **No sandbox, hot reload or file-based mods yet.** Every component is our own code. Keep reads and write arguments JSON-safe, so that
-  agent-created views can run sandboxed later.
+- **No sandbox.** Mods are file-based and hot reload, like Herdr's ([MODS.md](MODS.md)), but they run in the renderer like our own
+  components: a mod is trusted like the agent the user brought to write it. An outside agent reaches the host over MCP
+  ([MCP.md](MCP.md)), with tools generated from the ops, and no spoiler gate: reading past the playhead is an explicit flag.
 - **No edit rescue or separate daemon.** Those solve problems of user-installed mods and long-lived terminals, which we don't have.
 
 ## Order of work
@@ -260,5 +261,5 @@ Deliberately different:
 6. Build the audit script, once session data is on screen and its findings matter.
 7. Add captions as the next data kind, when the moments feature starts.
 
-Also still to add: an error boundary per tile, so that a broken component can't take the app down. Charts have one already, in
-their shared `ChartFrame`. Video tiles don't.
+Every tile has an error boundary in `<Grid>`, so a broken component can't take the app down. Charts also have their own, in
+`ChartFrame`.

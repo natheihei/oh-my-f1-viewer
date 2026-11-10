@@ -1,9 +1,12 @@
-import { app, BrowserWindow, Menu, session } from 'electron';
+import { app, BrowserWindow, Menu, protocol, session } from 'electron';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
-import { createMainWindow, getMainWindow } from './windows';
+import { ExternalServer } from './mcp/server';
+import { socketPath } from './mcp/protocol';
+import { MOD_SCHEME, Mods } from './mods';
+import { createMainWindow, getMainWindow, sendToRenderer } from './windows';
 
 // Vendored F1OpenViewer modules are plain CommonJS.
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -32,6 +35,11 @@ if (process.env.LIBVA_DRIVER_NAME === 'nvidia') {
 if (process.platform === 'linux' && !app.commandLine.hasSwitch('password-store')) {
   app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 }
+
+// Mods are served from memory over their own scheme, which the page imports as ES modules. See docs/MODS.md.
+protocol.registerSchemesAsPrivileged([
+  { scheme: MOD_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 const cacheRoot = path.join(os.tmpdir(), 'f1a-cache');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(cacheRoot, String(process.pid)));
@@ -84,7 +92,21 @@ app
     livetiming.setAuthTokenProvider(() => sessionState.memSession.accessToken);
     licenseProxy.startLicenseProxy();
     licenseProxy.installWebRequestHooks();
-    const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'));
+    const root = path.join(__dirname, '..', '..');
+    const mods = new Mods(path.join(app.getPath('userData'), 'mods'), (list) => sendToRenderer('mods:changed', list), {
+      declarations: path.join(root, 'dist-types'),
+      nodeModules: path.join(root, 'node_modules'),
+    });
+    protocol.handle(MOD_SCHEME, (request) => mods.serve(request));
+    // Outside agents, over MCP. See docs/MCP.md.
+    const external = new ExternalServer(socketPath(app.getPath('userData')), mods);
+    app.on('will-quit', () => {
+      external.stop();
+      void mods.stop();
+    });
+    const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'), mods, external);
+    void mods.start().catch((e: Error) => console.warn('[mods] start:', e.message));
+    external.start();
 
     try {
       await sessionState.restoreSessionOnStartup();
@@ -94,12 +116,13 @@ app
     sessionState.startProactiveRefreshLoop();
 
     Menu.setApplicationMenu(null);
-    createMainWindow();
+    // A reload loses the renderer's side of MCP until it says it's back.
+    createMainWindow().webContents.on('did-start-loading', () => external.rendererGone());
     // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
     void data.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow().webContents.on('did-start-loading', () => external.rendererGone());
     });
   })
   .catch((e) => {

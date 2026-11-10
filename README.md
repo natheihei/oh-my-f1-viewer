@@ -46,6 +46,17 @@ blank page with the command palette, which tells you what to sign in to.
 Everything else goes to the agent in plain words. Before it reads past where you are or moves playback forward, the palette
 shows a spoiler check: answer Yes (once), Yes (for the session) or No. The timeline goes anywhere without asking.
 
+### Your own agent
+
+f1a is also an MCP server, so you can bring your own agent, such as Claude Code, to control it and to build new views for it:
+
+```bash
+claude mcp add f1a -- /path/to/f1a/bin/f1a-mcp
+```
+
+A view it builds is a [mod](docs/MODS.md): a folder in `~/.config/f1a/mods` that the app reloads on every save. Avoiding spoilers is
+your agent's job: the app makes reading past the playhead an explicit flag. See [docs/MCP.md](docs/MCP.md).
+
 ## Development
 
 ```bash
@@ -76,6 +87,16 @@ node scripts/seek-check.mjs
 
 ```bash
 npm run build && node scripts/prod-check.mjs
+```
+
+These two need only the F1 TV sign-in, and put a mod in the real profile's mods folder while they run:
+
+```bash
+node scripts/mods-check.mjs /tmp/mods-check
+```
+
+```bash
+node scripts/mcp-check.mjs /tmp/mcp-check
 ```
 
 ```bash

@@ -4,6 +4,8 @@ import type { F1TvStatus } from '../shared/api';
 import { getMainAppUrl, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
+import type { ExternalServer } from './mcp/server';
+import type { Mods } from './mods';
 import { TimingDb } from './timingdb';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
@@ -144,7 +146,7 @@ function createTimingDb(file: string): TimingDb {
   });
 }
 
-export function setupIpc(databaseFile: string): { refreshSchedule(): Promise<void> } {
+export function setupIpc(databaseFile: string, mods: Mods, external: ExternalServer): { refreshSchedule(): Promise<void> } {
   const timingDb = createTimingDb(databaseFile);
 
   // --- F1 TV account ---
@@ -223,6 +225,23 @@ export function setupIpc(databaseFile: string): { refreshSchedule(): Promise<voi
   handle('ai:reset', () => agent.reset());
   ipcMain.on('ai:toolResult', (evt, result) => {
     if (isTrusted(evt)) agent.onToolResult(result);
+  });
+
+  // --- Mods ---
+  handle('mods:list', () => mods.list());
+  ipcMain.on('mods:loaded', (evt, name, version, error) => {
+    if (isTrusted(evt)) mods.loaded(String(name), Number(version), error == null ? null : String(error));
+  });
+  ipcMain.on('mods:log', (evt, name, line) => {
+    if (isTrusted(evt) && line && typeof line === 'object') mods.log(String(name), line);
+  });
+
+  // --- Outside agents ---
+  ipcMain.on('mcp:ready', (evt) => {
+    if (isTrusted(evt)) external.rendererReady();
+  });
+  ipcMain.on('mcp:reply', (evt, reply) => {
+    if (isTrusted(evt) && reply && typeof reply === 'object') external.onReply(reply);
   });
 
   return { refreshSchedule: () => timingDb.refreshSchedule() };

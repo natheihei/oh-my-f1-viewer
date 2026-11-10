@@ -1,0 +1,5 @@
+#!/bin/sh
+# f1a's MCP server, for an outside agent: `claude mcp add f1a -- <this file>`. It runs with the app's
+# own Electron as Node and talks to the running app. See docs/MCP.md.
+root="$(cd "$(dirname "$0")/.." && pwd)"
+ELECTRON_RUN_AS_NODE=1 exec "$root/node_modules/electron/dist/electron" "$root/dist-electron/electron/mcp/shim.js" "$@"

@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
+import type { ExternalReply, ExternalRequest } from '../shared/external';
+import type { ModStatus } from '../shared/mods';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const handler = (_event: unknown, payload: T) => {
@@ -50,6 +52,17 @@ const api: F1aApi = {
     onEvent: (cb) => subscribe<AgentEvent>('ai:event', cb),
     onToolCall: (cb) => subscribe<AgentToolCall>('ai:toolCall', cb),
     toolResult: (result: AgentToolResult) => ipcRenderer.send('ai:toolResult', result),
+  },
+  mods: {
+    list: () => invoke('mods:list'),
+    onChanged: (cb) => subscribe<ModStatus[]>('mods:changed', cb),
+    loaded: (name, version, error) => ipcRenderer.send('mods:loaded', name, version, error),
+    log: (name, line) => ipcRenderer.send('mods:log', name, line),
+  },
+  external: {
+    onRequest: (cb) => subscribe<ExternalRequest>('mcp:request', cb),
+    reply: (reply: ExternalReply) => ipcRenderer.send('mcp:reply', reply),
+    ready: () => ipcRenderer.send('mcp:ready'),
   },
 };
 

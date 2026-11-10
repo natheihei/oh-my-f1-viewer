@@ -21,15 +21,16 @@ function imports(file: string): string[] {
 
 const RULES: Record<string, string[]> = {
   // The core knows nothing above it, and its two halves don't know each other.
-  'src/data': ['src/layout', 'src/host', 'src/components', 'src/shell', 'src/agent'],
-  'src/layout': ['src/data', 'src/host', 'src/components', 'src/shell', 'src/agent'],
+  'src/data': ['src/layout', 'src/host', 'src/components', 'src/shell', 'src/agent', 'src/mcp'],
+  'src/layout': ['src/data', 'src/host', 'src/components', 'src/shell', 'src/agent', 'src/mcp'],
   // The host serves consumers, and knows none of them.
-  'src/host': ['src/components', 'src/backgrounds', 'src/shell', 'src/agent'],
+  'src/host': ['src/components', 'src/backgrounds', 'src/shell', 'src/agent', 'src/mcp'],
   // Consumers use the host and nothing below it.
-  'src/components': ['src/data', 'src/layout', 'src/backgrounds', 'src/shell', 'src/agent'],
-  'src/backgrounds': ['src/data', 'src/layout', 'src/components', 'src/shell', 'src/agent'],
+  'src/components': ['src/data', 'src/layout', 'src/backgrounds', 'src/shell', 'src/agent', 'src/mcp'],
+  'src/backgrounds': ['src/data', 'src/layout', 'src/components', 'src/shell', 'src/agent', 'src/mcp'],
   'src/agent': ['src/data', 'src/layout', 'src/components', 'src/backgrounds', 'src/shell'],
-  'src/shell': ['src/data', 'src/layout', 'src/backgrounds'],
+  'src/mcp': ['src/data', 'src/layout', 'src/components', 'src/backgrounds', 'src/shell', 'src/agent'],
+  'src/shell': ['src/data', 'src/layout', 'src/backgrounds', 'src/mcp'],
 };
 
 describe('layer boundaries', () => {
@@ -45,7 +46,7 @@ describe('layer boundaries', () => {
   }
 
   it('consumers only use the host through its one entry point', () => {
-    const violations = ['src/components', 'src/agent', 'src/shell'].flatMap((layer) =>
+    const violations = ['src/components', 'src/agent', 'src/shell', 'src/mcp'].flatMap((layer) =>
       sourceFiles(layer).flatMap((file) =>
         imports(file)
           .filter((target) => target.startsWith('src/host/'))
@@ -65,7 +66,7 @@ describe('layer boundaries', () => {
   });
 
   it('only the data layer talks to the main process', () => {
-    const offenders = ['src/layout', 'src/host', 'src/components', 'src/agent', 'src/shell']
+    const offenders = ['src/layout', 'src/host', 'src/components', 'src/agent', 'src/shell', 'src/mcp']
       .flatMap(sourceFiles)
       .filter((file) => /window\.f1a\b/.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);

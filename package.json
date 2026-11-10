@@ -9,16 +9,19 @@
   "scripts": {
     "dev": "npm run build:electron && concurrently -k -n vite,tsc,app \"vite\" \"tsc -w --preserveWatchOutput -p tsconfig.electron.json\" \"wait-on http://127.0.0.1:5173 && env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:5173 electron .\"",
     "build": "npm run build:electron && vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "tsc -p tsconfig.electron.json && npm run build:types",
     "start": "npm run build && env -u CHROME_DESKTOP electron .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "build:types": "tsc -p tsconfig.types.json"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^1.5.0",
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "axios": "^1.20.0",
+    "esbuild": "0.28.2",
     "gridstack": "^14.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

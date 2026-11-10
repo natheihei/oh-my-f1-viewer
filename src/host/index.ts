@@ -7,6 +7,7 @@
 import Type from 'typebox';
 import type { Channel, SessionInfo } from '../../shared/api';
 import { account, agentLink } from '../data/account';
+import { externalLink } from '../data/external';
 import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
 import { sessionSql } from '../data/sessionData';
@@ -29,6 +30,10 @@ export {
 } from './backgrounds';
 export { defineComponent, type ComponentDefinition, type ComponentInfo } from './components';
 export { ComponentView, Grid } from './Grid';
+export { startMods } from './mods';
+export { tileQueries } from './tile';
+export type { ExternalReply, ExternalRequest, ExternalToolDefinition, QueryInfo, TileInfo } from '../../shared/external';
+export type { ModLogLine, ModStatus } from '../../shared/mods';
 export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
@@ -157,7 +162,7 @@ export const host = {
   playback,
   audio,
   layout: layoutOps,
-  /** What tiles can show. The app registers its components once at start. */
+  /** What tiles can show. The app registers its components once at start, and mods theirs on each save. */
   components: componentOps,
   /** What can fill the gaps between tiles. The app registers its backgrounds once at start. */
   backgrounds: backgroundOps,
@@ -172,4 +177,6 @@ export const host = {
   account,
   /** The link to the agent loop in the main process. */
   agent: agentLink,
+  /** The link to outside agents connected over MCP, which the main process serves. */
+  external: externalLink,
 };

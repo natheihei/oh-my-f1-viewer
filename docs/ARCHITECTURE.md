@@ -2,9 +2,10 @@
 
 ```
 ┌ Renderer ─────────────────────────────────────────────────────┐
-│ Components  what a tile can show: video and charts            │
+│ Components  what a tile can show: video, charts and mods      │
 │ Shell       palette · timeline · countdown · / commands       │
 │ Agent       tools built on the host · gates                   │
+│ MCP         outside agents' tools, generated from the host    │
 │ ── Host ──  the only thing the three above may use            │
 │ Data        session · clock · synced streams · session data   │
 │ Layout      layout tree → solver → GridStack placeholders     │
@@ -13,17 +14,19 @@
 ┌ Main ───────┴─────────────────────────────────────────────────┐
 │ F1 TV sign-in, catalog, playback · license proxy · Widevine   │
 │ session database + live socket · circuit · agent loop (pi-ai) │
+│ mods: watch, compile, serve · MCP socket for outside agents   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
 `tests/layers.test.ts` fails if anything reaches around the host, or if anything but the data layer talks to the main process. The layout knows
-nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`.
+nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`,
+or from outside the app as a [mod](MODS.md). An agent the user brings controls the app and builds mods over [MCP](MCP.md).
 
 [DESIGN.md](DESIGN.md) has the direction this is heading in, and why.
 
 ## Host (`src/host`)
 
-Everything a component, the shell or the agent can do goes through here. [HOST.md](HOST.md) lists every read and write:
+Everything a component, the shell, the agent or an outside agent can do goes through here. [HOST.md](HOST.md) lists every read and write:
 
 - **Reads:** `useLive(selector)` re-renders only when the selected value changes, and `read()` gives the same state once, outside React. `useSql` and `host.data.sql` read the session's
   time series, and can't write.

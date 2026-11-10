@@ -1,8 +1,9 @@
 /** A SQL query that stays current: it runs again as the playhead moves and as more of the session arrives. */
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import type { SqlRows } from '../../shared/sessionData';
 import { sessionSql } from '../data/sessionData';
 import { useLive } from './live';
+import { forgetQuery, recordQuery, TileContext } from './tile';
 
 export type SqlView = { state: 'loading' } | { state: 'failed'; reason: string } | ({ state: 'ready' } & SqlRows);
 
@@ -59,6 +60,14 @@ export function useSql(sql: string, params: unknown[] = []): SqlView {
       cancelled = true;
     };
   }, [sql, key, revision]);
+
+  // What it returned, for an outside agent looking at the tile.
+  const tile = useContext(TileContext);
+  useEffect(() => {
+    if (tile === null) return;
+    recordQuery(tile, sql, view);
+  }, [tile, sql, view]);
+  useEffect(() => (tile === null ? undefined : () => forgetQuery(tile, sql)), [tile, sql]);
 
   return view;
 }
