@@ -25,6 +25,18 @@ Work in these stages, in order:
    {{BASE}} (never merge), push the branch (`--force-with-lease` if you
    rebased after pushing), and open a PR with `gh pr create` whose body
    explains the change and ends with `Closes #{{ISSUE}}`. Then tell the
-   user the PR link and stop.
+   user the PR link and end your turn; step 6 starts only when the user
+   comes back. Don't poll or wait on the PR yourself.
+6. **Clean up after merge.** When the user says the PR is merged or asks
+   you to clean up, check it with `gh pr view {{BRANCH}} --json state`. If
+   it isn't `MERGED`, say so and stop. If it is, ask the user to confirm
+   cleanup, and do nothing until they do. Once confirmed:
+   1. If `git -C {{WORKTREE}} status --porcelain` shows anything, list it
+      and stop; never force-remove.
+   2. Remove the worktree from the main checkout:
+      `cd {{MAIN}} && git worktree remove {{WORKTREE}}`.
+   3. Close this Herdr space last, since it ends your own terminal:
+      `herdr-app do space.close "$(herdr-app ls | jq -c --arg t "$HC_TERMINAL_ID" '{id: (.spaces[] | select(any(.tabs[].terminals[]; .terminal == $t)) | .id), confirmed: true}')"`.
+      Tell the user it's done before you run this command.
 
 {{GUIDANCE}}
