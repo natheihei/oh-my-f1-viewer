@@ -10,12 +10,19 @@ function describeLayout(state: LayoutState): string {
     .join('; ');
 }
 
+/** The audible feed and the master volume together, so a feed is never called audible at volume 0. */
+function describeAudio(label: string | null, volume: number): string {
+  if (label == null) return 'muted';
+  if (volume === 0) return `${label}, but the volume is 0 so nothing can be heard`;
+  return `${label} at ${Math.round(volume * 100)}% volume`;
+}
+
 /**
  * The state block sent with each user message. Contains nothing about how the race goes: the roster is
  * who is entered, not where they are. `note` is what the user did with the last turn's suggestions.
  */
 export function describeAppState(note: string | null = null): string {
-  const { session, audio, feeds, clock, streams, countdown, layout, sessionData } = read();
+  const { session, audio, volume, feeds, clock, streams, countdown, layout, sessionData } = read();
   const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
   if (countdown) lines.push(`countdown running for: ${countdown.title}`);
   if (!session) {
@@ -29,7 +36,7 @@ export function describeAppState(note: string | null = null): string {
     `session: ${session.title} (${session.status})`,
     `playback: ${clock.playing ? 'playing' : 'paused'} at ${formatClock(clock.timeSec)}`,
     `on screen: ${describeLayout(layout)}`,
-    `audio: ${feeds.find((f) => f.id === audio)?.label ?? 'muted'}`,
+    `audio: ${describeAudio(feeds.find((f) => f.id === audio)?.label ?? null, volume)}`,
   );
   if (sessionData.state === 'ready') {
     if (sessionData.playheadMs != null) lines.push(`playhead: ${Math.round(sessionData.playheadMs)} (UTC ms, as in date columns)`);
