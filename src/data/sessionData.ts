@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import type { SessionInfo, TimingQuery } from '../../shared/api';
 import type {
+  CircuitView,
   DataStatus,
   Schedule,
   ScheduleView,
@@ -33,6 +34,8 @@ function deepFreeze<T>(value: T): T {
 }
 
 export const useSessionData = create<SessionDataView>(() => ({ state: 'idle' }));
+/** The open session's circuit, which the main process fetches when the session opens. */
+export const useCircuit = create<CircuitView>(() => ({ state: 'idle' }));
 export const useSchedule = create<ScheduleView>(() => ({ state: 'loading', reason: null, meetings: [], sessions: [], refreshedAt: null }));
 
 function applySchedule(schedule: Schedule | null, reason: string | null, state: ScheduleView['state']): void {
@@ -170,6 +173,11 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   };
 
   useSessionData.setState({ state: 'loading', sessionKey: null, coverage: null }, true);
+  useCircuit.setState({ state: 'loading' }, true);
+  const asked = JSON.stringify(query);
+  const stopCircuit = window.f1a.data.onCircuit(({ query: sent, circuit }) => {
+    if (!destroyed && JSON.stringify(sent) === asked) useCircuit.setState(deepFreeze(circuit), true);
+  });
   const unsubscribe = window.f1a.data.onStatus(onStatus);
   void window.f1a.data.open(query, live).catch((e: Error) => {
     if (!destroyed) useSessionData.setState({ state: 'failed', reason: e.message }, true);
@@ -191,8 +199,10 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       destroyed = true;
       current = null;
       unsubscribe();
+      stopCircuit();
       void window.f1a.data.close().catch(() => {});
       useSessionData.setState({ state: 'idle' }, true);
+      useCircuit.setState({ state: 'idle' }, true);
     },
   };
 }

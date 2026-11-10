@@ -1,9 +1,9 @@
 /** One read surface over the core's stores. A consumer selects what it needs and re-renders only when that changes. */
 import { useSyncExternalStore } from 'react';
-import type { Channel, ScheduleView, SessionDataView, SessionInfo } from '../../shared/api';
+import type { Channel, CircuitView, ScheduleView, SessionDataView, SessionInfo } from '../../shared/api';
 import { useEventIndex, type EventIndex } from '../data/catalog';
 import { useSession, type ClockState, type StreamView } from '../data/session';
-import { useSchedule, useSessionData } from '../data/sessionData';
+import { useCircuit, useSchedule, useSessionData } from '../data/sessionData';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useComponents, type ComponentInfo } from './components';
@@ -29,6 +29,8 @@ export interface Live {
   schedule: ScheduleView;
   /** The open session's roster and results, as they stood at the frame on screen. */
   sessionData: SessionDataView;
+  /** The open session's circuit: outline, corners and pit loss. It doesn't depend on the playhead. */
+  circuit: CircuitView;
   /** Every component a tile can show, without its code: what the agent picks from. */
   components: ComponentInfo[];
 }
@@ -48,6 +50,7 @@ export function read(): Live {
     events: useEventIndex.getState(),
     schedule: useSchedule.getState(),
     sessionData: useSessionData.getState(),
+    circuit: useCircuit.getState(),
     components: useComponents.getState().list,
   };
 }
@@ -61,6 +64,7 @@ function subscribe(onChange: () => void): () => void {
     useEventIndex.subscribe(onChange),
     useSchedule.subscribe(onChange),
     useSessionData.subscribe(onChange),
+    useCircuit.subscribe(onChange),
     useComponents.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());

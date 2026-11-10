@@ -27,13 +27,27 @@ class ChartBoundary extends Component<BoundaryProps, { error: string | null }> {
 }
 
 /**
- * Draws `children` once the session has the datasets the chart `needs` and every view has rows, and a
- * short message until then. `children` is a function, so the chart's own work runs inside the boundary.
+ * Draws `children` once the session has the datasets the chart `needs`, anything else it `waits` on is
+ * there, and every view has rows, and a short message until then. `children` is a function, so the
+ * chart's own work runs inside the boundary.
+ *
+ * `waits` holds what else the chart needs, as a message while it's missing or null once it's there, such
+ * as `circuitMessage(circuit)`. The first message shows, after the session data's own.
  */
-export function ChartFrame({ needs, views, children }: { needs: readonly Dataset[]; views: readonly SqlView[]; children: () => ReactNode }) {
+export function ChartFrame({
+  needs,
+  waits = [],
+  views,
+  children,
+}: {
+  needs: readonly Dataset[];
+  waits?: ReadonlyArray<string | null>;
+  views: readonly SqlView[];
+  children: () => ReactNode;
+}) {
   // A string, so the frame re-renders when the message changes, not on every revision.
   const data = useLive((s) => dataMessage(s.sessionData, needs));
-  const message = data ?? viewMessage(views);
+  const message = data ?? waits.find((w) => w !== null) ?? viewMessage(views);
   return (
     <div className="tile">
       {message !== null ? (

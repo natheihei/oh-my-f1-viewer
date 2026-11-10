@@ -13,6 +13,7 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | Meetings, sessions | `useLive((s) => s.schedule)` | On every app start and sign-in. The last copy stays readable until then, or if that fails |
 | Drivers, championship, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
 | Lap count | `useLive((s) => s.sessionData.lapCount)` | When a session opens |
+| Circuit: outline, corners, pit loss | `useLive((s) => s.circuit)` | Each time a session opens, from MultiViewer. The last copy stays readable, with a `reason`, if that fails |
 | `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
 
 Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
@@ -21,6 +22,16 @@ upcoming list, not OpenF1's website API, so it lacks `circuit_type`, images and 
 until they've happened.
 
 `useSql` runs again as the playhead moves and as data arrives. Objects are frozen. `sessionData.coverage` says what the database holds and why anything is missing.
+
+## The circuit
+
+The circuit comes from MultiViewer's public API (`api.multiviewer.app/api/v1/circuits/{circuitKey}/{year}`), which needs no
+sign-in. The main process fetches it, sending nothing but the circuit's key and the year, and checks the answer's shape before
+keeping it: the outline must be there, and a corner or pit loss that doesn't read is left out or null. It's stored in `t_kv` under
+`circuit:<key>`. When a session opens, the cached copy is published at once, then the fresh one.
+
+The key is F1's own. The schedule's meeting has it once the meeting has happened; before that, it comes from the live feed's
+`SessionInfo` (`Meeting.Circuit.Key`). Until it's known, the circuit is `loading`.
 
 ## Track status, lap count and `lap_summary`
 
@@ -152,4 +163,7 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 - **No query timeout.** The agent now has SQL (`query_session`), and a runaway query would still block the worker, which runs SQLite
   synchronously. The timeout is still missing.
 - **A session with no keys could get another session's data.** The lookup then searches by name and type from the newest meeting back. How often F1 TV omits keys wasn't measured.
+- **The circuit is third-party and unofficial.** MultiViewer returns data dated 2021 whatever year is asked for, so a rebuilt
+  pit lane or a circuit added since may be wrong or missing. An archive session whose meeting isn't in the schedule never learns
+  its key, so its circuit stays `loading`.
 - **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `retired`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.

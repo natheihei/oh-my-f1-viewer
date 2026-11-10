@@ -4,7 +4,7 @@ import { driverStyles } from './colors';
 import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, lapTicks, median, neutralBands, neutralOf, paceRange, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
-import { dataMessage, viewMessage } from './status';
+import { circuitMessage, dataMessage, viewMessage } from './status';
 import { compoundLetter, formatGap, formatLapTime, gapSeconds, parseGap, stintAge } from './values';
 
 describe('scales', () => {
@@ -219,5 +219,14 @@ describe('laps', () => {
     expect(lapTicks(52, 300)).toEqual([10, 20, 30, 40, 52]);
     expect(lapTicks(5, 400)).toEqual([1, 2, 3, 4, 5]);
     expect(lapTicks(70, 100)).toEqual([70]);
+  });
+});
+
+describe('circuitMessage', () => {
+  it('waits for the circuit, says why there is none, and lets a stale copy serve', () => {
+    expect(circuitMessage({ state: 'loading' })).toBe('Loading the circuit…');
+    expect(circuitMessage({ state: 'failed', reason: 'HTTP 503' })).toBe('No circuit data. HTTP 503');
+    const ready = { circuitKey: 9, name: 'Austin', refreshedAt: 1, outline: { x: [], y: [] }, corners: [], rotation: 0, pitLoss: { normal: 20, safetyCar: null, virtualSafetyCar: null } };
+    expect(circuitMessage({ state: 'ready', reason: 'HTTP 503', ...ready })).toBeNull();
   });
 });
