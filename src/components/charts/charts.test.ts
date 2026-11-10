@@ -463,12 +463,16 @@ describe('battle_card', () => {
     expect(m.trend).toBeCloseTo(-0.3667, 3);
   });
 
-  it('has no trend while one has stopped and the other not yet, at either end', () => {
-    // 1 came out of the pits at the end of lap 1, a stint ahead of 44 there: that gap is a stop.
-    const stopped = rows.map((r) => (r.lap_number === 1 && r.kind === 'lap' ? { ...r, stint_number: r.driver_number === 1 ? 2 : 1 } : r));
-    expect(battleModel(stopped, [44, 1]).trend).toBeNull();
-    const both = rows.map((r) => (r.lap_number === 1 && r.kind === 'lap' ? { ...r, stint_number: 2 } : r));
-    expect(battleModel(both, [44, 1]).trend).toBeCloseTo(-0.3667, 3);
+  it('has no trend across a stop only one of them made, and keeps it otherwise', () => {
+    // Stints by lap for 44 and for 1, over the laps the trend spans: the end of lap 1 to the end of lap 4.
+    const withStints = (of44: number[], of1: number[]) =>
+      rows.map((r) => (r.kind === 'lap' && typeof r.lap_number === 'number' ? { ...r, stint_number: (r.driver_number === 44 ? of44 : of1)[r.lap_number - 1] } : r));
+    // 1 stopped in that time and 44 didn't: the change in the gap is a pit stop.
+    expect(battleModel(withStints([1, 1, 1, 1, 1], [1, 2, 2, 2, 2]), [44, 1]).trend).toBeNull();
+    // Both stopped in that time: the stops roughly cancel.
+    expect(battleModel(withStints([1, 2, 2, 2, 2], [1, 1, 2, 2, 2]), [44, 1]).trend).toBeCloseTo(-0.3667, 3);
+    // A two-stopper catching a one-stopper, both stops long past: the trend shows.
+    expect(battleModel(withStints([2, 2, 2, 2, 2], [3, 3, 3, 3, 3]), [44, 1]).trend).toBeCloseTo(-0.3667, 3);
   });
 
   it('uses the difference of the gaps to the leader when they are not nose to tail', () => {

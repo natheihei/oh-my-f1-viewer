@@ -82,25 +82,32 @@ export const toLeader = (r: Record<string, unknown>): number | null => (r.gap_to
  * How much the gap between two drivers grew per lap over the last `over` laps both have finished,
  * from their gaps to the leader as each crossed the line: negative is closing. Takes `lap_summary`
  * rows of both, with `driver_number`, `lap_number`, `date_end`, `gap_to_leader` and `stint_number`.
- * Null without both ends, or when at either end one driver has stopped and the other not yet: the
- * gap there is a pit stop, not the battle. The line after an out-lap is where a stop shows in the gap.
+ * Null without both ends, or when one driver stopped between them and the other didn't: that change is
+ * a pit stop, not the battle. Stops by both in that time roughly cancel, and stops before it don't
+ * count, so a two-stopper catching a one-stopper shows. A stop appears as a new `stint_number`.
  */
 export function gapTrend(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: readonly [number, number], over: number): number | null {
   const ended = (driver: number) =>
     new Map(rows.filter((r) => num(r.driver_number) === driver && r.date_end != null && num(r.lap_number) !== null).map((r) => [num(r.lap_number)!, r]));
   const [ea, eb] = [ended(a), ended(b)];
-  const between = (lap: number): number | null => {
-    const [ra, rb] = [ea.get(lap), eb.get(lap)];
-    if (!ra || !rb) return null;
-    const [sa, sb] = [num(ra.stint_number), num(rb.stint_number)];
-    if (sa !== null && sb !== null && sa !== sb) return null;
-    const [ga, gb] = [toLeader(ra), toLeader(rb)];
-    return ga === null || gb === null ? null : Math.abs(gb - ga);
-  };
   const common = [...ea.keys()].filter((lap) => eb.has(lap));
   if (!common.length) return null;
   const last = Math.max(...common);
-  const [now, then] = [between(last), between(last - over)];
+  const ends = [ea.get(last), eb.get(last), ea.get(last - over), eb.get(last - over)];
+  if (ends.some((r) => !r)) return null;
+  const [aNow, bNow, aThen, bThen] = ends as Array<Record<string, unknown>>;
+  // Without stint numbers there's nothing to tell a stop by, so the trend stands.
+  const stops = (now: Record<string, unknown>, then: Record<string, unknown>) => {
+    const [n, t] = [num(now.stint_number), num(then.stint_number)];
+    return n === null || t === null ? null : n - t;
+  };
+  const [stopsA, stopsB] = [stops(aNow, aThen), stops(bNow, bThen)];
+  if (stopsA !== null && stopsB !== null && stopsA !== stopsB) return null;
+  const between = (ra: Record<string, unknown>, rb: Record<string, unknown>): number | null => {
+    const [ga, gb] = [toLeader(ra), toLeader(rb)];
+    return ga === null || gb === null ? null : Math.abs(gb - ga);
+  };
+  const [now, then] = [between(aNow, bNow), between(aThen, bThen)];
   return now !== null && then !== null ? (now - then) / over : null;
 }
 
