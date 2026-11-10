@@ -6,6 +6,7 @@ import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, lapTicks, median, neutralBands, neutralOf, paceRange, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
 import { circuitMessage, dataMessage, viewMessage } from './status';
+import { bridgeSlow, deltaAlong, fitOutline, lapDistance, lineCrossings, outlineLength, projector, rotate, timeAt } from './track';
 import { compoundLetter, formatGap, formatLapTime, gapSeconds, parseGap, stintAge } from './values';
 
 describe('scales', () => {
@@ -237,5 +238,113 @@ describe('circuitMessage', () => {
     expect(circuitMessage({ state: 'failed', reason: 'HTTP 503' })).toBe('No circuit data. HTTP 503');
     const ready = { circuitKey: 9, name: 'Austin', refreshedAt: 1, outline: { x: [], y: [] }, corners: [], rotation: 0, pitLoss: { normal: 20, safetyCar: null, virtualSafetyCar: null } };
     expect(circuitMessage({ state: 'ready', reason: 'HTTP 503', ...ready })).toBeNull();
+  });
+});
+
+describe('track geometry', () => {
+  const square = { x: [0, 100, 100, 0], y: [0, 0, 50, 50] };
+
+  it('turns anticlockwise with y up', () => {
+    const [x, y] = rotate(10, 0, 90);
+    expect(x).toBeCloseTo(0);
+    expect(y).toBeCloseTo(10);
+  });
+
+  it('fits the outline to the box keeping its aspect, centred, y up', () => {
+    const fit = fitOutline(square, 0, { left: 0, top: 0, width: 200, height: 200 });
+    expect(fit.scale).toBe(2);
+    expect(fit(0, 0)).toEqual([0, 150]);
+    expect(fit(100, 50)).toEqual([200, 50]);
+    // Turned a quarter, the long side stands up, centred across: (100, 0) goes to the top right.
+    const turned = fitOutline(square, 90, { left: 0, top: 0, width: 200, height: 200 });
+    expect(turned.scale).toBe(2);
+    const [x, y] = turned(100, 0);
+    expect(x).toBeCloseTo(150);
+    expect(y).toBeCloseTo(0);
+  });
+
+  it('measures the outline as a closed line', () => {
+    expect(outlineLength(square)).toBe(300);
+  });
+
+  it('projects points onto the outline, as distance along it and off it', () => {
+    const project = projector(square);
+    expect(project(50, -3)).toEqual({ s: 50, off: 3 });
+    expect(project(103, 25)).toEqual({ s: 125, off: 3 });
+    // Back along the closing side, from (0, 50) to (0, 0).
+    expect(project(-1, 10)).toEqual({ s: 290, off: 1 });
+  });
+
+  it('takes a lap from positions between two crossings of the line, interpolated', () => {
+    // Round the 300-unit square (30 m) at 10 units a second, starting at 280 units: crossings at 2 s and 32 s.
+    const round = (u: number): { x: number; y: number } => {
+      const s = ((u % 300) + 300) % 300;
+      if (s < 100) return { x: s, y: 0 };
+      if (s < 150) return { x: 100, y: s - 100 };
+      if (s < 250) return { x: 250 - s, y: 50 };
+      return { x: 0, y: 300 - s };
+    };
+    const positions = Array.from({ length: 36 }, (_, i) => ({ date: i * 1000 + 500, ...round(285 + i * 10) }));
+    const lap = lineCrossings(positions, square, 2000)!;
+    expect(lap.start).toBeCloseTo(2000);
+    expect(lap.end).toBeCloseTo(32_000);
+    // The crossing nearest the time given, so a timed start a little late still finds it.
+    expect(lineCrossings(positions, square, 2400)!.start).toBeCloseTo(2000);
+    // Too short a window for a whole lap.
+    expect(lineCrossings(positions.slice(0, 10), square, 2000)).toBeNull();
+  });
+
+  it('integrates speed over the lap, holding the end samples to its ends', () => {
+    // 36 km/h is 10 m/s: a 10 s lap of constant speed is 100 m.
+    const samples = [2000, 4000, 6000, 8000].map((date) => ({ date, speed: 36 }));
+    const lap = lapDistance([...samples, { date: 20_000, speed: 300 }], 0, 10_000)!;
+    expect(lap[0]).toEqual({ t: 0, d: 0, speed: 36 });
+    expect(lap.at(-1)!.t).toBe(10);
+    expect(lap.at(-1)!.d).toBeCloseTo(100);
+    // Scaled to a known length, every distance stretches the same.
+    const scaled = lapDistance(samples, 0, 10_000, 110)!;
+    expect(scaled.at(-1)!.d).toBeCloseTo(110);
+    expect(scaled[1].d).toBeCloseTo(22);
+    expect(lapDistance([], 0, 10_000)).toBeNull();
+  });
+
+  it('reads the time at a distance between samples', () => {
+    const lap = [
+      { t: 0, d: 0 },
+      { t: 2, d: 10 },
+      { t: 4, d: 30 },
+    ];
+    expect(timeAt(lap, 5)).toBe(1);
+    expect(timeAt(lap, 20)).toBe(3);
+    expect(timeAt(lap, 31)).toBeNull();
+  });
+
+  it('runs the difference along the lap, ending at the lap time difference', () => {
+    const fast = [
+      { t: 0, d: 0 },
+      { t: 10, d: 100 },
+    ];
+    const slow = [
+      { t: 0, d: 0 },
+      { t: 12, d: 100 },
+    ];
+    const delta = deltaAlong(fast, slow, 4);
+    expect(delta.map((p) => p.d)).toEqual([0, 25, 50, 75, 100]);
+    expect(delta[2].delta).toBeCloseTo(1);
+    expect(delta.at(-1)!.delta).toBeCloseTo(2);
+    expect(deltaAlong([], slow)).toEqual([]);
+  });
+
+  it('draws the delta straight through slow corners, keeping the change across them and the ends', () => {
+    // A spike at 200 to 210 m, inside a slow corner from 180 to 230 m, and a real 0.1 s lost there.
+    const delta = Array.from({ length: 41 }, (_, i) => ({ d: i * 10, delta: (i >= 23 ? 0.1 : 0) + (i === 20 || i === 21 ? 0.3 : 0) }));
+    const bridged = bridgeSlow(delta, (d) => d >= 180 && d <= 230);
+    expect(bridged[17].delta).toBe(0);
+    expect(bridged[20].delta).toBeCloseTo(0.3 / 7);
+    expect(bridged[24].delta).toBeCloseTo(0.1);
+    expect(Math.max(...bridged.map((p) => p.delta))).toBeCloseTo(0.1);
+    expect(bridgeSlow(delta, () => true)[0]).toEqual(delta[0]);
+    expect(bridgeSlow(delta, () => true)[40]).toEqual(delta[40]);
+    expect(bridgeSlow([], () => true)).toEqual([]);
   });
 });
