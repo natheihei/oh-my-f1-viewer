@@ -475,4 +475,16 @@ describe('session database', () => {
     store = new TimingStore(path.join(dir, 'test.sqlite'));
     expect(store.schedule()).toEqual({ meetings: [], sessions: [], refreshedAt: 5 });
   });
+
+  it('keeps each circuit under its own key', () => {
+    const circuit = { circuitKey: 9, name: 'Austin', refreshedAt: 5, outline: { x: [0, 1], y: [0, 1] }, corners: [], rotation: 0, pitLoss: { normal: 20.81, safetyCar: null, virtualSafetyCar: null } };
+    store.saveCircuit(circuit);
+    store.saveCircuit({ ...circuit, circuitKey: 10, name: 'Other' });
+    store.close();
+    store = new TimingStore(path.join(dir, 'test.sqlite'));
+    expect(store.circuit(9)).toEqual(circuit);
+    expect(store.circuit(10)?.name).toBe('Other');
+    expect(store.circuit(11)).toBeNull();
+    expect(store.schedule()).toBeNull();
+  });
 });

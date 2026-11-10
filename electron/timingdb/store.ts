@@ -7,6 +7,7 @@ import { constants, DatabaseSync, type StatementSync, type SQLInputValue } from 
 import type { FeedClock } from '../../shared/feedTime';
 import {
   SQL_TABLES,
+  type Circuit,
   type Dataset,
   type DatasetCoverage,
   type Schedule,
@@ -340,5 +341,16 @@ export class TimingStore {
   schedule(): Schedule | null {
     const row = this.statement("SELECT value FROM t_kv WHERE key = 'schedule'").get() as { value: string } | undefined;
     return row ? (JSON.parse(row.value) as Schedule) : null;
+  }
+
+  // --- Circuits, from MultiViewer ---
+
+  saveCircuit(circuit: Circuit): void {
+    this.statement('INSERT OR REPLACE INTO t_kv (key, value) VALUES (?, ?)').run(`circuit:${circuit.circuitKey}`, JSON.stringify(circuit));
+  }
+
+  circuit(circuitKey: number): Circuit | null {
+    const row = this.statement('SELECT value FROM t_kv WHERE key = ?').get(`circuit:${circuitKey}`) as { value: string } | undefined;
+    return row ? (JSON.parse(row.value) as Circuit) : null;
   }
 }

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionInfo } from '../../shared/api';
-import type { DataStatus, SessionCoverage } from '../../shared/sessionData';
-import { archiveQuery, openSessionData, sessionSql, useSessionData } from './sessionData';
+import type { TimingQuery } from '../../shared/api';
+import type { CircuitView, DataStatus, SessionCoverage } from '../../shared/sessionData';
+import { archiveQuery, openSessionData, sessionSql, useCircuit, useSessionData } from './sessionData';
 
 const session = { contentId: 1, title: '2026 Race', type: 'race', year: 2026, meetingKey: '10', sessionKey: '20', status: 'replay' } as SessionInfo;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -14,11 +15,16 @@ const noObjects = { drivers: [], startingGrid: [], sessionResult: [], championsh
 
 describe('session data', () => {
   let emit: (status: DataStatus) => void;
+  let emitCircuit: (update: { query: TimingQuery; circuit: CircuitView }) => void;
   const data = {
     open: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
     onStatus: vi.fn((cb: (status: DataStatus) => void) => {
       emit = cb;
+      return () => {};
+    }),
+    onCircuit: vi.fn((cb: (update: { query: TimingQuery; circuit: CircuitView }) => void) => {
+      emitCircuit = cb;
       return () => {};
     }),
     objects: vi.fn(async (_key: number, _playhead: number) => noObjects),
@@ -150,6 +156,30 @@ describe('session data', () => {
     handle.update(100, null);
     expect(handle.videoTimeOf(BASE + 63_000)).toBeNull();
     handle.destroy();
+  });
+
+  it("keeps the open session's circuit, and ignores one for another session", () => {
+    const handle = openSessionData(session, false);
+    expect(useCircuit.getState()).toEqual({ state: 'loading' });
+    const circuit: CircuitView & { state: 'ready' } = {
+      state: 'ready',
+      reason: null,
+      circuitKey: 9,
+      name: 'Austin',
+      refreshedAt: 1,
+      outline: { x: [0, 1], y: [0, 1] },
+      corners: [],
+      rotation: 0,
+      pitLoss: { normal: 20.81, safetyCar: 13.5, virtualSafetyCar: null },
+    };
+    emitCircuit({ query: archiveQuery({ ...session, sessionKey: '19' }), circuit: { ...circuit, name: 'Elsewhere' } });
+    expect(useCircuit.getState().state).toBe('loading');
+    emitCircuit({ query: archiveQuery(session), circuit });
+    const view = useCircuit.getState();
+    expect(view).toMatchObject({ state: 'ready', name: 'Austin' });
+    expect(view.state === 'ready' && Object.isFrozen(view.outline.x)).toBe(true);
+    handle.destroy();
+    expect(useCircuit.getState()).toEqual({ state: 'idle' });
   });
 
   it('hands out read-only objects', async () => {

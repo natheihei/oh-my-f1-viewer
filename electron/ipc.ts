@@ -5,6 +5,7 @@ import { getMainAppUrl, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
 import { TimingDb } from './timingdb';
+import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
@@ -117,6 +118,12 @@ function createTimingDb(file: string): TimingDb {
       const seasons = await f1tv.getVodSeasons();
       const current = seasons.find((s: { year: number }) => s.year === new Date().getUTCFullYear());
       return { upcoming: await listUpcoming(seasons), events: current ? await listEvents(current.pageId) : [] };
+    },
+    // MultiViewer's public API: no sign-in, and nothing sent but the circuit's key and the year.
+    fetchCircuit: async (circuitKey, year) => {
+      const res = await fetch(circuitUrl(circuitKey, year), { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`MultiViewer answered HTTP ${res.status}`);
+      return res.json();
     },
     fetchSessionStart: async (meetingKey, sessionKey) => (await livetiming.fetchSyncData(meetingKey, sessionKey))?.sessionStartSec ?? null,
     connectLive: (feeds, onRecord, onStatus) => {

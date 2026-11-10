@@ -1,18 +1,20 @@
 /**
  * The main process's side of the session database. It does what needs the network or the F1 TV token
  * and leaves all else to the worker: refreshing the calendar, downloading a session's files unless they
- * are already ingested, and passing on a live feed.
+ * are already ingested, fetching its circuit, and passing on a live feed.
  */
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { TimingQuery } from '../../shared/api';
 import {
   FIRST_SUPPORTED_YEAR,
+  type CircuitView,
   type DataStatus,
   type Schedule,
   type SessionObjects,
   type SqlRows,
 } from '../../shared/sessionData';
+import { refreshCircuit } from './circuit';
 import type { FeedFiles, LiveRecord } from './ingest';
 import { TELEMETRY_FEEDS, TIMING_FEEDS, type SessionMeta } from './processors';
 import { parseResults, parseStartingGrid, resultPages } from './results';
@@ -34,6 +36,8 @@ export interface TimingDbDeps {
   fetchPage(url: string): Promise<string | null>;
   resolveSession(year: number, query: TimingQuery): Promise<{ path: string; meetingKey: number; sessionKey: number; type: string | null; name: string | null; endMs: number | null } | null>;
   listUpcoming(): Promise<{ upcoming: Parameters<typeof fromUpcoming>[0]; events: Parameters<typeof fromUpcoming>[1] }>;
+  /** MultiViewer's circuit, as JSON. Throws if it couldn't be fetched. */
+  fetchCircuit(circuitKey: number, year: number): Promise<unknown>;
   send(channel: string, payload: unknown): void;
 }
 
@@ -50,6 +54,8 @@ export class TimingDb {
   /** The open session's video second of lights out. */
   private sessionStartSec: number | null = null;
   private live: { meta: SessionMeta | null; buffer: LiveRecord[]; timer: ReturnType<typeof setInterval> | null; query: TimingQuery } | null = null;
+  /** The open session's circuit: fetched once its key is known. */
+  private circuit: { generation: number; query: TimingQuery; year: number; started: boolean } | null = null;
 
   constructor(private deps: TimingDbDeps) {}
 
@@ -142,11 +148,13 @@ export class TimingDb {
     this.endLive();
     this.sessionStartSec = null;
     const year = query.year ?? new Date().getUTCFullYear();
+    this.circuit = { generation, query, year, started: false };
+    this.sendCircuit(query, { state: 'loading' });
     if (year < FIRST_SUPPORTED_YEAR) {
       this.refuse('unsupported', `Session data covers ${FIRST_SUPPORTED_YEAR} onwards.`);
       return;
     }
-    const run = live ? this.openLive(query, year) : this.openArchive(query, year, generation);
+    const run = live ? this.openLive(query, year, generation) : this.openArchive(query, year, generation);
     run.catch((e: Error) => {
       console.warn('[timingdb] opening failed:', e.message);
       if (generation === this.generation) this.refuse('failed', e.message);
@@ -155,7 +163,36 @@ export class TimingDb {
 
   close(): void {
     this.generation++;
+    this.circuit = null;
     this.endLive();
+  }
+
+  // --- The circuit ---
+
+  private sendCircuit(query: TimingQuery, circuit: CircuitView): void {
+    this.deps.send('data:circuit', { query, circuit });
+  }
+
+  /** The schedule's meetings carry their circuit's key once they've happened. */
+  private async circuitFromSchedule(generation: number, meetingKey: number): Promise<void> {
+    const schedule = await this.call('schedule').catch(() => null);
+    const key = schedule?.meetings.find((m) => m.meeting_key === meetingKey)?.circuit_key;
+    if (key) this.startCircuit(generation, key);
+  }
+
+  /** Fetches the circuit once per opened session, from whichever source knows its key first. */
+  private startCircuit(generation: number, circuitKey: number): void {
+    const circuit = this.circuit;
+    if (!circuit || circuit.started || circuit.generation !== generation || generation !== this.generation) return;
+    circuit.started = true;
+    void refreshCircuit(circuitKey, circuit.year, {
+      load: (key) => this.call('circuit', key),
+      save: (fresh) => this.call('saveCircuit', fresh),
+      fetch: (key, year) => this.deps.fetchCircuit(key, year),
+      publish: (view) => this.sendCircuit(circuit.query, view),
+      stale: () => generation !== this.generation,
+      now: () => Date.now(),
+    }).catch((e: Error) => console.warn('[timingdb] circuit:', e.message));
   }
 
   private async openArchive(query: TimingQuery, year: number, generation: number): Promise<void> {
@@ -167,6 +204,7 @@ export class TimingDb {
     }
     const meta: SessionMeta = { meetingKey: found.meetingKey, sessionKey: found.sessionKey, isRace: found.type ? found.type.toLowerCase() === 'race' : null };
     const stale = () => generation !== this.generation;
+    void this.circuitFromSchedule(generation, meta.meetingKey);
 
     if (!(await this.call('isComplete', meta.sessionKey, 'timing'))) {
       await this.status(meta.sessionKey, 'loading');
@@ -234,7 +272,7 @@ export class TimingDb {
 
   // --- Live ---
 
-  private async openLive(query: TimingQuery, year: number): Promise<void> {
+  private async openLive(query: TimingQuery, year: number, generation: number): Promise<void> {
     const session = { meta: null as SessionMeta | null, buffer: [] as LiveRecord[], timer: null as ReturnType<typeof setInterval> | null, query };
     this.live = session;
     session.timer = setInterval(() => void this.flushLive(), LIVE_FLUSH_MS);
@@ -244,6 +282,7 @@ export class TimingDb {
     if (this.live !== session) return;
     const sessionKey = Number(query.sessionKey ?? found?.sessionKey);
     const meetingKey = Number(query.meetingKey ?? found?.meetingKey);
+    if (meetingKey) void this.circuitFromSchedule(generation, meetingKey);
     if (sessionKey && meetingKey) await this.beginLive(session, { sessionKey, meetingKey, isRace: this.isRace(query) });
   }
 
@@ -262,7 +301,11 @@ export class TimingDb {
     const session = this.live;
     if (!session) return;
     session.buffer.push(record);
-    // The catalog doesn't always know a live session's keys, but the feed's own details do.
+    // The catalog doesn't always know a live session's keys, nor the schedule its circuit, but the feed's own details do.
+    if (record.topic === 'SessionInfo') {
+      const circuitKey = Number((record.data as { Meeting?: { Circuit?: { Key?: unknown } } })?.Meeting?.Circuit?.Key);
+      if (circuitKey > 0) this.startCircuit(this.generation, circuitKey);
+    }
     if (!session.meta && record.topic === 'SessionInfo') {
       const info = record.data as { Key?: unknown; Meeting?: { Key?: unknown } };
       const sessionKey = Number(info?.Key);

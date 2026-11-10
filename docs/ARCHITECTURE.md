@@ -12,7 +12,7 @@
               │ typed IPC (shared/api.ts). Tokens never cross it.
 ┌ Main ───────┴─────────────────────────────────────────────────┐
 │ F1 TV sign-in, catalog, playback · license proxy · Widevine   │
-│ session database + live socket · agent loop (pi-ai)           │
+│ session database + live socket · circuit · agent loop (pi-ai) │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,8 +39,8 @@ Charts are components like video: one file each, holding the `defineComponent` d
 with no chart library. They may only import from the host, and from the kit beside them:
 
 - **`kit/ChartFrame`** wraps every chart. It shows a short message instead of the chart while session data isn't ready, a dataset in
-  `needs` is absent or failed, the query failed, or there are no rows yet, and it holds the chart's error boundary. Messages say what's
-  missing, never anything about the race.
+  `needs` is absent or failed, something else in `waits` isn't there (such as the circuit, through `circuitMessage`), the query
+  failed, or there are no rows yet, and it holds the chart's error boundary. Messages say what's missing, never anything about the race.
 - **`kit/ChartCanvas`** sizes a canvas to its tile at the screen's pixel ratio and calls the chart's `draw(ctx, model, box)` only when the
   model or size changes. Below 300 × 150 the box is `compact`, and charts drop axes and labels, so the suggestion strip's preview reads as
   a thumbnail.

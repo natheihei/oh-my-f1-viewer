@@ -63,6 +63,46 @@ export interface Schedule {
 /** Known meetings and sessions are kept when a refresh fails: `reason` then says what went wrong. */
 export type ScheduleView = { state: 'loading' | 'ready'; reason: string | null } & Schedule;
 
+/** A numbered corner, at its apex on the outline's coordinates. */
+export interface CircuitCorner {
+  number: number;
+  x: number;
+  y: number;
+  /** Degrees, for placing its number beside the track. */
+  angle: number;
+  /** How far along the lap it is, on the outline's scale. */
+  distance: number;
+}
+
+/**
+ * A circuit, from MultiViewer's public API. It doesn't depend on the playhead: a circuit can't spoil a
+ * race. Its data is dated 2021 whatever year is asked for.
+ */
+export interface Circuit {
+  /** F1's own circuit key, as the schedule's `circuit_key`. */
+  circuitKey: number;
+  name: string;
+  /** When it was last fetched, in UTC milliseconds. */
+  refreshedAt: number;
+  /** The track as one closed line, in the same units as `location`'s x and y. */
+  outline: { x: number[]; y: number[] };
+  corners: CircuitCorner[];
+  /** Degrees to turn the outline by so it reads the usual way up. */
+  rotation: number;
+  /** Seconds lost to a stop, under green, a safety car and a virtual one. Null where missing or unreadable. */
+  pitLoss: { normal: number | null; safetyCar: number | null; virtualSafetyCar: number | null };
+}
+
+/**
+ * The open session's circuit. A stale copy stays `ready` when a refresh fails, with `reason` saying why.
+ * `loading` until the circuit's key is known and it has been fetched or found in the cache.
+ */
+export type CircuitView =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'failed'; reason: string }
+  | ({ state: 'ready'; reason: string | null } & Circuit);
+
 export interface DriverEntry {
   driver_number: number;
   broadcast_name: string | null;

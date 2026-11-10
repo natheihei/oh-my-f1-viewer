@@ -36,6 +36,7 @@ const api: F1aApi = {
     open: (query, live) => invoke('data:open', query, live),
     close: () => invoke('data:close'),
     onStatus: (cb) => subscribe('data:status', cb),
+    onCircuit: (cb) => subscribe('data:circuit', cb),
     objects: (sessionKey, playheadMs) => invoke('data:objects', sessionKey, playheadMs),
     sql: (sessionKey, playheadMs, sql, params) => invoke('data:sql', sessionKey, playheadMs, sql, params),
   },
