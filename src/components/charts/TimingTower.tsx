@@ -96,6 +96,15 @@ const COLUMNS: Array<{ key: Key; head: string; chars: number; drop: number }> = 
   { key: 'tyre', head: 'TYRE', chars: 4, drop: 2 },
 ];
 
+/** The most size, spacing and padding `draw` ever uses, so how wide the tower draws at most. */
+const MAX_SIZE = 12;
+const MAX_SPACING = 3;
+const PAD = 8;
+/** JetBrains Mono's advance is 0.6 of its size. */
+const WIDEST = Math.ceil(
+  COLUMNS.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'bar' || col.key === 'code' ? 0.6 : MAX_SPACING), 0) * MAX_SIZE * 0.6 + PAD * 2,
+);
+
 interface Drawn {
   rows: TowerRow[];
   styles: Map<number, DriverStyle>;
@@ -103,10 +112,10 @@ interface Drawn {
 
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
-  const pad = compact ? 4 : 8;
+  const pad = compact ? 4 : PAD;
   const head = compact ? 0 : 16;
   const pitch = Math.min(22, Math.max(compact ? 9 : 12, (height - head - pad) / Math.max(1, m.rows.length)));
-  const size = Math.min(12, Math.max(8, Math.floor(pitch * 0.58)));
+  const size = Math.min(MAX_SIZE, Math.max(8, Math.floor(pitch * 0.58)));
   const ch = textWidth(ctx, '0', size);
 
   // Drop columns until the rest fit, with at least a character and a half between them.
@@ -117,7 +126,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     const worst = Math.max(...columns.map((col) => col.drop));
     columns = columns.filter((col) => col.drop !== worst);
   }
-  const spacing = Math.min(3 * ch, Math.max(1.5 * ch, (room - columns.reduce((s, col) => s + col.chars, 0) * ch) / (columns.length - 1)));
+  const spacing = Math.min(MAX_SPACING * ch, Math.max(1.5 * ch, (room - columns.reduce((s, col) => s + col.chars, 0) * ch) / (columns.length - 1)));
   const edges = new Map<Key, { x0: number; x1: number }>();
   let at = pad;
   for (const col of columns) {
@@ -196,7 +205,7 @@ export default defineComponent({
     'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview of the race, or whenever the user asks where someone is.',
   args: Type.Object({}),
   needs: NEEDS,
-  size: { aspect: 0.6, min: [6, 12] },
+  size: { aspect: 0.6, min: [6, 12], width: WIDEST },
   spec: () => ({ key: 'timing_tower', label: 'Timing' }),
   View: TimingTower,
 });
