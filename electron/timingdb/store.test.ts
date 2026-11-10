@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ingestResults, ingestTelemetry, ingestTiming, isFinal, LiveCapture } from './ingest';
 import { timingRouter, type SessionMeta } from './processors';
 import { TimingStore } from './store';
-import { LAP_SUMMARY_COLUMNS } from '../../shared/sessionTables';
+import { SQL_TABLES } from '../../shared/sessionData';
+import { DERIVED_VIEWS, sqlColumns, TABLE_BY_NAME } from './schema';
 
 const META: SessionMeta = { meetingKey: 100, sessionKey: 200, isRace: true };
 const BASE = Date.UTC(2026, 0, 1, 12, 0, 0);
@@ -227,9 +228,54 @@ describe('session database', () => {
       expect(sql('SELECT * FROM lap_summary', at(49_999))).toEqual([]);
     });
 
-    it('has the columns the agent is told about', () => {
-      const [row] = sql('SELECT * FROM lap_summary LIMIT 1', at(600_000)) as Array<Record<string, unknown>>;
-      expect(Object.keys(row)).toEqual(['session_key', 'meeting_key', ...LAP_SUMMARY_COLUMNS]);
+  });
+
+  describe('what SQL can read', () => {
+    const reported = (name: string) => store.tables.find((t) => t.name === name);
+
+    it('is the list of tables in SQL_TABLES, in the same order', () => {
+      expect(store.tables.map((t) => t.name)).toEqual([...SQL_TABLES]);
+    });
+
+    it('builds every derived view from the list, after the views it reads', () => {
+      for (const view of DERIVED_VIEWS) {
+        expect(reported(view.name)).toMatchObject({ about: view.about });
+        expect(() => sql(`SELECT * FROM ${view.name}`, at(600_000))).not.toThrow();
+      }
+    });
+
+    it("reports a filter view's columns from its definition, and no about", () => {
+      expect(reported('laps')).toEqual({ name: 'laps', columns: sqlColumns(TABLE_BY_NAME.get('laps')!) });
+      expect(reported('race_control')!.columns).not.toContain('row_key');
+    });
+
+    it("reports lap_summary's columns from its SQL, with no visible_from", () => {
+      expect(reported('lap_summary')!.columns).toEqual([
+        'session_key',
+        'meeting_key',
+        'driver_number',
+        'lap_number',
+        'date_start',
+        'date_end',
+        'lap_duration',
+        'duration_sector_1',
+        'duration_sector_2',
+        'duration_sector_3',
+        'position',
+        'gap_to_leader',
+        'interval',
+        'stint_number',
+        'compound',
+        'tyre_age',
+        'is_pit_in_lap',
+        'is_pit_out_lap',
+        'track_status',
+      ]);
+    });
+
+    it('reports the columns a query gets back', () => {
+      ingest();
+      for (const { name, columns } of store.tables) expect(store.sql(META.sessionKey, at(600_000), `SELECT * FROM ${name} LIMIT 0`).columns).toEqual(columns);
     });
   });
 

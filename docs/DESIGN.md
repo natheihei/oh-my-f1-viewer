@@ -97,6 +97,9 @@ described below:
   has no data, the name is unknown, or the driver count is wrong.
 - The agent has not seen what a chart shows, so it never describes it.
 
+Once session data is ready, the tables `query_session` can read follow the charts, from `sessionData.tables`. The tool's own description
+doesn't change, so opening a session only changes the end of the system prompt.
+
 ### Finding a session
 
 The app supports seasons from 2023 on. At start it loads F1 TV's events for those seasons, one page per season, and every message to the

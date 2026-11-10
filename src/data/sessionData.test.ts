@@ -10,7 +10,8 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const coverage = { source: 'archive', datasets: {}, missingFeeds: [], gaps: [], capturedFrom: null } as unknown as SessionCoverage;
 const BASE = Date.UTC(2026, 0, 1);
 const clock = { feedBaseUtc: BASE, clockStartOffsetMs: 2_000_000, scheduledStartOffsetMs: 1_900_000, durationMs: 9_000_000 };
-const ready: DataStatus = { sessionKey: 20, state: 'ready', reason: null, coverage, clock, sessionStartSec: 500 };
+const tables = [{ name: 'laps', columns: ['session_key', 'meeting_key', 'lap_number', 'visible_from'] }];
+const ready: DataStatus = { sessionKey: 20, state: 'ready', reason: null, coverage, clock, sessionStartSec: 500, tables };
 const noObjects = { drivers: [], startingGrid: [], sessionResult: [], championshipDrivers: [], championshipTeams: [] };
 
 describe('session data', () => {
@@ -54,7 +55,7 @@ describe('session data', () => {
 
   it('says why when there is no data', () => {
     const handle = openSessionData(session, false);
-    emit({ sessionKey: null, state: 'unsupported', reason: 'Session data covers 2023 onwards.', coverage: null, clock: null, sessionStartSec: null });
+    emit({ sessionKey: null, state: 'unsupported', reason: 'Session data covers 2023 onwards.', coverage: null, clock: null, sessionStartSec: null, tables: null });
     expect(useSessionData.getState()).toEqual({ state: 'unsupported', reason: 'Session data covers 2023 onwards.' });
     handle.destroy();
   });
@@ -181,6 +182,24 @@ describe('session data', () => {
     expect(view.state === 'ready' && Object.isFrozen(view.outline.x)).toBe(true);
     handle.destroy();
     expect(useCircuit.getState()).toEqual({ state: 'idle' });
+  });
+
+  it('gives the tables SQL can read once ready, as one object across revisions and statuses', async () => {
+    const handle = openSessionData(session, false);
+    emit(ready);
+    await flush();
+    const first = useSessionData.getState();
+    expect(first.state === 'ready' && first.tables).toEqual(tables);
+    expect(first.state === 'ready' && Object.isFrozen(first.tables[0].columns)).toBe(true);
+    handle.update(500, null);
+    await flush();
+    // Every status carries the list again, as a fresh copy over IPC.
+    emit({ ...ready, tables: structuredClone(tables) });
+    await flush();
+    const later = useSessionData.getState();
+    expect(later.state === 'ready' && later.revision).toBeGreaterThan(first.state === 'ready' ? first.revision : 0);
+    expect(later.state === 'ready' && later.tables).toBe(first.state === 'ready' && first.tables);
+    handle.destroy();
   });
 
   it('hands out read-only objects', async () => {

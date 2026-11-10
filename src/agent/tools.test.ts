@@ -385,7 +385,7 @@ describe('upcoming sessions', () => {
 
 const { sessionControl } = await import('../data/session');
 const { useSessionData } = await import('../data/sessionData');
-const { describeAppState } = await import('./bridge');
+const { askAgent, describeAppState } = await import('./bridge');
 
 describe('seeking to a moment', () => {
   const open = { contentId: 1, title: 'Race', status: 'replay' } as SessionInfo;
@@ -403,6 +403,7 @@ describe('seeking to a moment', () => {
     championshipDrivers: [],
     championshipTeams: [],
     lapCount: null,
+    tables: [],
   });
   let seekToDate: MockInstance<typeof sessionControl.seekToDate>;
 
@@ -473,12 +474,24 @@ describe('seeking to a moment', () => {
     expect(seekToDate).not.toHaveBeenCalled();
   });
 
-  it('describes every table and its columns, from the schema', () => {
+  it('points to the table list in the system prompt, and lists no tables itself', () => {
     const description = toolDefinitions().find((t) => t.name === 'query_session')!.description;
-    expect(description).toMatch(/laps: driver_number, lap_number, date_start,/);
-    expect(description).toMatch(/race_control: date, driver_number, lap_number,/);
-    expect(description).not.toMatch(/row_key/);
+    expect(description).toContain('the table list at the end of the system prompt');
     expect(description).toMatch(/UTC milliseconds/);
+    expect(description).not.toMatch(/laps: |lap_summary/);
+    expect(description).not.toMatch(/Every table also has/);
+  });
+
+  it('sends the table list at the end of the system prompt once the data is ready, and not before', async () => {
+    const send = vi.spyOn(host.agent, 'send').mockResolvedValue();
+    const tables = [{ name: 'laps', columns: ['session_key', 'meeting_key', 'lap_number', 'visible_from'] }];
+    useSessionData.setState({ ...ready(PLAYHEAD), tables } as SessionDataView, true);
+    await askAgent('go to lap 3');
+    expect(send.mock.calls[0][3]).toMatch(/\n\nTables for query_session\.[^\n]*\nlaps: lap_number, visible_from$/);
+    useSessionData.setState({ state: 'loading', sessionKey: 9, datasets: null }, true);
+    await askAgent('go to lap 3');
+    expect(send.mock.calls[1][3]).not.toContain('query_session');
+    send.mockRestore();
   });
 
   it('a forward seek asks the gate first', async () => {

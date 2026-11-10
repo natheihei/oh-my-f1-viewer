@@ -66,6 +66,8 @@ A selector must return a value or an existing reference. Building a new object o
     `sessionResult` (only once the session has finished at the playhead), `championshipDrivers` and `championshipTeams`.
   - `lapCount`: `{ current, total }`, the leader's lap and the scheduled distance, as of the playhead. `null` in a session
     without them, such as practice or qualifying.
+  - `tables`: every table SQL can read, as `{ name, columns, about? }`, in the order of `SQL_TABLES`. It's the same for every
+    session, and stays the same object across revisions.
 
 Types are in [shared/sessionData.ts](../shared/sessionData.ts). Field names follow OpenF1, except that times are UTC milliseconds.
 
@@ -113,8 +115,9 @@ returns the same rows as the last, it keeps returning the previous object, so a 
 The tables are `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`,
 `track_status` and `weather`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
 can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
-the user must ask first. `useSql` always reads as of the playhead. Only `SELECT` is allowed. The table and column definitions are in
-[shared/sessionTables.ts](../shared/sessionTables.ts).
+the user must ask first. `useSql` always reads as of the playhead. Only `SELECT` is allowed. The tables and their columns, as SQLite
+reports them, are in `sessionData.tables`. The stored tables are defined in [shared/sessionTables.ts](../shared/sessionTables.ts), and the
+views built from them, such as `lap_summary`, in [electron/timingdb/schema.ts](../electron/timingdb/schema.ts).
 [SESSION_DATA.md](SESSION_DATA.md) covers the columns, where the data comes from, and when it loads.
 
 ## Writes
@@ -242,7 +245,9 @@ index (`live.events`) with every message, so it can work out which weekend the u
 `host.suggestions.newTurn` reports, and the tiles on screen, a chart by its label and component name.
 
 Every registered component but `video` is a chart. The bridge lists them at the end of the system prompt, one line each: name, title,
-how many drivers it takes, session types and description. With none registered, the list is left out. `suggest_tiles` takes charts
+how many drivers it takes, session types and description. With none registered, the list is left out. Once session data is ready, the
+tables `query_session` can read follow, from `sessionData.tables`: one line each with its columns, and `about` where a table has one.
+Before that the list is left out, and the tool refuses anyway. `suggest_tiles` takes charts
 by name, each with the drivers it's about, which the agent matches to car numbers through the session's roster, or the onboard feeds
 without one. A chart's props carry only those numbers, and a chart given none picks its own. The agent never sees what a chart shows,
 and a refusal only ever depends on the session type, missing data, an unknown name or the driver count, never on how the session is

@@ -101,6 +101,9 @@ It's 3 since `TrackStatus` and `LapCount` were added, and `PitOut: false` stoppe
 - **`index.ts`** does what needs the network or the token, in the main process.
 - **`processors.ts`** turns messages into rows, **`ingest.ts`** fills the database and decides completion, and **`store.ts`** holds the two connections.
 - **Consumers' SQL** runs on a read-only connection, against temporary views limited to the session and playhead. An authorizer refuses everything else, including the tables behind them.
+  The store makes one view per stored table named in `SQL_TABLES`, from its definition, then each view in `DERIVED_VIEWS` (`schema.ts`), such as `lap_summary`, on top of those.
+  Then it asks SQLite for every view and its columns, and that list reaches the renderer as `sessionData.tables`, through the `data:status` message.
+  A test checks that it matches `SQL_TABLES`. Adding a derived view takes an entry in `DERIVED_VIEWS`, and its name in `SQL_TABLES` and `DERIVED_TABLES`.
 
 A live capture also keeps its raw messages, because processors hold state in memory. Restarting mid-session rebuilds from them. Opening the session after it has finished replaces the capture
 with the archive and drops them.
