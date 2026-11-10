@@ -36,7 +36,7 @@ import {
 const MAX_SQL_ROWS = 200_000;
 
 /** Bump when table definitions change. It's a cache of what F1 publishes, so old tables are just dropped. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const EMPTY_COVERAGE: DatasetState = { state: 'absent', reason: null };
 
