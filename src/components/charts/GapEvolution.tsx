@@ -9,6 +9,7 @@ import {
   colors,
   dot,
   gapSeconds,
+  gapTrend,
   hline,
   linear,
   niceCeil,
@@ -34,17 +35,21 @@ const SPIKE = 1;
 /** Within a second of the car ahead at the detection point, DRS opens. */
 const DRS = 1;
 
-// The pair's lap starts over the window, then both drivers' gaps to the leader since its first lap.
+// The pair's lap starts over the window, both drivers' gaps to the leader since its first lap, and
+// each one's gap as it crossed the line on the laps of the window, for the trend.
 export const SQL = `
 WITH pair AS (
   SELECT lap_number, MIN(date_start) AS date_start FROM laps
   WHERE driver_number IN (?1, ?2) AND date_start IS NOT NULL GROUP BY lap_number
 ),
 win AS (SELECT MAX(MAX(lap_number) - ${WINDOW}, 1) AS first FROM pair)
-SELECT 'lap' AS kind, lap_number AS n, date_start AS date, NULL AS gap FROM pair WHERE lap_number >= (SELECT first FROM win)
+SELECT 'lap' AS kind, lap_number AS n, date_start AS date, NULL AS gap, NULL AS lap, NULL AS stint FROM pair WHERE lap_number >= (SELECT first FROM win)
 UNION ALL
-SELECT 'gap', driver_number, date, gap_to_leader FROM intervals
+SELECT 'gap', driver_number, date, gap_to_leader, NULL, NULL FROM intervals
 WHERE driver_number IN (?1, ?2) AND date >= COALESCE((SELECT date_start FROM pair WHERE lap_number = (SELECT first FROM win)), 0)
+UNION ALL
+SELECT 'end', driver_number, date_end, gap_to_leader, lap_number, stint_number FROM lap_summary
+WHERE driver_number IN (?1, ?2) AND date_end IS NOT NULL AND lap_number >= (SELECT first FROM win)
 ORDER BY date`;
 
 export interface GapModel {
@@ -108,13 +113,16 @@ export function gapModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: r
   const from = laps[0].n;
   // A lapped car's latest gap isn't a time, so there's no current value to tell.
   const known = last.get(a) != null && last.get(b) != null;
-  const then = drawn.findLast((p) => p.x <= now.x - TREND_LAPS);
+  // The trend as the battle card tells it, from the gaps at the line rather than a sample that may sit on a pit stop.
+  const ends = rows
+    .filter((r) => r.kind === 'end')
+    .map((r) => ({ driver_number: r.n, lap_number: r.lap, date_end: r.date, gap_to_leader: r.gap, stint_number: r.stint }));
   return {
     points,
     from,
     to: Math.max(now.x, from + 1),
     current: known ? now.gap : null,
-    trend: known && then ? (Math.abs(now.gap) - Math.abs(then.gap)) / (now.x - then.x) : null,
+    trend: known ? gapTrend(ends, [a, b], TREND_LAPS) : null,
   };
 }
 
