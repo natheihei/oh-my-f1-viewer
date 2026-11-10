@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import zlib from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ingestResults, ingestTelemetry, ingestTiming, isFinal, LiveCapture } from './ingest';
@@ -219,6 +220,19 @@ describe('session database', () => {
       expect(status(339_999)).toEqual(['Yellow', 'SCDeployed', 'SCDeployed', 'AllClear']);
     });
 
+    it('marks the lap a car retired on, only once the feed has said so', () => {
+      const files = raceFiles();
+      files.DriverRaceInfo = stream([
+        [150_000, { '1': { Gap: '+1.500', Interval: '+0.500' } }],
+        [335_000, { '1': { Gap: '', Interval: '', IsOut: true } }],
+      ]);
+      ingestTiming(store, META, { files, failed: [] }, BASE + 2 * 3600 * 1000, BASE + DAY);
+      const out = (playhead: number) => laps(playhead, 'lap_number, is_out').filter((r) => r.is_out).map((r) => r.lap_number);
+      expect(laps(600_000, 'lap_number, is_out').map((r) => r.is_out)).toEqual([0, 0, 0, 1]);
+      expect(out(334_999)).toEqual([]);
+      expect(out(335_000)).toEqual([4]);
+    });
+
     it('carries the stint, compound and the age of the set', () => {
       expect(laps(600_000, 'lap_number, stint_number, compound, tyre_age')[0]).toEqual({ lap_number: 1, stint_number: 1, compound: 'SOFT', tyre_age: 1 });
     });
@@ -270,6 +284,7 @@ describe('session database', () => {
         'is_pit_in_lap',
         'is_pit_out_lap',
         'track_status',
+        'is_out',
       ]);
     });
 
@@ -288,6 +303,34 @@ describe('session database', () => {
     expect(rows('LapCount', { CurrentLap: 1, TotalLaps: 71 })).toEqual([['lap_count', { ...key, current_lap: 1, total_laps: 71 }]]);
     // Later messages carry only the lap: the distance stays.
     expect(rows('LapCount', { CurrentLap: 2 })).toEqual([['lap_count', { ...key, current_lap: 2, total_laps: 71 }]]);
+  });
+
+  describe('retirements', () => {
+    const run = (messages: Array<{ topic: string; content: unknown; snapshot?: boolean }>) => {
+      const router = timingRouter(META);
+      router.process({ topic: 'TimingAppData', content: { Lines: { '1': { Stints: [{ Compound: 'SOFT' }] } } }, time: BASE });
+      return messages.flatMap((m, i) => router.process({ ...m, time: BASE + i + 1 })).filter((e) => e.table === 'laps').map((e) => e.row);
+    };
+    const lap = (n: number) => ({ topic: 'TimingData', content: { Lines: { '1': { NumberOfLaps: n } } } });
+
+    it('marks the lap in progress when DriverRaceInfo says IsOut, and no lap after', () => {
+      const rows = run([lap(4), { topic: 'DriverRaceInfo', content: { '1': { IsOut: false } } }, { topic: 'DriverRaceInfo', content: { '1': { IsOut: true } } }]);
+      expect(rows.filter((r) => r.is_out).map((r) => r.lap_number)).toEqual([5]);
+      expect(rows.at(-1)).toMatchObject({ lap_number: 5, is_out: true });
+    });
+
+    it("takes TimingData's Retired, but not Stopped", () => {
+      expect(run([lap(4), { topic: 'TimingData', content: { Lines: { '1': { Stopped: true } } } }]).some((r) => r.is_out)).toBe(false);
+      expect(run([lap(4), { topic: 'TimingData', content: { Lines: { '1': { Retired: true, Stopped: true } } } }]).at(-1)).toMatchObject({ lap_number: 5, is_out: true });
+    });
+
+    it('marks a car out in a snapshot on the lap the snapshot puts it on', () => {
+      const rows = run([
+        { topic: 'DriverRaceInfo', content: { '1': { IsOut: true } }, snapshot: true },
+        { topic: 'TimingData', content: { Lines: { '1': { NumberOfLaps: 20 } } }, snapshot: true },
+      ]);
+      expect(rows).toEqual([expect.objectContaining({ lap_number: 21, is_out: true })]);
+    });
   });
 
   it('has no lap count in a session without one', () => {
@@ -513,6 +556,17 @@ describe('session database', () => {
     it('hides internal keys', () => {
       expect(store.sql(META.sessionKey, at(600_000), 'SELECT * FROM race_control').columns).not.toContain('row_key');
     });
+  });
+
+  it('rebuilds tables from an older schema, so new columns exist', () => {
+    store.close();
+    const file = path.join(dir, 'old.sqlite');
+    const old = new DatabaseSync(file);
+    old.exec('CREATE TABLE t_laps (session_key INTEGER NOT NULL, driver_number INTEGER NOT NULL, lap_number INTEGER NOT NULL, visible_from INTEGER NOT NULL); PRAGMA user_version = 2');
+    old.close();
+    store = new TimingStore(file);
+    ingest();
+    expect(sql('SELECT is_out FROM laps LIMIT 1', at(600_000))).toEqual([{ is_out: 0 }]);
   });
 
   it('keeps the calendar across restarts', () => {

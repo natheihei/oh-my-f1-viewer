@@ -16,7 +16,7 @@ import type { DerivedTable, TableDefinition } from '../../shared/sessionTables';
 export { rowColumns, sqlColumns, TABLE_BY_NAME, TABLES, visibleColumns, type RowTable, type TableDefinition } from '../../shared/sessionTables';
 
 /** Bump when a processor or table changes: sessions are then ingested again the next time they open. */
-export const INGEST_VERSION = 3;
+export const INGEST_VERSION = 4;
 
 /** Column types for key columns. Dates and numbers are integers; the rest are text. */
 function keyType(column: string): string {
@@ -65,11 +65,12 @@ const OPEN_END = Number.MAX_SAFE_INTEGER;
  * playhead. A lap ends where the next one starts, or else at its start plus its time. Position and
  * gaps are the last before the lap's end, and the lap in progress, which has no end yet, gets the latest.
  * `track_status` is the worst during the lap: Red, SCDeployed, VSCDeployed, VSCEnding, Yellow, then AllClear.
+ * `is_out` marks the lap a car retired on, from when the feed said so.
  */
 const LAP_SUMMARY_SQL = `
 WITH l AS MATERIALIZED (
   SELECT session_key, meeting_key, driver_number, lap_number, date_start, lap_duration,
-    duration_sector_1, duration_sector_2, duration_sector_3, is_pit_out_lap,
+    duration_sector_1, duration_sector_2, duration_sector_3, is_pit_out_lap, is_out,
     LEAD(lap_number) OVER w AS next_lap, LEAD(date_start) OVER w AS next_start
   FROM laps WINDOW w AS (PARTITION BY driver_number ORDER BY lap_number)
 ),
@@ -99,7 +100,8 @@ SELECT b.session_key, b.meeting_key, b.driver_number, b.lap_number, b.date_start
   (SELECT status FROM (
     SELECT status, severity FROM t WHERE date > b.since AND date <= b.upto
     UNION ALL SELECT * FROM (SELECT status, severity FROM t WHERE date <= b.since ORDER BY date DESC LIMIT 1)
-  ) ORDER BY severity DESC LIMIT 1) AS track_status
+  ) ORDER BY severity DESC LIMIT 1) AS track_status,
+  b.is_out
 FROM b
 LEFT JOIN s st ON st.driver_number = b.driver_number
   AND st.stint_number = (SELECT MAX(stint_number) FROM s WHERE driver_number = b.driver_number AND lap_start <= b.lap_number)`;
@@ -114,6 +116,6 @@ export const DERIVED_VIEWS: Array<{ name: DerivedTable; sql: string; about?: str
     name: 'lap_summary',
     sql: LAP_SUMMARY_SQL,
     about:
-      'One row per driver per lap. Its date_start and date_end work with seek_to, so it is the easiest table for going to lap N, or for finding when something changed between two drivers.',
+      'One row per driver per lap. Its date_start and date_end work with seek_to, so it is the easiest table for going to lap N, or for finding when something changed between two drivers. is_out marks the lap a car retired on.',
   },
 ];

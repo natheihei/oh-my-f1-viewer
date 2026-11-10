@@ -157,10 +157,12 @@ export const TABLES: TableDefinition[] = [
       segments_sector_1: 'TEXT',
       segments_sector_2: 'TEXT',
       segments_sector_3: 'TEXT',
+      // Ours, not OpenF1's: the car retired during this lap.
+      is_out: 'INTEGER',
     },
     versioned: true,
     json: ['segments_sector_1', 'segments_sector_2', 'segments_sector_3'],
-    booleans: ['is_pit_out_lap'],
+    booleans: ['is_pit_out_lap', 'is_out'],
   },
   {
     name: 'drivers',
