@@ -48,6 +48,8 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 - Ingesting a whole race in about 7 seconds, then skipping that on the next open.
 - Its tables matching OpenF1 row for row, on the same clock. Telemetry was sampled, and 7 of 22 `starting_grid` positions differ, where OpenF1's copy looks older than the page.
 - Opening through the host: results hidden at the start of a replay, reads following the playhead, and direct table reads refused.
+- Retired cars on the 2026 United States race (session 11396), with `scripts/charts-check.mjs` (2026-11-09): at laps 20, 30 and 53 the timing
+  tower marked the same cars `OUT` as the broadcast's tower, and the track map, pace and pit window left them out.
 
 Live capture has only run in unit tests. See "Not verified".
 
