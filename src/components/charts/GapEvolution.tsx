@@ -1,7 +1,7 @@
 /** The gap between two drivers over the last laps, moving within a lap as interval samples arrive. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
+import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -32,8 +32,6 @@ const WINDOW = 15;
 const TREND_LAPS = 3;
 /** A sample this far, in seconds, from its neighbours' median is a glitch. */
 const SPIKE = 1;
-/** Within a second of the car ahead at the detection point, DRS opens. */
-const DRS = 1;
 
 // The pair's lap starts over the window, both drivers' gaps to the leader since its first lap, and
 // each one's gap as it crossed the line on the laps of the window, for the trend.
@@ -146,15 +144,17 @@ function smooth(points: GapModel['points']): void {
 }
 
 /** Most of the window, so a pit stop runs off the top rather than flattening the battle. */
-function yTop(gaps: number[]): number {
+function yTop(gaps: number[], line: number): number {
   const sorted = gaps.map(Math.abs).sort((x, y) => x - y);
   const high = sorted[Math.floor((sorted.length - 1) * 0.9)] ?? 0;
-  return niceCeil(Math.max(DRS * 2, high * 1.15), 4);
+  return niceCeil(Math.max(line * 2, high * 1.15), 4);
 }
 
 interface Drawn extends GapModel {
   first: DriverStyle;
   second: DriverStyle;
+  /** The season's DRS or Overtake line, from the spec. */
+  aid: ChaseAid;
 }
 
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
@@ -167,7 +167,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const top = compact ? 8 : 12;
   const bottom = height - (compact ? 6 : 22);
   const drawn = m.points.filter((p) => p !== null);
-  const yMax = yTop(drawn.map((p) => p.gap));
+  const yMax = yTop(drawn.map((p) => p.gap), m.aid.within);
   const x = linear([m.from, m.to], [left, right]);
   const y = linear([0, yMax], [bottom, top]);
 
@@ -176,11 +176,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     const step = [1, 2, 5, 10].find((s) => (m.to - m.from) / s <= room) ?? 10;
     const laps = ticks(Math.ceil(m.from), Math.floor(m.to), 0, step);
     xAxis(ctx, { scale: x, values: laps, y: height - 9, format: (l) => `L${l}` });
-    const values = ticks(0, yMax, Math.max(2, Math.floor((bottom - top) / 34))).filter((v) => Math.abs(y(v) - y(DRS)) >= 11);
+    const values = ticks(0, yMax, Math.max(2, Math.floor((bottom - top) / 34))).filter((v) => Math.abs(y(v) - y(m.aid.within)) >= 11);
     yAxis(ctx, { scale: y, values, x0: left, x1: right, format: (v) => v.toFixed(1) });
-    text(ctx, 'DRS', left - 5, y(DRS), { align: 'right', color: c.ink });
+    text(ctx, m.aid.label, left - 5, y(m.aid.within), { align: 'right', color: c.ink });
   }
-  hline(ctx, left, right, y(DRS), c.dim, [3, 3]);
+  hline(ctx, left, right, y(m.aid.within), c.dim, [3, 3]);
 
   const line = m.points.map((p) => (p ? ([x(p.x), y(Math.abs(p.gap))] as const) : null));
   ctx.save();
@@ -219,9 +219,10 @@ function GapEvolution({ props }: { props: { drivers: number[] } }) {
   const [a, b] = props.drivers;
   const view = useSql(SQL, [a, b]);
   const styles = useDriverStyles();
+  const aid = useLive((s) => s.spec.chaseAid);
   const model = useMemo(
-    () => (view.state === 'ready' ? { ...gapModel(view.rows, [a, b]), first: styleOf(styles, a), second: styleOf(styles, b) } : null),
-    [view, styles, a, b],
+    () => (view.state === 'ready' ? { ...gapModel(view.rows, [a, b]), first: styleOf(styles, a), second: styleOf(styles, b), aid } : null),
+    [view, styles, a, b, aid],
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
@@ -234,7 +235,7 @@ export default defineComponent({
   name: 'gap_evolution',
   title: 'Gap evolution',
   description:
-    "The gap between two drivers over the last laps, with the 1 second DRS line. Suggest it for a battle or a chase, next to both drivers' onboards.",
+    "The gap between two drivers over the last laps, with the 1 second line where DRS opens (Overtake from 2026). Suggest it for a battle or a chase, next to both drivers' onboards.",
   args: Type.Object({ drivers: Drivers }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
