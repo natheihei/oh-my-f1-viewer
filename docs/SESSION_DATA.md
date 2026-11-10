@@ -17,7 +17,7 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
 
 Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
-doesn't follow its naming, and `lap_summary` is our own (see below). Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
+doesn't follow its naming, and `lap_summary` is our own (see below). `laps` also has one column of ours, `is_out`. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
 upcoming list, not OpenF1's website API, so it lacks `circuit_type`, images and `is_cancelled`. Upcoming meetings also have no location or circuit
 until they've happened.
 
@@ -49,7 +49,7 @@ start their laps there, give or take a few metres. The outline runs anticlockwis
   isn't a spoiler. A shortened race shows its new distance only from when the feed said so. Practice and qualifying have no `LapCount`.
 - **`lap_summary`** is a view over the other views, not a table, so it only knows what they show at the playhead. One row per driver per lap
   reached: `session_key`, `meeting_key`, `driver_number`, `lap_number`, `date_start`, `date_end`, `lap_duration`, `duration_sector_1` to `3`,
-  `position`, `gap_to_leader`, `interval`, `stint_number`, `compound`, `tyre_age`, `is_pit_in_lap`, `is_pit_out_lap` and `track_status`.
+  `position`, `gap_to_leader`, `interval`, `stint_number`, `compound`, `tyre_age`, `is_pit_in_lap`, `is_pit_out_lap`, `track_status` and `is_out`.
   - A lap ends where the driver's next lap starts, or else at its start plus its time. The lap in progress has no `date_end`.
   - `position`, `gap_to_leader` and `interval` are the last values at or before `date_end`, so as the car crossed the line. The lap in
     progress, and a retired car's last lap, get the latest. Gaps can be text such as `+1 LAP`, as in `intervals`.
@@ -57,6 +57,20 @@ start their laps there, give or take a few metres. The outline runs anticlockwis
     `lap_number` is the in-lap. `is_pit_out_lap` is the lap's own flag, or a stop on the lap before.
   - `track_status` is the worst status during the lap, counting the one it started under: `Red`, then `SCDeployed`, `VSCDeployed`,
     `VSCEnding`, `Yellow`, and `AllClear`. Null when there's no status yet. Lap 1 often has no start: it then runs back from its end by its time.
+  - `is_out` is the lap a car retired on, from `laps`. See below.
+
+## Retirements
+
+A car is out from when `DriverRaceInfo` says `IsOut`, which marks the lap it's on in `laps` as `is_out`. That's a new version of the
+lap, so it shows from the moment the feed said so, mid-lap, and not before: a retired car never finishes its lap, so waiting for its end
+wouldn't work. `TimingData`'s `Retired` does the same, for archives without `IsOut`, but on session 11396 it was missing for one of the
+three retirements, which only had `Stopped`. `Stopped` doesn't count, as a car can restart. Neither flag was seen to go back to false, in
+the three cached races with 11 retirements between them, so once out a car stays out. A live snapshot marks a car already out on the lap
+it gives.
+
+On session 11396, the three cars marked are the three the result lists as DNF, each on its last lap, and at laps 20, 30 and 53 the
+timing tower showed the same cars out as the broadcast. The charts use only this: `timing_tower` shows them as `OUT` at the bottom,
+`track_map` leaves them off, `stint_pace` gives them a dash, `pit_window` leaves them off the ring, and `race_trace` leaves them out of its range.
 
 On session 11396 at the end of the race, through the real worker in the app (`scripts/charts-check.mjs`, median of 5): `SELECT * FROM
 lap_summary` took 27ms for 1,166 rows, one driver's laps 6ms, every driver's position and gap per lap 13ms, and everyone's last 5 laps 11ms.
@@ -91,7 +105,7 @@ Each dataset has its own mark in `t_ingest`, so a failed scrape can't force the 
 | `telemetry` | `CarData.z`, `Position.z` | The same as timing |
 
 A complete dataset is skipped when the session opens again. Bump `INGEST_VERSION` when a processor or table changes, and each session is ingested again the next time it opens.
-It's 3 since `TrackStatus` and `LapCount` were added, and `PitOut: false` stopped marking every car's first lap as an out lap.
+It's 4 since `laps.is_out` was added. Changing a table's columns also takes a bump of `SCHEMA_VERSION` in `store.ts`, which drops the stored tables, since they're a cache.
 
 `ArchiveStatus` can't be the test: it reads `Generating` in files that have been final for years. Neither can the feed alone, since some archives never report the end.
 
@@ -188,5 +202,5 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   is one of DRS's own.
 - **Odd values when stopped.** `brake` is 0 or 100, and 104 (nearly always with `throttle` 104) 47,595 times in session 11396, 46,565 of
   them at 0 km/h. Charts cap both at 100. `location` is exactly (0, 0) before a car first leaves the garage. A retired car keeps
-  reporting where it stopped, or the garage, so `track_map` still shows it.
-- **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `retired`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.
+  reporting where it stopped, or the garage, so `track_map` leaves out cars marked `is_out`.
+- **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.
