@@ -43,8 +43,8 @@ blank page with the command palette, which tells you what to sign in to.
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
 
-Everything else goes to the agent in plain words. The agent can't move playback forward or read race results, so it can't
-spoil a session. Going forward is on the timeline.
+Everything else goes to the agent in plain words. Before it reads past where you are or moves playback forward, the palette
+shows a spoiler check: answer Yes (once), Yes (for the session) or No. The timeline goes anywhere without asking.
 
 ## Development
 
