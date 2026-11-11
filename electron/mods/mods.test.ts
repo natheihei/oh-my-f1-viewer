@@ -36,6 +36,10 @@ function write(files: Record<string, string>): void {
 
 const code = async (m: Mods, name: string) => (await m.serve(new Request(`f1a-mod://mods/${name}/main.js?v=1`))).text();
 
+/** Waits for text in a file the app writes in the background, which can be missing or still empty until then. */
+const untilFileHas = (file: string, text: string) =>
+  until(() => existsSync(path.join(dir, file)) && readFileSync(path.join(dir, file), 'utf8').includes(text));
+
 afterEach(async () => {
   await mods?.stop();
   mods = null;
@@ -84,7 +88,7 @@ describe('mods', () => {
     await until(() => last().find((m) => m.version === 1));
     mods.loaded('two', 1, 'main must export default defineComponent');
     expect(mods.status('two')).toMatchObject({ state: 'failed', error: 'main must export default defineComponent' });
-    expect(readFileSync(path.join(dir, 'two/mod.error'), 'utf8')).toContain('defineComponent');
+    await untilFileHas('two/mod.error', 'defineComponent');
   });
 
   it('finds new mods and drops removed ones', async () => {
@@ -105,7 +109,6 @@ describe('mods', () => {
     await until(() => last().find((m) => m.version === 1));
     mods.log('logs', { at: 1000, level: 'warn', text: 'hello' });
     expect(mods.logs('logs')).toEqual([{ at: 1000, level: 'warn', text: 'hello' }]);
-    await until(() => existsSync(path.join(dir, 'logs/mod.log')));
-    expect(readFileSync(path.join(dir, 'logs/mod.log'), 'utf8')).toContain('warn hello');
+    await untilFileHas('logs/mod.log', 'warn hello');
   });
 });
