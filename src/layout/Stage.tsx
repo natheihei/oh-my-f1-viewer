@@ -8,10 +8,23 @@ import { useEffect, useMemo, useRef, type ComponentType } from 'react';
 import { allTiles, TITLE_BAR_PX, type ComponentSpec } from './model';
 import { useLayout } from './store';
 
-export type TileComponent = ComponentType<{ spec: ComponentSpec }>;
+export type TileComponent = ComponentType<{ spec: ComponentSpec; tileId: string }>;
 
-/** `highlight` outlines the tile with that component key. */
-export function Stage({ registry, highlight = null }: { registry: Record<string, TileComponent>; highlight?: string | null }) {
+const NO_MARKS: Record<string, string> = {};
+
+/**
+ * `highlight` outlines the tile with that component key. `marks` holds a word for some component types,
+ * such as "edited": their tiles get a dashed outline and the word in a corner.
+ */
+export function Stage({
+  registry,
+  highlight = null,
+  marks = NO_MARKS,
+}: {
+  registry: Record<string, TileComponent>;
+  highlight?: string | null;
+  marks?: Record<string, string>;
+}) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const hostsRef = useRef(new Map<string, HTMLDivElement>());
   const nodes = useLayout((s) => s.nodes);
@@ -50,18 +63,22 @@ export function Stage({ registry, highlight = null }: { registry: Record<string,
     <div ref={rootRef} className="stage" data-testid="stage">
       {tiles.map((tile) => {
         const Component = registry[tile.component.type];
+        const mark = marks[tile.component.type];
         return (
           <div
             key={tile.id}
             data-tile={tile.id}
             data-tile-key={tile.component.key}
-            className={`stage-host ${tile.component.key === highlight ? 'stage-host-highlight' : ''}`}
+            data-tile-type={tile.component.type}
+            data-tile-mark={mark}
+            className={`stage-host ${tile.component.key === highlight ? 'stage-host-highlight' : ''} ${mark ? 'stage-host-marked' : ''}`}
             ref={(el) => {
               if (el) hostsRef.current.set(tile.id, el);
               else hostsRef.current.delete(tile.id);
             }}
           >
-            {Component ? <Component spec={tile.component} /> : null}
+            {Component ? <Component spec={tile.component} tileId={tile.id} /> : null}
+            {mark ? <span className="stage-mark">{mark}</span> : null}
           </div>
         );
       })}

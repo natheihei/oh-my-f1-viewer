@@ -91,10 +91,13 @@ app
     licenseProxy.startLicenseProxy();
     licenseProxy.installWebRequestHooks();
     const root = path.join(__dirname, '..', '..');
-    const mods = new Mods(path.join(app.getPath('userData'), 'mods'), (list) => sendToRenderer('mods:changed', list), {
-      declarations: path.join(root, 'dist-types'),
-      nodeModules: path.join(root, 'node_modules'),
-    });
+    const mods = new Mods(
+      path.join(app.getPath('userData'), 'mods'),
+      (list) => sendToRenderer('mods:changed', list),
+      { declarations: path.join(root, 'dist-types'), nodeModules: path.join(root, 'node_modules') },
+      path.join(app.getPath('userData'), 'mods-snapshot'),
+      (state) => sendToRenderer('build:changed', state),
+    );
     protocol.handle(MOD_SCHEME, (request) => mods.serve(request));
     app.on('will-quit', () => void mods.stop());
     const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'), mods);

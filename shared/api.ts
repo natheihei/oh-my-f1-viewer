@@ -151,11 +151,14 @@ export interface AgentToolResult {
   pastPlayhead?: boolean;
 }
 
+/** Which of the app's two agents a message goes to: the one that drives viewing, or the one that builds mods. */
+export type AgentMode = 'view' | 'build';
+
 export type AgentEvent =
   | { type: 'turn_start'; turnId: string }
   | { type: 'text_delta'; turnId: string; delta: string }
   | { type: 'tool_start'; turnId: string; name: string; args: Record<string, unknown> }
-  | { type: 'tool_end'; turnId: string; name: string; ok: boolean }
+  | { type: 'tool_end'; turnId: string; name: string; ok: boolean; /** A line for the palette, such as a file the build agent wrote. */ note?: string }
   | { type: 'turn_end'; turnId: string; acted: boolean }
   | { type: 'error'; turnId: string; message: string };
 
@@ -218,7 +221,9 @@ export interface F1aApi {
     /** Saves the model and thinking level. They apply from the next message, in the same conversation. */
     choose(model: string, thinking: ThinkingLevel): Promise<AiStatus>;
     /** `reference` is appended to the system prompt: what the agent should know up front, like the event list. */
-    send(text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void>;
+    send(text: string, context: string, tools: AgentToolDefinition[], reference: string, mode?: AgentMode): Promise<void>;
+    /** Ends build mode's conversation. The viewing one is untouched. */
+    endBuild(): Promise<void>;
     cancel(): Promise<void>;
     reset(): Promise<void>;
     onEvent(cb: (event: AgentEvent) => void): () => void;
@@ -232,6 +237,17 @@ export interface F1aApi {
     /** Reports whether a build loaded: `error` is null when it did. */
     loaded(name: string, version: number, error: string | null): void;
     log(name: string, line: import('./mods').ModLogLine): void;
+  };
+  /** Build mode's snapshot of the mods folder. See docs/BUILD_MODE.md. */
+  build: {
+    state(): Promise<import('./mods').BuildState>;
+    onChanged(cb: (state: import('./mods').BuildState) => void): () => void;
+    /** Takes the snapshot Undo all goes back to. */
+    begin(): Promise<import('./mods').BuildState>;
+    /** Keeps the changes. Resolves to what changed, in the app's words, or null for nothing. */
+    save(): Promise<string | null>;
+    /** Puts the mods folder back. Resolves to how many mods that undid. */
+    undo(): Promise<number>;
   };
 }
 

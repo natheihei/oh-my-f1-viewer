@@ -14,7 +14,7 @@
  * playback landed.
  */
 import Type, { type Static, type TObject } from 'typebox';
-import type { AgentToolDefinition, Channel, SessionType } from '../../shared/api';
+import type { AgentMode, AgentToolDefinition, Channel, SessionType } from '../../shared/api';
 import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
@@ -119,6 +119,17 @@ export const QUERY_DESCRIPTION = [
   'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from, in the tables that have it, is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
   `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
 ].join('\n');
+
+export const BUILD_QUERY_DESCRIPTION = [
+  'Read the open session\'s timing data with SQLite, to get a query right before a component uses it. SELECT only. The tables and their columns are in the table list at the end of the system prompt, once the session\'s data is ready.',
+  'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen, which is what useSql sees. asOf "session" reads everything the session holds. Never tell the user what either shows.',
+  'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from, in the tables that have it, is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
+  `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
+].join('\n');
+
+const BuildAsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
+  description: '"playhead" (the default) sees up to the frame on screen; "session" sees the whole session.',
+});
 
 const AsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
   description: '"playhead" (the default) sees up to the frame on screen; "session" sees the whole session, and asks the user first.',
@@ -267,6 +278,104 @@ function tileKeys(refs: string[]): string[] {
   return [...keys];
 }
 
+/**
+ * `suggest_tiles`. The viewing agent's lists the chart names registered when the message was sent. The
+ * build agent's takes any name, since it suggests mods it wrote during the turn.
+ */
+const suggestTiles = (args: typeof SuggestArgs | (() => typeof SuggestArgs)): AgentTool =>
+  expose(host.suggestions.offer, {
+    name: 'suggest_tiles',
+    description: `Suggest streams and charts as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time. Charts come from the chart list, each with the drivers it is about.`,
+    args,
+    adapt: ({ streams = [], charts = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planCharts(charts).items] }),
+    gate: [
+      sessionOpen,
+      (_, { streams = [], charts = [] }) => {
+        if (streams.length === 0 && charts.length === 0) throw new Error('Name at least one stream or chart.');
+      },
+      (_, { charts = [] }) => {
+        const { problems } = planCharts(charts);
+        if (problems.length) throw new Error(`${problems.join(' ')} Nothing was suggested.`);
+      },
+      ({ items }, { streams = [] }) => {
+        if (items.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
+      },
+    ],
+    result: ({ suggested, onScreen, repeated, overLimit }, { streams = [] }) => {
+      const parts = [
+        suggested.length ? `Suggested: ${suggested.join(', ')}.` : '',
+        onScreen.length ? `Already on screen, shown as such: ${onScreen.join(', ')}.` : '',
+        repeated.length ? `Already suggested this turn: ${repeated.join(', ')}.` : '',
+        overLimit.length ? `Left out, the strip is full: ${overLimit.join(', ')}.` : '',
+      ];
+      return `${parts.filter(Boolean).join(' ')}${missingNote(matchAll(streams).missing)} The user decides; nothing is on screen until they add it.`;
+    },
+    hints: [[/dismissed/, 'Do not suggest again until they ask.']],
+  });
+
+/**
+ * `query_session`. The viewing agent's asks the spoiler gate before reading past the playhead. The build
+ * agent's doesn't: build mode reads the whole session, which the viewer agreed to on entering it.
+ */
+const querySession = (gated: boolean): AgentTool =>
+  expose(host.data.sql, {
+    name: 'query_session',
+    description: gated ? QUERY_DESCRIPTION : BUILD_QUERY_DESCRIPTION,
+    args: Type.Object(
+      {
+        sql: Type.String({ description: 'One SELECT statement. Use ? for params.' }),
+        params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
+        asOf: Type.Optional(gated ? AsOf : BuildAsOf),
+      },
+      { additionalProperties: false },
+    ),
+    adapt: ({ sql, params, asOf }) => ({ sql, params, asOf }),
+    pastPlayhead: ({ asOf }) => asOf === 'session',
+    gate: [
+      sessionOpen,
+      dataReady,
+      async ({ sql, asOf }) => {
+        if (gated && asOf === 'session') await approve({ kind: 'read_ahead', session: sessionTitle(), playheadMs: playheadMs(), sql });
+      },
+    ],
+    result: ({ columns, rows }, { asOf }) => {
+      const shown = rows.slice(0, MAX_QUERY_ROWS).map((row) => columns.map((c) => row[c]));
+      // Nothing at the playhead often just means it hasn't happened on screen yet.
+      const note =
+        rows.length > MAX_QUERY_ROWS
+          ? `Showing ${MAX_QUERY_ROWS} of ${rows.length} rows. Narrow the query to see the rest.`
+          : rows.length === 0 && asOf !== 'session' && !gated
+            ? 'Nothing up to the frame on screen. asOf "session" reads the whole session.'
+            : rows.length === 0 && asOf !== 'session'
+              ? 'Nothing up to the frame on screen. If the moment may be later, call query_session again with asOf "session": the app asks the user, so do not ask them yourself.'
+            : undefined;
+      return JSON.stringify({ columns, rows: shown, ...(note ? { note } : {}) });
+    },
+  });
+
+/** `seek_to`. Gated like `query_session`: only the viewing agent's asks before a forward seek. */
+const seekTo = (gated: boolean): AgentTool =>
+  expose(host.playback.seekToDate, {
+    name: 'seek_to',
+    description:
+      gated
+        ? 'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. A moment later than the frame on screen asks the user first. Playback stays within what can be played.'
+        : 'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. It moves what the user is watching, so only do it when they ask. Playback stays within what can be played.',
+    args: Type.Object({ date: Type.Number({ description: 'UTC milliseconds, from a query_session date column' }) }, { additionalProperties: false }),
+    adapt: ({ date }) => ({ dateMs: date }),
+    gate: [
+      sessionOpen,
+      dataReady,
+      async ({ dateMs }) => {
+        const playhead = playheadMs();
+        // With the frame on screen unknown, a seek may be forward: ask.
+        if (gated && (playhead === null || dateMs > playhead)) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: dateMs });
+      },
+    ],
+    result: ({ timeSec, clamped }) =>
+      `Playback is at ${formatClock(timeSec)}.${clamped ? ' That moment is outside what can be played, so it stopped at the nearest end.' : ''}`,
+  });
+
 const MAX_UPCOMING = 16;
 
 export const AGENT_TOOLS: AgentTool[] = [
@@ -331,35 +440,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     result: (feeds) =>
       JSON.stringify(feeds.map((f) => ({ name: f.label, kind: f.kind, driver: f.driverName, team: f.team, number: f.number, onScreen: onScreen(f.id) }))),
   }),
-  expose(host.suggestions.offer, {
-    name: 'suggest_tiles',
-    description: `Suggest streams and charts as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time. Charts come from the chart list, each with the drivers it is about.`,
-    args: suggestArgs,
-    adapt: ({ streams = [], charts = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planCharts(charts).items] }),
-    gate: [
-      sessionOpen,
-      (_, { streams = [], charts = [] }) => {
-        if (streams.length === 0 && charts.length === 0) throw new Error('Name at least one stream or chart.');
-      },
-      (_, { charts = [] }) => {
-        const { problems } = planCharts(charts);
-        if (problems.length) throw new Error(`${problems.join(' ')} Nothing was suggested.`);
-      },
-      ({ items }, { streams = [] }) => {
-        if (items.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
-      },
-    ],
-    result: ({ suggested, onScreen, repeated, overLimit }, { streams = [] }) => {
-      const parts = [
-        suggested.length ? `Suggested: ${suggested.join(', ')}.` : '',
-        onScreen.length ? `Already on screen, shown as such: ${onScreen.join(', ')}.` : '',
-        repeated.length ? `Already suggested this turn: ${repeated.join(', ')}.` : '',
-        overLimit.length ? `Left out, the strip is full: ${overLimit.join(', ')}.` : '',
-      ];
-      return `${parts.filter(Boolean).join(' ')}${missingNote(matchAll(streams).missing)} The user decides; nothing is on screen until they add it.`;
-    },
-    hints: [[/dismissed/, 'Do not suggest again until they ask.']],
-  }),
+  suggestTiles(suggestArgs),
   expose(host.layout.remove, {
     name: 'remove_tiles',
     description: 'Take tiles off screen: streams, or charts.',
@@ -433,66 +514,35 @@ export const AGENT_TOOLS: AgentTool[] = [
     gate: [sessionOpen],
     result: () => 'Back at the start.',
   }),
-  expose(host.data.sql, {
-    name: 'query_session',
-    description: QUERY_DESCRIPTION,
-    args: Type.Object(
-      {
-        sql: Type.String({ description: 'One SELECT statement. Use ? for params.' }),
-        params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
-        asOf: Type.Optional(AsOf),
-      },
-      { additionalProperties: false },
-    ),
-    adapt: ({ sql, params, asOf }) => ({ sql, params, asOf }),
-    pastPlayhead: ({ asOf }) => asOf === 'session',
-    gate: [
-      sessionOpen,
-      dataReady,
-      async ({ sql, asOf }) => {
-        if (asOf === 'session') await approve({ kind: 'read_ahead', session: sessionTitle(), playheadMs: playheadMs(), sql });
-      },
-    ],
-    result: ({ columns, rows }, { asOf }) => {
-      const shown = rows.slice(0, MAX_QUERY_ROWS).map((row) => columns.map((c) => row[c]));
-      // Nothing at the playhead often just means it hasn't happened on screen yet.
-      const note =
-        rows.length > MAX_QUERY_ROWS
-          ? `Showing ${MAX_QUERY_ROWS} of ${rows.length} rows. Narrow the query to see the rest.`
-          : rows.length === 0 && asOf !== 'session'
-            ? 'Nothing up to the frame on screen. If the moment may be later, call query_session again with asOf "session": the app asks the user, so do not ask them yourself.'
-            : undefined;
-      return JSON.stringify({ columns, rows: shown, ...(note ? { note } : {}) });
-    },
-  }),
-  expose(host.playback.seekToDate, {
-    name: 'seek_to',
-    description:
-      'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. A moment later than the frame on screen asks the user first. Playback stays within what can be played.',
-    args: Type.Object({ date: Type.Number({ description: 'UTC milliseconds, from a query_session date column' }) }, { additionalProperties: false }),
-    adapt: ({ date }) => ({ dateMs: date }),
-    gate: [
-      sessionOpen,
-      dataReady,
-      async ({ dateMs }) => {
-        const playhead = playheadMs();
-        // With the frame on screen unknown, a seek may be forward: ask.
-        if (playhead === null || dateMs > playhead) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: dateMs });
-      },
-    ],
-    result: ({ timeSec, clamped }) =>
-      `Playback is at ${formatClock(timeSec)}.${clamped ? ' That moment is outside what can be played, so it stopped at the nearest end.' : ''}`,
-  }),
+  querySession(true),
+  seekTo(true),
 ];
 
-export const toolDefinitions = (): AgentToolDefinition[] => AGENT_TOOLS.map(({ name, description, parameters }) => ({ name, description, parameters }));
+/**
+ * What the build agent has of the viewing tools, beside its own file tools in the main process: enough
+ * to look at the data, show a draft with props, and try a control. None of it asks the spoiler gate.
+ * See docs/BUILD_MODE.md.
+ */
+const BUILD_VIEW_TOOLS = ['list_streams', 'remove_tiles', 'play', 'pause'];
+export const BUILD_TOOLS: AgentTool[] = [
+  ...AGENT_TOOLS.filter((t) => BUILD_VIEW_TOOLS.includes(t.name)),
+  suggestTiles(SuggestArgs),
+  querySession(false),
+  seekTo(false),
+];
 
-export const readsPastPlayhead = (name: string, args: Record<string, unknown>): boolean =>
-  AGENT_TOOLS.find((t) => t.name === name)?.pastPlayhead?.(args) ?? false;
+const toolsFor = (mode: AgentMode): AgentTool[] => (mode === 'build' ? BUILD_TOOLS : AGENT_TOOLS);
+
+export const toolDefinitions = (mode: AgentMode = 'view'): AgentToolDefinition[] =>
+  toolsFor(mode).map(({ name, description, parameters }) => ({ name, description, parameters }));
+
+/** Only the viewing agent forgets what it read ahead: the build agent's whole conversation ends with the build. */
+export const readsPastPlayhead = (name: string, args: Record<string, unknown>, mode: AgentMode = 'view'): boolean =>
+  mode === 'view' && (AGENT_TOOLS.find((t) => t.name === name)?.pastPlayhead?.(args) ?? false);
 
 /** Returns the model-facing result text; throws on failure. */
-export async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
-  const tool = AGENT_TOOLS.find((t) => t.name === name);
+export async function runTool(name: string, args: Record<string, unknown>, mode: AgentMode = 'view'): Promise<string> {
+  const tool = toolsFor(mode).find((t) => t.name === name);
   if (!tool) throw new Error(`Unknown tool: ${name}`);
   return tool.run(args);
 }

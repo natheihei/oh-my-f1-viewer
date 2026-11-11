@@ -26,3 +26,15 @@ export interface ModLogLine {
   level: 'log' | 'info' | 'warn' | 'error' | 'debug';
   text: string;
 }
+
+/** One mod that differs from how the mods folder stood when a build started. See docs/BUILD_MODE.md. */
+export interface BuildChange {
+  name: string;
+  change: 'added' | 'edited' | 'deleted';
+}
+
+/** Build mode as the main process sees it: whether a snapshot is open, and what differs from it. */
+export interface BuildState {
+  active: boolean;
+  changes: BuildChange[];
+}

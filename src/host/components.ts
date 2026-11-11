@@ -28,6 +28,11 @@ interface Declared {
   size?: { aspect: number; min: [number, number] };
   /** How its content draws, when it doesn't simply fill the tile: the tile is shrunk to it. See `ContentFit`. */
   fit?: ContentFit;
+  /**
+   * It reads or acts on what the viewer hasn't watched yet. The grid then covers each tile of it with
+   * a warning, and doesn't draw the view until the viewer allows that tile. See docs/BUILD_MODE.md.
+   */
+  looksAhead?: boolean;
 }
 
 export interface ComponentDefinition extends Declared {
@@ -49,6 +54,7 @@ export interface ComponentInfo {
   sessions: SessionType[] | null;
   needs: Dataset[];
   size: { aspect: number; min: [number, number] } | null;
+  looksAhead: boolean;
 }
 
 /** Declares a component that tiles can show by name. */
@@ -76,6 +82,7 @@ function infoOf(c: ComponentDefinition): ComponentInfo {
     sessions: c.sessions ?? null,
     needs: c.needs ?? [],
     size: c.size ?? null,
+    looksAhead: c.looksAhead === true,
   };
 }
 

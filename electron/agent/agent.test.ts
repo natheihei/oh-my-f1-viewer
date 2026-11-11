@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AgentToolCall, AgentToolDefinition } from '../../shared/api';
+import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 
 const host = vi.hoisted(() => ({
@@ -322,6 +323,139 @@ describe('forgetting a read ahead', () => {
     expect(summarized).toContain('Jumped to lap 30.');
     expect(summarized).not.toContain('SECRET ROWS');
     expect(summarized).not.toContain('12345');
+  });
+});
+
+describe('build mode', () => {
+  const modsDir = () => path.join(host.userData, 'mods');
+  const sessions = (folder: string) => {
+    const dir = path.join(host.userData, 'pi-agent', folder);
+    return existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(path.join(dir, f), 'utf8')) : [];
+  };
+  /** The mods folder as the build agent's tools see it, with every save loading at once. */
+  function attach(agent: InstanceType<typeof Agent>, picture: Buffer | null = null) {
+    mkdirSync(modsDir(), { recursive: true });
+    agent.attachMods({
+      dir: modsDir(),
+      settled: async (name) =>
+        existsSync(path.join(modsDir(), name, 'main.tsx')) ? { name, state: 'ready', version: 1, url: null, error: null } : null,
+      logs: () => [{ at: 0, level: 'log', text: 'drew' }],
+      picture: async () => picture,
+    });
+  }
+  const notes = () => events().flatMap((e) => (e.type === 'tool_end' && e.note ? [e.note] : []));
+
+  it('is its own conversation, with its own prompt and file tools', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent);
+    script(fauxAssistantMessage('Viewing.'), fauxAssistantMessage('Building.'), fauxAssistantMessage('Viewing again.'));
+    await agent.send('ham', 'state', [TOOL]);
+    await agent.send('a lap stepper', 'state', [TOOL], 'TABLES', 'build');
+    await agent.send('nor', 'state', [TOOL]);
+
+    expect(requests[1].system).toBe(`${BUILD_PROMPT}\n\nTABLES`);
+    expect(requests[1].tools).toEqual(expect.arrayContaining(['act', 'read_file', 'write_file', 'edit_file', 'delete_path', 'list_files', 'mod_status', 'look_at']));
+    expect(requests[1].history).not.toContain('ham');
+    expect(requests[0].tools).toEqual(['act']);
+    // The viewing conversation carries on, and never saw the build.
+    expect(requests[2].system).toBe(SYSTEM_PROMPT);
+    expect(requests[2].history).toContain('ham');
+    expect(requests[2].history).not.toContain('a lap stepper');
+    expect(requests[2].history).not.toContain('Building.');
+  });
+
+  it('stores the build apart from the viewing conversation', async () => {
+    const { agent, script } = setup();
+    attach(agent);
+    script(fauxAssistantMessage('Viewing.'), fauxAssistantMessage('Building.'));
+    await agent.send('ham', 'state', [TOOL]);
+    await agent.send('a lap stepper', 'state', [TOOL], '', 'build');
+    expect(sessions('sessions')).toHaveLength(1);
+    expect(sessions('sessions')[0]).not.toContain('a lap stepper');
+    expect(sessions('build-sessions')).toHaveLength(1);
+    expect(sessions('build-sessions')[0]).toContain('a lap stepper');
+  });
+
+  it('starts a new build conversation after leaving, and leaves the viewing one alone', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent);
+    script(fauxAssistantMessage('one'), fauxAssistantMessage('v'), fauxAssistantMessage('two'), fauxAssistantMessage('v2'));
+    await agent.send('first build', 'state', [TOOL], '', 'build');
+    await agent.send('view', 'state', [TOOL]);
+    await agent.endBuild();
+    await agent.send('second build', 'state', [TOOL], '', 'build');
+    await agent.send('view again', 'state', [TOOL]);
+    expect(requests[2].history).not.toContain('first build');
+    expect(requests[3].history).toContain('view');
+    expect(sessions('build-sessions')).toHaveLength(2);
+  });
+
+  it('writes, edits and deletes inside the mods folder, and says what it did', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent);
+    script(
+      fauxAssistantMessage([fauxToolCall('write_file', { path: 'lap_stepper/main.tsx', content: 'const a = 1;' })]),
+      fauxAssistantMessage([fauxToolCall('edit_file', { path: 'lap_stepper/main.tsx', old: 'a = 1', new: 'a = 2' })]),
+      fauxAssistantMessage([fauxToolCall('read_file', { path: 'lap_stepper/main.tsx' })]),
+      fauxAssistantMessage([fauxToolCall('mod_status', { mod: 'lap_stepper' })]),
+      fauxAssistantMessage([fauxToolCall('delete_path', { path: 'lap_stepper' })]),
+      fauxAssistantMessage('Done.'),
+    );
+    await agent.send('build it', 'state', [], '', 'build');
+    expect(requests[1].history).toContain('Saved lap_stepper/main.tsx. lap_stepper loaded.');
+    expect(requests[3].history).toContain('const a = 2;');
+    expect(requests[4].history).toContain('drew');
+    expect(existsSync(path.join(modsDir(), 'lap_stepper'))).toBe(false);
+    expect(notes()).toEqual(['wrote lap_stepper/main.tsx · loaded', 'edited lap_stepper/main.tsx · loaded', 'removed lap_stepper']);
+    expect(events().at(-1)).toMatchObject({ type: 'turn_end', acted: true });
+  });
+
+  it('refuses paths outside the mods folder, and files the app owns', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent);
+    writeFileSync(path.join(host.userData, 'secret.txt'), 'TOKEN');
+    const tries = [
+      fauxToolCall('read_file', { path: '../secret.txt' }),
+      fauxToolCall('write_file', { path: '../escape/main.tsx', content: 'x' }),
+      fauxToolCall('write_file', { path: '/tmp/f1a-escape.txt', content: 'x' }),
+      fauxToolCall('write_file', { path: 'tsconfig.json', content: 'x' }),
+      fauxToolCall('write_file', { path: '.types/a.d.ts', content: 'x' }),
+      fauxToolCall('write_file', { path: 'a_mod/mod.log', content: 'x' }),
+      fauxToolCall('write_file', { path: 'Bad Name/main.tsx', content: 'x' }),
+      fauxToolCall('delete_path', { path: '.' }),
+    ];
+    script(...tries.map((call) => fauxAssistantMessage([call])), fauxAssistantMessage('Done.'));
+    await agent.send('go', 'state', [], '', 'build');
+    const history = requests.at(-1)!.history;
+    expect(history).not.toContain('TOKEN');
+    expect(history.match(/outside the mods folder/g)).toHaveLength(3);
+    expect(existsSync(path.join(host.userData, 'escape'))).toBe(false);
+    expect(existsSync('/tmp/f1a-escape.txt')).toBe(false);
+    expect(readdirSync(modsDir())).toEqual([]);
+    expect(notes()).toEqual([]);
+  });
+
+  it('shows the build agent a picture of a draft', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent, Buffer.from('PNGDATA'));
+    script(fauxAssistantMessage([fauxToolCall('look_at', { mod: 'lap_stepper' })]), fauxAssistantMessage('Looks right.'));
+    await agent.send('check it', 'state', [], '', 'build');
+    expect(requests[1].history).toContain(Buffer.from('PNGDATA').toString('base64'));
+    expect(notes()).toEqual(['looked at lap_stepper']);
+  });
+
+  it('keeps what a build read out of later build turns only by ending: nothing is collapsed', async () => {
+    const { agent, requests, script } = setup();
+    attach(agent);
+    host.onToolCall = (call) => agent.onToolResult({ callId: (call as AgentToolCall).callId, ok: true, content: 'WHOLE SESSION ROWS', pastPlayhead: true });
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Built.'), fauxAssistantMessage('ok'), fauxAssistantMessage('view'));
+    await agent.send('build', 'state', [TOOL], '', 'build');
+    await agent.send('more', 'state', [TOOL], '', 'build');
+    expect(requests[2].history).toContain('WHOLE SESSION ROWS');
+    await agent.endBuild();
+    await agent.send('ham', 'state', [TOOL]);
+    expect(requests[3].history).not.toContain('WHOLE SESSION ROWS');
+    expect(requests[3].history).not.toContain('Built.');
   });
 });
 

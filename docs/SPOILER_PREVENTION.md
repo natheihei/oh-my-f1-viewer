@@ -26,7 +26,9 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
   authorizer refuses everything else, including the tables behind those views.
 - **`sessionData` follows the playhead too.** The roster, the grid, the championship and `lapCount` read as they stood at that frame. `sessionResult` appears
   only once the session has finished at the playhead.
-- **Charts can't opt out.** `useSql` always reads as of the playhead. Seeking back hides what had been shown.
+- **Charts read as of the playhead.** `useSql` does by default, and seeking back hides what had been shown. A component can ask it
+  for the whole session, and its author decides whether to warn: with `looksAhead: true` in its definition, the grid shows "This tile
+  reads past where you are now." and an Allow button in place of the tile until the viewer allows it. See [BUILD_MODE.md](BUILD_MODE.md).
 - **A live session waits for the video.** Rows are compared with the stream's wall clock, since F1 TV's video runs tens of seconds behind the feed.
 
 Reading the whole session takes `host.data.sql({ asOf: 'session' })`, asked for by name. The host doesn't check who's calling: policy belongs to the caller.
@@ -102,8 +104,11 @@ The prompt in `shared/tools.ts` covers what code can't:
 - **Within the turn.** The rows are in context until the turn ends, so that turn's reply depends on the prompt.
 - **What the agent said.** Its replies stay in the history. If it disclosed something in an approved turn, later turns can repeat it.
 - **Live sessions with no wall clock.** With nothing to compare against, everything is visible.
-- **Mods.** A mod can call `host.data.sql({ asOf: 'session' })` and show the result. Nothing gates that. See [MODS.md](MODS.md).
-- **A future build mode.** Forgetting only covers tools that mark their results. Shell or direct database access would need the gate and the mark first.
+- **Mods.** A mod can read the whole session, with `useSql` or `host.data.sql` and `asOf: 'session'`, and show the result. Nothing
+  gates that. A component that declares `looksAhead` asks the viewer once per tile, but declaring it is up to the author. See [MODS.md](MODS.md).
+- **Build mode.** Its agent reads the whole session with no check: entering build mode is the viewer's consent, said in red beside
+  `/build`. Its conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
+  says to the viewer while building depends on its prompt. See [BUILD_MODE.md](BUILD_MODE.md).
 - **Commentary captions.** Not in the app yet. They contain the race, so reading them ahead has to go through the check. See [CAPTIONS.md](CAPTIONS.md).
 
 ## How it's checked

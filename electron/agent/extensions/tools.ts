@@ -8,8 +8,11 @@ export interface ToolsExtension {
   register(definitions: AgentToolDefinition[]): void;
 }
 
-/** The renderer's tools, which it sends with each message. `run` carries a call out and waits for its result. */
-export function toolsExtension(run: (call: AgentToolCall) => Promise<AgentToolResult>): ToolsExtension {
+/**
+ * The renderer's tools, which it sends with each message. `run` carries a call out and waits for its
+ * result. `always` names tools registered elsewhere that stay active beside them.
+ */
+export function toolsExtension(run: (call: AgentToolCall) => Promise<AgentToolResult>, always: string[] = []): ToolsExtension {
   let pi: ExtensionAPI | null = null;
   return {
     factory: (api) => {
@@ -33,7 +36,7 @@ export function toolsExtension(run: (call: AgentToolCall) => Promise<AgentToolRe
           },
         });
       }
-      pi.setActiveTools(definitions.map((d) => d.name));
+      pi.setActiveTools([...definitions.map((d) => d.name), ...always]);
     },
   };
 }

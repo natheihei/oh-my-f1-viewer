@@ -2,6 +2,7 @@
 import type {
   AgentConnectEvent,
   AgentEvent,
+  AgentMode,
   AgentProviderOption,
   AgentToolCall,
   AgentToolDefinition,
@@ -40,8 +41,10 @@ export const agentLink = {
   onConnect: (cb: (event: AgentConnectEvent) => void): (() => void) => window.f1a.ai.onConnect(cb),
   disconnect: (): Promise<void> => window.f1a.ai.disconnect(),
   choose: (model: string, thinking: ThinkingLevel): Promise<AiStatus> => window.f1a.ai.choose(model, thinking),
-  send: (text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void> =>
-    window.f1a.ai.send(text, context, tools, reference),
+  send: (text: string, context: string, tools: AgentToolDefinition[], reference: string, mode: AgentMode = 'view'): Promise<void> =>
+    window.f1a.ai.send(text, context, tools, reference, mode),
+  /** Ends build mode's conversation. */
+  endBuild: (): Promise<void> => window.f1a.ai.endBuild(),
   cancel: (): Promise<void> => window.f1a.ai.cancel(),
   onEvent: (cb: (event: AgentEvent) => void): (() => void) => window.f1a.ai.onEvent(cb),
   onToolCall: (cb: (call: AgentToolCall) => void): (() => void) => window.f1a.ai.onToolCall(cb),
