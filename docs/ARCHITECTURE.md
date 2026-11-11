@@ -142,6 +142,9 @@ pi gets two folders, passed in code, and never reads or writes `~/.pi`:
 
 - `agentDir`, `<userData>/pi-agent`, holds `auth.json`, `models.json`, `settings.json` and `SYSTEM.md`. The app rewrites `SYSTEM.md` from
   `SYSTEM_PROMPT` on every start. `settings.json` is written only if missing, so it can be edited.
+- `<agentDir>/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
+  results, and token use. They're never resumed, so a new conversation or a restart starts empty, as if in memory. They hold whatever
+  the agent read, including race data, stay on this machine, and aren't pruned.
 - `cwd` is the mods folder, set for a later build mode. It's untrusted: pi ignores any `.pi` folder there, which could otherwise change
   the prompt or run code in main.
 

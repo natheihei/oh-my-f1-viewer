@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -291,6 +291,93 @@ describe('starting over', () => {
     await agent.send('second', 'state', [TOOL]);
     expect(requests[1].roles.filter((r) => r === 'user')).toHaveLength(1);
     expect(requests[1].tools).toEqual(['act']);
+  });
+});
+
+describe('stored sessions', () => {
+  const dir = () => path.join(host.userData, 'pi-agent', 'sessions');
+  const files = () => (existsSync(dir()) ? readdirSync(dir()).sort() : []);
+  const entries = (file: string) =>
+    readFileSync(path.join(dir(), file), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { type: string; id: string; message?: Message });
+  const stored = (file: string) =>
+    entries(file).flatMap((e) =>
+      e.message && e.message.role !== 'system' ? [`${e.message.role}: ${text(e.message.content)}`] : [],
+    );
+
+  it('writes the conversation to a .jsonl, keeping the id used as the cache key', async () => {
+    const { agent, script } = setup();
+    script(fauxAssistantMessage('Hello.'));
+    await agent.send('hi', 'state', [TOOL]);
+    expect(files()).toHaveLength(1);
+    expect(files()[0]).toMatch(/_f1a\.jsonl$/);
+    expect(entries(files()[0])[0]).toMatchObject({ type: 'session', id: 'f1a' });
+    expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\nhi', 'assistant: Hello.']);
+  });
+
+  it('adds later turns to the same file', async () => {
+    const { agent, script } = setup();
+    script(fauxAssistantMessage('one'));
+    await agent.send('first', 'state', [TOOL]);
+    script(fauxAssistantMessage('two'));
+    await agent.send('second', 'state', [TOOL]);
+    expect(files()).toHaveLength(1);
+    expect(stored(files()[0])).toHaveLength(4);
+  });
+
+  it('starts a new file on reset, leaving the old one', async () => {
+    const { agent, requests, script } = setup();
+    script(fauxAssistantMessage('one'));
+    await agent.send('first', 'state', [TOOL]);
+    const [first] = files();
+    const before = readFileSync(path.join(dir(), first), 'utf8');
+    await agent.reset();
+    script(fauxAssistantMessage('two'));
+    await agent.send('second', 'state', [TOOL]);
+    expect(files()).toHaveLength(2);
+    expect(readFileSync(path.join(dir(), first), 'utf8')).toBe(before);
+    expect(requests[1].roles.filter((r) => r === 'user')).toHaveLength(1);
+  });
+
+  it('never resumes a stored session after a restart', async () => {
+    const before = setup();
+    before.script(fauxAssistantMessage('one'));
+    await before.agent.send('first', 'state', [TOOL]);
+    const after = setup();
+    after.script(fauxAssistantMessage('two'));
+    await after.agent.send('second', 'state', [TOOL]);
+    expect(files()).toHaveLength(2);
+    expect(after.requests[0].roles.filter((r) => r === 'user')).toHaveLength(1);
+    expect(after.requests[0].lastUser).toContain('second');
+  });
+
+  it('keeps the prompt of a cancelled turn', async () => {
+    const { agent, script } = setup();
+    let reached!: () => void;
+    const started = new Promise<void>((resolve) => (reached = resolve));
+    host.onToolCall = () => reached();
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Should not be said.'));
+    const turn = agent.send('go', 'state', [TOOL]);
+    await started;
+    await agent.cancel();
+    await turn;
+    expect(stored(files()[0])[0]).toContain('go');
+  });
+
+  it('writes nothing until there is a message', async () => {
+    await new Agent().status();
+    expect(files()).toEqual([]);
+  });
+
+  it('reports an error, rather than hanging, when the session cannot be written', async () => {
+    mkdirSync(path.join(host.userData, 'pi-agent'), { recursive: true });
+    writeFileSync(dir(), 'a file where the folder should be');
+    const { agent, script } = setup();
+    script(fauxAssistantMessage('Not reached.'));
+    await agent.send('hi', 'state', [TOOL]);
+    expect(events().at(-1)).toMatchObject({ type: 'error' });
   });
 });
 
