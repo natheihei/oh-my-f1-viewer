@@ -69,6 +69,9 @@ On Linux, in the real app, over replay races (2026-11-09):
   `mod.error` with the file and line, a mod that threw showed the error in its tile with the rest of the app still playing and its
   console and error in `mod.log`, a fixed save drew again, and deleting the folder took the tile off.
 - The production build loading a mod under its content security policy, with no errors.
+- A tile marking content cut off below it, with `scripts/overflow-check.mjs` (2026-11-11): a list mod showed "more ▾" with a faded
+  bottom edge when resized below its `size.min`, when its scroll area was squeezed to 40px, and with 40 rows at its `size.min`, even
+  scrolled part-way; no mark when it fit or was scrolled to the end; and the same in the suggestion strip.
 - The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
 
 ## Verified for agent setup
