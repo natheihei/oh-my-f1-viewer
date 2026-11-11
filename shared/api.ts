@@ -185,6 +185,14 @@ export interface F1aApi {
     onToolCall(cb: (call: AgentToolCall) => void): () => void;
     toolResult(result: AgentToolResult): void;
   };
+  /** Mods: main watches and compiles them, and the renderer loads them. See docs/MODS.md. */
+  mods: {
+    list(): Promise<import('./mods').ModStatus[]>;
+    onChanged(cb: (list: import('./mods').ModStatus[]) => void): () => void;
+    /** Reports whether a build loaded: `error` is null when it did. */
+    loaded(name: string, version: number, error: string | null): void;
+    log(name: string, line: import('./mods').ModLogLine): void;
+  };
 }
 
 declare global {

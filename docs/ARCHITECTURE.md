@@ -2,7 +2,7 @@
 
 ```
 ┌ Renderer ─────────────────────────────────────────────────────┐
-│ Components  what a tile can show: video and charts            │
+│ Components  what a tile can show, from the app or from mods   │
 │ Shell       palette · timeline · countdown · / commands       │
 │ Agent       tools built on the host · gates                   │
 │ ── Host ──  the only thing the three above may use            │
@@ -13,11 +13,13 @@
 ┌ Main ───────┴─────────────────────────────────────────────────┐
 │ F1 TV sign-in, catalog, playback · license proxy · Widevine   │
 │ session database + live socket · circuit · agent loop (pi-ai) │
+│ mods: watch, compile, serve                                   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
 `tests/layers.test.ts` fails if anything reaches around the host, or if anything but the data layer talks to the main process. The layout knows
-nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`.
+nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`,
+or from outside the app in a [mod](MODS.md).
 
 [DESIGN.md](DESIGN.md) has the direction this is heading in, and why.
 

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, Menu, session } from 'electron';
+import { app, BrowserWindow, Menu, protocol, session } from 'electron';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
-import { createMainWindow, getMainWindow } from './windows';
+import { MOD_SCHEME, Mods } from './mods';
+import { createMainWindow, getMainWindow, sendToRenderer } from './windows';
 
 // Vendored F1OpenViewer modules are plain CommonJS.
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -32,6 +33,11 @@ if (process.env.LIBVA_DRIVER_NAME === 'nvidia') {
 if (process.platform === 'linux' && !app.commandLine.hasSwitch('password-store')) {
   app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 }
+
+// Mods are served from memory over their own scheme, which the page imports as ES modules. See docs/MODS.md.
+protocol.registerSchemesAsPrivileged([
+  { scheme: MOD_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 const cacheRoot = path.join(os.tmpdir(), 'f1a-cache');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(cacheRoot, String(process.pid)));
@@ -84,7 +90,15 @@ app
     livetiming.setAuthTokenProvider(() => sessionState.memSession.accessToken);
     licenseProxy.startLicenseProxy();
     licenseProxy.installWebRequestHooks();
-    const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'));
+    const root = path.join(__dirname, '..', '..');
+    const mods = new Mods(path.join(app.getPath('userData'), 'mods'), (list) => sendToRenderer('mods:changed', list), {
+      declarations: path.join(root, 'dist-types'),
+      nodeModules: path.join(root, 'node_modules'),
+    });
+    protocol.handle(MOD_SCHEME, (request) => mods.serve(request));
+    app.on('will-quit', () => void mods.stop());
+    const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'), mods);
+    void mods.start().catch((e: Error) => console.warn('[mods] start:', e.message));
 
     try {
       await sessionState.restoreSessionOnStartup();

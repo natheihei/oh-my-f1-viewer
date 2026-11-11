@@ -9,6 +9,8 @@ import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
 import { useComponents, type ComponentInfo } from './components';
+import { useMods } from './mods';
+import type { ModStatus } from '../../shared/mods';
 import { useSuggestions, type SuggestionsView } from './suggestions';
 import { useCountdown, type Countdown } from './viewing';
 
@@ -41,6 +43,8 @@ export interface Live {
   background: BackgroundView;
   /** Every background the settings panel offers, without its code. */
   backgrounds: BackgroundInfo[];
+  /** Every mod in the mods folder: its state, version and error. The ones that loaded are in `components` too. */
+  mods: ModStatus[];
 }
 
 export function read(): Live {
@@ -63,6 +67,7 @@ export function read(): Live {
     spec: specFor(session),
     background: useBackground.getState(),
     backgrounds: useBackgrounds.getState().list,
+    mods: useMods.getState().list,
   };
 }
 
@@ -79,6 +84,7 @@ function subscribe(onChange: () => void): () => void {
     useComponents.subscribe(onChange),
     useBackground.subscribe(onChange),
     useBackgrounds.subscribe(onChange),
+    useMods.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }
