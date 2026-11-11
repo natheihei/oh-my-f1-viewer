@@ -1,5 +1,5 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
-import { Component, useEffect, useMemo, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Value from 'typebox/value';
 import { GridSurface } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
@@ -11,6 +11,7 @@ import { componentOf, useComponents } from './components';
 import { layoutOps } from './layoutOps';
 import { tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
+import { useHiddenBelow } from './overflow';
 import { setGridFrame, useSuggestions } from './suggestions';
 
 interface BoundaryProps {
@@ -57,6 +58,27 @@ function LookAheadWarning({ scope }: { scope: string }) {
 }
 
 /**
+ * Holds a drawn component and says, with a faded bottom edge and a quiet "more" mark, when it has
+ * content below what the tile shows, whatever the component does with its overflow.
+ */
+function ViewFrame({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const hidden = useHiddenBelow(ref);
+  return (
+    <>
+      <div ref={ref} className="view-frame">
+        {children}
+      </div>
+      {hidden ? (
+        <div className="overflow-mark" data-testid="overflow-mark" aria-hidden>
+          <span className="overflow-mark-label">more ▾</span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
  * Draws a spec with its registered component, or `fallback` if none is registered under its type.
  * `scope` names the tile or preview it draws in, which is what a look-ahead approval belongs to. A
  * component that declares `looksAhead` isn't drawn there until the viewer allows it.
@@ -76,9 +98,11 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
   if (!View) return <>{fallback}</>;
   if (definition.looksAhead && !allowed) return scope != null ? <LookAheadWarning scope={scope} /> : null;
   return (
-    <TileBoundary type={spec.type} version={View}>
-      <View props={props} label={spec.label} />
-    </TileBoundary>
+    <ViewFrame>
+      <TileBoundary type={spec.type} version={View}>
+        <View props={props} label={spec.label} />
+      </TileBoundary>
+    </ViewFrame>
   );
 }
 
