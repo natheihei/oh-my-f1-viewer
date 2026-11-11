@@ -1,4 +1,4 @@
-# Design direction: one host, components as mods
+# Design direction: one host, components on top of it
 
 Agreed on 2026-11-08. This is where the app's layering is heading. `docs/ARCHITECTURE.md` describes what exists today, and `docs/STATUS.md`
 says what's verified.
@@ -10,7 +10,7 @@ app through one write path. f1a adopts the idea, not the machinery.
 
 1. **One read surface.** Everything a consumer can know comes from the host, in the same shape for every season and every source.
 2. **One write surface.** Nothing changes except through `host.*` functions, and `tests/layers.test.ts` forbids any other route.
-3. **Components are mods.** A tile component only declares itself and uses the host. It can't reach the data or layout layers.
+3. **Components only use the host.** A tile component only declares itself and uses the host. It can't reach the data or layout layers.
 4. **The host doesn't judge.** It has no gates or per-caller rules. `host.playback.seek()` goes anywhere, and policy belongs to whoever calls it.
 5. **Differences are data.** When something must vary by year or Grand Prix, it goes in a looked-up spec that names a parser, not in `if` branches.
 6. **Missing data is data.** Each data kind carries its own state and reason.
@@ -19,8 +19,8 @@ app through one write path. f1a adopts the idea, not the machinery.
 
 ```
 ┌ CONSUMERS ─────────────────────────────────────────────────┐
-│ Components   video and charts (the "mods")                 │
-│ Backgrounds  what fills the gaps between tiles (mods too)  │
+│ Components   video and charts, from the app or from mods   │
+│ Backgrounds  what fills the gaps between tiles             │
 │ Frame        timeline · palette · countdown · settings     │
 │ Agent        tools built on the host · spoiler gate        │
 ├ HOST (src/host): the only import consumers may use ────────┤
@@ -232,7 +232,7 @@ it. The file names parsers and the registry holds their code, so a new case mean
 
 | Herdr | f1a |
 | --- | --- |
-| Mod | Component in a tile |
+| Mod, drawn in a layout block | Component in a tile |
 | Layout block `{mod, props}` | `ComponentSpec`, where a copy is keyed by name and props |
 | The `herdr` module | `src/host` |
 | Live reads with per-key revisions | Selectors in `useLive` |
@@ -246,8 +246,8 @@ Deliberately different:
   We have none of those, and typed calls give compile errors and real return types. A name-based bridge can be added if sandboxed views need one.
 - **Writes return results.** Herdr's are fire-and-forget, but the agent needs answers such as which feeds loaded.
 - **No per-actor rules.** The agent's powers are its tool list, and the user's are the UI.
-- **No sandbox, hot reload or file-based mods yet.** Every component is our own code. Keep reads and write arguments JSON-safe, so that
-  agent-created views can run sandboxed later.
+- **No sandbox.** Mods are plugins in folders that hot reload, like Herdr's ([MODS.md](MODS.md)), but they run in the renderer like
+  our own components: a mod is trusted like anything else the user chooses to run.
 - **No edit rescue or separate daemon.** Those solve problems of user-installed mods and long-lived terminals, which we don't have.
 
 ## Order of work
@@ -260,5 +260,5 @@ Deliberately different:
 6. Build the audit script, once session data is on screen and its findings matter.
 7. Add captions as the next data kind, when the moments feature starts.
 
-Also still to add: an error boundary per tile, so that a broken component can't take the app down. Charts have one already, in
-their shared `ChartFrame`. Video tiles don't.
+Every tile has an error boundary in `<Grid>`, so a broken component can't take the app down. Charts also have their own, in
+`ChartFrame`.

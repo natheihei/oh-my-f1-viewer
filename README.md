@@ -46,6 +46,12 @@ blank page with the command palette, which tells you what to sign in to.
 Everything else goes to the agent in plain words. Before it reads past where you are or moves playback forward, the palette
 shows a spoiler check: answer Yes (once), Yes (for the session) or No. The timeline goes anywhere without asking.
 
+### Mods
+
+A [mod](docs/MODS.md) is a plugin: a folder in `~/.config/f1a/mods` that the app reloads on every save. For now it can add a component
+for tiles to show, such as a chart or a controller that jumps between laps. Write one yourself or have a coding agent write it, then
+ask the agent above to show it.
+
 ## Development
 
 ```bash
@@ -76,6 +82,12 @@ node scripts/seek-check.mjs
 
 ```bash
 npm run build && node scripts/prod-check.mjs
+```
+
+This one needs only the F1 TV sign-in, and puts a mod in the real profile's mods folder while it runs:
+
+```bash
+node scripts/mods-check.mjs /tmp/mods-check
 ```
 
 ```bash
