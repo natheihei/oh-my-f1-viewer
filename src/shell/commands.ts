@@ -10,11 +10,11 @@ import { palette } from './palette';
 export interface SlashCommand {
   name: string;
   description: string;
-  /** What follows the name, if the command takes something: shown as a hint. */
-  argument?: string;
+  /** Whether text may follow the name. The command list doesn't say so: it's a shortcut, not the way in. */
+  takesText?: boolean;
   /** What running it means that the viewer should know first. Shown in red beside it. */
   warning?: string;
-  /** `text` is what followed the name, for a command with an `argument`. */
+  /** `text` is what followed the name, for a command that `takesText`. */
   run(text: string): Promise<void>;
 }
 
@@ -52,8 +52,9 @@ export async function reportReadiness(): Promise<void> {
 export const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: '/build',
-    description: 'Build or change a mod',
-    argument: 'what to build',
+    description: 'Enter build mode',
+    // "/build a lap stepper" also sends the request, as a shortcut.
+    takesText: true,
     // The build agent reads the open session past the playhead without asking: see docs/BUILD_MODE.md.
     warning: 'spoiler alert - agent may read beyond where you are',
     run: (text) => enterBuild(text),
@@ -114,6 +115,6 @@ export function parseCommand(input: string): { name: string; rest: string } {
 export function matchCommands(input: string): SlashCommand[] {
   if (!input.trimStart().startsWith('/')) return [];
   const { name, rest } = parseCommand(input);
-  if (rest || /\s$/.test(input)) return SLASH_COMMANDS.filter((c) => c.name === name && c.argument);
+  if (rest || /\s$/.test(input)) return SLASH_COMMANDS.filter((c) => c.name === name && c.takesText);
   return SLASH_COMMANDS.filter((c) => c.name.startsWith(name));
 }

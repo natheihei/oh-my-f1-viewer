@@ -163,7 +163,7 @@ export function CommandPalette() {
     if (text.startsWith('/')) {
       const { name, rest } = parseCommand(text);
       const command = SLASH_COMMANDS.find((c) => c.name === name) ?? (rest ? undefined : suggestions[selected]);
-      if (command && (!rest || command.argument)) {
+      if (command && (!rest || command.takesText)) {
         palette.push('user', rest ? `${command.name} ${rest}` : command.name);
         void command.run(rest);
       } else {
@@ -231,14 +231,11 @@ export function CommandPalette() {
               className={`palette-suggestion ${i === selected ? 'palette-suggestion-active' : ''}`}
               onMouseDown={(e) => {
                 e.preventDefault();
-                setValue(command.argument ? `${command.name} ` : command.name);
+                setValue(command.name);
                 inputRef.current?.focus();
               }}
             >
-              <span>
-                {command.name}
-                {command.argument ? <span className="palette-suggestion-desc"> {`<${command.argument}>`}</span> : null}
-              </span>
+              <span>{command.name}</span>
               <span className="palette-suggestion-desc">{command.description}</span>
               {command.warning ? (
                 <span className="palette-suggestion-warning" data-testid="command-warning">
@@ -281,7 +278,7 @@ export function CommandPalette() {
               else if (!blank && !building) palette.hide();
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
-              setValue(suggestions[selected].argument ? `${suggestions[selected].name} ` : suggestions[selected].name);
+              setValue(suggestions[selected].name);
             } else if (e.key === 'ArrowDown') {
               e.preventDefault();
               if (suggestions.length > 0) setSelected((selected + 1) % suggestions.length);

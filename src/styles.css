@@ -716,7 +716,7 @@
 
 /* What a command does that the viewer should know before running it. */
 .palette-suggestion-warning {
-  @apply shrink-0 text-accent;
+  @apply shrink-0 whitespace-nowrap text-accent;
 }
 
 .palette-suggestion-desc {

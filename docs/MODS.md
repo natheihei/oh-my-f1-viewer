@@ -114,7 +114,7 @@ ones that loaded are in `live.components`, like any other.
 Whatever puts a component on screen works for a mod's. For now that's the app's own agent, which reads
 `live.components` and can suggest it, or `host.layout.add` from code.
 
-The app's agent can also write mods: `/build a controller that can go back and forward laps` puts it in build mode, where it works in
+The app's agent can also write mods: `/build` puts it in build mode, where it works in
 this folder and everything it changes can be undone as one. See [BUILD_MODE.md](BUILD_MODE.md).
 
 ## Types
