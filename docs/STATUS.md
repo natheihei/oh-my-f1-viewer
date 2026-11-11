@@ -71,7 +71,21 @@ On Linux, in the real app, over replay races (2026-11-09):
 - The production build loading a mod under its content security policy, with no errors.
 - The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
 
+## Verified for agent setup
+
+In the real app on a fresh profile (2026-11-11): `/settings-agent` listed OpenAI and Anthropic, an Anthropic key typed into the key
+window connected it with Claude Sonnet 5.5 at medium, choosing Claude Haiku 5.5 at high saved both, closing printed the model line,
+OpenAI showed the switch note while Anthropic was connected, and Remove left the agent needing setup again. The key was fake, so no
+request was sent.
+
+GPT-6.1 Terra at medium on a ChatGPT plan, the recommended OpenAI model, on the real profile (2026-11-11): "2025 mexico city grand prix
+race" called `list_sessions` then `load_session` and opened the race in 8.3s, and "Hamilton" suggested his onboard with `suggest_tiles` in
+4.1s. The stored session shows every reply came from `gpt-6.1-terra`.
+
 ## Not verified
+
+- **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key or a
+  ChatGPT sign-in from the panel hasn't run either: the ChatGPT flow is the same pi call as before, now started from the panel.
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 

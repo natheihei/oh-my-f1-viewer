@@ -1,5 +1,5 @@
 // Runs the real app on the real profile under Playwright, with the source served by Vite so checks can
-// reach app modules. Shared by the scripts that need F1 TV or ChatGPT.
+// reach app modules. Shared by the scripts that need F1 TV or the agent.
 import path from 'node:path';
 import { createServer } from 'vite';
 import { _electron as electron } from 'playwright';

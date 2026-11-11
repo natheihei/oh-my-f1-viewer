@@ -1,15 +1,26 @@
 /**
- * The agent: a pi session using Sign in with ChatGPT. It holds the credentials, so it lives here, but its
- * tools run in the renderer, which owns layout and playback. The renderer sends their definitions with
- * each message, each call goes over IPC, and its result comes back here.
+ * The agent: a pi session on the provider, model and thinking level chosen in `/settings-agent`, from the
+ * providers in supported.ts. It holds the credentials, so it lives here, but its tools run in the renderer,
+ * which owns layout and playback. The renderer sends their definitions with each message, each call goes
+ * over IPC, and its result comes back here.
  */
 import { app, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import type { AssistantMessage } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
+import type { Api, AssistantMessage, AuthInteraction, Model } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
 import type { AgentSession, ModelRuntime, SettingsManager } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
-import type { AgentEvent, AgentToolCall, AgentToolDefinition, AgentToolResult, AiStatus } from '../../shared/api';
+import type {
+  AgentConnectEvent,
+  AgentEvent,
+  AgentProviderOption,
+  AgentToolCall,
+  AgentToolDefinition,
+  AgentToolResult,
+  AiStatus,
+  ConnectWay,
+  ThinkingLevel,
+} from '../../shared/api';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
 import { installId } from './credentials';
@@ -17,24 +28,42 @@ import { forgetReadAhead } from './extensions/forgetReadAhead';
 import { promptExtension } from './extensions/prompt';
 import { roundCap, type RoundCap } from './extensions/roundCap';
 import { toolsExtension, type ToolsExtension } from './extensions/tools';
+import { askForKey } from './keyWindow';
+import { SUPPORTED, supported, type SupportedProvider } from './supported';
 
-const PROVIDER = 'openai';
 const MAX_TOOL_ROUNDS = 10;
 const TOOL_TIMEOUT_MS = 60_000;
-const SIGN_IN_NEEDED = 'ChatGPT sign-in is needed. Run /login-chatgpt.';
+const CONNECT_TIMEOUT_MS = 5 * 60_000;
+const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
+const WAYS: ConnectWay[] = ['oauth', 'api_key'];
+const LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-/** Written only if missing, so it can be edited. */
+/** Written only if missing, so it can be edited. The provider, model and thinking level come from `/settings-agent`. */
 const STARTER_SETTINGS = {
-  defaultProvider: PROVIDER,
-  defaultModel: 'gpt-6-luna',
-  defaultThinkingLevel: 'medium',
   compaction: { enabled: true },
   retry: { enabled: false },
   cacheWarming: 'off',
 };
 
+const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
+
 function emit(event: AgentEvent): void {
   sendToRenderer('ai:event', event);
+}
+
+function emitConnect(event: AgentConnectEvent): void {
+  sendToRenderer('ai:connect', event);
+}
+
+/** Sign-in pages open in the real browser, and only over https. */
+function openExternal(raw: string): void {
+  try {
+    const url = new URL(raw);
+    if (url.protocol === 'https:') void shell.openExternal(url.href);
+    else console.warn('[ai] ignored a sign-in URL that is not https:', url.protocol);
+  } catch {
+    console.warn('[ai] ignored an invalid sign-in URL');
+  }
 }
 
 /** Set up once per run of the app. */
@@ -43,6 +72,16 @@ interface Runtime {
   settings: SettingsManager;
   agentDir: string;
   cwd: string;
+  levels: (model: Model<Api>) => ThinkingLevel[];
+  clamp: (model: Model<Api>, level: ThinkingLevel) => ThinkingLevel;
+}
+
+/** What the agent runs on: a supported provider with a stored credential, and the model and level chosen for it. */
+interface Choice {
+  entry: SupportedProvider;
+  way: ConnectWay;
+  model: Model<Api>;
+  thinking: ThinkingLevel;
 }
 
 /** One conversation. Starting over makes a new one. */
@@ -51,6 +90,7 @@ interface Conversation {
   tools: ToolsExtension;
   cap: RoundCap;
   reference: string;
+  provider: string;
 }
 
 interface Turn {
@@ -67,7 +107,7 @@ export class Agent {
   /** Bumped by each send and cancel, so a send waiting on the last turn knows when it's been replaced. */
   private generation = 0;
   private pendingTools = new Map<string, (result: AgentToolResult) => void>();
-  private loginAbort: AbortController | null = null;
+  private connectAbort: AbortController | null = null;
 
   /** `onRuntime` lets tests register a fake model. */
   constructor(private readonly onRuntime?: (models: ModelRuntime) => void) {}
@@ -82,6 +122,7 @@ export class Agent {
 
   private async createRuntime(): Promise<Runtime> {
     const { ModelRuntime, SettingsManager } = await import('@earendil-works/pi-coding-agent');
+    const { clampThinkingLevel, getSupportedThinkingLevels } = await import('@earendil-works/pi-ai');
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
     const cwd = path.join(app.getPath('userData'), 'mods');
     await fsp.mkdir(agentDir, { recursive: true });
@@ -100,19 +141,55 @@ export class Agent {
     this.onRuntime?.(models);
     // Not trusted: anything in mods/.pi could otherwise override the prompt or run in this process.
     const settings = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
-    return { models, settings, agentDir, cwd };
+    return {
+      models,
+      settings,
+      agentDir,
+      cwd,
+      levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
+      clamp: (model, level) => clampThinkingLevel(model, level) as ThinkingLevel,
+    };
   }
 
-  private async createConversation(): Promise<Conversation> {
+  /** The way a provider is connected: its credential in auth.json. Environment variables never count. */
+  private async connectedWay(entry: SupportedProvider): Promise<ConnectWay | null> {
+    const { models } = await this.runtime();
+    const credential = (await models.listCredentials()).find((c) => c.providerId === entry.provider);
+    return credential && entry.ways[credential.type] ? credential.type : null;
+  }
+
+  /**
+   * What the agent runs on, or null if it isn't set up. The provider is the one in settings.json, and a
+   * model missing from its supported list falls back to the recommended one.
+   */
+  private async current(): Promise<Choice | null> {
+    const { models, settings, clamp } = await this.runtime();
+    const entry = supported(settings.getDefaultProvider());
+    if (!entry) return null;
+    const way = await this.connectedWay(entry);
+    if (!way) return null;
+    const saved = settings.getDefaultModel();
+    const id = saved && entry.models.includes(saved) && models.getModel(entry.provider, saved) ? saved : entry.recommended.model;
+    const model = models.getModel(entry.provider, id);
+    if (!model) return null;
+    const thinking = clamp(model, (settings.getDefaultThinkingLevel() as ThinkingLevel | undefined) ?? entry.recommended.thinking);
+    return { entry, way, model, thinking };
+  }
+
+  private async createConversation(choice: Choice): Promise<Conversation> {
     const { DefaultResourceLoader, SessionManager, createAgentSession } = await import('@earendil-works/pi-coding-agent');
     const { models, settings, agentDir, cwd } = await this.runtime();
-    const modelId = settings.getDefaultModel();
-    const model = modelId ? models.getModel(settings.getDefaultProvider() ?? PROVIDER, modelId) : undefined;
-    if (!model) throw new Error(`Model ${modelId} is not available.`);
+    const { model } = choice;
 
     const tools = toolsExtension((call) => this.callTool(call));
     const cap = roundCap(MAX_TOOL_ROUNDS);
-    const conversation: Conversation = { session: null as unknown as AgentSession, tools, cap, reference: '' };
+    const conversation: Conversation = {
+      session: null as unknown as AgentSession,
+      tools,
+      cap,
+      reference: '',
+      provider: choice.entry.provider,
+    };
     // pi also walks up from cwd and reads ~/.agents/skills: keep only what's in agentDir.
     const inside = (p: string) => path.resolve(p).startsWith(agentDir + path.sep);
     const resourceLoader = new DefaultResourceLoader({
@@ -128,6 +205,7 @@ export class Agent {
       cwd,
       agentDir,
       model,
+      thinkingLevel: choice.thinking,
       modelRuntime: models,
       settingsManager: settings,
       resourceLoader,
@@ -142,54 +220,137 @@ export class Agent {
   }
 
   async status(): Promise<AiStatus> {
-    const { models, settings } = await this.runtime();
-    const check = await models.checkAuth(PROVIDER);
-    return { signedIn: check?.type === 'oauth', model: check ? (settings.getDefaultModel() ?? null) : null };
+    const choice = await this.current();
+    if (!choice) return NOT_READY;
+    return {
+      ready: true,
+      provider: choice.entry.provider,
+      model: choice.model.id,
+      modelName: choice.model.name,
+      thinking: choice.thinking,
+    };
   }
 
-  /** Opens the real browser. pi runs the local callback server and stores the result. */
-  async login(): Promise<AiStatus> {
-    const { models } = await this.runtime();
-    this.loginAbort?.abort();
-    const abort = new AbortController();
-    this.loginAbort = abort;
-    const timeout = setTimeout(() => abort.abort(), 5 * 60_000);
-    try {
-      await models.login(
-        PROVIDER,
-        'oauth',
+  /** The supported providers, as pi describes them. One missing from the installed pi is left out. */
+  async providers(): Promise<AgentProviderOption[]> {
+    const { models, levels } = await this.runtime();
+    const choice = await this.current();
+    return SUPPORTED.flatMap((entry): AgentProviderOption[] => {
+      const provider = models.getProvider(entry.provider);
+      if (!provider) return [];
+      const { oauth, apiKey } = provider.auth;
+      const label = (way: ConnectWay) => (way === 'oauth' ? (oauth?.loginLabel ?? `Sign in with ${entry.label}`) : 'Use an API key');
+      const offered = (way: ConnectWay) => !!entry.ways[way] && (way === 'oauth' ? !!oauth : !!apiKey?.login);
+      const way = choice?.entry === entry ? choice.way : null;
+      return [
         {
-          signal: abort.signal,
-          notify: (event) => {
-            if (event.type === 'auth_url') {
-              const url = new URL(event.url);
-              if (url.protocol === 'https:' && url.hostname === 'auth.openai.com') void shell.openExternal(event.url);
-              else console.warn('[ai] ignored unexpected sign-in URL host:', url.hostname);
-            }
-          },
-          // pi races this against its callback server. The palette offers no paste box, so this
-          // prompt just waits until the callback wins or the login is cancelled.
-          prompt: (p) =>
-            new Promise<string>((_resolve, reject) => {
-              const cancel = () => reject(new Error('Sign-in cancelled'));
-              if (p.signal?.aborted || abort.signal.aborted) cancel();
-              p.signal?.addEventListener('abort', cancel, { once: true });
-              abort.signal.addEventListener('abort', cancel, { once: true });
-            }),
+          id: entry.provider,
+          label: entry.label,
+          ways: WAYS.filter(offered).map((w) => ({ way: w, label: label(w), note: entry.ways[w] as string })),
+          connected: way ? { way, label: way === 'oauth' ? (oauth?.name ?? 'Signed in') : 'API key' } : null,
+          models: entry.models.flatMap((id) => {
+            const model = models.getModel(entry.provider, id);
+            return model ? [{ id, name: model.name, thinking: levels(model) }] : [];
+          }),
+          recommended: entry.recommended,
         },
-        { agentName: 'f1a', getDeviceId: installId },
-      );
+      ];
+    });
+  }
+
+  /**
+   * Connects a provider: the browser for a sign-in, the key window for an API key. Only once that succeeds
+   * is any other provider removed, since the agent uses one at a time. Switching provider starts a new
+   * conversation with its recommended model and thinking level.
+   */
+  async connect(providerId: string, way: ConnectWay): Promise<AiStatus> {
+    const entry = supported(providerId);
+    if (!entry || !entry.ways[way]) throw new Error(`${providerId} can't be connected that way.`);
+    const { models, settings } = await this.runtime();
+    this.connectAbort?.abort();
+    const abort = new AbortController();
+    this.connectAbort = abort;
+    const timeout = setTimeout(() => abort.abort(), CONNECT_TIMEOUT_MS);
+    try {
+      await models.login(entry.provider, way, this.interaction(entry, abort.signal), { agentName: 'f1a', getDeviceId: installId });
     } finally {
       clearTimeout(timeout);
-      if (this.loginAbort === abort) this.loginAbort = null;
+      if (this.connectAbort === abort) this.connectAbort = null;
+    }
+
+    const switched = settings.getDefaultProvider() !== entry.provider;
+    if (switched) await this.reset();
+    for (const credential of await models.listCredentials()) {
+      if (credential.providerId !== entry.provider) await models.logout(credential.providerId);
+    }
+    if (switched || !entry.models.includes(settings.getDefaultModel() ?? '')) {
+      settings.setDefaultModelAndProvider(entry.provider, entry.recommended.model);
+      settings.setDefaultThinkingLevel(entry.recommended.thinking);
+      await settings.flush();
     }
     return this.status();
   }
 
-  async logout(): Promise<void> {
+  async cancelConnect(): Promise<void> {
+    this.connectAbort?.abort();
+  }
+
+  /** How a sign-in reaches the user. The panel shows what's happening, but never sees a key. */
+  private interaction(entry: SupportedProvider, signal: AbortSignal): AuthInteraction {
+    return {
+      signal,
+      notify: (event) => {
+        if (event.type === 'auth_url') {
+          openExternal(event.url);
+          emitConnect({ type: 'browser', message: 'Complete sign-in in your browser.' });
+        } else if (event.type === 'device_code') {
+          openExternal(event.verificationUri);
+          emitConnect({ type: 'device_code', code: event.userCode, url: event.verificationUri });
+        } else if (event.type === 'progress' || event.type === 'info') {
+          emitConnect({ type: 'progress', message: event.message });
+        }
+      },
+      prompt: (p) => {
+        const signals = p.signal ? AbortSignal.any([signal, p.signal]) : signal;
+        if (p.type === 'secret') {
+          emitConnect({ type: 'key_window', message: `Paste your ${entry.label} API key in the window that opened.` });
+          return askForKey(`${entry.label} API key`, `Paste your ${entry.label} API key.`, signals);
+        }
+        if (p.type !== 'manual_code') {
+          return Promise.reject(new Error(`${entry.label} asked for something the app can't show: ${p.message}`));
+        }
+        // pi races this against its callback server. There's no paste box, so this just waits until the
+        // callback wins or the sign-in is cancelled.
+        return new Promise<string>((_resolve, reject) => {
+          const cancel = () => reject(new Error('Sign-in cancelled'));
+          if (signals.aborted) cancel();
+          signals.addEventListener('abort', cancel, { once: true });
+        });
+      },
+    };
+  }
+
+  /** Removes the connected provider. The agent then needs setting up again. */
+  async disconnect(): Promise<void> {
     await this.reset();
-    const { models } = await this.runtime();
-    await models.logout(PROVIDER);
+    const { models, settings } = await this.runtime();
+    const provider = settings.getDefaultProvider();
+    if (provider) await models.logout(provider);
+  }
+
+  /** Saves the model and thinking level. A conversation picks them up at its next message. */
+  async choose(modelId: string, thinking: ThinkingLevel): Promise<AiStatus> {
+    const choice = await this.current();
+    if (!choice) throw new Error(SETUP_NEEDED);
+    const { models, settings } = await this.runtime();
+    if (!LEVELS.includes(thinking)) throw new Error(`Unknown thinking level: ${thinking}`);
+    if (!choice.entry.models.includes(modelId) || !models.getModel(choice.entry.provider, modelId)) {
+      throw new Error(`${modelId} isn't offered for ${choice.entry.label}.`);
+    }
+    settings.setDefaultModelAndProvider(choice.entry.provider, modelId);
+    settings.setDefaultThinkingLevel(thinking);
+    await settings.flush();
+    return this.status();
   }
 
   /** Starts a new conversation. The next send creates it. */
@@ -276,16 +437,26 @@ export class Agent {
     reference: string,
   ): Promise<void> {
     emit({ type: 'turn_start', turnId: turn.id });
+    let label: string | undefined;
     try {
-      const { models } = await this.runtime();
-      // agentDir doesn't isolate the environment: without this, a key like ANTHROPIC_API_KEY would be used instead.
-      const check = await models.checkAuth(PROVIDER);
-      if (check?.type !== 'oauth') throw new Error(SIGN_IN_NEEDED);
-      this.conversation ??= await this.createConversation();
+      // Only a credential stored through /settings-agent counts: agentDir doesn't isolate the environment,
+      // so a key like ANTHROPIC_API_KEY would otherwise be used without anyone choosing it.
+      const choice = await this.current();
+      if (!choice) throw new Error(SETUP_NEEDED);
+      label = choice.entry.label;
+      // A provider changed outside connect(), such as a hand edit of settings.json, starts over too.
+      if (this.conversation && this.conversation.provider !== choice.entry.provider) {
+        this.conversation.session.dispose();
+        this.conversation = null;
+      }
+      this.conversation ??= await this.createConversation(choice);
       if (turn.cancelled) return;
 
       const conversation = this.conversation;
       const { session, tools, cap } = conversation;
+      // A model or thinking level chosen since the last message.
+      if (session.model?.id !== choice.model.id) await session.setModel(choice.model);
+      if (session.thinkingLevel !== choice.thinking) session.setThinkingLevel(choice.thinking);
       conversation.reference = reference;
       tools.register(definitions);
       cap.start();
@@ -312,16 +483,19 @@ export class Agent {
       emit({ type: 'turn_end', turnId: turn.id, acted: turn.acted });
     } catch (e) {
       if (turn.cancelled) return;
-      emit({ type: 'error', turnId: turn.id, message: friendlyError(e) });
+      emit({ type: 'error', turnId: turn.id, message: friendlyError(e, label) });
     }
   }
 }
 
-function friendlyError(e: unknown): string {
+function friendlyError(e: unknown, label = 'The provider'): string {
   const message = e instanceof Error ? e.message : String(e);
-  if (/usage_limit|usage limit/i.test(message)) return 'ChatGPT usage limit reached. Try again later.';
-  if (/not_eligible/i.test(message)) return 'This ChatGPT account cannot use its plan in other apps.';
-  if (/No API key|not configured|unauthor|invalid_grant|token/i.test(message)) return SIGN_IN_NEEDED;
+  if (message === SETUP_NEEDED) return message;
+  if (/usage_limit|usage limit|rate_limit|rate limit/i.test(message)) return `${label} usage limit reached. Try again later.`;
+  if (/not_eligible/i.test(message)) return `This ${label} account cannot use its plan in other apps.`;
+  if (/No API key|not configured|unauthor|invalid_grant|invalid x-api-key|authentication_error|incorrect api key|token/i.test(message)) {
+    return `${label} didn't accept the connection. Connect it again in /settings-agent.`;
+  }
   return message;
 }
 

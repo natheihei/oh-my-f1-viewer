@@ -1,4 +1,4 @@
-// Runs both sign-in commands through the palette, skipping any that are already done.
+// Runs F1 TV sign-in and the agent's setup through the palette, skipping any that are already done.
 import { paletteText, startApp, typeInPalette } from './harness.mjs';
 
 const { page, stop } = await startApp();
@@ -28,10 +28,10 @@ if (!(await status()).f1.signedIn) {
   console.log('F1 TV sign-in window should be open');
   await waitFor((s) => s.f1.signedIn, /F1 TV sign-in failed/, FIVE_MINUTES);
 }
-if (!(await status()).ai.signedIn) {
-  await typeInPalette(page, '/login-chatgpt');
-  console.log('ChatGPT sign-in should be open in the browser');
-  await waitFor((s) => s.ai.signedIn, /ChatGPT sign-in failed/, FIVE_MINUTES);
+if (!(await status()).ai.ready) {
+  await typeInPalette(page, '/settings-agent');
+  console.log('Connect a provider in the agent panel that just opened');
+  await waitFor((s) => s.ai.ready, /Couldn't connect/, FIVE_MINUTES);
 }
 console.log('palette:\n' + (await paletteText(page)));
 console.log('after:', JSON.stringify(await status()));
