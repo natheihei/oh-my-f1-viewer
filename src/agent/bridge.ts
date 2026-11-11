@@ -2,7 +2,7 @@
 import type { AgentToolCall } from '../../shared/api';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
-import { driverCount, formatClock, runTool, toolDefinitions } from './tools';
+import { driverCount, formatClock, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
 /** A stream by its label, a chart by its label and chart name. */
 const describeTile = (c: ComponentSpec) => (c.type === 'video' ? c.label : `${c.label} (${c.type} chart)`);
@@ -60,7 +60,7 @@ export function describeAppState(note: string | null = null): string {
 async function handleToolCall(call: AgentToolCall): Promise<void> {
   try {
     const content = await runTool(call.name, call.args);
-    host.agent.toolResult({ callId: call.callId, ok: true, content });
+    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead: readsPastPlayhead(call.name, call.args) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     host.agent.toolResult({

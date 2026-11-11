@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionFactory, ToolDefinition } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
 import type { AgentToolCall, AgentToolDefinition, AgentToolResult } from '../../../shared/api';
+import { PAST_PLAYHEAD } from './forgetReadAhead';
 
 export interface ToolsExtension {
   factory: ExtensionFactory;
@@ -24,7 +25,11 @@ export function toolsExtension(run: (call: AgentToolCall) => Promise<AgentToolRe
           parameters: parameters as unknown as ToolDefinition['parameters'],
           execute: async (callId, args) => {
             const result = await run({ callId, name, args: args as Record<string, unknown> });
-            return { content: [{ type: 'text', text: result.content }], details: undefined, isError: !result.ok };
+            return {
+              content: [{ type: 'text', text: result.content }],
+              details: result.ok && result.pastPlayhead ? PAST_PLAYHEAD : undefined,
+              isError: !result.ok,
+            };
           },
         });
       }

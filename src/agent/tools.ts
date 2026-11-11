@@ -5,7 +5,9 @@
  * These are not user commands: `/` commands are a separate, much smaller set in src/shell/commands.ts.
  *
  * Reading the session past the playhead and seeking forward both ask the spoiler gate first, on every
- * call, before anything runs. The agent reads ahead only to find a moment to jump to. See docs/DESIGN.md.
+ * call, before anything runs. With approval the agent may answer from what it read, for that turn only:
+ * a tool that reads past the playhead says so, and the agent forgets the result once the turn ends. See
+ * docs/SPOILER_PREVENTION.md.
  *
  * Results are short and go back to the model. Apart from an approved read ahead, nothing returned here
  * may reveal how a session turned out, only what exists and what is on screen. A seek says only where
@@ -19,6 +21,8 @@ import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 
 export interface AgentTool extends AgentToolDefinition {
   run(args: Record<string, unknown>): Promise<string>;
+  /** Whether a call with these arguments reads past the playhead. */
+  pastPlayhead?(args: Record<string, unknown>): boolean;
 }
 
 /** Refuses a call by throwing, or rejecting. Gets the host arguments, and what the model actually sent. */
@@ -35,10 +39,12 @@ interface Exposure<A, R, S extends TObject> {
   result?: (out: Awaited<R>, modelArgs: Static<S>) => string;
   /** What to tell the model to do about an error from the host. */
   hints?: [RegExp, string][];
+  /** Whether a call reads past the playhead, so the agent forgets its result after the turn. */
+  pastPlayhead?: (modelArgs: Static<S>) => boolean;
 }
 
 function expose<A, R, S extends TObject = TObject>(op: Op<A, R>, options: Exposure<A, R, S>): AgentTool {
-  const { name, description, args, adapt, gate = [], result, hints = [] } = options;
+  const { name, description, args, adapt, gate = [], result, hints = [], pastPlayhead } = options;
   const schema = typeof args === 'function' ? args : () => args ?? op.info.args;
   return {
     name,
@@ -47,6 +53,7 @@ function expose<A, R, S extends TObject = TObject>(op: Op<A, R>, options: Exposu
     get parameters() {
       return JSON.parse(JSON.stringify(schema()));
     },
+    pastPlayhead: pastPlayhead && ((modelArgs) => pastPlayhead(modelArgs as Static<S>)),
     async run(modelArgs) {
       const model = modelArgs as Static<S>;
       const hostArgs = adapt ? adapt(model) : (modelArgs as A);
@@ -108,7 +115,7 @@ export const MAX_QUERY_ROWS = 200;
  */
 export const QUERY_DESCRIPTION = [
   'Read the open session\'s timing data with SQLite. SELECT only. The tables and their columns are in the table list at the end of the system prompt, once the session\'s data is ready.',
-  'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen. asOf "session" reads everything the session holds, including what the user has not watched yet: use it only to find a moment to jump to with seek_to, and never tell the user what it showed.',
+  'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen. asOf "session" reads everything the session holds, including what the user has not watched yet: use it when a request needs what may be past the playhead. The app asks the user first. Once they approve, you may answer from what it showed, in this turn only.',
   'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from, in the tables that have it, is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
   `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
 ].join('\n');
@@ -438,6 +445,7 @@ export const AGENT_TOOLS: AgentTool[] = [
       { additionalProperties: false },
     ),
     adapt: ({ sql, params, asOf }) => ({ sql, params, asOf }),
+    pastPlayhead: ({ asOf }) => asOf === 'session',
     gate: [
       sessionOpen,
       dataReady,
@@ -478,6 +486,9 @@ export const AGENT_TOOLS: AgentTool[] = [
 ];
 
 export const toolDefinitions = (): AgentToolDefinition[] => AGENT_TOOLS.map(({ name, description, parameters }) => ({ name, description, parameters }));
+
+export const readsPastPlayhead = (name: string, args: Record<string, unknown>): boolean =>
+  AGENT_TOOLS.find((t) => t.name === name)?.pastPlayhead?.(args) ?? false;
 
 /** Returns the model-facing result text; throws on failure. */
 export async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
