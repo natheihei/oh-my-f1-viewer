@@ -60,7 +60,7 @@ Rules for what you build:
 - Content that can outgrow the tile, like a list, goes in an element with overflowY 'auto', flex 1 and minHeight 0, so it scrolls instead of being cut off. Never hide overflow on content the user would want to reach.
 - A component queries for itself. Never write race data into a mod's source: lap times, results, who pitted when. The same mod runs on other sessions.
 - A tile that only shows what has happened uses plain useSql and does not set looksAhead. Reach for asOf 'session' only as above, and show nothing from it that the viewer has not seen: use it to act, like seeking.
-- Any component that uses asOf 'session', or that could take the viewer or show them past where they are, must set looksAhead: true. Add it when an edit makes a component look ahead, and remove it when an edit stops it.
+- Any component that uses asOf 'session', or that could take the viewer or show them past the playhead, must set looksAhead: true. Add it when an edit makes a component look ahead, and remove it when an edit stops it.
 - Keep a mod to one component. To change one that exists, edit it. To remove one, delete its folder.
 
 How to work:

@@ -54,7 +54,7 @@ describe('spoiler check', () => {
     lookAhead.answer('no');
     expect(await decision).toEqual({ approved: false });
     expect(asking()).toBe(false);
-    expect(lastLine()).toBe('Not looking ahead.');
+    expect(lastLine()).toBe("The agent didn't look ahead.");
   });
 
   it('yes (once) lasts for the rest of the turn, and covers a forward seek too', async () => {
@@ -71,7 +71,7 @@ describe('spoiler check', () => {
 
   it('yes (for the session) lasts across turns, until another session opens', async () => {
     expect(await ask(seekForward, 'session')).toEqual({ approved: true });
-    expect(lastLine()).toBe('Looking ahead allowed for this session.');
+    expect(lastLine()).toBe('The agent may look ahead for this session.');
     lookAhead.endTurn();
     expect(await ask(readAhead)).toEqual({ approved: true });
 

@@ -20,7 +20,7 @@ editor and no separate preview. The draft is the real component, on the open ses
 
 - `/build` enters build mode, and what the viewer types next goes to the build agent. In the palette's command list it reads "Enter
   build mode", with red text beside it:
-  "spoiler alert - agent may read beyond where you are". That text is the viewer's consent to what [Spoilers](#spoilers) describes, and there's no check on entry.
+  "! spoiler the agent looks ahead without asking". That text is the viewer's consent to what [Spoilers](#spoilers) describes, and there's no check on entry.
 - Entering pauses playback, so the race doesn't run on unwatched while the viewer builds. Leaving doesn't start it again.
 - While build mode is on, the palette is yellow: its frame, its prompt, and the tag's text and outlines.
 - `/build <request>` also works, entering and sending the request in one line. The command list doesn't mention it.
@@ -148,11 +148,11 @@ playhead.
 The mod's author decides whether a component warns the viewer:
 
 - **`looksAhead: true` in `defineComponent`** says the component reads or acts on what the viewer hasn't watched.
-- **The grid then stands a warning in for the tile**: a red `! looks ahead`, "This tile reads past where you are now." and an
+- **The grid then stands a warning in for the tile**: a red `! spoiler`, "This tile looks ahead of where you are." and an
   **Allow** button. The component's view isn't drawn until the viewer allows it, so none of its queries run before that.
 - **`useSql(sql, params, { asOf: 'session' })`** reads the whole session. It doesn't ask anything itself.
 - **Nothing enforces the flag.** A component that reads the whole session without it is drawn at once. The build agent's
-  instructions say to set it on any component that uses `asOf: 'session'` or could take the viewer past where they are.
+  instructions say to set it on any component that uses `asOf: 'session'` or could take the viewer past the playhead.
 - **Approval belongs to the tile.** It lasts until the tile is destroyed, and another tile of the same mod asks again. It survives a
   hot reload, since the tile is the same tile, so a draft is approved once per build. The app starts with an empty layout, so no
   approval outlasts a restart.
@@ -199,7 +199,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 
 **Entering**
 
-1. Typing `/b` lists `/build` with the red "spoiler alert - agent may read beyond where you are" beside it.
+1. Typing `/b` lists `/build` with the red "! spoiler the agent looks ahead without asking" beside it.
 2. `/build a controller that can go back and forward laps` shows the `build ×` tag with no spoiler check. The layout is untouched
    and playback pauses.
 
@@ -239,7 +239,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 
 19. During a build at 0:00 of a replay, the agent reads the whole session with no check, and its replies don't mention results.
 20. After leaving, the viewing agent's next request, read from the session's `.jsonl`, holds only the app's one line.
-21. After leaving, "go to lap 30" in view mode asks "Peeking past where you are now?" again.
+21. After leaving, "go to lap 30" in view mode asks "The agent wants to look ahead of where you are." again.
 22. The saved mod's source has no race data written into it. This is a read of the file, not of the screen.
 
 **The picture**
