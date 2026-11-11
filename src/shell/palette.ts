@@ -10,7 +10,7 @@ export interface PaletteEntry {
 }
 
 /** A settings panel the palette shows in its place. */
-export type PalettePanel = 'background';
+export type PalettePanel = 'background' | 'agent';
 
 interface PaletteState {
   open: boolean;
