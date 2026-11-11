@@ -7,6 +7,8 @@ export interface PaletteEntry {
   id: number;
   role: EntryRole;
   text: string;
+  /** Something the viewer can do about this line, once: a button after its text. */
+  action?: { label: string; run(): void };
 }
 
 /** A settings panel the palette shows in its place. */
@@ -30,10 +32,17 @@ function cancelHide(): void {
 }
 
 export const palette = {
-  push(role: EntryRole, text: string): number {
+  push(role: EntryRole, text: string, action?: PaletteEntry['action']): number {
     const id = nextEntry++;
-    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text }] }));
+    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...(action ? { action } : {}) }] }));
     return id;
+  },
+  /** Runs an entry's action, which then goes: it can only be taken once. */
+  act(id: number): void {
+    const entry = usePalette.getState().entries.find((e) => e.id === id);
+    if (!entry?.action) return;
+    usePalette.setState((s) => ({ entries: s.entries.map((e) => (e.id === id ? { id: e.id, role: e.role, text: e.text } : e)) }));
+    entry.action.run();
   },
   /** Appends to an entry being streamed. */
   append(id: number, delta: string): void {

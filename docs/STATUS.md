@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-09.
+What has actually been verified, and what hasn't. Last updated 2026-11-11.
 
 ## Verified on real sessions
 
@@ -82,12 +82,52 @@ GPT-6.1 Terra at medium on a ChatGPT plan, the recommended OpenAI model, on the 
 race" called `list_sessions` then `load_session` and opened the race in 8.3s, and "Hamilton" suggested his onboard with `suggest_tiles` in
 4.1s. The stored session shows every reply came from `gpt-6.1-terra`.
 
+## Verified for build mode
+
+On Linux, in the real app with the real agent, over the 2026 United States race, with `scripts/build-check.mjs` (2026-11-11). It runs
+the cases in [BUILD_MODE.md](BUILD_MODE.md), "Checking it", and every one passed:
+
+- **Entering:** `/b` listed `/build` with its spoiler alert in red. `/build a controller that can go back and forward laps`
+  showed the tag with no spoiler check, paused playback, turned the palette's frame and prompt yellow, and left the layout alone.
+- **A new mod:** the agent wrote `lap_controller`, the palette said "wrote lap_controller/main.tsx · loaded", and it appeared in the
+  strip marked draft without the agent suggesting it. The agent had set `looksAhead` on it unasked, so its preview asked before looking ahead. Once allowed, Next landed 0.0s from the
+  start of the next lap by the session database, and Previous went back. Enter added it already approved, with "· looks ahead" in its
+  title in the title's grey. Closing the tile and adding the mod again asked again.
+- **Edits:** "show the lap number bigger" reloaded the same tile in the same place, still approved. Changing lap form, which was on
+  screen, gave its tile the dashed outline and "edited", and the tag read 2 changes. After the script broke the controller's source, the
+  tile kept running the last good version, and the agent fixed the break while making an unrelated change.
+- **Props:** asked for a mod for Hamilton and Norris, the agent wrote it and suggested it with those two, and the strip previewed it
+  with their car numbers. With no props it drew too.
+- **A delete, and Undo all:** the agent removed a mod, edited another and added a third. Undo all brought the first back, put the
+  second's old code back on disk and on screen, and removed the third with its tile. The snapshot folder was gone afterwards.
+- **Save:** the mods stayed, the tiles stayed, the marks went, and the palette said what was built. The offer to go back returned
+  playback to where build mode was entered, and not taking it left playback alone.
+- **Quitting:** killing the app mid-build and starting it again put the mods folder back with no prompt. A snapshot with no marker was
+  ignored and cleared.
+- **Spoilers:** no spoiler check showed in any build, and the build agent read the whole session. After Save, the viewing agent's next
+  request held the app's one line and nothing else of the build, and "go to lap 40" asked again. The saved sources held no race data.
+  The agent's replies said nothing about the race in the runs read.
+- **The picture:** asked to make the buttons red and check, the agent called `look_at`, and the buttons on screen were red.
+
+What the script doesn't do: for case 18 it puts a half snapshot on disk, without killing the app inside a copy. The last run was all three parts on the final code, 89 checks. Earlier runs found
+one bug, since fixed: a draft suggested with drivers was dropped when its key matched the draft with no props. The agent names and
+builds things a little differently each run.
+
+A second script, not in the repo, built a list of race control penalties the same way: the agent declared `size` and drew no heading,
+the strip preview took the list's tall shape (260 by 179), and the newest message showed there, in the tile, and in a tile 2 rows high.
+The same mod with a 62px heading of its own still hid its message at 2 rows: see issue 44.
+
 ## Not verified
 
 - **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key or a
   ChatGPT sign-in from the panel hasn't run either: the ChatGPT flow is the same pi call as before, now started from the panel.
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
+
+- **Build mode on a live session, on macOS or Windows, or in the production build.** `look_at` captures the window, which hasn't been
+  tried with DRM video on screen.
+- **A build that runs long enough to compact.** The build conversation isn't collapsed, so nothing depends on it, but it hasn't run.
+- **Dragging a draft from the strip onto the grid.** Enter and the host's add are checked. The drag is the same code as any suggestion's.
 
 - **The agent using `suggest_tiles`.** The strip, keys, drag and drop, and Esc are covered by `scripts/suggestions-check.mjs` in the real
   app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,
@@ -132,7 +172,7 @@ race" called `list_sessions` then `load_session` and opened the race in 8.3s, an
 ## Deferred, by design
 
 - Race-state tools for the agent.
-- Charts and agent-created dynamic views. How pitwall.info draws its charts is researched in [PITWALL.md](PITWALL.md).
+- More charts. How pitwall.info draws its charts is researched in [PITWALL.md](PITWALL.md).
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows and macOS, including the VMP signing they need.
 - Saved layouts, pop-out windows, translations and auto-update.

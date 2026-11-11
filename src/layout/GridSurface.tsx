@@ -16,12 +16,14 @@ const GROUP_TITLE_PX = 18;
 const TOP_GRIP = 'grip-top';
 const SUB_GRIP = 'grip-sub';
 
-function signature(nodes: LayoutNode[]): string {
+const NO_NOTES: Record<string, string> = {};
+
+function signature(nodes: LayoutNode[], notes: Record<string, string> = NO_NOTES): string {
   return JSON.stringify(
     nodes.map((n) =>
       n.kind === 'tile'
-        ? [n.id, n.x, n.y, n.w, n.h, n.component.label]
-        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label])],
+        ? [n.id, n.x, n.y, n.w, n.h, n.component.label, notes[n.id]]
+        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label, notes[c.id]])],
     ),
   );
 }
@@ -38,14 +40,14 @@ const baseOptions: GridStackOptions = {
 };
 
 /** The tile's title bar: dragging it moves the tile, and its x closes it. */
-function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void): void {
+function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void, note?: string): void {
   const content = item.querySelector(':scope > .grid-stack-item-content');
   if (!content || content.querySelector(':scope > .tile-titlebar')) return;
   const bar = document.createElement('div');
   bar.className = `tile-titlebar tile-grip ${className}`;
   const title = document.createElement('span');
   title.className = 'tile-title';
-  title.textContent = tile.component.label;
+  title.textContent = note ? `${tile.component.label} · ${note}` : tile.component.label;
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'tile-close';
@@ -67,11 +69,16 @@ export function GridSurface({
   onMove,
   onSwap,
   onClose,
+  notes = NO_NOTES,
 }: {
   onMove: (id: string, rect: Rect) => void;
   onSwap: (a: string, b: string) => void;
   onClose: (id: string) => void;
+  /** A few quiet words after some tiles' titles, by tile id. */
+  notes?: Record<string, string>;
 }) {
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
   const renderedRef = useRef('');
@@ -97,7 +104,7 @@ export function GridSurface({
         if (item.id == null) continue;
         onMove(String(item.id), { x: item.x ?? 0, y: item.y ?? 0, w: item.w ?? 1, h: item.h ?? 1 });
       }
-      renderedRef.current = signature(layout.snapshot().nodes);
+      renderedRef.current = signature(layout.snapshot().nodes, notesRef.current);
     });
 
     // Dropped on another tile: swap them. Deferred because the swap rebuilds the placeholders, which
@@ -145,7 +152,7 @@ export function GridSurface({
     const grid = gridRef.current;
     const host = hostRef.current;
     if (!grid || !host) return;
-    const sig = signature(nodes);
+    const sig = signature(nodes, notes);
     if (sig === renderedRef.current) return;
     renderedRef.current = sig;
 
@@ -158,7 +165,7 @@ export function GridSurface({
       const rect = { id: node.id, x: node.x, y: node.y, w: node.w, h: node.h };
       if (node.kind === 'tile') {
         const el = grid.addWidget(rect);
-        if (el) addTitleBar(el, TOP_GRIP, node, onClose);
+        if (el) addTitleBar(el, TOP_GRIP, node, onClose, notes[node.id]);
       } else {
         const el = grid.addWidget({
           ...rect,
@@ -180,14 +187,14 @@ export function GridSurface({
           el.classList.add('tile-group');
           el.querySelectorAll('.grid-stack-nested > .grid-stack-item').forEach((child) => {
             const tile = node.children.find((c) => c.id === child.getAttribute('gs-id'));
-            if (tile) addTitleBar(child, SUB_GRIP, tile, onClose);
+            if (tile) addTitleBar(child, SUB_GRIP, tile, onClose, notes[tile.id]);
           });
         }
       }
     }
     grid.batchUpdate(false);
     rebuildingRef.current = false;
-  }, [nodes]);
+  }, [nodes, notes]);
 
   return <div ref={hostRef} className="grid-stack grid-surface" data-testid="grid-surface" />;
 }

@@ -15,7 +15,7 @@ There are three kinds of things:
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
 | Queries | `host.catalog.*`, `host.session.feeds`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -46,6 +46,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
+| `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -116,10 +117,16 @@ Queries read things that aren't part of the live state. They return promises, ex
 while playing, and returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
 returns the same rows as the last, it keeps returning the previous object, so a chart can redraw only when its data changes.
 
+`useSql(sql, params, { asOf: 'session' })` reads the whole session, for a component that needs the future, such as a control that
+jumps to the next lap. It asks the viewer nothing. A component that should warn them declares `looksAhead: true` in `defineComponent`:
+the grid then shows a warning in place of the tile and draws the component only once the viewer allows it. Approval belongs to the
+tile: it lasts until the tile is gone, survives the component reloading, and another tile of the same component asks again.
+[BUILD_MODE.md](BUILD_MODE.md) has the details.
+
 The tables are `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`,
 `track_status` and `weather`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
 can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
-the user must ask first. `useSql` always reads as of the playhead. Only `SELECT` is allowed. The tables and their columns, as SQLite
+the user must ask first. `useSql` reads as of the playhead unless it asks for the session, as above. Only `SELECT` is allowed. The tables and their columns, as SQLite
 reports them, are in `sessionData.tables`. The stored tables are defined in [shared/sessionTables.ts](../shared/sessionTables.ts), and the
 views built from them, such as `lap_summary`, in [electron/timingdb/schema.ts](../electron/timingdb/schema.ts).
 [SESSION_DATA.md](SESSION_DATA.md) covers the columns, where the data comes from, and when it loads.
@@ -209,10 +216,21 @@ shell's `/settings-background` panel changes it.
 | `backgrounds.register` | `backgrounds: BackgroundDefinition[]` | Makes the backgrounds available. One with a name that's already registered replaces it |
 | `appearance.setBackground` | `style: string`, `params?: Record<string, number \| boolean>` | Shows that style, or `'off'` for none, and changes some of its settings. Settings are checked against the style's schema: numbers are clamped to their range and snapped to their step, and anything else that doesn't fit is ignored. Throws on a style that isn't registered |
 
+### `host.build`
+
+Build mode's snapshot of the mods folder, which the main process keeps. See [BUILD_MODE.md](BUILD_MODE.md).
+
+| Function | Arguments | Effect |
+| --- | --- | --- |
+| `build.begin` | none | Takes the snapshot and turns build mode on. Does nothing new if it's already on |
+| `build.save` | none | Drops the snapshot, keeping every change. Resolves to what changed in the app's words, like "Built lap_stepper.", or null |
+| `build.undo` | none | Puts the mods folder back as it stood on entry. Resolves to how many mods that undid |
+
 ### `host.suggestions`
 
 Suggested tiles wait in a strip for the user to add, drag onto the grid or dismiss. Suggestions belong to one turn: the user's next
-message clears them, and so does opening or closing a session. A *key* is a suggestion's component key, which for a video is its
+message clears them, and so does opening or closing a session. Build mode's drafts are the exception: the strip holds a preview with
+no props for each mod the build added or changed that has no tile on screen, and they stay from turn to turn. A *key* is a suggestion's component key, which for a video is its
 feed id.
 
 | Function | Arguments | Effect |
@@ -260,7 +278,7 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 - `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.
   `args` is a TypeBox object schema for its props, which must stay JSON-safe. `spec(props)` returns the tile's unique `key` and
   title-bar `label`. `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is a hint in grid
-  cells that nothing uses yet. `View` receives the tile's `props` and `label`, and may only use the host.
+  cells: `aspect` and the least room it reads in. The layout uses it to place a new tile, and the strip to shape its preview. `View` receives the tile's `props` and `label`, and may only use the host.
 
 ## The agent's view
 
@@ -295,3 +313,7 @@ going. The tools today:
 `app_state` also carries the master volume next to the audible feed, so the agent never calls a feed audible at volume 0. It carries the
 playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add`, `focus` and `reset`, groups, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
+
+While build mode is on, messages go to a second agent with its own prompt (`shared/buildPrompt.ts`) and conversation. From this list it
+has `list_streams`, `remove_tiles`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`, and the last two don't ask the
+spoiler gate. Its file tools run in the main process: see [BUILD_MODE.md](BUILD_MODE.md).

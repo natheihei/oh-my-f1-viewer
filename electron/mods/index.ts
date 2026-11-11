@@ -6,7 +6,8 @@
 import { existsSync, promises as fsp, statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import * as esbuild from 'esbuild';
-import { SHARED_MODULES, type ModLogLine, type ModStatus } from '../../shared/mods';
+import { SHARED_MODULES, type BuildState, type ModLogLine, type ModStatus } from '../../shared/mods';
+import { BuildSnapshot, describeChanges } from './snapshot';
 
 export const MOD_SCHEME = 'f1a-mod';
 const ENTRIES = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'];
@@ -84,15 +85,29 @@ export class Mods {
   private readonly mods = new Map<string, Mod>();
   private watcher: FSWatcher | null = null;
   private scanTimer: NodeJS.Timeout | null = null;
+  private readonly snapshot: BuildSnapshot;
+  private buildTimer: NodeJS.Timeout | null = null;
+  private lastBuild = '';
+  /** Callers waiting for a mod's next build to load or fail. */
+  private readonly waiters = new Set<() => void>();
 
+  /** `snapshotDir` holds build mode's copy of the folder, and must be outside it. */
   constructor(
     readonly dir: string,
     private readonly onChange: (list: ModStatus[]) => void,
     private readonly types: TypeSources | null = null,
-  ) {}
+    snapshotDir: string = `${dir}-snapshot`,
+    private readonly onBuild: (state: BuildState) => void = () => {},
+  ) {
+    this.snapshot = new BuildSnapshot(dir, snapshotDir);
+  }
 
   async start(): Promise<void> {
     await fsp.mkdir(this.dir, { recursive: true });
+    // A build the app quit in the middle of is undone, before anything reads the folder.
+    if (await this.snapshot.restore().catch((e: Error) => (console.warn('[mods] undoing an unfinished build:', e.message), false))) {
+      console.log('[mods] undid an unfinished build');
+    }
     if (this.types) await this.writeTypes(this.types).catch((e: Error) => console.warn('[mods] types:', e.message));
     await this.scan();
     this.watcher = watch(this.dir, { recursive: true }, (_event, file) => this.changed(file ? String(file) : null));
@@ -102,6 +117,7 @@ export class Mods {
   async stop(): Promise<void> {
     this.watcher?.close();
     this.watcher = null;
+    if (this.buildTimer) clearTimeout(this.buildTimer);
     await Promise.all([...this.mods.values()].map((m) => m.context?.dispose()));
     await esbuild.stop();
   }
@@ -139,6 +155,76 @@ export class Mods {
       include: ['*/**/*.ts', '*/**/*.tsx'],
     };
     await fsp.writeFile(path.join(this.dir, 'tsconfig.json'), JSON.stringify(config, null, 2) + '\n');
+  }
+
+  /** Starts a build: from here until `saveBuild` or `undoBuild`, the folder can be put back as it is now. */
+  async beginBuild(): Promise<BuildState> {
+    await this.snapshot.take();
+    return this.publishBuild();
+  }
+
+  /** Ends the build and keeps its changes. Returns what it changed, in the app's words, or null for nothing. */
+  async saveBuild(): Promise<string | null> {
+    const summary = describeChanges(await this.snapshot.changes());
+    await this.snapshot.discard();
+    await this.publishBuild();
+    return summary;
+  }
+
+  /** Ends the build and puts the folder back. Returns how many mods that undid. */
+  async undoBuild(): Promise<number> {
+    const count = (await this.snapshot.changes()).length;
+    await this.snapshot.restore();
+    this.scheduleScan();
+    await this.publishBuild();
+    return count;
+  }
+
+  async buildState(): Promise<BuildState> {
+    return { active: this.snapshot.active, changes: await this.snapshot.changes() };
+  }
+
+  private async publishBuild(): Promise<BuildState> {
+    const state = await this.buildState();
+    const text = JSON.stringify(state);
+    if (text !== this.lastBuild) {
+      this.lastBuild = text;
+      this.onBuild(state);
+    }
+    return state;
+  }
+
+  /** The folder changed: while a build is under way, work out again what differs. */
+  private scheduleBuildState(): void {
+    if (!this.snapshot.active || this.buildTimer) return;
+    this.buildTimer = setTimeout(() => {
+      this.buildTimer = null;
+      void this.publishBuild().catch((e: Error) => console.warn('[mods] build state:', e.message));
+    }, DEBOUNCE_MS);
+  }
+
+  /**
+   * Waits for what was last saved in a mod's folder to load or fail, and returns its status: null if
+   * the folder isn't a mod. Gives up after `timeoutMs` and returns the status as it stands.
+   */
+  async settled(name: string, timeoutMs = 8000): Promise<ModStatus | null> {
+    const deadline = Date.now() + timeoutMs;
+    // A save reaches the watcher a moment after the write returns.
+    await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS * 2));
+    for (;;) {
+      const mod = this.mods.get(name);
+      const busy = mod ? mod.timer != null || mod.building != null || mod.status.state === 'loading' : this.scanTimer != null;
+      if (!busy || Date.now() >= deadline) return mod?.status ?? null;
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          this.waiters.delete(done);
+          resolve();
+        };
+        const timer = setTimeout(done, 250);
+        this.waiters.add(done);
+      });
+    }
   }
 
   list(): ModStatus[] {
@@ -192,6 +278,7 @@ export class Mods {
   }
 
   private changed(file: string | null): void {
+    this.scheduleBuildState();
     const parts = file ? file.split(path.sep) : [];
     // At the top level: a folder came or went, or the app wrote its own files there.
     if (parts.length < 2) return this.scheduleScan();
@@ -319,5 +406,7 @@ export class Mods {
 
   private publish(): void {
     this.onChange(this.list());
+    for (const wake of [...this.waiters]) wake();
+    this.scheduleBuildState();
   }
 }
