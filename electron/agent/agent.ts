@@ -131,8 +131,9 @@ export class Agent {
       settingsManager: settings,
       resourceLoader,
       noTools: 'builtin',
+      // Stored for review but never resumed: each conversation gets its own timestamped file.
       // A fixed id, passed on to the provider as the prompt cache key.
-      sessionManager: SessionManager.inMemory(cwd, { id: 'f1a' }),
+      sessionManager: SessionManager.create(cwd, path.join(agentDir, 'sessions'), { id: 'f1a' }),
     });
     session.agent.toolExecution = 'sequential';
     conversation.session = session;
