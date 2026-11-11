@@ -699,6 +699,24 @@
   line-height: 14px;
 }
 
+/* What a component draws in, in a tile or a strip preview: the host checks it for content cut off below. */
+.view-frame {
+  @apply absolute inset-0 overflow-hidden;
+}
+
+/* A component with more below than its tile shows: the bottom edge fades out and a quiet mark says so. */
+.overflow-mark {
+  @apply pointer-events-none absolute inset-x-0 bottom-0 z-10;
+  height: 22px;
+  background: linear-gradient(to bottom, transparent, black);
+}
+
+.overflow-mark-label {
+  @apply absolute right-0 bottom-0 border-t border-l border-line bg-black px-1 text-dim;
+  font-size: 10px;
+  line-height: 14px;
+}
+
 /* A tile asking to read past the playhead: it covers the tile until the viewer allows it. */
 .tile-warning {
   @apply absolute inset-0 z-10 flex items-center justify-center gap-4 bg-black p-2 text-dim;
