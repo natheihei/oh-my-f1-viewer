@@ -1,7 +1,7 @@
 /**
  * The spoiler check, between the palette's history and the input. It says nothing about what the agent
- * is after, only that it wants to peek past where the viewer is. ← → move between answers, Enter
- * answers, Esc says no. Space does nothing here, so reaching for play/pause can't answer it.
+ * is after, only that it wants to look ahead of where the viewer is. ← → move between answers, Enter
+ * answers, Esc doesn't allow. Space does nothing here, so reaching for play/pause can't answer it.
  */
 import { forwardRef, useImperativeHandle, useRef, type KeyboardEvent } from 'react';
 import { lookAhead, type LookAheadAnswer } from './lookAhead';
@@ -11,9 +11,9 @@ export interface LookAheadPromptHandle {
 }
 
 const ANSWERS: { answer: LookAheadAnswer; label: string }[] = [
-  { answer: 'once', label: 'Yes (once)' },
-  { answer: 'session', label: 'Yes (for the session)' },
-  { answer: 'no', label: 'No' },
+  { answer: 'once', label: 'Allow once' },
+  { answer: 'session', label: 'Allow for this session' },
+  { answer: 'no', label: "Don't allow" },
 ];
 
 export const LookAheadPrompt = forwardRef<LookAheadPromptHandle>(function LookAheadPrompt(_props, ref) {
@@ -40,7 +40,7 @@ export const LookAheadPrompt = forwardRef<LookAheadPromptHandle>(function LookAh
     <>
       <div className="spoiler" data-testid="spoiler-check" role="alertdialog" aria-label="Spoiler check">
         <div>
-          <span className="spoiler-label">! spoiler check</span> Peeking past where you are now?
+          <span className="spoiler-label">! spoiler</span> The agent wants to look ahead of where you are.
         </div>
         <div className="spoiler-actions">
           {ANSWERS.map(({ answer, label }, i) => (
@@ -60,7 +60,7 @@ export const LookAheadPrompt = forwardRef<LookAheadPromptHandle>(function LookAh
           ))}
         </div>
       </div>
-      <div className="strip-hint">← → choose · enter answer · esc no</div>
+      <div className="strip-hint">← → choose · enter answer · esc don't allow</div>
     </>
   );
 });

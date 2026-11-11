@@ -225,7 +225,7 @@ async function partSave() {
   const row = page.locator('[data-testid=palette-suggestions]');
   check('1 /b lists /build', (await row.innerText()).includes('/build'));
   const warning = page.locator('[data-testid=command-warning]');
-  check('1 with the spoiler alert beside it', (await warning.innerText().catch(() => '')) === 'spoiler alert - agent may read beyond where you are');
+  check('1 with the spoiler warning beside it', (await warning.innerText().catch(() => '')) === '! spoiler the agent looks ahead without asking');
   const color = await warning.evaluate((el) => getComputedStyle(el).color).catch(() => '');
   check('1 in red', color === 'rgb(255, 59, 48)', color);
   const listed = await row.locator('.palette-suggestion').first().evaluate((el) => ({ text: el.innerText.replace(/\s+/g, ' '), height: el.getBoundingClientRect().height }));

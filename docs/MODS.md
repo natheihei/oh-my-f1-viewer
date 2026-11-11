@@ -79,8 +79,8 @@ outside the folder, fails to compile.
 A component can act as well as draw: `host` has the same writes the app uses, such as `host.playback.seekToDate`. `useSql` reads as of
 the playhead, like every chart. A controller that jumps to the next lap needs more, because that lap hasn't happened yet:
 `useSql(sql, params, { asOf: 'session' })` reads the whole session. A component that does that, or that can take the viewer past
-where they are, should say so with `looksAhead: true` in `defineComponent`. The grid then shows a warning in place of each tile of it,
-with an Allow button, and draws the component only once the viewer allows that tile. Such a component should seek with what it reads
+the playhead, should say so with `looksAhead: true` in `defineComponent`. The grid then shows a warning in place of each tile of it, a red `! spoiler`
+and "This tile looks ahead of where you are.", with an Allow button, and draws the component only once the viewer allows that tile. Such a component should seek with what it reads
 and show nothing from it. The flag is the author's to set and nothing enforces it: a mod that reads the whole session without it and
 shows the result can spoil the race for the viewer.
 

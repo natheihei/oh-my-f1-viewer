@@ -41,12 +41,12 @@ blank page with the command palette, which tells you what to sign in to.
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
 | `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
-| `/build` | Enter build mode, where the agent builds or changes mods. Spoiler alert: it may read beyond where you are |
+| `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
 
-Everything else goes to the agent in plain words. Before it reads past where you are or moves playback forward, the palette
-shows a spoiler check: answer Yes (once), Yes (for the session) or No. The timeline goes anywhere without asking.
+Everything else goes to the agent in plain words. Before it looks ahead of where you are, by reading ahead or moving playback forward, the palette
+shows a spoiler check: answer Allow once, Allow for this session or Don't allow. The timeline goes anywhere without asking.
 
 ### Mods
 
