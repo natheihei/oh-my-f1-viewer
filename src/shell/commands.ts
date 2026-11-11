@@ -12,7 +12,7 @@ export interface SlashCommand {
   description: string;
   /** Whether text may follow the name. The command list doesn't say so: it's a shortcut, not the way in. */
   takesText?: boolean;
-  /** What running it means that the viewer should know first. Shown in red beside it. */
+  /** What running it means that the viewer should know first. Shown in red beside it, after "! spoiler". */
   warning?: string;
   /** `text` is what followed the name, for a command that `takesText`. */
   run(text: string): Promise<void>;
@@ -56,7 +56,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     // "/build a lap stepper" also sends the request, as a shortcut.
     takesText: true,
     // The build agent reads the open session past the playhead without asking: see docs/BUILD_MODE.md.
-    warning: 'spoiler alert - agent may read beyond where you are',
+    warning: 'the agent looks ahead without asking',
     run: (text) => enterBuild(text),
   },
   {

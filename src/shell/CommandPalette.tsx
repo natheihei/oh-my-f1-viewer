@@ -39,7 +39,7 @@ export function CommandPalette() {
   const promptRef = useRef<LookAheadPromptHandle | null>(null);
   const asking = useLookAhead((s) => s.asking);
   const contentId = useLive((s) => s.session?.contentId ?? null);
-  const peekAllowed = useLookAhead((s) => sessionAllowed(s, contentId));
+  const lookAheadAllowed = useLookAhead((s) => sessionAllowed(s, contentId));
   const tiles = useLive((s) => s.suggestions.items);
   const building = useLive((s) => s.build.active);
   const changeCount = useLive((s) => s.build.changes.length);
@@ -239,7 +239,7 @@ export function CommandPalette() {
               <span className="palette-suggestion-desc">{command.description}</span>
               {command.warning ? (
                 <span className="palette-suggestion-warning" data-testid="command-warning">
-                  {command.warning}
+                  <span className="spoiler-label">! spoiler</span> {command.warning}
                 </span>
               ) : null}
             </div>
@@ -312,12 +312,12 @@ export function CommandPalette() {
             )}
           </span>
         ) : null}
-        {peekAllowed ? (
+        {lookAheadAllowed ? (
           <button
             type="button"
             className="palette-tag"
             data-testid="spoiler-session-tag"
-            title="Looking ahead is allowed for this session. Click to ask again."
+            title="The agent may look ahead for this session. Click to make it ask again."
             onClick={lookAhead.revokeSession}
           >
             looks ahead · ×

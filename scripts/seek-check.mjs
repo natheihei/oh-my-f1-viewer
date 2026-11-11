@@ -1,7 +1,7 @@
 // Asks the real agent to seek a real session by what happened in it, and checks where playback landed
 // against the session database. Needs both sign-ins. Prints the agent's queries and replies, which can
-// give away the race: use a session you've watched. It answers the spoiler check itself: No first,
-// to check that a refusal leaves the video where it was, then Yes (once).
+// give away the race: use a session you've watched. It answers the spoiler check itself: Don't allow first,
+// to check that a refusal leaves the video where it was, then Allow once.
 // Usage: node scripts/seek-check.mjs [lap]
 //   F1A_YEAR and F1A_EVENT pick the race (2025, mexic).
 import { startApp, typeInPalette } from './harness.mjs';

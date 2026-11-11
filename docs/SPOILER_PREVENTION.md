@@ -27,8 +27,8 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
 - **`sessionData` follows the playhead too.** The roster, the grid, the championship and `lapCount` read as they stood at that frame. `sessionResult` appears
   only once the session has finished at the playhead.
 - **Charts read as of the playhead.** `useSql` does by default, and seeking back hides what had been shown. A component can ask it
-  for the whole session, and its author decides whether to warn: with `looksAhead: true` in its definition, the grid shows "This tile
-  reads past where you are now." and an Allow button in place of the tile until the viewer allows it. See [BUILD_MODE.md](BUILD_MODE.md).
+  for the whole session, and its author decides whether to warn: with `looksAhead: true` in its definition, the grid shows a red `! spoiler`, "This tile
+  looks ahead of where you are." and an Allow button in place of the tile until the viewer allows it. See [BUILD_MODE.md](BUILD_MODE.md).
 - **A live session waits for the video.** Rows are compared with the stream's wall clock, since F1 TV's video runs tens of seconds behind the feed.
 
 Reading the whole session takes `host.data.sql({ asOf: 'session' })`, asked for by name. The host doesn't check who's calling: policy belongs to the caller.
@@ -51,11 +51,11 @@ The gate runs in the agent's tools, before anything executes, so no row reaches 
 - **Reading ahead:** `query_session` with `asOf: 'session'`.
 - **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known.
 
-The viewer sees "Peeking past where you are now?" and never the SQL, the target time or how far ahead it is, since any of those could give something away.
+Both are ways of looking ahead. The viewer sees a red `! spoiler`, "The agent wants to look ahead of where you are.", and never the SQL, the target time or how far ahead it is, since any of those could give something away.
 
-- **Yes (once)** lasts for the agent's turn.
-- **Yes (for the session)** lasts until another session opens.
-- **No**, Esc, or 50 seconds without an answer refuses. So does the turn ending. The tool call fails and the query or seek never runs.
+- **Allow once** lasts for the agent's turn.
+- **Allow for this session** lasts until another session opens.
+- **Don't allow**, Esc, or 50 seconds without an answer refuses. So does the turn ending. The tool call fails and the query or seek never runs.
 
 Reading ahead at the live edge doesn't ask, since it only sees the seconds the feed is ahead of the video. The viewer's own timeline is never gated.
 
@@ -64,7 +64,7 @@ Reading ahead at the live edge doesn't ask, since it only sees the seconds the f
 ## Forgetting read-ahead turns
 
 The check decides what the agent may read. It doesn't say how long the agent keeps it. Without a limit, rows from an approved read stay in the conversation
-and can come out in a later turn or a compaction summary, long after a "Yes (once)" has lapsed.
+and can come out in a later turn or a compaction summary, long after an "Allow once" has lapsed.
 
 **An approved read ahead is usable only in the turn that asked for it. After that, the agent remembers only what it told the viewer.**
 
@@ -87,7 +87,7 @@ How it works, in `electron/agent/extensions/forgetReadAhead.ts`:
 The stored conversation isn't changed: collapsing edits the copy sent to the model. The palette is built from events during the turn, so the viewer's history
 doesn't change either. The first request after a collapse re-reads that turn and the new message, about 300 more uncached tokens when measured. The prompt and the turns before it stay cached.
 
-If the agent needs the data again, it queries again. Under "Yes (once)" that asks again. Under "Yes (for the session)" it doesn't.
+If the agent needs the data again, it queries again. Under "Allow once" that asks again. Under "Allow for this session" it doesn't.
 
 ## The system prompt
 
@@ -107,7 +107,7 @@ The prompt in `shared/tools.ts` covers what code can't:
 - **Mods.** A mod can read the whole session, with `useSql` or `host.data.sql` and `asOf: 'session'`, and show the result. Nothing
   gates that. A component that declares `looksAhead` asks the viewer once per tile, but declaring it is up to the author. See [MODS.md](MODS.md).
 - **Build mode.** Its agent reads the whole session with no check: entering build mode is the viewer's consent, said in red beside
-  `/build`. Its conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
+  `/build`: "! spoiler the agent looks ahead without asking". Its conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
   says to the viewer while building depends on its prompt. See [BUILD_MODE.md](BUILD_MODE.md).
 - **Commentary captions.** Not in the app yet. They contain the race, so reading them ahead has to go through the check. See [CAPTIONS.md](CAPTIONS.md).
 
