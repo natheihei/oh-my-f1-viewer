@@ -12,7 +12,8 @@ const LICENSE_PROXY = Array.from({ length: 11 }, (_, i) => `http://127.0.0.1:${1
 const F1_MEDIA = 'https://*.formula1.com https://*.akamaized.net https://*.akamaihd.net';
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  // Mods are compiled by the main process and imported from their own scheme: see docs/MODS.md.
+  "script-src 'self' f1a-mod:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.formula1.com",
   `media-src 'self' blob: data: ${F1_MEDIA}`,

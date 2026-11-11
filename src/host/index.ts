@@ -29,6 +29,8 @@ export {
 } from './backgrounds';
 export { defineComponent, type ComponentDefinition, type ComponentInfo } from './components';
 export { ComponentView, Grid } from './Grid';
+export { startMods } from './mods';
+export type { ModLogLine, ModStatus } from '../../shared/mods';
 export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
@@ -157,7 +159,7 @@ export const host = {
   playback,
   audio,
   layout: layoutOps,
-  /** What tiles can show. The app registers its components once at start. */
+  /** What tiles can show. The app registers its components once at start, and mods theirs on each save. */
   components: componentOps,
   /** What can fill the gaps between tiles. The app registers its backgrounds once at start. */
   backgrounds: backgroundOps,
