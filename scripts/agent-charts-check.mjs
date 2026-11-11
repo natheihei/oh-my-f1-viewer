@@ -35,7 +35,7 @@ const check = (name, ok, detail = '') => {
 };
 
 await page.waitForTimeout(2000);
-const signIns = await page.evaluate(async () => ({ f1: (await window.f1a.f1tv.status()).signedIn, ai: (await window.f1a.ai.status()).signedIn }));
+const signIns = await page.evaluate(async () => ({ f1: (await window.f1a.f1tv.status()).signedIn, ai: (await window.f1a.ai.status()).ready }));
 console.log(`sign-ins: ${JSON.stringify(signIns)}`);
 if (!signIns.f1 || !signIns.ai) {
   console.log('FAIL a sign-in has expired: not running the agent checks.');

@@ -63,8 +63,8 @@ export function connectAgent(): () => void {
 export async function sendToAgent(text: string): Promise<void> {
   palette.push('user', text);
   const status = await host.agent.status();
-  if (!status.signedIn) {
-    palette.push('system', 'The agent needs a ChatGPT sign-in first: /login-chatgpt');
+  if (!status.ready) {
+    palette.push('system', 'The agent needs setting up first: /settings-agent');
     return;
   }
   // The agent finds sessions from the event list: without it, it would only guess.

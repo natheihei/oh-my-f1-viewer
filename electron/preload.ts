@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
+import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
 import type { ModStatus } from '../shared/mods';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
@@ -43,8 +43,12 @@ const api: F1aApi = {
   },
   ai: {
     status: () => invoke('ai:status'),
-    login: () => invoke('ai:login'),
-    logout: () => invoke('ai:logout'),
+    providers: () => invoke('ai:providers'),
+    connect: (provider, way) => invoke('ai:connect', provider, way),
+    cancelConnect: () => invoke('ai:cancelConnect'),
+    onConnect: (cb) => subscribe<AgentConnectEvent>('ai:connect', cb),
+    disconnect: () => invoke('ai:disconnect'),
+    choose: (model, thinking) => invoke('ai:choose', model, thinking),
     send: (text, context, tools, reference) => invoke('ai:send', text, context, tools, reference),
     cancel: () => invoke('ai:cancel'),
     reset: () => invoke('ai:reset'),

@@ -215,8 +215,11 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
 
   // --- Agent ---
   handle('ai:status', () => agent.status());
-  handle('ai:login', () => agent.login());
-  handle('ai:logout', () => agent.logout());
+  handle('ai:providers', () => agent.providers());
+  handle('ai:connect', (_e, provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));
+  handle('ai:cancelConnect', () => agent.cancelConnect());
+  handle('ai:disconnect', () => agent.disconnect());
+  handle('ai:choose', (_e, model, thinking) => agent.choose(String(model), thinking));
   handle('ai:send', (_e, text, context, tools, reference) =>
     agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? '')),
   );

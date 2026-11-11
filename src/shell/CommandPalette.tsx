@@ -6,9 +6,10 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { host, read, useLive } from '../host';
+import { AgentPanel, describeAgent } from './AgentPanel';
 import { BackgroundPanel } from './BackgroundPanel';
 import { sendToAgent, stopTurn } from './agentFeed';
-import { matchCommands, SLASH_COMMANDS } from './commands';
+import { matchCommands, reportReadiness, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { palette, usePalette, type EntryRole } from './palette';
@@ -127,6 +128,23 @@ export function CommandPalette() {
     return (
       <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
         <BackgroundPanel onClose={closePanel} />
+      </div>
+    );
+  }
+
+  if (panel === 'agent') {
+    const closePanel = () => {
+      palette.closePanel();
+      requestAnimationFrame(() => inputRef.current?.focus());
+      void host.agent.status().then((status) => {
+        const line = describeAgent(status);
+        if (line) palette.push('system', line);
+        return reportReadiness();
+      });
+    };
+    return (
+      <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
+        <AgentPanel onClose={closePanel} />
       </div>
     );
   }

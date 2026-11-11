@@ -96,10 +96,37 @@ export interface F1TvStatus {
   ready: boolean;
 }
 
+export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** How a provider gets connected: signing in through the browser, or an API key typed into its own window. */
+export type ConnectWay = 'oauth' | 'api_key';
+
+/** What the agent is set up to use. `ready` means a supported provider is connected, so the agent can run. */
 export interface AiStatus {
-  signedIn: boolean;
+  ready: boolean;
+  provider: string | null;
   model: string | null;
+  modelName: string | null;
+  thinking: ThinkingLevel | null;
 }
+
+/** One provider `/settings-agent` offers, from electron/agent/supported.ts and pi's catalog. */
+export interface AgentProviderOption {
+  id: string;
+  label: string;
+  ways: { way: ConnectWay; label: string; note: string }[];
+  /** How it's connected, or null. At most one provider is connected at a time. */
+  connected: { way: ConnectWay; label: string } | null;
+  models: { id: string; name: string; thinking: ThinkingLevel[] }[];
+  recommended: { model: string; thinking: ThinkingLevel };
+}
+
+/** What the browser side of a sign-in asks of the user, shown in the panel while it runs. */
+export type AgentConnectEvent =
+  | { type: 'browser'; message: string }
+  | { type: 'device_code'; code: string; url: string }
+  | { type: 'key_window'; message: string }
+  | { type: 'progress'; message: string };
 
 /** What the model is told about one tool. */
 export interface AgentToolDefinition {
@@ -177,8 +204,19 @@ export interface F1aApi {
   };
   ai: {
     status(): Promise<AiStatus>;
-    login(): Promise<AiStatus>;
-    logout(): Promise<void>;
+    /** The providers `/settings-agent` offers, each with its ways to connect and its models. */
+    providers(): Promise<AgentProviderOption[]>;
+    /**
+     * Connects a provider. Any other connected provider is removed only once this one succeeds, so a
+     * cancelled or failed connection changes nothing. API keys are asked for in their own window.
+     */
+    connect(provider: string, way: ConnectWay): Promise<AiStatus>;
+    cancelConnect(): Promise<void>;
+    onConnect(cb: (event: AgentConnectEvent) => void): () => void;
+    /** Removes the connected provider's credential. The agent then needs setting up again. */
+    disconnect(): Promise<void>;
+    /** Saves the model and thinking level. They apply from the next message, in the same conversation. */
+    choose(model: string, thinking: ThinkingLevel): Promise<AiStatus>;
     /** `reference` is appended to the system prompt: what the agent should know up front, like the event list. */
     send(text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void>;
     cancel(): Promise<void>;
