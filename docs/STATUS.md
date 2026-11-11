@@ -22,6 +22,9 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
   No to "go to lap 30" left the video at 0:00 with nothing read ahead, and the agent said it couldn't look. Yes (once) then covered both the
   read ahead and the forward seek of that turn with one check, and a backward seek didn't ask. The 50s timeout, the session approval and the
   live edge are covered by unit tests only.
+- Forgetting a read-ahead turn, on the same race with `scripts/seek-check.mjs` (2026-11-10). After an approved read ahead, the next request
+  carried only that turn's message, with its `<app_note>`, and the agent's reply, and OpenAI accepted the cut-down history on every later turn.
+  A refused turn stayed whole. Compaction is covered by tests against a fake model only.
 - The production build, including its content security policy.
 - The countdown displaying and ticking. Its automatic start hasn't run: see below.
 - Every season's world feed from 2021 on, opened directly and through the agent. 2021 races start with it as the main feed, and from 2022

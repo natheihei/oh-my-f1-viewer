@@ -156,8 +156,8 @@ A yes covers both kinds. A refusal makes the tool fail with a message the agent 
 unanswered for 50s is refused as "they didn't answer", under the 60s a tool call gets before the agent reads it as the app not responding.
 A turn that ends, is stopped or is replaced by a new message refuses its open check. Each outcome leaves a line in the palette's history.
 
-The agent is told to read ahead only to find a moment to jump to, and to say nothing about what it found beyond the jump ("Jumped to lap
-30."). The `seek_to` result says only where playback landed, as session clock time.
+Once the viewer approves a read ahead, the agent may answer from what it read, for that turn only. After the turn it remembers only what it
+said: see [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md). The `seek_to` result says only where playback landed, as session clock time.
 
 A live session works the same way, except that reading ahead at the live edge doesn't ask: it only sees the seconds the feed is ahead of
 the video. Behind the live edge it asks as a replay does, and a seek stays within the seekable range. The timeline is unaffected: the

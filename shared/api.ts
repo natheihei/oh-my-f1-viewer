@@ -120,6 +120,8 @@ export interface AgentToolResult {
   ok: boolean;
   /** What the model sees: a short JSON or text result. */
   content: string;
+  /** It read past the playhead, so the agent forgets it after this turn. See docs/SPOILER_PREVENTION.md. */
+  pastPlayhead?: boolean;
 }
 
 export type AgentEvent =

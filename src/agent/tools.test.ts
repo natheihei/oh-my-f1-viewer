@@ -14,7 +14,7 @@ const { spoilerGate, sessionSql } = vi.hoisted(() => ({
 vi.mock('./spoilerGate', () => ({ spoilerGate }));
 vi.mock('../data/sessionData', async (original) => ({ ...(await original<object>()), sessionSql }));
 
-const { AGENT_TOOLS, runTool, toolDefinitions } = await import('./tools');
+const { AGENT_TOOLS, readsPastPlayhead, runTool, toolDefinitions } = await import('./tools');
 const { resolveChannel } = await import('./matching');
 const { closeViewingSession, startCountdown, useCountdown } = await import('../host/viewing');
 const { useSession } = await import('../data/session');
@@ -437,6 +437,14 @@ describe('seeking to a moment', () => {
     await runTool('query_session', { sql, asOf: 'session' });
     expect(spoilerGate).toHaveBeenCalledWith({ kind: 'read_ahead', session: 'Race', playheadMs: PLAYHEAD, sql });
     expect(sessionSql).toHaveBeenCalledWith(sql, undefined, 'session');
+  });
+
+  it('says a whole-session query reads past the playhead, and a playhead one does not', () => {
+    expect(readsPastPlayhead('query_session', { sql: 'SELECT 1', asOf: 'session' })).toBe(true);
+    expect(readsPastPlayhead('query_session', { sql: 'SELECT 1', asOf: 'playhead' })).toBe(false);
+    expect(readsPastPlayhead('query_session', { sql: 'SELECT 1' })).toBe(false);
+    expect(readsPastPlayhead('seek_to', { date: 1 })).toBe(false);
+    expect(readsPastPlayhead('no_such_tool', {})).toBe(false);
   });
 
   it('a refused read ahead never runs the query', async () => {

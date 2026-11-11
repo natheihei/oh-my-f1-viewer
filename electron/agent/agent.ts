@@ -13,6 +13,7 @@ import type { AgentEvent, AgentToolCall, AgentToolDefinition, AgentToolResult, A
 import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
 import { installId } from './credentials';
+import { forgetReadAhead } from './extensions/forgetReadAhead';
 import { promptExtension } from './extensions/prompt';
 import { roundCap, type RoundCap } from './extensions/roundCap';
 import { toolsExtension, type ToolsExtension } from './extensions/tools';
@@ -120,7 +121,7 @@ export class Agent {
       settingsManager: settings,
       agentsFilesOverride: (base) => ({ agentsFiles: base.agentsFiles.filter((f) => inside(f.path)) }),
       skillsOverride: (base) => ({ ...base, skills: base.skills.filter((s) => inside(s.filePath)) }),
-      extensionFactories: [promptExtension(() => conversation.reference), tools.factory, cap.factory],
+      extensionFactories: [promptExtension(() => conversation.reference), tools.factory, cap.factory, forgetReadAhead],
     });
     await resourceLoader.reload();
     const { session } = await createAgentSession({

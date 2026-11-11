@@ -36,6 +36,8 @@ interface Request {
   tools: string[];
   roles: string[];
   lastUser: string;
+  /** Everything but the system messages. */
+  history: string;
 }
 
 type Message = { role: string; content: unknown; toolsAdded?: { name: string }[]; stopReason?: string };
@@ -59,6 +61,7 @@ function setup() {
       tools: system.flatMap((m) => (m.toolsAdded ?? []).map((t) => t.name)),
       roles: messages.map((m) => m.role + (m.stopReason === 'error' || m.stopReason === 'aborted' ? `:${m.stopReason}` : '')),
       lastUser: text(messages.filter((m) => m.role === 'user').at(-1)?.content ?? ''),
+      history: JSON.stringify(messages.filter((m) => m.role !== 'system')),
     });
     return message;
   };
@@ -187,6 +190,77 @@ describe('the prompt', () => {
     script(fauxAssistantMessage('ok'));
     await agent.send('/compact now', 'state', [TOOL]);
     expect(requests[0].lastUser).toContain('/compact now');
+  });
+});
+
+describe('forgetting a read ahead', () => {
+  /** The renderer answering every call as a read past the playhead. */
+  function answerReadAhead(agent: InstanceType<typeof Agent>) {
+    host.onToolCall = (call) => agent.onToolResult({ callId: (call as AgentToolCall).callId, ok: true, content: 'SECRET ROWS', pastPlayhead: true });
+  }
+  const readAhead = () => [fauxAssistantMessage([fauxToolCall('act', { n: 12345 })]), fauxAssistantMessage('Jumped to lap 30.')];
+
+  it('lets the turn use what it read, and later turns keep only what was said', async () => {
+    const { agent, requests, script } = setup();
+    answerReadAhead(agent);
+    script(...readAhead(), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    expect(requests[1].history).toContain('SECRET ROWS');
+    expect(requests[2].history).not.toContain('SECRET ROWS');
+    expect(requests[2].history).not.toContain('12345');
+    expect(requests[2].history).toContain('Jumped to lap 30.');
+    expect(requests[2].history).toContain('<app_note>');
+    expect(requests[2].roles.filter((r) => r !== 'system')).toEqual(['user', 'assistant', 'user']);
+  });
+
+  it('keeps the prompt and tools when history is cut down', async () => {
+    const { agent, requests, script } = setup();
+    answerReadAhead(agent);
+    script(...readAhead(), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL], 'THE REFERENCE');
+    await agent.send('next', 'state', [TOOL], 'THE REFERENCE');
+    expect(requests[2].system).toBe(`${SYSTEM_PROMPT}\n\nTHE REFERENCE`);
+    expect(requests[2].tools).toEqual(['act']);
+  });
+
+  it('remembers a turn that read nothing past the playhead', async () => {
+    const { agent, requests, script } = setup();
+    answerTools(agent);
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 12345 })]), fauxAssistantMessage('Done.'), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    expect(requests[2].history).toContain('12345');
+    expect(requests[2].history).not.toContain('<app_note>');
+  });
+
+  it('ignores the mark on a failed call', async () => {
+    const { agent, requests, script } = setup();
+    host.onToolCall = (call) => agent.onToolResult({ callId: (call as AgentToolCall).callId, ok: false, content: 'refused', pastPlayhead: true });
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 12345 })]), fauxAssistantMessage('You said no.'), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    expect(requests[2].history).toContain('12345');
+  });
+
+  it('forgets it in a compaction summary, and leaves the stored conversation alone', async () => {
+    mkdirSync(path.join(host.userData, 'pi-agent'), { recursive: true });
+    writeFileSync(
+      path.join(host.userData, 'pi-agent', 'settings.json'),
+      JSON.stringify({ defaultProvider: 'openai', defaultModel: 'gpt-6-luna', compaction: { enabled: true, keepRecentTokens: 1 } }),
+    );
+    const { agent, requests, script } = setup();
+    answerReadAhead(agent);
+    script(...readAhead(), fauxAssistantMessage('ok'), fauxAssistantMessage('THE SUMMARY'), fauxAssistantMessage('THE TURN SO FAR'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    const { session } = (agent as unknown as { conversation: { session: { compact(): Promise<unknown>; messages: unknown[] } } }).conversation;
+    expect(JSON.stringify(session.messages)).toContain('SECRET ROWS');
+    await session.compact();
+    const summarized = requests.slice(3).map((r) => r.history).join('');
+    expect(summarized).toContain('Jumped to lap 30.');
+    expect(summarized).not.toContain('SECRET ROWS');
+    expect(summarized).not.toContain('12345');
   });
 });
 
