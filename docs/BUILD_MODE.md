@@ -1,7 +1,7 @@
 # Build mode
 
 The app's agent normally drives viewing: it finds sessions, suggests tiles and seeks. In build mode it writes mods instead. The viewer
-types `/build a controller that can go back and forward laps`, and the agent builds it.
+types `/build`, asks for a controller that can go back and forward laps, and the agent builds it.
 
 Agreed and built on 2026-11-11. [STATUS.md](STATUS.md) says what's verified. [MODS.md](MODS.md) describes mods themselves, and
 [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) the rules build mode changes.
@@ -18,11 +18,12 @@ editor and no separate preview. The draft is the real component, on the open ses
 
 ## Entering and leaving
 
-- `/build <request>` enters build mode and sends the request. In the palette's command list, `/build` carries red text beside it:
+- `/build` enters build mode, and what the viewer types next goes to the build agent. In the palette's command list it reads "Enter
+  build mode", with red text beside it:
   "spoiler alert - agent may read beyond where you are". That text is the viewer's consent to what [Spoilers](#spoilers) describes, and there's no check on entry.
 - Entering pauses playback, so the race doesn't run on unwatched while the viewer builds. Leaving doesn't start it again.
 - While build mode is on, the palette is yellow: its frame, its prompt, and the tag's text and outlines.
-- `/build` alone enters and waits for a request. While build mode is on, everything typed goes to the build agent.
+- `/build <request>` also works, entering and sending the request in one line. The command list doesn't mention it.
 - While building, a tag beside the input reads `build · 2 changes`, with **Undo all** and **Save** next to it. With no changes yet it's
   a plain `build ×`, and clicking it leaves. The palette stays open, since the tag is the only way out.
 - **Save** keeps every change and leaves build mode. **Undo all** puts the mods folder back as it was on entry and leaves build mode.
@@ -30,7 +31,7 @@ editor and no separate preview. The draft is the real component, on the open ses
   palette such as "back to 0:42:10". It's an offer, and the playhead doesn't move by itself.
 - Quitting the app mid-build undoes anything unsaved on the next start, without asking.
 
-The other `/` commands are account actions and take no arguments. `/build` is the first that takes one, and the first with a warning
+The other `/` commands take no arguments. `/build` is the only one that accepts text after it, and the only one with a warning
 beside it.
 
 ## What the viewer sees
