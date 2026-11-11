@@ -222,7 +222,6 @@ console.log(`  used lap_summary: ${queries.some((q) => /lap_summary/i.test(q))}`
 check('it sought', r.names.includes('seek_to'));
 check('playback moved forward', at.t > startAt.t + 60, `video ${startAt.t.toFixed(1)}s to ${at.t.toFixed(1)}s`);
 check('the playhead is in lap 30', at.playhead >= lap.start - 5000 && at.playhead < lap.next, `${((at.playhead - lap.start) / 1000).toFixed(1)}s after the lap began, lap lasts ${((lap.next - lap.start) / 1000).toFixed(1)}s`);
-check('the reply says nothing about the race', !/\b(P\d+|leads?|leader|pit(ted|s)?|gap|ahead of|behind|overt[ao]k|crash|retire|safety car)\b/i.test(r.reply), r.reply.slice(0, 160));
 check('reply uses no markdown', !markdown(r.reply));
 
 console.log(`\n${failures ? `${failures} check(s) failed` : 'all checks passed'}`);

@@ -1,0 +1,116 @@
+# Spoiler prevention
+
+f1a holds whole races in a local database, and most viewers are watching a replay they don't know the end of. The rule across the app:
+
+**The viewer learns nothing past the frame on screen unless they asked to.**
+
+Protection comes in layers, from the data up. Each one assumes the layer above it could misbehave.
+
+| Layer | What it stops | Where |
+| --- | --- | --- |
+| Data as of the playhead | Charts and queries seeing the future | `electron/timingdb/store.ts`, `src/data/sessionData.ts` |
+| What the agent is given | Spoilers arriving unasked in the agent's input | `src/agent/bridge.ts`, `src/agent/tools.ts` |
+| The spoiler check | The agent reading ahead or seeking forward unapproved | `src/agent/spoilerGate.ts`, `src/shell/lookAhead.ts` |
+| Forgetting read-ahead turns | An approved read leaking into later turns | `electron/agent/extensions/forgetReadAhead.ts` |
+| The system prompt | The agent saying what it knows from memory | `shared/tools.ts` |
+
+## Data as of the playhead
+
+[SESSION_DATA.md](SESSION_DATA.md) has the details.
+
+- **Every row knows when it was revealed.** `visible_from` is when the feed made a row known, on the same clock as the playhead. A row's own `date` can't
+  serve, because a message often reports something earlier than when it was sent.
+- **Rows that change are stored as versions.** `laps`, `stints`, `pit`, `drivers` and the championship tables return the newest version the playhead has
+  reached, so a stint's `lap_end` can't reveal a stop that hasn't happened yet.
+- **SQL can only reach limited views.** Consumers' queries run on a read-only connection against temporary views limited to the session and the playhead. An
+  authorizer refuses everything else, including the tables behind those views.
+- **`sessionData` follows the playhead too.** The roster, the grid, the championship and `lapCount` read as they stood at that frame. `sessionResult` appears
+  only once the session has finished at the playhead.
+- **Charts can't opt out.** `useSql` always reads as of the playhead. Seeking back hides what had been shown.
+- **A live session waits for the video.** Rows are compared with the stream's wall clock, since F1 TV's video runs tens of seconds behind the feed.
+
+Reading the whole session takes `host.data.sql({ asOf: 'session' })`, asked for by name. The host doesn't check who's calling: policy belongs to the caller.
+
+## What the agent is given
+
+Nothing that reaches the agent by default says how a session went:
+
+- **Its system prompt reference** lists events by name, round and dates, charts by what they're for, and tables by their columns.
+- **`app_state`**, sent with each message, adds only the playhead and the roster: who is entered, not where they are.
+- **Tool results** say what exists and what's on screen. A seek reports only where playback landed.
+- **Charts** are picked by description, and the agent never sees what they show. `planCharts` refuses a chart only for reasons that don't depend on how the
+  session is going.
+- **`query_session`** reads as of the playhead unless it asks for more.
+
+## The spoiler check
+
+The gate runs in the agent's tools, before anything executes, so no row reaches the model and no stream moves unapproved. It's asked for two things:
+
+- **Reading ahead:** `query_session` with `asOf: 'session'`.
+- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known.
+
+The viewer sees "Peeking past where you are now?" and never the SQL, the target time or how far ahead it is, since any of those could give something away.
+
+- **Yes (once)** lasts for the agent's turn.
+- **Yes (for the session)** lasts until another session opens.
+- **No**, Esc, or 50 seconds without an answer refuses. So does the turn ending. The tool call fails and the query or seek never runs.
+
+Reading ahead at the live edge doesn't ask, since it only sees the seconds the feed is ahead of the video. The viewer's own timeline is never gated.
+
+[DESIGN.md](DESIGN.md) covers the check in full.
+
+## Forgetting read-ahead turns
+
+The check decides what the agent may read. It doesn't say how long the agent keeps it. Without a limit, rows from an approved read stay in the conversation
+and can come out in a later turn or a compaction summary, long after a "Yes (once)" has lapsed.
+
+**An approved read ahead is usable only in the turn that asked for it. After that, the agent remembers only what it told the viewer.**
+
+Within the turn the agent can answer from what it read, because the viewer agreed to the peek. Once the turn is over, the history holds what the viewer asked
+and what the agent said to them, which the viewer already knows.
+
+How it works, in `electron/agent/extensions/forgetReadAhead.ts`:
+
+- **Marking.** A tool that reads past the playhead says so with `pastPlayhead` on its exposure in `src/agent/tools.ts`, and a successful result carries the mark
+  in pi's `details`, which the model never sees. The mark means "read past the playhead", not "the viewer was asked", so live-edge reads count too.
+- **Collapsing.** A marked turn is reduced to its user message and one assistant message holding everything the agent said, in order. Tool calls, tool
+  results and reasoning are all dropped, including the SQL and seek dates, which can carry what the agent learned.
+- **Telling the agent.** The user message gains an `<app_note>` block saying the tool calls were removed. It's on the user side, next to `<app_state>`, so the
+  agent isn't shown a pattern of replying without tools that it could copy.
+- **Before each model request** (pi's `context` hook), every turn but the current one is collapsed.
+- **Before each compaction** (pi's `session_before_compact` hook), every marked turn is collapsed, including the turn in progress, because a summary outlives
+  the turn. Compaction reads stored messages and doesn't go through the `context` hook, so it needs its own.
+- **A turn split by compaction** has lost its start, and with it possibly the mark. Once it's over, it's treated as marked.
+
+The stored conversation isn't changed: collapsing edits the copy sent to the model. The palette is built from events during the turn, so the viewer's history
+doesn't change either. The first request after a collapse re-reads that turn and the new message, about 300 more uncached tokens when measured. The prompt and the turns before it stay cached.
+
+If the agent needs the data again, it queries again. Under "Yes (once)" that asks again. Under "Yes (for the session)" it doesn't.
+
+## The system prompt
+
+The prompt in `shared/tools.ts` covers what code can't:
+
+- Never reveal results from memory, or from anything not approved to read.
+- With approval, the agent may answer from what that read returned. It's allowed to, not required to: "Jumped to lap 30." is still a fine answer.
+- Never ask for permission itself: the app asks.
+- Never describe what a chart shows.
+
+## What this doesn't cover
+
+- **The model's own memory.** It may know how a past race ended, and only the prompt stops it from saying so.
+- **Within the turn.** The rows are in context until the turn ends, so that turn's reply depends on the prompt.
+- **What the agent said.** Its replies stay in the history. If it disclosed something in an approved turn, later turns can repeat it.
+- **Live sessions with no wall clock.** With nothing to compare against, everything is visible.
+- **Mods.** A mod can call `host.data.sql({ asOf: 'session' })` and show the result. Nothing gates that. See [MODS.md](MODS.md).
+- **A future build mode.** Forgetting only covers tools that mark their results. Shell or direct database access would need the gate and the mark first.
+- **Commentary captions.** Not in the app yet. They contain the race, so reading them ahead has to go through the check. See [CAPTIONS.md](CAPTIONS.md).
+
+## How it's checked
+
+- `electron/timingdb/store.test.ts`: reads are limited to the playhead and direct table reads are refused.
+- `src/agent/tools.test.ts` and `src/shell/lookAhead.test.ts`: the gate and the check.
+- `electron/agent/extensions/forgetReadAhead.test.ts` and `electron/agent/agent.test.ts`: collapsing, in the request and in compaction.
+- `scripts/seek-check.mjs`: the check in the real palette with the real model, including later turns sent after a read-ahead turn is cut down.
+
+Compaction has only run against a fake model. See [STATUS.md](STATUS.md).
