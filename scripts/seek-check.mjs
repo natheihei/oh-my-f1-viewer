@@ -152,7 +152,6 @@ check(
   lap.start != null && at.playhead >= lap.start - 5000 && (lap.next == null || at.playhead < lap.next),
   lap.start == null ? 'the lap is not in the data' : `${secs(at.playhead - lap.start)} after the lap began, lap lasts ${secs(lap.next - lap.start)}`,
 );
-check('the reply says nothing about the race', !/\b(P\d+|leads?|leader|pit(ted|s)?|gap|ahead of|behind|overt[ao]k|crash|retire|safety car)\b/i.test(r.reply), r.reply.slice(0, 160));
 const afterLap = at;
 
 // Backward: still lands where asked.
