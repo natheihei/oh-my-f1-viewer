@@ -1,14 +1,21 @@
 /**
- * `/` commands: account actions the user runs themselves. A separate set from the agent's tools
- * (shared/tools.ts): neither can call the other, and anything to do with viewing goes to the agent.
+ * `/` commands: account actions the user runs themselves, and `/build`, which changes who they're
+ * talking to. They're a separate set, and the agent's tools (shared/tools.ts) are another: neither can
+ * call the other, and anything to do with viewing goes to the agent.
  */
 import { FIRST_SEASON, host } from '../host';
+import { enterBuild } from './buildMode';
 import { palette } from './palette';
 
 export interface SlashCommand {
   name: string;
   description: string;
-  run(): Promise<void>;
+  /** What follows the name, if the command takes something: shown as a hint. */
+  argument?: string;
+  /** What running it means that the viewer should know first. Shown in red beside it. */
+  warning?: string;
+  /** `text` is what followed the name, for a command with an `argument`. */
+  run(text: string): Promise<void>;
 }
 
 /** An error's message, without Electron's wrapping around errors from main. */
@@ -43,6 +50,14 @@ export async function reportReadiness(): Promise<void> {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    name: '/build',
+    description: 'Build or change a mod',
+    argument: 'what to build',
+    // The build agent reads the open session past the playhead without asking: see docs/BUILD_MODE.md.
+    warning: 'spoiler alert - agent may read beyond where you are',
+    run: (text) => enterBuild(text),
+  },
   {
     name: '/settings-background',
     description: 'Choose the background in the gaps between tiles',
@@ -88,8 +103,17 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
+/** A command line split into its name and what follows it. */
+export function parseCommand(input: string): { name: string; rest: string } {
+  const text = input.trim();
+  const space = text.search(/\s/);
+  return space < 0 ? { name: text.toLowerCase(), rest: '' } : { name: text.slice(0, space).toLowerCase(), rest: text.slice(space).trim() };
+}
+
+/** The commands the input could become. Once something follows the name, only one that takes it. */
 export function matchCommands(input: string): SlashCommand[] {
-  const needle = input.trim().toLowerCase();
-  if (!needle.startsWith('/')) return [];
-  return SLASH_COMMANDS.filter((c) => c.name.startsWith(needle));
+  if (!input.trimStart().startsWith('/')) return [];
+  const { name, rest } = parseCommand(input);
+  if (rest || /\s$/.test(input)) return SLASH_COMMANDS.filter((c) => c.name === name && c.argument);
+  return SLASH_COMMANDS.filter((c) => c.name.startsWith(name));
 }

@@ -9,7 +9,7 @@ import { backgrounds } from './backgrounds/registry';
 import * as kit from './components/charts/kit';
 import { components } from './components/registry';
 import * as f1a from './host';
-import { host, startMods } from './host';
+import { host, startBuild, startMods } from './host';
 import { App } from './shell/App';
 import { restoreBackground } from './shell/persistBackground';
 import { restoreVolume } from './shell/persistVolume';
@@ -19,6 +19,7 @@ host.components.register({ components });
 host.backgrounds.register({ backgrounds });
 // Mods import these as the app's own copies. See docs/MODS.md.
 startMods({ f1a, 'f1a/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });
+startBuild();
 // Before the first render too, so the volume slider starts at the saved level rather than jumping from 100%.
 restoreVolume();
 // And the background, so the gaps don't flash black first.

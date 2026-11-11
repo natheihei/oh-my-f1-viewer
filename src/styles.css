@@ -357,7 +357,7 @@
 
 /* Suggested tiles: a strip between the palette's history and its input. */
 .strip {
-  @apply flex gap-2 overflow-x-auto border-b border-line px-2.5 pt-2 pb-1.5;
+  @apply flex items-end gap-2 overflow-x-auto border-b border-line px-2.5 pt-2 pb-1.5;
 }
 
 .strip-item {
@@ -366,7 +366,8 @@
 }
 
 .strip-view {
-  @apply relative aspect-video w-full overflow-hidden border border-line bg-black;
+  /* Its shape comes from the component's size hint: see src/shell/stripShape.ts. */
+  @apply relative w-full overflow-hidden border border-line bg-black;
 }
 
 .strip-item:focus-visible .strip-view,
@@ -652,4 +653,109 @@
 .agent-settings [data-control]:focus-visible {
   outline: 1px solid var(--color-dim);
   outline-offset: 1px;
+}
+
+/* Build mode. See docs/BUILD_MODE.md. */
+
+/* A draft in the strip: wider, since its preview is there to be tried. Only its name adds or drags it. */
+.strip-item-draft {
+  @apply w-80 cursor-default;
+}
+
+.strip-item-draft .strip-view {
+  border-color: var(--color-medium);
+  border-style: dashed;
+}
+
+.strip-item-draft .strip-label {
+  @apply cursor-pointer;
+}
+
+.strip-badge-draft {
+  border-color: var(--color-medium);
+  color: var(--color-medium);
+}
+
+.strip-add {
+  @apply shrink-0 text-dim;
+}
+
+.strip-item-draft:hover .strip-add,
+.strip-item-draft:focus-visible .strip-add {
+  @apply text-ink;
+}
+
+/* A tile whose mod the build added or changed. */
+.stage-host-marked::after {
+  @apply pointer-events-none absolute inset-0 border border-dashed;
+  border-color: var(--color-medium);
+  content: '';
+}
+
+.stage-mark {
+  @apply pointer-events-none absolute top-0 right-0 z-10 bg-black px-1;
+  color: var(--color-medium);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* A tile asking to read past the playhead: it covers the tile until the viewer allows it. */
+.tile-warning {
+  @apply absolute inset-0 z-10 flex items-center justify-center gap-4 bg-black p-2 text-dim;
+  font-size: 11px;
+}
+
+.tile-warning-title {
+  @apply text-accent;
+}
+
+.tile-warning-allow {
+  @apply shrink-0 cursor-pointer border border-faint bg-black px-3 py-1 text-ink hover:border-ink;
+  font-size: 12px;
+}
+
+/* What a command does that the viewer should know before running it. */
+.palette-suggestion-warning {
+  @apply shrink-0 text-accent;
+}
+
+.palette-suggestion-desc {
+  @apply min-w-0 flex-1 text-right;
+}
+
+/* A line in the history the viewer can act on. */
+.palette-action {
+  @apply cursor-pointer border border-faint bg-transparent px-1.5 text-ink hover:border-ink;
+}
+
+/* Beside the input while building: what changed, and the two ways out. */
+.build-tag {
+  @apply flex shrink-0 items-center gap-1.5;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.build-tag-label {
+  color: var(--color-medium);
+}
+
+.build-tag-button {
+  @apply cursor-pointer border bg-transparent px-1.5 hover:text-ink;
+  border-color: var(--color-medium);
+  color: var(--color-medium);
+}
+
+/* Build mode is the palette in yellow: its frame, its prompt and its tag. */
+.palette-building {
+  border-color: var(--color-medium);
+}
+
+.palette-building .palette-prompt {
+  color: var(--color-medium);
+}
+
+.build-tag-save {
+  border-color: var(--color-medium);
+  background: var(--color-medium);
+  @apply text-black hover:text-black;
 }

@@ -146,8 +146,9 @@ pi gets two folders, passed in code, and never reads or writes `~/.pi`:
 - `<agentDir>/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
   results, and token use. They're never resumed, so a new conversation or a restart starts empty, as if in memory. They hold whatever
   the agent read, including race data, stay on this machine, and aren't pruned.
-- `cwd` is the mods folder, set for a later build mode. It's untrusted: pi ignores any `.pi` folder there, which could otherwise change
-  the prompt or run code in main.
+- `<agentDir>/build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
+- `cwd` is the mods folder, where build mode's agent writes. It's untrusted: pi ignores any `.pi` folder there, which could otherwise
+  change the prompt or run code in main.
 
 `src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the
 function's schema, and one with its own must type-check against the function's through `adapt`, so a host change that breaks a tool fails

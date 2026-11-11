@@ -1,5 +1,5 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
-import type { AgentToolCall } from '../../shared/api';
+import type { AgentMode, AgentToolCall } from '../../shared/api';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
 import { driverCount, formatClock, readsPastPlayhead, runTool, toolDefinitions } from './tools';
@@ -25,10 +25,11 @@ function describeAudio(label: string | null, volume: number): string {
  * The state block sent with each user message. Contains nothing about how the race goes: the roster is
  * who is entered, not where they are. `note` is what the user did with the last turn's suggestions.
  */
-export function describeAppState(note: string | null = null): string {
+export function describeAppState(note: string | null = null, build: string | null = null): string {
   const { session, audio, volume, feeds, clock, streams, countdown, layout, sessionData } = read();
   const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
   if (countdown) lines.push(`countdown running for: ${countdown.title}`);
+  if (build) lines.push(build);
   if (!session) {
     lines.push('session: none open');
     return lines.join('\n');
@@ -57,10 +58,14 @@ export function describeAppState(note: string | null = null): string {
   return lines.join('\n');
 }
 
+/** Which agent the turn in progress belongs to: its tool calls arrive without saying. */
+let turnMode: AgentMode = 'view';
+
 async function handleToolCall(call: AgentToolCall): Promise<void> {
+  const mode = turnMode;
   try {
-    const content = await runTool(call.name, call.args);
-    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead: readsPastPlayhead(call.name, call.args) });
+    const content = await runTool(call.name, call.args, mode);
+    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead: readsPastPlayhead(call.name, call.args, mode) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     host.agent.toolResult({
@@ -134,11 +139,39 @@ export function describeTables(data: SessionDataView): string {
   return lines.join('\n');
 }
 
-/** A message starts a new turn, which clears the suggestion strip. */
+/** What a finished build changed, for the viewing agent's next message: the one line of it that agent ever sees. */
+let buildNote: string | null = null;
+
+/** `summary` is the app's own account of a saved build, such as "Built lap_stepper." */
+export function tellViewingAgent(summary: string): void {
+  buildNote = summary;
+}
+
+/** What the build has changed so far, and every mod there is, for the build agent. */
+function describeBuild(): string {
+  const { build, mods } = read();
+  const sign = { added: '+', edited: '~', deleted: '-' } as const;
+  const changes = build.changes.map((c) => `${sign[c.change]}${c.name}`).join(', ') || 'none yet';
+  const all = mods.map((m) => `${m.name} (${m.state})`).join(', ') || 'none';
+  return `build changes so far: ${changes}\nmods: ${all}`;
+}
+
+/**
+ * A message starts a new turn, which clears the suggestion strip. While build mode is on it goes to the
+ * build agent, with its own tools and no event list. See docs/BUILD_MODE.md.
+ */
 export function askAgent(text: string): Promise<void> {
   const note = host.suggestions.newTurn();
-  const { events, components, sessionData } = read();
+  const { events, components, sessionData, build } = read();
+  if (build.active) {
+    turnMode = 'build';
+    const reference = [describeCharts(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
+    return host.agent.send(text, describeAppState(note, describeBuild()), toolDefinitions('build'), reference, 'build');
+  }
+  turnMode = 'view';
+  const fromBuild = buildNote ? `build mode: the user left it having saved this. ${buildNote}` : null;
+  buildNote = null;
   // Least likely to change last: opening a session only changes what follows the charts.
   const reference = [describeEvents(events), describeCharts(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
-  return host.agent.send(text, describeAppState(note), toolDefinitions(), reference);
+  return host.agent.send(text, describeAppState(note, fromBuild), toolDefinitions(), reference);
 }

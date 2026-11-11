@@ -1,7 +1,7 @@
 /** A SQL query that stays current: it runs again as the playhead moves and as more of the session arrives. */
 import { useEffect, useState } from 'react';
 import type { SqlRows } from '../../shared/sessionData';
-import { sessionSql } from '../data/sessionData';
+import { sessionSql, type SqlAsOf } from '../data/sessionData';
 import { useLive } from './live';
 
 export type SqlView = { state: 'loading' } | { state: 'failed'; reason: string } | ({ state: 'ready' } & SqlRows);
@@ -35,8 +35,12 @@ export function nextView(previous: SqlView, next: SqlView): SqlView {
 /**
  * Runs `sql` now and again on every `sessionData.revision`, about once a second while playing. The
  * returned view keeps its reference until its rows change, so a chart can redraw only then.
+ *
+ * It reads as of the playhead. `asOf: 'session'` reads the whole session, which can spoil it: a
+ * component that does should declare `looksAhead`, so the viewer is asked before it's drawn.
  */
-export function useSql(sql: string, params: unknown[] = []): SqlView {
+export function useSql(sql: string, params: unknown[] = [], options: { asOf?: SqlAsOf } = {}): SqlView {
+  const asOf = options.asOf ?? 'playhead';
   const revision = useLive((live) => (live.sessionData.state === 'ready' ? live.sessionData.revision : null));
   const [view, setView] = useState<SqlView>(LOADING);
   const key = JSON.stringify(params);
@@ -47,7 +51,7 @@ export function useSql(sql: string, params: unknown[] = []): SqlView {
       return;
     }
     let cancelled = false;
-    sessionSql(sql, JSON.parse(key)).then(
+    sessionSql(sql, JSON.parse(key), asOf).then(
       (rows) => {
         if (!cancelled) setView((previous) => nextView(previous, { state: 'ready', ...rows }));
       },
@@ -58,7 +62,7 @@ export function useSql(sql: string, params: unknown[] = []): SqlView {
     return () => {
       cancelled = true;
     };
-  }, [sql, key, revision]);
+  }, [sql, key, revision, asOf]);
 
   return view;
 }

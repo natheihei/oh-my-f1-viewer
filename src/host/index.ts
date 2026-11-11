@@ -11,6 +11,7 @@ import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
 import { sessionSql } from '../data/sessionData';
 import { appearanceOps, backgroundOps } from './backgrounds';
+import { buildOps } from './build';
 import { componentOps } from './components';
 import { layoutOps } from './layoutOps';
 import { query, write } from './op';
@@ -30,7 +31,9 @@ export {
 export { defineComponent, type ComponentDefinition, type ComponentInfo } from './components';
 export { ComponentView, Grid } from './Grid';
 export { startMods } from './mods';
-export type { ModLogLine, ModStatus } from '../../shared/mods';
+export { startBuild, type BuildView } from './build';
+export { previewScope } from './lookAhead';
+export type { BuildChange, ModLogLine, ModStatus } from '../../shared/mods';
 export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
@@ -167,6 +170,8 @@ export const host = {
   appearance: appearanceOps,
   /** Tiles the agent suggests, which the user adds or dismisses. */
   suggestions: suggestionOps,
+  /** Build mode's snapshot: begin, then save or undo. */
+  build: buildOps,
   catalog: catalogOps,
   /** Session data that isn't in the live state. Nothing here can change it. */
   data,
