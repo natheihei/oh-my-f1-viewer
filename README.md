@@ -11,7 +11,7 @@ Hamilton, Norris and Leclerc added.
 Removed: NOR, LEC.
 ```
 
-Every stream, and the session data, stays locked to one session clock. Needs an F1 TV subscription and a ChatGPT plan.
+Every stream, and the session data, stays locked to one session clock. Needs an F1 TV subscription, and a ChatGPT plan or an OpenAI or Anthropic API key for the agent.
 
 ## Run it
 
@@ -39,7 +39,8 @@ blank page with the command palette, which tells you what to sign in to.
 | `Ctrl+Shift+P` | Show or hide the palette, with its history |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
-| `/login-f1tv`, `/login-chatgpt` | Sign in (`/logout-*` to sign out) |
+| `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
+| `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
 

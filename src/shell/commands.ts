@@ -11,7 +11,8 @@ export interface SlashCommand {
   run(): Promise<void>;
 }
 
-function errorText(e: unknown): string {
+/** An error's message, without Electron's wrapping around errors from main. */
+export function errorText(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   return raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim();
 }
@@ -27,15 +28,15 @@ export async function loadEvents(): Promise<boolean> {
   return false;
 }
 
-/** Tells the user what still needs signing in, or loads the events and says they can start. */
+/** Tells the user what still needs doing, or loads the events and says they can start. */
 export async function reportReadiness(): Promise<void> {
-  const { f1tv: f1, chatgpt: ai } = await host.account.status();
+  const { f1tv: f1, agent } = await host.account.status();
   const missing: string[] = [];
   if (!f1.signedIn) missing.push('/login-f1tv');
-  if (!ai.signedIn) missing.push('/login-chatgpt');
+  if (!agent.ready) missing.push('/settings-agent');
   if (f1.signedIn && !(await loadEvents())) return;
   if (missing.length) {
-    palette.push('system', `Sign in to get started: ${missing.join(', ')}`);
+    palette.push('system', `Get started: ${missing.join(', ')}`);
   } else {
     palette.push('system', `Ready. Name a session from ${FIRST_SEASON} on, like "2025 Mexico race".`);
   }
@@ -47,6 +48,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Choose the background in the gaps between tiles',
     async run() {
       palette.openPanel('background');
+    },
+  },
+  {
+    name: '/settings-agent',
+    description: "Choose the agent's provider, model and thinking level",
+    async run() {
+      palette.openPanel('agent');
     },
   },
   {
@@ -64,20 +72,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     },
   },
   {
-    name: '/login-chatgpt',
-    description: 'Sign in with ChatGPT for the agent',
-    async run() {
-      palette.push('system', 'Complete ChatGPT sign-in in your browser.');
-      try {
-        await host.account.login('chatgpt');
-        palette.push('system', 'ChatGPT signed in.');
-        await reportReadiness();
-      } catch (e) {
-        palette.push('error', `ChatGPT sign-in failed: ${errorText(e)}`);
-      }
-    },
-  },
-  {
     name: '/reload-events',
     description: "Load F1 TV's events again",
     async run() {
@@ -90,14 +84,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       await host.account.logout('f1tv');
       palette.push('system', 'F1 TV signed out.');
-    },
-  },
-  {
-    name: '/logout-chatgpt',
-    description: 'Sign out of ChatGPT',
-    async run() {
-      await host.account.logout('chatgpt');
-      palette.push('system', 'ChatGPT signed out.');
     },
   },
 ];

@@ -8,7 +8,11 @@ import { SYSTEM_PROMPT } from '../../shared/tools';
 const host = vi.hoisted(() => ({
   userData: '',
   events: [] as unknown[],
+  /** Everything sent to the renderer, on any channel. */
+  sent: [] as unknown[],
   onToolCall: (_call: unknown): void => {},
+  askForKey: (_title: string, _message: string, _signal: AbortSignal): Promise<string> => Promise.resolve('sk-test-key'),
+  keyTitles: [] as string[],
 }));
 
 vi.mock('electron', () => ({
@@ -17,8 +21,15 @@ vi.mock('electron', () => ({
 }));
 vi.mock('../windows', () => ({
   sendToRenderer: (channel: string, payload: unknown) => {
+    host.sent.push([channel, payload]);
     if (channel === 'ai:event') host.events.push(payload);
     if (channel === 'ai:toolCall') host.onToolCall(payload);
+  },
+}));
+vi.mock('./keyWindow', () => ({
+  askForKey: (title: string, message: string, signal: AbortSignal) => {
+    host.keyTitles.push(title);
+    return host.askForKey(title, message, signal);
   },
 }));
 
@@ -38,35 +49,87 @@ interface Request {
   lastUser: string;
   /** Everything but the system messages. */
   history: string;
+  model: string;
+  reasoning: string | undefined;
 }
 
 type Message = { role: string; content: unknown; toolsAdded?: { name: string }[]; stopReason?: string };
+type Way = 'oauth' | 'api_key';
 
 const text = (content: unknown): string =>
   typeof content === 'string' ? content : (content as { text?: string }[]).map((b) => b.text ?? '').join('');
 
-function setup() {
-  const faux = fauxProvider({ provider: 'openai', models: [{ id: 'gpt-6-luna', reasoning: true }] });
+const agentDir = () => path.join(host.userData, 'pi-agent');
+const savedSettings = () => JSON.parse(readFileSync(path.join(agentDir(), 'settings.json'), 'utf8')) as Record<string, unknown>;
+
+/**
+ * An agent on a faux `openai`, connected the way `credentials` says. Credentials live in memory, and
+ * login and logout change them, so connecting and switching run without a network.
+ */
+function setup(
+  options: {
+    provider?: string;
+    model?: string;
+    thinking?: string;
+    credentials?: [string, Way][];
+    /** More of settings.json, such as compaction. */
+    settings?: Record<string, unknown>;
+  } = {},
+) {
+  mkdirSync(agentDir(), { recursive: true });
+  writeFileSync(
+    path.join(agentDir(), 'settings.json'),
+    JSON.stringify({
+      defaultProvider: options.provider ?? 'openai',
+      defaultModel: options.model ?? 'gpt-6-luna',
+      defaultThinkingLevel: options.thinking ?? 'medium',
+      ...options.settings,
+    }),
+  );
+  const faux = fauxProvider({
+    provider: 'openai',
+    models: [
+      { id: 'gpt-6-luna', reasoning: true },
+      { id: 'gpt-6.1-terra', reasoning: true },
+    ],
+  });
+  const credentials = new Map<string, Way>(options.credentials ?? [['openai', 'oauth']]);
+  const ops: string[] = [];
   const requests: Request[] = [];
   const agent = new Agent((models) => {
     models.registerNativeProvider(faux.provider);
     models.checkAuth = (async () => ({ type: 'oauth' })) as never;
+    models.listCredentials = (async () => [...credentials].map(([providerId, type]) => ({ providerId, type }))) as never;
+    models.login = (async (id: string, type: Way, interaction: { prompt(p: { type: string; message: string }): Promise<string> }) => {
+      if (type === 'api_key') await interaction.prompt({ type: 'secret', message: 'Enter key' });
+      ops.push(`login ${id}`);
+      credentials.set(id, type);
+      return { type };
+    }) as never;
+    models.logout = (async (id: string) => {
+      ops.push(`logout ${id}`);
+      credentials.delete(id);
+    }) as never;
   });
   /** A scripted reply that records the request it answers. */
-  const reply = (message: ReturnType<typeof fauxAssistantMessage>) => (context: { messages: unknown[] }) => {
-    const messages = context.messages as Message[];
-    const system = messages.filter((m) => m.role === 'system');
-    requests.push({
-      system: system.map((m) => text(m.content)).join('\n---\n'),
-      tools: system.flatMap((m) => (m.toolsAdded ?? []).map((t) => t.name)),
-      roles: messages.map((m) => m.role + (m.stopReason === 'error' || m.stopReason === 'aborted' ? `:${m.stopReason}` : '')),
-      lastUser: text(messages.filter((m) => m.role === 'user').at(-1)?.content ?? ''),
-      history: JSON.stringify(messages.filter((m) => m.role !== 'system')),
-    });
-    return message;
-  };
-  const script = (...messages: ReturnType<typeof fauxAssistantMessage>[]) => faux.setResponses(messages.map(reply));
-  return { agent, faux, requests, script };
+  const reply =
+    (message: ReturnType<typeof fauxAssistantMessage>) =>
+    (context: { messages: unknown[] }, streamOptions: { reasoning?: string } | undefined, _state: unknown, model: { id: string }) => {
+      const messages = context.messages as Message[];
+      const system = messages.filter((m) => m.role === 'system');
+      requests.push({
+        system: system.map((m) => text(m.content)).join('\n---\n'),
+        tools: system.flatMap((m) => (m.toolsAdded ?? []).map((t) => t.name)),
+        roles: messages.map((m) => m.role + (m.stopReason === 'error' || m.stopReason === 'aborted' ? `:${m.stopReason}` : '')),
+        lastUser: text(messages.filter((m) => m.role === 'user').at(-1)?.content ?? ''),
+        history: JSON.stringify(messages.filter((m) => m.role !== 'system')),
+        model: model.id,
+        reasoning: streamOptions?.reasoning,
+      });
+      return message;
+    };
+  const script = (...messages: ReturnType<typeof fauxAssistantMessage>[]) => faux.setResponses(messages.map(reply) as never);
+  return { agent, faux, requests, script, credentials, ops };
 }
 
 const events = () => host.events as AgentEvent[];
@@ -89,7 +152,10 @@ function answerTools(agent: InstanceType<typeof Agent>, ok = true) {
 beforeEach(() => {
   host.userData = mkdtempSync(path.join(os.tmpdir(), 'f1a-agent-test-'));
   host.events.length = 0;
+  host.sent.length = 0;
+  host.keyTitles.length = 0;
   host.onToolCall = () => {};
+  host.askForKey = () => Promise.resolve('sk-test-key');
 });
 
 afterEach(() => {
@@ -244,12 +310,7 @@ describe('forgetting a read ahead', () => {
   });
 
   it('forgets it in a compaction summary, and leaves the stored conversation alone', async () => {
-    mkdirSync(path.join(host.userData, 'pi-agent'), { recursive: true });
-    writeFileSync(
-      path.join(host.userData, 'pi-agent', 'settings.json'),
-      JSON.stringify({ defaultProvider: 'openai', defaultModel: 'gpt-6-luna', compaction: { enabled: true, keepRecentTokens: 1 } }),
-    );
-    const { agent, requests, script } = setup();
+    const { agent, requests, script } = setup({ settings: { compaction: { enabled: true, keepRecentTokens: 1 } } });
     answerReadAhead(agent);
     script(...readAhead(), fauxAssistantMessage('ok'), fauxAssistantMessage('THE SUMMARY'), fauxAssistantMessage('THE TURN SO FAR'));
     await agent.send('go', 'state', [TOOL]);
@@ -297,7 +358,7 @@ describe('failures', () => {
     const { agent, script } = setup();
     script(fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'usage_limit_reached' }));
     await agent.send('go', 'state', [TOOL]);
-    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'ChatGPT usage limit reached. Try again later.' });
+    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'OpenAI usage limit reached. Try again later.' });
     host.events.length = 0;
     script(fauxAssistantMessage('Fine now.'));
     await agent.send('again', 'state', [TOOL]);
@@ -305,13 +366,119 @@ describe('failures', () => {
     expect(events().at(-1)).toMatchObject({ type: 'turn_end' });
   });
 
-  it('refuses when signed out, even with another provider set up in the environment', async () => {
+  it('refuses when not set up, even with the chosen provider set up in the environment', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'not-a-real-key');
+    mkdirSync(agentDir(), { recursive: true });
+    writeFileSync(path.join(agentDir(), 'settings.json'), '{"defaultProvider":"anthropic","defaultModel":"claude-sonnet-5-5"}');
     const agent = new Agent();
     await agent.send('go', 'state', [TOOL]);
     expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
-    expect(events().at(-1)).toMatchObject({ message: 'ChatGPT sign-in is needed. Run /login-chatgpt.' });
-    expect(await agent.status()).toMatchObject({ signedIn: false });
+    expect(events().at(-1)).toMatchObject({ message: 'The agent needs setting up first: /settings-agent' });
+    expect(await agent.status()).toMatchObject({ ready: false });
+  });
+});
+
+describe('setup', () => {
+  it('reports the connected provider, model and thinking level', async () => {
+    const { agent } = setup();
+    expect(await agent.status()).toMatchObject({ ready: true, provider: 'openai', model: 'gpt-6-luna', thinking: 'medium' });
+  });
+
+  it('falls back to the recommended model when the saved one is not offered', async () => {
+    const { agent } = setup({ model: 'gpt-4' });
+    expect(await agent.status()).toMatchObject({ ready: true, model: 'gpt-6.1-terra' });
+  });
+
+  it('counts only the provider in settings, connected a way the supported list offers', async () => {
+    expect(await setup({ provider: 'anthropic' }).agent.status()).toMatchObject({ ready: false });
+    const oauthAnthropic = setup({ provider: 'anthropic', model: 'claude-sonnet-5-5', credentials: [['anthropic', 'oauth']] });
+    expect(await oauthAnthropic.agent.status()).toMatchObject({ ready: false });
+  });
+
+  it('lists the supported providers with their ways to connect, models and thinking levels', async () => {
+    const { agent } = setup();
+    const list = await agent.providers();
+    expect(list.map((p) => p.id)).toEqual(['openai', 'anthropic']);
+    const [openai, anthropic] = list;
+    expect(openai.connected).toMatchObject({ way: 'oauth' });
+    // The faux provider stands in for OpenAI, so only its two models exist.
+    expect(openai.models.map((m) => m.id)).toEqual(['gpt-6.1-terra', 'gpt-6-luna']);
+    expect(openai.recommended).toEqual({ model: 'gpt-6.1-terra', thinking: 'medium' });
+    expect(anthropic.connected).toBeNull();
+    expect(anthropic.ways.map((w) => w.way)).toEqual(['api_key']);
+    expect(anthropic.models.map((m) => m.id)).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5']);
+    expect(anthropic.models[0].thinking).not.toContain('off');
+  });
+
+  it('applies a new model and thinking level from the next message, in the same conversation', async () => {
+    const { agent, requests, script } = setup();
+    script(fauxAssistantMessage('one'));
+    await agent.send('first', 'state', [TOOL]);
+    expect(await agent.choose('gpt-6.1-terra', 'high')).toMatchObject({ model: 'gpt-6.1-terra', thinking: 'high' });
+    expect(savedSettings()).toMatchObject({ defaultModel: 'gpt-6.1-terra', defaultThinkingLevel: 'high' });
+    script(fauxAssistantMessage('two'));
+    await agent.send('second', 'state', [TOOL]);
+    expect(requests.map((r) => [r.model, r.reasoning])).toEqual([
+      ['gpt-6-luna', 'medium'],
+      ['gpt-6.1-terra', 'high'],
+    ]);
+    expect(requests[1].roles.filter((r) => r === 'user')).toHaveLength(2);
+  });
+
+  it('refuses a model the supported list does not offer', async () => {
+    const { agent } = setup();
+    await expect(agent.choose('gpt-4', 'medium')).rejects.toThrow(/isn't offered/);
+    expect(savedSettings()).toMatchObject({ defaultModel: 'gpt-6-luna' });
+  });
+
+  it('switches provider: removes the old one only after the new one connects, with its recommended settings', async () => {
+    const { agent, credentials, ops } = setup();
+    const status = await agent.connect('anthropic', 'api_key');
+    expect(ops).toEqual(['login anthropic', 'logout openai']);
+    expect([...credentials]).toEqual([['anthropic', 'api_key']]);
+    expect(status).toMatchObject({ ready: true, provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' });
+    expect(savedSettings()).toMatchObject({
+      defaultProvider: 'anthropic',
+      defaultModel: 'claude-sonnet-5-5',
+      defaultThinkingLevel: 'medium',
+    });
+  });
+
+  it('asks for a key in the key window, and never sends it to the renderer', async () => {
+    const { agent } = setup();
+    await agent.connect('anthropic', 'api_key');
+    expect(host.keyTitles).toEqual(['Anthropic API key']);
+    expect(JSON.stringify(host.sent)).not.toContain('sk-test-key');
+    expect(host.sent).toContainEqual(['ai:connect', expect.objectContaining({ type: 'key_window' })]);
+  });
+
+  it('leaves the connected provider as it was when connecting another is cancelled', async () => {
+    const { agent, credentials, ops } = setup();
+    host.askForKey = () => Promise.reject(new Error('Sign-in cancelled'));
+    await expect(agent.connect('anthropic', 'api_key')).rejects.toThrow('Sign-in cancelled');
+    expect(ops).toEqual([]);
+    expect([...credentials]).toEqual([['openai', 'oauth']]);
+    expect(await agent.status()).toMatchObject({ ready: true, provider: 'openai', model: 'gpt-6-luna' });
+  });
+
+  it('keeps the chosen model when the same provider connects another way', async () => {
+    const { agent, credentials } = setup();
+    await agent.connect('openai', 'api_key');
+    expect([...credentials]).toEqual([['openai', 'api_key']]);
+    expect(await agent.status()).toMatchObject({ provider: 'openai', model: 'gpt-6-luna' });
+  });
+
+  it('refuses a way the supported list does not offer', async () => {
+    const { agent, ops } = setup();
+    await expect(agent.connect('anthropic', 'oauth')).rejects.toThrow();
+    expect(ops).toEqual([]);
+  });
+
+  it('needs setting up again after disconnecting', async () => {
+    const { agent, credentials } = setup();
+    await agent.disconnect();
+    expect([...credentials]).toEqual([]);
+    expect(await agent.status()).toMatchObject({ ready: false });
   });
 });
 
@@ -456,8 +623,6 @@ describe('stored sessions', () => {
 });
 
 describe('its files', () => {
-  const agentDir = () => path.join(host.userData, 'pi-agent');
-
   it('writes SYSTEM.md every time, and settings only if missing', async () => {
     mkdirSync(agentDir(), { recursive: true });
     writeFileSync(path.join(agentDir(), 'SYSTEM.md'), 'hand edit');
@@ -469,10 +634,7 @@ describe('its files', () => {
 
   it('starts with the expected settings', async () => {
     await new Agent().status();
-    expect(JSON.parse(readFileSync(path.join(agentDir(), 'settings.json'), 'utf8'))).toEqual({
-      defaultProvider: 'openai',
-      defaultModel: 'gpt-6-luna',
-      defaultThinkingLevel: 'medium',
+    expect(savedSettings()).toEqual({
       compaction: { enabled: true },
       retry: { enabled: false },
       cacheWarming: 'off',

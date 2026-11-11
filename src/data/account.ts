@@ -1,25 +1,45 @@
-/** Sign-ins, and the link to the agent loop in the main process. */
-import type { AgentEvent, AgentToolCall, AgentToolDefinition, AgentToolResult, AiStatus, F1TvStatus } from '../../shared/api';
+/** Sign-ins, the agent's setup, and the link to the agent loop in the main process. */
+import type {
+  AgentConnectEvent,
+  AgentEvent,
+  AgentProviderOption,
+  AgentToolCall,
+  AgentToolDefinition,
+  AgentToolResult,
+  AiStatus,
+  ConnectWay,
+  F1TvStatus,
+  ThinkingLevel,
+} from '../../shared/api';
 
-export type Service = 'f1tv' | 'chatgpt';
+const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
+
+/** What signs in from here. The agent's provider is set up through `host.agent` instead. */
+export type Service = 'f1tv';
 
 export const account = {
-  async status(): Promise<{ f1tv: F1TvStatus; chatgpt: AiStatus }> {
-    const [f1tv, chatgpt] = await Promise.all([
+  async status(): Promise<{ f1tv: F1TvStatus; agent: AiStatus }> {
+    const [f1tv, agent] = await Promise.all([
       window.f1a.f1tv.status().catch(() => ({ signedIn: false, ready: false })),
-      window.f1a.ai.status().catch(() => ({ signedIn: false, model: null })),
+      window.f1a.ai.status().catch(() => NOT_READY),
     ]);
-    return { f1tv, chatgpt };
+    return { f1tv, agent };
   },
-  login: async (service: Service): Promise<void> => {
-    await (service === 'f1tv' ? window.f1a.f1tv.login() : window.f1a.ai.login());
+  login: async (_service: Service): Promise<void> => {
+    await window.f1a.f1tv.login();
   },
-  logout: (service: Service): Promise<void> => (service === 'f1tv' ? window.f1a.f1tv.logout() : window.f1a.ai.logout()),
+  logout: (_service: Service): Promise<void> => window.f1a.f1tv.logout(),
   onExpired: (cb: () => void): (() => void) => window.f1a.f1tv.onExpired(cb),
 };
 
 export const agentLink = {
-  status: (): Promise<AiStatus> => window.f1a.ai.status().catch(() => ({ signedIn: false, model: null })),
+  status: (): Promise<AiStatus> => window.f1a.ai.status().catch(() => NOT_READY),
+  providers: (): Promise<AgentProviderOption[]> => window.f1a.ai.providers(),
+  connect: (provider: string, way: ConnectWay): Promise<AiStatus> => window.f1a.ai.connect(provider, way),
+  cancelConnect: (): Promise<void> => window.f1a.ai.cancelConnect(),
+  onConnect: (cb: (event: AgentConnectEvent) => void): (() => void) => window.f1a.ai.onConnect(cb),
+  disconnect: (): Promise<void> => window.f1a.ai.disconnect(),
+  choose: (model: string, thinking: ThinkingLevel): Promise<AiStatus> => window.f1a.ai.choose(model, thinking),
   send: (text: string, context: string, tools: AgentToolDefinition[], reference: string): Promise<void> =>
     window.f1a.ai.send(text, context, tools, reference),
   cancel: (): Promise<void> => window.f1a.ai.cancel(),

@@ -133,15 +133,16 @@ the host through the host's ordinary writes (`src/shell/persistVolume.ts`). The 
 
 ## Agent
 
-`electron/agent/agent.ts` runs a session on [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), using
-OpenAI's Sign in with ChatGPT plan usage. It lives in main because it holds the credentials. Tools run in the renderer because it owns
+`electron/agent/agent.ts` runs a session on [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), on the
+provider, model and thinking level chosen in `/settings-agent`. It lives in main because it holds the credentials. Tools run in the renderer because it owns
 layout and playback, so their definitions come with each message and each call goes over IPC. Three small pi extensions in
 `electron/agent/extensions/` do the f1a-specific parts: the prompt, the renderer's tools, and the cap on tool rounds per message.
 
 pi gets two folders, passed in code, and never reads or writes `~/.pi`:
 
 - `agentDir`, `<userData>/pi-agent`, holds `auth.json`, `models.json`, `settings.json` and `SYSTEM.md`. The app rewrites `SYSTEM.md` from
-  `SYSTEM_PROMPT` on every start. `settings.json` is written only if missing, so it can be edited.
+  `SYSTEM_PROMPT` on every start. `settings.json` is written only if missing, so it can be edited, and `/settings-agent` saves the
+  provider, model and thinking level there.
 - `<agentDir>/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
   results, and token use. They're never resumed, so a new conversation or a restart starts empty, as if in memory. They hold whatever
   the agent read, including race data, stay on this machine, and aren't pruned.
@@ -161,7 +162,14 @@ that refuse a call.
   viewer a spoiler check. With approval the agent may answer from what it read, for that turn only. Other tool results, the `seek_to` result
   and `app_state` hold nothing about how a session turned out: `app_state` adds only the playhead and the roster. There is still no race-state
   tool. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md).
-- **Model.** `gpt-6-luna` by default, the fastest tested. Change it with `defaultModel` in `settings.json`.
+- **Providers and models.** `electron/agent/supported.ts` lists what `/settings-agent` offers: OpenAI, through a ChatGPT plan or an
+  API key, and Anthropic through an API key, each with its models and a recommended model and thinking level. Anything else in pi's
+  catalog is left out. Its comment says how to see everything pi offers. GPT-6 Luna and GPT-6.1 Terra have run the app's tools on a
+  ChatGPT plan. Nothing has run on an API key yet.
+- **One provider at a time.** Connecting another provider removes the first only once the new one succeeds, so a cancelled or failed
+  connection changes nothing. Switching provider starts a new conversation. A new model or thinking level applies from the next
+  message, in the same conversation.
+- **Only credentials stored through the panel count.** Keys in the environment, like `ANTHROPIC_API_KEY`, are never used.
 - **History.** pi's automatic compaction summarizes old turns when the context nears the model's limit. A turn that read past the playhead is
   cut down to the viewer's message and the agent's words, both in what's sent to the model and in what's summarized.
 
@@ -169,8 +177,10 @@ that refuse a call.
 
 - **F1 TV** uses an in-app window on F1's real page and reads its `login-session` cookie, as F1 OpenViewer does. An external browser
   can't hand that session back.
-- **ChatGPT** uses your real browser, with pi running the local callback on port 1455. pi keeps the credentials in a plain
-  `auth.json`, readable only by your user, in `agentDir`.
+- **The agent's provider** is connected in `/settings-agent`. A ChatGPT sign-in uses your real browser, with pi running the local
+  callback on port 1455. An API key is typed into its own small sandboxed window (`electron/agent/keyWindow.ts`), not the app's
+  renderer, because mods run there with no sandbox and could read it. The key goes straight to main, and the renderer never sees it.
+  pi keeps credentials in a plain `auth.json`, readable only by your user, in `agentDir`.
 - F1 TV credentials are encrypted with the OS keyring. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
 
