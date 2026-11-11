@@ -41,7 +41,7 @@ blank page with the command palette, which tells you what to sign in to.
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
 | `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
-| `/build <what you want>` | Have the agent build or change a mod. Spoiler alert: it may read beyond where you are |
+| `/build` | Enter build mode, where the agent builds or changes mods. Spoiler alert: it may read beyond where you are |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
 
@@ -54,8 +54,8 @@ A [mod](docs/MODS.md) is a plugin: a folder in `~/.config/f1a/mods` that the app
 for tiles to show, such as a chart or a controller that jumps between laps. Write one yourself or have a coding agent write it, then
 ask the agent above to show it.
 
-The app's own agent writes them too. `/build a controller that can go back and forward laps` puts it in
-[build mode](docs/BUILD_MODE.md): what it builds shows up as a working draft to try, and Save keeps it or Undo all puts everything
+The app's own agent writes them too. `/build` puts it in
+[build mode](docs/BUILD_MODE.md), where you ask for something like a controller that can go back and forward laps: what it builds shows up as a working draft to try, and Save keeps it or Undo all puts everything
 back.
 
 ## Development
