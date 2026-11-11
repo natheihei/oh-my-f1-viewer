@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
-import type { ModStatus } from '../shared/mods';
+import type { BuildState, ModStatus } from '../shared/mods';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const handler = (_event: unknown, payload: T) => {
@@ -49,7 +49,8 @@ const api: F1aApi = {
     onConnect: (cb) => subscribe<AgentConnectEvent>('ai:connect', cb),
     disconnect: () => invoke('ai:disconnect'),
     choose: (model, thinking) => invoke('ai:choose', model, thinking),
-    send: (text, context, tools, reference) => invoke('ai:send', text, context, tools, reference),
+    send: (text, context, tools, reference, mode) => invoke('ai:send', text, context, tools, reference, mode),
+    endBuild: () => invoke('ai:endBuild'),
     cancel: () => invoke('ai:cancel'),
     reset: () => invoke('ai:reset'),
     onEvent: (cb) => subscribe<AgentEvent>('ai:event', cb),
@@ -61,6 +62,13 @@ const api: F1aApi = {
     onChanged: (cb) => subscribe<ModStatus[]>('mods:changed', cb),
     loaded: (name, version, error) => ipcRenderer.send('mods:loaded', name, version, error),
     log: (name, line) => ipcRenderer.send('mods:log', name, line),
+  },
+  build: {
+    state: () => invoke('build:state'),
+    onChanged: (cb) => subscribe<BuildState>('build:changed', cb),
+    begin: () => invoke('build:begin'),
+    save: () => invoke('build:save'),
+    undo: () => invoke('build:undo'),
   },
 };
 

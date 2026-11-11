@@ -14,7 +14,7 @@ const { spoilerGate, sessionSql } = vi.hoisted(() => ({
 vi.mock('./spoilerGate', () => ({ spoilerGate }));
 vi.mock('../data/sessionData', async (original) => ({ ...(await original<object>()), sessionSql }));
 
-const { AGENT_TOOLS, readsPastPlayhead, runTool, toolDefinitions } = await import('./tools');
+const { AGENT_TOOLS, BUILD_TOOLS, readsPastPlayhead, runTool, toolDefinitions } = await import('./tools');
 const { resolveChannel } = await import('./matching');
 const { closeViewingSession, startCountdown, useCountdown } = await import('../host/viewing');
 const { useSession } = await import('../data/session');
@@ -248,6 +248,7 @@ describe('components', () => {
       sessions: null,
       needs: ['timing'],
       size: null,
+      looksAhead: false,
     });
     // The same reference until something registers, so a useLive selector over it is stable.
     expect(read().components).toBe(list);
@@ -523,6 +524,27 @@ describe('seeking to a moment', () => {
     useSessionData.setState(ready(null), true);
     await runTool('seek_to', { date: 5 });
     expect(spoilerGate).toHaveBeenCalledTimes(1);
+  });
+
+  it("the build agent's query and seek never ask, and aren't marked to be forgotten", async () => {
+    sessionSql.mockResolvedValueOnce({ columns: ['n'], rows: [{ n: 1 }] });
+    await runTool('query_session', { sql: 'SELECT 1', asOf: 'session' }, 'build');
+    expect(sessionSql).toHaveBeenCalledWith('SELECT 1', undefined, 'session');
+    await runTool('seek_to', { date: PLAYHEAD + 60_000 }, 'build');
+    expect(seekToDate).toHaveBeenCalledWith(PLAYHEAD + 60_000);
+    expect(spoilerGate).not.toHaveBeenCalled();
+    expect(readsPastPlayhead('query_session', { sql: 'SELECT 1', asOf: 'session' }, 'build')).toBe(false);
+  });
+
+  it('the build agent has no tools for finding or opening a session', async () => {
+    const names = BUILD_TOOLS.map((t) => t.name);
+    expect(names).toEqual(['list_streams', 'remove_tiles', 'play', 'pause', 'suggest_tiles', 'query_session', 'seek_to']);
+    expect(toolDefinitions('build').map((t) => t.name)).toEqual(names);
+    await expect(runTool('load_session', { contentId: 1, title: 'x' }, 'build')).rejects.toThrow(/Unknown tool/);
+    // The viewing agent's wording is unchanged by the build agent's.
+    const describe = (mode: 'view' | 'build') => toolDefinitions(mode).find((t) => t.name === 'query_session')!.description;
+    expect(describe('view')).toMatch(/The app asks the user first/);
+    expect(describe('build')).not.toMatch(/asks the user/);
   });
 
   it('a refused forward seek never moves playback', async () => {

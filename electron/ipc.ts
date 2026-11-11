@@ -1,7 +1,7 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import type { F1TvStatus } from '../shared/api';
-import { getMainAppUrl, sendToRenderer } from './windows';
+import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
 import type { Mods } from './mods';
@@ -35,6 +35,26 @@ function handle(channel: string, fn: (evt: IpcMainInvokeEvent, ...args: any[]) =
     }
     return fn(evt, ...args);
   });
+}
+
+/**
+ * A PNG of a component as the window shows it now: its tile if it has one, else its preview in the
+ * strip. For the build agent, which may see the session anyway. Null when it's on neither.
+ */
+async function pictureOf(name: string): Promise<Buffer | null> {
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return null;
+  const box = (await win.webContents.executeJavaScript(
+    `(() => {
+      const type = ${JSON.stringify(name)};
+      const el = document.querySelector('[data-tile-type="' + CSS.escape(type) + '"]') ?? document.querySelector('[data-draft-type="' + CSS.escape(type) + '"]');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
+    })()`,
+  )) as { x: number; y: number; width: number; height: number } | null;
+  if (!box) return null;
+  return (await win.webContents.capturePage(box)).toPNG();
 }
 
 function f1Status(): F1TvStatus {
@@ -220,9 +240,10 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('ai:cancelConnect', () => agent.cancelConnect());
   handle('ai:disconnect', () => agent.disconnect());
   handle('ai:choose', (_e, model, thinking) => agent.choose(String(model), thinking));
-  handle('ai:send', (_e, text, context, tools, reference) =>
-    agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? '')),
+  handle('ai:send', (_e, text, context, tools, reference, mode) =>
+    agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? ''), mode === 'build' ? 'build' : 'view'),
   );
+  handle('ai:endBuild', () => agent.endBuild());
   handle('ai:cancel', () => agent.cancel());
   handle('ai:reset', () => agent.reset());
   ipcMain.on('ai:toolResult', (evt, result) => {
@@ -237,6 +258,18 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   ipcMain.on('mods:log', (evt, name, line) => {
     if (isTrusted(evt) && line && typeof line === 'object') mods.log(String(name), line);
   });
+
+  // --- Build mode ---
+  agent.attachMods({
+    dir: mods.dir,
+    settled: (name) => mods.settled(name),
+    logs: (name) => mods.logs(name),
+    picture: (name) => pictureOf(name),
+  });
+  handle('build:state', () => mods.buildState());
+  handle('build:begin', () => mods.beginBuild());
+  handle('build:save', () => mods.saveBuild());
+  handle('build:undo', () => mods.undoBuild());
 
   return { refreshSchedule: () => timingDb.refreshSchedule() };
 }

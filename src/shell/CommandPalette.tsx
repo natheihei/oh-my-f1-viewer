@@ -9,7 +9,8 @@ import { host, read, useLive } from '../host';
 import { AgentPanel, describeAgent } from './AgentPanel';
 import { BackgroundPanel } from './BackgroundPanel';
 import { sendToAgent, stopTurn } from './agentFeed';
-import { matchCommands, reportReadiness, SLASH_COMMANDS } from './commands';
+import { leaveBuild } from './buildMode';
+import { matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { palette, usePalette, type EntryRole } from './palette';
@@ -40,12 +41,15 @@ export function CommandPalette() {
   const contentId = useLive((s) => s.session?.contentId ?? null);
   const peekAllowed = useLookAhead((s) => sessionAllowed(s, contentId));
   const tiles = useLive((s) => s.suggestions.items);
+  const building = useLive((s) => s.build.active);
+  const changeCount = useLive((s) => s.build.changes.length);
   const [armed, setArmed] = useState(false);
   const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
-  const showing = open || blank || hasTiles || asking || panel != null;
+  // While building, the tag beside the input is the only way out, so the palette stays.
+  const showing = open || blank || hasTiles || asking || building || panel != null;
   const suggestions = matchCommands(value);
 
   useEffect(() => {
@@ -126,7 +130,7 @@ export function CommandPalette() {
       requestAnimationFrame(() => inputRef.current?.focus());
     };
     return (
-      <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
+      <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
         <BackgroundPanel onClose={closePanel} />
       </div>
     );
@@ -157,10 +161,11 @@ export function CommandPalette() {
     recallRef.current = null;
     sentRef.current.push(text);
     if (text.startsWith('/')) {
-      const command = SLASH_COMMANDS.find((c) => c.name === text) ?? suggestions[selected];
-      if (command) {
-        palette.push('user', command.name);
-        void command.run();
+      const { name, rest } = parseCommand(text);
+      const command = SLASH_COMMANDS.find((c) => c.name === name) ?? (rest ? undefined : suggestions[selected]);
+      if (command && (!rest || command.argument)) {
+        palette.push('user', rest ? `${command.name} ${rest}` : command.name);
+        void command.run(rest);
       } else {
         palette.push('user', text);
         palette.push('error', `Unknown command. Available: ${SLASH_COMMANDS.map((c) => c.name).join(', ')}`);
@@ -186,13 +191,21 @@ export function CommandPalette() {
   };
 
   return (
-    <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
+    <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
       {entries.length > 0 ? (
         <div ref={historyRef} className="palette-history" data-testid="palette-history">
           {entries.map((entry) => (
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
               {ROLE_PREFIX[entry.role]}
               {entry.text}
+              {entry.action ? (
+                <>
+                  {' '}
+                  <button type="button" className="palette-action" data-testid="palette-action" onClick={() => palette.act(entry.id)}>
+                    {entry.action.label}
+                  </button>
+                </>
+              ) : null}
             </div>
           ))}
         </div>
@@ -202,7 +215,11 @@ export function CommandPalette() {
         <>
           <SuggestionStrip ref={stripRef} items={tiles} onLeave={() => inputRef.current?.focus()} onEscape={escapeTiles} />
           <div className="strip-hint" data-testid="strip-hint">
-            {armed ? 'esc again to dismiss and stop the agent' : '← → choose · enter add · drag to place · esc dismiss'}
+            {armed
+              ? 'esc again to dismiss and stop the agent'
+              : building
+                ? 'try the draft here · press enter or click its name to add it · drag its name to place it · esc dismiss'
+                : '← → choose · enter add · drag to place · esc dismiss'}
           </div>
         </>
       ) : null}
@@ -214,12 +231,20 @@ export function CommandPalette() {
               className={`palette-suggestion ${i === selected ? 'palette-suggestion-active' : ''}`}
               onMouseDown={(e) => {
                 e.preventDefault();
-                setValue(command.name);
+                setValue(command.argument ? `${command.name} ` : command.name);
                 inputRef.current?.focus();
               }}
             >
-              <span>{command.name}</span>
+              <span>
+                {command.name}
+                {command.argument ? <span className="palette-suggestion-desc"> {`<${command.argument}>`}</span> : null}
+              </span>
               <span className="palette-suggestion-desc">{command.description}</span>
+              {command.warning ? (
+                <span className="palette-suggestion-warning" data-testid="command-warning">
+                  {command.warning}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>
@@ -233,7 +258,7 @@ export function CommandPalette() {
           value={value}
           spellCheck={false}
           autoComplete="off"
-          placeholder={blank ? 'name a session, or / for commands' : 'ask for anything on screen'}
+          placeholder={building ? 'ask for a mod, or a change to one' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'}
           onChange={(e) => {
             setValue(e.target.value);
             setSelected(0);
@@ -253,10 +278,10 @@ export function CommandPalette() {
               e.preventDefault();
               if (value) setValue('');
               else if (hasTiles) escapeTiles();
-              else if (!blank) palette.hide();
+              else if (!blank && !building) palette.hide();
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
-              setValue(suggestions[selected].name);
+              setValue(suggestions[selected].argument ? `${suggestions[selected].name} ` : suggestions[selected].name);
             } else if (e.key === 'ArrowDown') {
               e.preventDefault();
               if (suggestions.length > 0) setSelected((selected + 1) % suggestions.length);
@@ -269,6 +294,27 @@ export function CommandPalette() {
             }
           }}
         />
+        {building ? (
+          <span className="build-tag" data-testid="build-tag">
+            {changeCount === 0 ? (
+              <button type="button" className="build-tag-button build-tag-label" data-testid="build-leave" title="Leave build mode" onClick={() => void leaveBuild('save')}>
+                build ×
+              </button>
+            ) : (
+              <>
+                <span className="build-tag-label" data-testid="build-count">
+                  build · {changeCount} {changeCount === 1 ? 'change' : 'changes'}
+                </span>
+                <button type="button" className="build-tag-button" data-testid="build-undo" title="Put the mods folder back as it was, and leave build mode" onClick={() => void leaveBuild('undo')}>
+                  Undo all
+                </button>
+                <button type="button" className="build-tag-button build-tag-save" data-testid="build-save" title="Keep what was built, and leave build mode" onClick={() => void leaveBuild('save')}>
+                  Save
+                </button>
+              </>
+            )}
+          </span>
+        ) : null}
         {peekAllowed ? (
           <button
             type="button"

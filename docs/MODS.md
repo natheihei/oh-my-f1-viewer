@@ -77,9 +77,12 @@ They're the app's own copies, shared with the mod, so hooks and schemas work acr
 outside the folder, fails to compile.
 
 A component can act as well as draw: `host` has the same writes the app uses, such as `host.playback.seekToDate`. `useSql` reads as of
-the playhead, like every chart. `host.data.sql({ asOf: 'session' })` reads the whole session, results included: a mod that does that
-and shows it can spoil the race for the viewer. A controller that jumps to the next lap needs it, because that lap hasn't happened
-yet, so it should seek with the result and show nothing from it.
+the playhead, like every chart. A controller that jumps to the next lap needs more, because that lap hasn't happened yet:
+`useSql(sql, params, { asOf: 'session' })` reads the whole session. A component that does that, or that can take the viewer past
+where they are, should say so with `looksAhead: true` in `defineComponent`. The grid then shows a warning in place of each tile of it,
+with an Allow button, and draws the component only once the viewer allows that tile. Such a component should seek with what it reads
+and show nothing from it. The flag is the author's to set and nothing enforces it: a mod that reads the whole session without it and
+shows the result can spoil the race for the viewer.
 
 ## How the app loads mods
 
@@ -109,8 +112,10 @@ ones that loaded are in `live.components`, like any other.
 ## Getting a mod's component on screen
 
 Whatever puts a component on screen works for a mod's. For now that's the app's own agent, which reads
-`live.components` and can add it or suggest it, or `host.layout.add` from code. There's no `/` command for it: those are for the
-user's account actions.
+`live.components` and can suggest it, or `host.layout.add` from code.
+
+The app's agent can also write mods: `/build a controller that can go back and forward laps` puts it in build mode, where it works in
+this folder and everything it changes can be undone as one. See [BUILD_MODE.md](BUILD_MODE.md).
 
 ## Types
 

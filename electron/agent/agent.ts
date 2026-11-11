@@ -13,6 +13,7 @@ import type { AgentSession, ModelRuntime, SettingsManager } from '@earendil-work
 import type {
   AgentConnectEvent,
   AgentEvent,
+  AgentMode,
   AgentProviderOption,
   AgentToolCall,
   AgentToolDefinition,
@@ -21,10 +22,12 @@ import type {
   ConnectWay,
   ThinkingLevel,
 } from '../../shared/api';
+import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
 import { installId } from './credentials';
 import { forgetReadAhead } from './extensions/forgetReadAhead';
+import { MOD_FILE_TOOLS, modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { promptExtension } from './extensions/prompt';
 import { roundCap, type RoundCap } from './extensions/roundCap';
 import { toolsExtension, type ToolsExtension } from './extensions/tools';
@@ -32,6 +35,8 @@ import { askForKey } from './keyWindow';
 import { SUPPORTED, supported, type SupportedProvider } from './supported';
 
 const MAX_TOOL_ROUNDS = 10;
+/** Building takes more steps than viewing: reading the types, writing, fixing, looking. */
+const MAX_BUILD_ROUNDS = 60;
 const TOOL_TIMEOUT_MS = 60_000;
 const CONNECT_TIMEOUT_MS = 5 * 60_000;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
@@ -95,6 +100,7 @@ interface Conversation {
 
 interface Turn {
   id: string;
+  mode: AgentMode;
   cancelled: boolean;
   acted: boolean;
 }
@@ -102,6 +108,9 @@ interface Turn {
 export class Agent {
   private runtimePromise: Promise<Runtime> | null = null;
   private conversation: Conversation | null = null;
+  /** Build mode's own conversation, apart from the viewing one. Leaving build mode ends it. See docs/BUILD_MODE.md. */
+  private building: Conversation | null = null;
+  private modFiles: ModFilesHost | null = null;
   private turn: Turn | null = null;
   private running: Promise<void> | null = null;
   /** Bumped by each send and cancel, so a send waiting on the last turn knows when it's been replaced. */
@@ -176,20 +185,27 @@ export class Agent {
     return { entry, way, model, thinking };
   }
 
-  private async createConversation(choice: Choice): Promise<Conversation> {
+  /** Gives the build agent its mods folder. Until then it has no file tools. */
+  attachMods(host: ModFilesHost): void {
+    this.modFiles = host;
+  }
+
+  private async createConversation(choice: Choice, mode: AgentMode = 'view'): Promise<Conversation> {
     const { DefaultResourceLoader, SessionManager, createAgentSession } = await import('@earendil-works/pi-coding-agent');
     const { models, settings, agentDir, cwd } = await this.runtime();
     const { model } = choice;
 
-    const tools = toolsExtension((call) => this.callTool(call));
-    const cap = roundCap(MAX_TOOL_ROUNDS);
-    const conversation: Conversation = {
-      session: null as unknown as AgentSession,
-      tools,
-      cap,
-      reference: '',
-      provider: choice.entry.provider,
-    };
+    const build = mode === 'build';
+    const tools = toolsExtension((call) => this.callTool(call), build ? MOD_FILE_TOOLS : []);
+    const cap = roundCap(build ? MAX_BUILD_ROUNDS : MAX_TOOL_ROUNDS);
+    const modFiles = modFilesExtension(
+      () => {
+        if (!this.modFiles) throw new Error('The mods folder is not available.');
+        return this.modFiles;
+      },
+      (name, ok, note) => this.reportTool(name, ok, note),
+    );
+    const conversation: Conversation = { session: null as unknown as AgentSession, tools, cap, reference: '', provider: choice.entry.provider };
     // pi also walks up from cwd and reads ~/.agents/skills: keep only what's in agentDir.
     const inside = (p: string) => path.resolve(p).startsWith(agentDir + path.sep);
     const resourceLoader = new DefaultResourceLoader({
@@ -198,7 +214,10 @@ export class Agent {
       settingsManager: settings,
       agentsFilesOverride: (base) => ({ agentsFiles: base.agentsFiles.filter((f) => inside(f.path)) }),
       skillsOverride: (base) => ({ ...base, skills: base.skills.filter((s) => inside(s.filePath)) }),
-      extensionFactories: [promptExtension(() => conversation.reference), tools.factory, cap.factory, forgetReadAhead],
+      // The build agent reads the whole session by design, and nothing of its conversation reaches the viewing one.
+      extensionFactories: build
+        ? [promptExtension(() => conversation.reference, BUILD_PROMPT), modFiles, tools.factory, cap.factory]
+        : [promptExtension(() => conversation.reference), tools.factory, cap.factory, forgetReadAhead],
     });
     await resourceLoader.reload();
     const { session } = await createAgentSession({
@@ -212,7 +231,7 @@ export class Agent {
       noTools: 'builtin',
       // Stored for review but never resumed: each conversation gets its own timestamped file.
       // A fixed id, passed on to the provider as the prompt cache key.
-      sessionManager: SessionManager.create(cwd, path.join(agentDir, 'sessions'), { id: 'f1a' }),
+      sessionManager: SessionManager.create(cwd, path.join(agentDir, build ? 'build-sessions' : 'sessions'), { id: build ? 'f1a-build' : 'f1a' }),
     });
     session.agent.toolExecution = 'sequential';
     conversation.session = session;
@@ -358,6 +377,15 @@ export class Agent {
     await this.cancel();
     this.conversation?.session.dispose();
     this.conversation = null;
+    this.building?.session.dispose();
+    this.building = null;
+  }
+
+  /** Leaves build mode: its conversation ends here, and the viewing one never sees it. */
+  async endBuild(): Promise<void> {
+    if (this.turn?.mode === 'build') await this.cancel();
+    this.building?.session.dispose();
+    this.building = null;
   }
 
   async cancel(): Promise<void> {
@@ -369,7 +397,7 @@ export class Agent {
   private async stopTurn(): Promise<void> {
     if (!this.turn) return;
     this.turn.cancelled = true;
-    const stopped = this.conversation?.session.abort();
+    const stopped = (this.turn.mode === 'build' ? this.building : this.conversation)?.session.abort();
     for (const resolve of this.pendingTools.values()) {
       resolve({ callId: '', ok: false, content: 'Cancelled by the user.' });
     }
@@ -410,12 +438,21 @@ export class Agent {
     return result;
   }
 
-  async send(text: string, appState: string, definitions: AgentToolDefinition[], reference = ''): Promise<void> {
+  /** One of the build agent's own tools ended: they run here, so nothing else tells the renderer. */
+  private reportTool(name: string, ok: boolean, note: string | null): void {
+    const turn = this.turn;
+    if (!turn || turn.cancelled) return;
+    emit({ type: 'tool_start', turnId: turn.id, name, args: {} });
+    emit({ type: 'tool_end', turnId: turn.id, name, ok, ...(note ? { note } : {}) });
+    turn.acted = turn.acted || ok;
+  }
+
+  async send(text: string, appState: string, definitions: AgentToolDefinition[], reference = '', mode: AgentMode = 'view'): Promise<void> {
     this.generation += 1;
     const generation = this.generation;
     await this.stopTurn();
     if (generation !== this.generation) return;
-    const turn: Turn = { id: randomUUID(), cancelled: false, acted: false };
+    const turn: Turn = { id: randomUUID(), mode, cancelled: false, acted: false };
     this.turn = turn;
     const running = this.runTurn(turn, text, appState, definitions, reference);
     this.running = running;
@@ -449,10 +486,15 @@ export class Agent {
         this.conversation.session.dispose();
         this.conversation = null;
       }
-      this.conversation ??= await this.createConversation(choice);
+      if (this.building && this.building.provider !== choice.entry.provider) {
+        this.building.session.dispose();
+        this.building = null;
+      }
+      if (turn.mode === 'build') this.building ??= await this.createConversation(choice, 'build');
+      else this.conversation ??= await this.createConversation(choice);
       if (turn.cancelled) return;
 
-      const conversation = this.conversation;
+      const conversation = (turn.mode === 'build' ? this.building : this.conversation)!;
       const { session, tools, cap } = conversation;
       // A model or thinking level chosen since the last message.
       if (session.model?.id !== choice.model.id) await session.setModel(choice.model);

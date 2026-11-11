@@ -33,13 +33,17 @@ export function connectAgent(): () => void {
         // A later reply gets its own line under the tool calls.
         streaming = null;
         break;
+      case 'tool_end':
+        // What the build agent did to a file, in the app's words.
+        if (event.note) palette.push('system', event.note);
+        break;
       case 'turn_end': {
         lookAhead.endTurn();
         palette.setBusy(false);
         // Only hide once the agent did something and isn't waiting on an answer, or on suggestions.
         const asking = finalText.includes('?');
-        const { session, suggestions } = read();
-        if (event.acted && !asking && session != null && suggestions.items.length === 0) palette.hideAfter(AUTO_HIDE_MS);
+        const { session, suggestions, build } = read();
+        if (event.acted && !asking && session != null && suggestions.items.length === 0 && !build.active) palette.hideAfter(AUTO_HIDE_MS);
         break;
       }
       case 'error':
@@ -60,15 +64,19 @@ export function connectAgent(): () => void {
   };
 }
 
-export async function sendToAgent(text: string): Promise<void> {
-  palette.push('user', text);
+/**
+ * Sends what the user typed to the agent: the build agent while build mode is on, else the viewing one.
+ * `echo: false` when the palette already shows the line, as it does for a `/` command.
+ */
+export async function sendToAgent(text: string, { echo = true }: { echo?: boolean } = {}): Promise<void> {
+  if (echo) palette.push('user', text);
   const status = await host.agent.status();
   if (!status.ready) {
     palette.push('system', 'The agent needs setting up first: /settings-agent');
     return;
   }
-  // The agent finds sessions from the event list: without it, it would only guess.
-  if (read().events.state !== 'ready') {
+  // The viewing agent finds sessions from the event list: without it, it would only guess.
+  if (!read().build.active && read().events.state !== 'ready') {
     const { f1tv } = await host.account.status();
     if (!f1tv.signedIn) {
       palette.push('system', 'The agent needs F1 TV signed in first: /login-f1tv');

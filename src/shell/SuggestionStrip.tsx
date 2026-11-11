@@ -3,12 +3,16 @@
  * preview, unless it's already on screen: then it shows its title, and hovering it outlines the tile
  * it duplicates. Click or Enter adds one, dragging drops it where the pointer lets go.
  *
+ * In build mode, a mod the build added or changed shows as a draft: its preview works, so the viewer can
+ * try it there, and its name underneath is what adds or drags it. See docs/BUILD_MODE.md.
+ *
  * Keys, once a suggestion has focus: ← → move, Enter adds, ↓ or typing goes back to the input,
  * Esc is the palette's (see CommandPalette).
  */
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ComponentView, host, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
+import { ComponentView, host, previewScope, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
+import { previewAspect } from './stripShape';
 
 export interface SuggestionStripHandle {
   /** Gives the strip keyboard focus, on the suggestion it last had. */
@@ -33,6 +37,15 @@ export const SuggestionStrip = forwardRef<
 >(function SuggestionStrip({ items, onLeave, onEscape }, ref) {
   const layout = useLive((s) => s.layout);
   const onScreen = useMemo(() => new Set(tilesOf(layout).map((t) => t.component.key)), [layout]);
+  const building = useLive((s) => s.build.active);
+  const changes = useLive((s) => s.build.changes);
+  /** What build mode did to a component, by name: its preview is a draft the viewer can try. */
+  const drafts = useMemo(
+    () => new Map(building ? changes.filter((c) => c.change !== 'deleted').map((c) => [c.name, c.change === 'added' ? 'draft' : 'edited'] as const) : []),
+    [building, changes],
+  );
+  /** Inside a draft's preview, the mouse and keys belong to the component being tried. */
+  const insideDraft = (spec: ComponentSpec, target: EventTarget | null) => drafts.has(spec.type) && target instanceof Element && target.closest('.strip-view') != null;
   const [index, setIndex] = useState(0);
   const [drag, setDrag] = useState<Drag | null>(null);
   const cards = useRef<(HTMLDivElement | null)[]>([]);
@@ -62,6 +75,7 @@ export const SuggestionStrip = forwardRef<
 
   const onKeyDown = (e: KeyboardEvent, spec: ComponentSpec, i: number) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target !== e.currentTarget && insideDraft(spec, e.target)) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
       const next = Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
@@ -83,7 +97,7 @@ export const SuggestionStrip = forwardRef<
   };
 
   const onPointerDown = (e: PointerEvent, spec: ComponentSpec) => {
-    if (e.button !== 0 || onScreen.has(spec.key)) return;
+    if (e.button !== 0 || onScreen.has(spec.key) || insideDraft(spec, e.target)) return;
     const start: Drag = { key: spec.key, label: spec.label, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, moved: false };
     let state = start;
     const move = (ev: globalThis.PointerEvent) => {
@@ -116,6 +130,7 @@ export const SuggestionStrip = forwardRef<
     <div className="strip" data-testid="suggestion-strip" role="listbox" aria-label="Suggested tiles" aria-orientation="horizontal">
       {items.map((spec, i) => {
         const present = onScreen.has(spec.key);
+        const draft = present ? undefined : drafts.get(spec.type);
         return (
           <div
             key={spec.key}
@@ -126,9 +141,10 @@ export const SuggestionStrip = forwardRef<
             aria-selected={i === current}
             aria-label={present ? `${spec.label}, already on screen` : `Add ${spec.label}`}
             tabIndex={i === current ? 0 : -1}
-            className={`strip-item ${present ? 'strip-item-present' : ''} ${drag?.key === spec.key && drag.moved ? 'strip-item-dragging' : ''}`}
+            className={`strip-item ${present ? 'strip-item-present' : ''} ${draft ? 'strip-item-draft' : ''} ${drag?.key === spec.key && drag.moved ? 'strip-item-dragging' : ''}`}
             data-testid="suggestion"
             data-key={spec.key}
+            data-draft={draft}
             data-on-screen={present}
             onFocus={() => {
               setIndex(i);
@@ -138,7 +154,8 @@ export const SuggestionStrip = forwardRef<
             onMouseEnter={() => host.suggestions.highlight({ key: spec.key })}
             onMouseLeave={() => host.suggestions.highlight({ key: null })}
             onPointerDown={(e) => onPointerDown(e, spec)}
-            onClick={() => {
+            onClick={(e) => {
+              if (insideDraft(spec, e.target)) return;
               if (suppressClick.current) {
                 suppressClick.current = false;
                 return;
@@ -147,21 +164,29 @@ export const SuggestionStrip = forwardRef<
             }}
             onKeyDown={(e) => onKeyDown(e, spec, i)}
           >
-            <div className="strip-view">
+            <div className="strip-view" style={{ aspectRatio: previewAspect(spec.size?.aspect, draft ? 'draft' : 'suggestion') }} data-draft-type={draft ? spec.type : undefined}>
               {present ? (
                 <div className="strip-placeholder">{spec.label}</div>
               ) : (
                 <PreviewScope>
-                  <ComponentView spec={spec} fallback={<div className="strip-placeholder">{spec.label}</div>} />
+                  <ComponentView spec={spec} scope={previewScope(spec.key)} fallback={<div className="strip-placeholder">{spec.label}</div>} />
                 </PreviewScope>
               )}
-              <div className="strip-overlay" aria-hidden>
-                {present ? 'already on screen' : '+'}
-              </div>
+              {draft ? null : (
+                <div className="strip-overlay" aria-hidden>
+                  {present ? 'already on screen' : '+'}
+                </div>
+              )}
             </div>
             <div className="strip-label">
               <span className="strip-label-text">{spec.label}</span>
               {present ? <span className="strip-badge">on screen</span> : null}
+              {draft ? (
+                <span className="strip-badge strip-badge-draft" data-testid="draft-badge">
+                  {draft}
+                </span>
+              ) : null}
+              {draft ? <span className="strip-add">+ add</span> : null}
             </div>
           </div>
         );

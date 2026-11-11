@@ -1,11 +1,15 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
-import { Component, useMemo, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, type ReactNode } from 'react';
+import Value from 'typebox/value';
 import { GridSurface } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
-import { GRID_COLUMNS, GRID_ROWS } from '../layout/model';
+import { allTiles, GRID_COLUMNS, GRID_ROWS } from '../layout/model';
+import { useLayout } from '../layout/store';
 import { Stage, type TileComponent } from '../layout/Stage';
+import { useBuild } from './build';
 import { componentOf, useComponents } from './components';
 import { layoutOps } from './layoutOps';
+import { tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { setGridFrame, useSuggestions } from './suggestions';
 
@@ -37,13 +41,43 @@ class TileBoundary extends Component<BoundaryProps, { error: string | null }> {
   }
 }
 
-/** Draws a spec with its registered component, or `fallback` if none is registered under its type. */
-export function ComponentView({ spec, fallback = null }: { spec: ComponentSpec; fallback?: ReactNode }) {
-  const View = componentOf(spec.type)?.View;
+/** Asks the viewer before a tile that looks past the playhead is drawn. Stands in for it until they allow it. */
+function LookAheadWarning({ scope }: { scope: string }) {
+  return (
+    <div className="tile-warning" data-testid="look-ahead-warning" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+      <div>
+        <div className="tile-warning-title">! looks ahead</div>
+        <div>This tile reads past where you are now.</div>
+      </div>
+      <button type="button" className="tile-warning-allow" data-testid="look-ahead-allow" onClick={() => tileLookAhead.approve(scope)}>
+        Allow
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Draws a spec with its registered component, or `fallback` if none is registered under its type.
+ * `scope` names the tile or preview it draws in, which is what a look-ahead approval belongs to. A
+ * component that declares `looksAhead` isn't drawn there until the viewer allows it.
+ */
+export function ComponentView({ spec, scope = null, fallback = null }: { spec: ComponentSpec; scope?: string | null; fallback?: ReactNode }) {
+  // Re-renders when a mod's component is replaced, wherever this is drawn.
+  useComponents((s) => s.list);
+  const definition = componentOf(spec.type);
+  // Props from before an edit that the component's new args no longer accept: it draws with none.
+  const props = useMemo(() => (definition && !Value.Check(definition.args, spec.props) ? {} : spec.props), [definition, spec.props]);
+  useEffect(() => {
+    if (scope == null) return;
+    return () => tileLookAhead.forget(scope);
+  }, [scope]);
+  const allowed = useTileLookAhead((s) => scope != null && s.approved[scope] === true);
+  const View = definition?.View;
   if (!View) return <>{fallback}</>;
+  if (definition.looksAhead && !allowed) return scope != null ? <LookAheadWarning scope={scope} /> : null;
   return (
     <TileBoundary type={spec.type} version={View}>
-      <View props={spec.props} label={spec.label} />
+      <View props={props} label={spec.label} />
     </TileBoundary>
   );
 }
@@ -75,12 +109,14 @@ function DropPreview() {
   );
 }
 
+const NO_MARKS: Record<string, string> = {};
+
 // One wrapper per component name for good, because a new one would remount every tile showing it.
 const wrappers = new Map<string, TileComponent>();
 function wrapperOf(name: string): TileComponent {
   let wrapper = wrappers.get(name);
   if (!wrapper) {
-    wrapper = ({ spec }) => <ComponentView spec={spec} />;
+    wrapper = ({ spec, tileId }) => <ComponentView spec={spec} scope={tileId} />;
     wrappers.set(name, wrapper);
   }
   return wrapper;
@@ -91,10 +127,24 @@ export function Grid() {
   const components = useComponents((s) => s.list);
   const registry = useMemo(() => Object.fromEntries(components.map(({ name }) => [name, wrapperOf(name)])), [components]);
   const highlight = useSuggestions((s) => s.highlight);
+  const building = useBuild((s) => s.active);
+  const changes = useBuild((s) => s.changes);
+  // What build mode changed, by component name: a new mod's tile is a draft, a changed one is edited.
+  const marks = useMemo(
+    () => (building ? Object.fromEntries(changes.filter((c) => c.change !== 'deleted').map((c) => [c.name, c.change === 'added' ? 'draft' : 'edited'])) : NO_MARKS),
+    [building, changes],
+  );
+  const approved = useTileLookAhead((s) => s.approved);
+  const nodes = useLayout((s) => s.nodes);
+  // An approval outlives an edit that drops `looksAhead`, but the title only says so while it applies.
+  const notes = useMemo(() => {
+    const ahead = new Set(components.filter((c) => c.looksAhead).map((c) => c.name));
+    return Object.fromEntries(allTiles({ nodes }).filter((t) => approved[t.id] && ahead.has(t.component.type)).map((t) => [t.id, 'looks ahead']));
+  }, [approved, components, nodes]);
   return (
     <>
-      <Stage registry={registry} highlight={highlight} />
-      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} />
+      <Stage registry={registry} highlight={highlight} marks={marks} />
+      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} notes={notes} />
       <DropPreview />
     </>
   );

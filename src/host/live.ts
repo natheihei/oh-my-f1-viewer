@@ -8,6 +8,7 @@ import { specFor, type Spec } from '../data/spec';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
+import { useBuild, type BuildView } from './build';
 import { useComponents, type ComponentInfo } from './components';
 import { useMods } from './mods';
 import type { ModStatus } from '../../shared/mods';
@@ -45,6 +46,8 @@ export interface Live {
   backgrounds: BackgroundInfo[];
   /** Every mod in the mods folder: its state, version and error. The ones that loaded are in `components` too. */
   mods: ModStatus[];
+  /** Build mode: whether it's on, and which mods it has changed. See docs/BUILD_MODE.md. */
+  build: BuildView;
 }
 
 export function read(): Live {
@@ -68,6 +71,7 @@ export function read(): Live {
     background: useBackground.getState(),
     backgrounds: useBackgrounds.getState().list,
     mods: useMods.getState().list,
+    build: useBuild.getState(),
   };
 }
 
@@ -85,6 +89,7 @@ function subscribe(onChange: () => void): () => void {
     useBackground.subscribe(onChange),
     useBackgrounds.subscribe(onChange),
     useMods.subscribe(onChange),
+    useBuild.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }
