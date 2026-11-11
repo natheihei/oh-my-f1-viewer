@@ -143,16 +143,16 @@ anything runs, in two cases:
   and the target. A backward seek doesn't ask.
 
 The gate hands the request to an asker the shell registers (`src/shell/lookAhead.ts`), which shows a spoiler check in the palette,
-between the history and any suggested tiles: a red `! spoiler check`, then "Peeking past where you are now?". It never shows the SQL, the
+between the history and any suggested tiles: a red `! spoiler`, then "The agent wants to look ahead of where you are.". It never shows the SQL, the
 target time or how far ahead it is, since any of those could give something away. Reading ahead and seeking forward ask the same question.
 The viewer answers:
 
-- **Yes (once):** allowed for the rest of the agent's turn, since one request often takes a few queries and then a seek.
-- **Yes (for the session):** allowed until another session opens. A `looks ahead · ×` tag beside the input shows it, and clicking it asks
+- **Allow once:** allowed for the rest of the agent's turn, since one request often takes a few queries and then a seek.
+- **Allow for this session:** allowed until another session opens. A `looks ahead · ×` tag beside the input shows it, and clicking it asks
   again next time.
-- **No**, or Esc: refused.
+- **Don't allow**, or Esc: refused.
 
-A yes covers both kinds. A refusal makes the tool fail with a message the agent passes on, and the query or seek never runs. A check left
+An allow covers both kinds: reading ahead and seeking forward are the two ways the agent looks ahead. A refusal makes the tool fail with a message the agent passes on, and the query or seek never runs. A check left
 unanswered for 50s is refused as "they didn't answer", under the 60s a tool call gets before the agent reads it as the app not responding.
 A turn that ends, is stopped or is replaced by a new message refuses its open check. Each outcome leaves a line in the palette's history.
 

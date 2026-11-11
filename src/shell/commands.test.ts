@@ -32,7 +32,7 @@ describe('/ commands', () => {
   it('warns that build mode reads the whole session', () => {
     const build = SLASH_COMMANDS.find((c) => c.name === '/build');
     expect(build?.description).toBe('Enter build mode');
-    expect(build?.warning).toBe('spoiler alert - agent may read beyond where you are');
+    expect(build?.warning).toBe('the agent looks ahead without asking');
     expect(SLASH_COMMANDS.filter((c) => c.warning).map((c) => c.name)).toEqual(['/build']);
   });
 });

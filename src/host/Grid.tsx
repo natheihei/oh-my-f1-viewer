@@ -42,13 +42,13 @@ class TileBoundary extends Component<BoundaryProps, { error: string | null }> {
   }
 }
 
-/** Asks the viewer before a tile that looks past the playhead is drawn. Stands in for it until they allow it. */
+/** Asks the viewer before a tile that looks ahead of the playhead is drawn. Stands in for it until they allow it. */
 function LookAheadWarning({ scope }: { scope: string }) {
   return (
     <div className="tile-warning" data-testid="look-ahead-warning" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <div>
-        <div className="tile-warning-title">! looks ahead</div>
-        <div>This tile reads past where you are now.</div>
+        <div className="tile-warning-title">! spoiler</div>
+        <div>This tile looks ahead of where you are.</div>
       </div>
       <button type="button" className="tile-warning-allow" data-testid="look-ahead-allow" onClick={() => tileLookAhead.approve(scope)}>
         Allow
