@@ -57,7 +57,20 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 
 Live capture has only run in unit tests. See "Not verified".
 
+## Verified for mods
+
+On Linux, in the real app, over replay races (2026-11-09):
+
+- A mod's life, with `scripts/mods-check.mjs` on the 2026 United States race at lap 25: a new folder loaded and drew, a save while
+  playing replaced the tile's drawing while the session, tile and clock carried on, a broken save kept the last good version and wrote
+  `mod.error` with the file and line, a mod that threw showed the error in its tile with the rest of the app still playing and its
+  console and error in `mod.log`, a fixed save drew again, and deleting the folder took the tile off.
+- The production build loading a mod under its content security policy, with no errors.
+- The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
+
 ## Not verified
+
+- **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 
 - **The agent using `suggest_tiles`.** The strip, keys, drag and drop, and Esc are covered by `scripts/suggestions-check.mjs` in the real
   app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,
