@@ -1,13 +1,25 @@
 /** Keeps the background, and every style's settings, across app restarts, like the volume. */
 import { useEffect } from 'react';
-import { host, NO_BACKGROUND, read, useLive, type BackgroundParams } from '../host';
+import { host, NO_BACKGROUND, read, useLive, type BackgroundInfo, type BackgroundParams } from '../host';
 import { loadUiState, saveUiState, type UiStorage } from './uiState';
 
 const KEY = 'background';
 
 export interface SavedBackground {
   style: string;
+  /** Only the settings changed from their defaults, so a new default reaches everyone who left it alone. */
   params: Record<string, BackgroundParams>;
+}
+
+/** `params` without the settings at their default, and without styles left with none. */
+export function changedParams(backgrounds: BackgroundInfo[], params: Record<string, BackgroundParams>): Record<string, BackgroundParams> {
+  const out: Record<string, BackgroundParams> = {};
+  for (const [style, values] of Object.entries(params)) {
+    const schema = backgrounds.find((b) => b.name === style)?.params as { properties?: Record<string, { default?: unknown }> } | undefined;
+    const changed = Object.entries(values).filter(([key, v]) => schema?.properties?.[key]?.default !== v);
+    if (changed.length > 0) out[style] = Object.fromEntries(changed);
+  }
+  return out;
 }
 
 export function parseSavedBackground(value: unknown): SavedBackground | null {
@@ -43,5 +55,6 @@ export function saveBackground(saved: SavedBackground, storage?: UiStorage | nul
 export function usePersistBackground(): void {
   const style = useLive((s) => s.background.style);
   const params = useLive((s) => s.background.params);
-  useEffect(() => saveBackground({ style, params }), [style, params]);
+  const backgrounds = useLive((s) => s.backgrounds);
+  useEffect(() => saveBackground({ style, params: changedParams(backgrounds, params) }), [style, params, backgrounds]);
 }
