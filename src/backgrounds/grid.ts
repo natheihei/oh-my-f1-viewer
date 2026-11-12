@@ -18,17 +18,17 @@ export default defineBackground<Params>({
     brightness: Type.Number({
       title: 'Brightness',
       minimum: 0.03,
-      maximum: 0.4,
+      maximum: 1,
       step: 0.01,
-      default: 0.13,
+      default: 0.2,
       unit: '%',
     }),
     size: Type.Number({
       title: 'Dot size',
       minimum: 0.6,
-      maximum: 3,
+      maximum: 6,
       step: 0.1,
-      default: 1.2,
+      default: 1.4,
       unit: 'px',
     }),
     density: Type.Union([Type.Literal(24), Type.Literal(48)], {
@@ -61,10 +61,10 @@ export default defineBackground<Params>({
           a *= 0.35;
           if (pointer) {
             const d = Math.hypot(x - pointer.x, y - pointer.y) / p.radius;
-            if (d < 1) a += Math.min(0.5, p.brightness * 2.2) * (1 - d) ** 2;
+            if (d < 1) a += p.brightness * 2.2 * (1 - d) ** 2;
           }
         }
-        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(1, a)})`;
         ctx.fillRect(x - p.size / 2, y - p.size / 2, p.size, p.size);
       }
     }
