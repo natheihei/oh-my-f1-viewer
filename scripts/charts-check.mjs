@@ -65,18 +65,17 @@ const allGroups = {
   ],
   race: [
     { type: 'race_trace', props: {} },
-    { type: 'position_chart', props: { drivers: pair } },
+    { type: 'race_trace', props: { drivers: pair } },
   ],
   pace: [
     { type: 'lap_time_compare', props: { drivers: pair } },
-    { type: 'stint_pace', props: {} },
+    { type: 'field_pace', props: {} },
   ],
   tyres: [
-    { type: 'tyre_degradation', props: {} },
+    { type: 'lap_time_compare', props: { drivers: [pair[0]] } },
     { type: 'race_trace', props: { drivers: pair } },
   ],
   small: [
-    { type: 'battle_card', props: { drivers: pair } },
     { type: 'sector_delta', props: { drivers: pair } },
     { type: 'pit_stops', props: {} },
     { type: 'race_control', props: {} },
@@ -90,7 +89,7 @@ const allGroups = {
   telemetry: [
     { type: 'track_map', props: { drivers: pair } },
     { type: 'speed_trace', props: { drivers: pair } },
-    { type: 'telemetry_live', props: { drivers: [pair[0]] } },
+    { type: 'car_telemetry', props: { drivers: [pair[0]] } },
   ],
 };
 const groups = Object.fromEntries(Object.entries(allGroups).filter(([name]) => !only || only.includes(name)));
@@ -173,18 +172,18 @@ async function shoot(moment) {
       console.log(`pit window: ${JSON.stringify(check)}`);
     }
     if (name === 'small') {
-      // The battle card and the latest stops in numbers, beside the tower's rows for the pair, to check by hand.
+      // The gap chart's sides and the latest stops in numbers, beside the tower's rows for the pair, to check by hand.
       const check = await page.evaluate(async (pair) => {
         const { host, read } = await import('/src/host/index.ts');
-        const battle = await import('/src/components/charts/BattleCard.tsx');
+        const gap = await import('/src/components/charts/GapEvolution.tsx');
         const stops = await import('/src/components/charts/PitStops.tsx');
         const tower = await import('/src/components/charts/TimingTower.tsx');
         const sectors = await import('/src/components/charts/SectorDelta.tsx');
-        const b = battle.battleModel((await host.data.sql({ sql: battle.SQL, params: pair })).rows, pair, read().spec.chaseAid.within);
+        const { points: _points, ...b } = gap.gapModel((await host.data.sql({ sql: gap.SQL, params: pair })).rows, pair);
         const s = sectors.sectorModel((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
         const p = stops.stopsModel((await host.data.sql({ sql: stops.sqlFor(0) })).rows).stops.slice(0, 4);
         const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));
-        return { battle: b, sectors: { laps: s.laps, averages: s.averages, skipped: s.skipped }, stops: p, tower: t };
+        return { gap: b, sectors: { laps: s.laps, averages: s.averages, skipped: s.skipped }, stops: p, tower: t };
       }, pair);
       console.log(`small: ${JSON.stringify(check)}`);
     }
@@ -245,10 +244,10 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, trace, positions, compare, deg, pace, pit, battle, sectors, stops, control, weather] = await Promise.all(
+    const [tower, gap, tyres, trace, compare, pace, pit, sectors, stops, control, weather] = await Promise.all(
       [
-        'TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'PositionChart', 'LapTimeCompare', 'TyreDegradation', 'StintPace', 'PitWindow',
-        'BattleCard', 'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
+        'TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'LapTimeCompare', 'FieldPace', 'PitWindow',
+        'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
     const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
@@ -267,25 +266,21 @@ const timings = await page.evaluate(
       gap_evolution: await time(gap.SQL, pair),
       tyre_strategy: await time(tyres.sqlFor(0), []),
       race_trace: await time(trace.SQL, []),
-      position_chart: await time(positions.SQL, []),
       lap_time_compare: await time(compare.sqlFor(2), pair),
-      tyre_degradation_top3: await time(deg.sqlFor(0), []),
-      tyre_degradation_pair: await time(deg.sqlFor(2), pair),
-      stint_pace: await time(pace.SQL, []),
+      field_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),
-      battle_card: await time(battle.SQL, pair),
       sector_delta: await time(sectors.SQL, pair),
       pit_stops: await time(stops.sqlFor(0), []),
       race_control: await time(control.SQL, []),
       weather: await time(weather.SQL, []),
       ...(await (async () => {
-        const [map, speed, live] = await Promise.all(['TrackMap', 'SpeedTrace', 'TelemetryLive'].map((name) => import(`/src/components/charts/${name}.tsx`)));
+        const [map, speed, live] = await Promise.all(['TrackMap', 'SpeedTrace', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));
         const picks = speed.pickLaps((await window.f1a.data.sql(key, playhead, speed.LAPS_SQL, pair)).rows, pair);
         return {
           track_map: await time(map.SQL, [playhead], playhead),
           speed_trace_laps: await time(speed.LAPS_SQL, pair, playhead),
           speed_trace_speed: await time(speed.SPEED_SQL, speed.speedParams(picks, pair), playhead),
-          telemetry_live: await time(live.SQL, [pair[0], playhead], playhead),
+          car_telemetry: await time(live.SQL, [pair[0], playhead], playhead),
         };
       })()),
     };

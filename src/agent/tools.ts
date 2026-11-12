@@ -233,6 +233,10 @@ function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problem
       problems.push(`${info.name} is for ${info.sessions.map(sessionTypeName).join(', ')} sessions, and this is ${sessionTypeName(session.type)}: leave it out.`);
       continue;
     }
+    if (session?.status === 'live' && info.replayOnly) {
+      problems.push(`${info.name} works in replays only, and this session is live: leave it out.`);
+      continue;
+    }
     if (info.needs.length && sessionData.state === 'unsupported') {
       problems.push(`${info.name} has no data for this session: ${sessionData.reason}`);
       continue;

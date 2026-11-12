@@ -187,13 +187,13 @@ if (gap) {
 r = await say(`pit strategy for ${PIT_DRIVER}`, 'agent-3-pit-strategy.png');
 const pitNumber = await page.evaluate((name) => window.read().sessionData.drivers.find((d) => new RegExp(name, 'i').test(`${d.last_name ?? ''} ${d.full_name ?? ''} ${d.broadcast_name ?? ''}`))?.driver_number, PIT_DRIVER);
 check(`pit_window for ${PIT_DRIVER} is suggested`, r.strip.some((s) => s.type === 'pit_window' && s.drivers?.length === 1 && s.drivers[0] === pitNumber), `car ${pitNumber}`);
-check('a tyre chart comes with it', r.strip.some((s) => ['tyre_strategy', 'tyre_degradation', 'stint_pace', 'pit_stops'].includes(s.type)));
+check('a tyre chart comes with it', r.strip.some((s) => ['tyre_strategy', 'lap_time_compare', 'field_pace', 'pit_stops'].includes(s.type)));
 hygiene(r);
 
 // 4: tyres, field-wide.
 r = await say('tyres', 'agent-4-tyres.png');
-check('tyre charts are suggested', r.strip.some((s) => ['tyre_strategy', 'tyre_degradation'].includes(s.type)));
-check('no driver is named for them', r.strip.filter((s) => ['tyre_strategy', 'tyre_degradation'].includes(s.type)).every((s) => !s.drivers || s.drivers.length === 0), JSON.stringify(r.strip));
+check('tyre charts are suggested', r.strip.some((s) => s.type === 'tyre_strategy'));
+check('no driver is named for them', r.strip.filter((s) => s.type === 'tyre_strategy').every((s) => !s.drivers || s.drivers.length === 0), JSON.stringify(r.strip));
 hygiene(r);
 
 // 5: remove the chart that was added.

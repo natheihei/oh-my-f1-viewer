@@ -70,7 +70,7 @@ it gives.
 
 On session 11396, the three cars marked are the three the result lists as DNF, each on its last lap, and at laps 20, 30 and 53 the
 timing tower showed the same cars out as the broadcast. The charts use only this: `timing_tower` shows them as `OUT` at the bottom,
-`track_map` leaves them off, `stint_pace` gives them a dash, `pit_window` leaves them off the ring, and `race_trace` leaves them out of its range.
+`track_map` leaves them off, `field_pace` gives them a dash, `pit_window` leaves them off the ring, and `race_trace` leaves them out of its range.
 
 On session 11396 at the end of the race, through the real worker in the app (`scripts/charts-check.mjs`, median of 5): `SELECT * FROM
 lap_summary` took 27ms for 1,166 rows, one driver's laps 6ms, every driver's position and gap per lap 13ms, and everyone's last 5 laps 11ms.
@@ -198,7 +198,7 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   (median over 4 drivers' laps 3 to 45), give or take 0.1 to 0.2 s from lap to lap, and once 1.35 s. `speed_trace` finds each lap's ends from
   the positions instead.
 - **`car_data.drs` isn't DRS in 2026.** It's null throughout session 11396, and session 11404 has codes such as 17, 49 and 151 that aren't
-  DRS's (2026's cars have no DRS). 2025's session 9877 has the usual 0 to 14. `telemetry_live` shows DRS only when every code in its minute
+  DRS's (2026's cars have no DRS). 2025's session 9877 has the usual 0 to 14. `car_telemetry` shows DRS only when every code in its minute
   is one of DRS's own.
 - **Odd values when stopped.** `brake` is 0 or 100, and 104 (nearly always with `throttle` 104) 47,595 times in session 11396, 46,565 of
   them at 0 km/h. Charts cap both at 100. `location` is exactly (0, 0) before a car first leaves the garage. A retired car keeps

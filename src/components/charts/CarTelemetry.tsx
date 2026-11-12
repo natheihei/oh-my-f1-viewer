@@ -181,7 +181,7 @@ const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
 
 const NO_PLAYHEAD = 0;
 
-function TelemetryLive({ props }: { props: { drivers: number[] } }) {
+function CarTelemetry({ props }: { props: { drivers: number[] } }) {
   const [driver] = props.drivers;
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const view = useSql(SQL, [driver, playhead ?? NO_PLAYHEAD]);
@@ -195,13 +195,14 @@ function TelemetryLive({ props }: { props: { drivers: number[] } }) {
 }
 
 export default defineComponent({
-  name: 'telemetry_live',
+  name: 'car_telemetry',
   title: 'Telemetry',
   description:
-    "One car's speed, gear, revs, throttle, brake and DRS, as the driver is driving. Suggest it next to that driver's onboard. Replays only.",
+    "One car's speed, gear, revs, throttle, brake and DRS, as the driver is driving. Suggest it next to that driver's onboard.",
+  replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
   needs: NEEDS,
   size: { aspect: 1.6, min: [6, 5] },
-  spec: ({ drivers }) => ({ key: `telemetry_live:${drivers[0]}`, label: `Telemetry ${codeOf(drivers[0])}` }),
-  View: TelemetryLive,
+  spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: `Telemetry ${codeOf(drivers[0])}` }),
+  View: CarTelemetry,
 });
