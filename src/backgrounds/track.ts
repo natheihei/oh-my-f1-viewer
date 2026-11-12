@@ -40,9 +40,9 @@ export default defineBackground<Params, undefined, Data>({
     line: Type.Number({
       title: 'Line brightness',
       minimum: 0.02,
-      maximum: 0.3,
+      maximum: 1,
       step: 0.005,
-      default: 0.075,
+      default: 0.12,
       unit: '%',
     }),
     leader: Type.Boolean({ title: 'Leader', default: true }),

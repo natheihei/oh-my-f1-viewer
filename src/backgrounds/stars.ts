@@ -30,7 +30,7 @@ export default defineBackground<Params, Star[]>({
     density: Type.Number({
       title: 'Density',
       minimum: 0.5,
-      maximum: 12,
+      maximum: 30,
       step: 0.1,
       default: 3.8,
       unit: '/10k px²',
@@ -38,9 +38,9 @@ export default defineBackground<Params, Star[]>({
     brightness: Type.Number({
       title: 'Brightness',
       minimum: 0.05,
-      maximum: 0.5,
+      maximum: 1,
       step: 0.01,
-      default: 0.2,
+      default: 0.32,
       unit: '%',
     }),
     twinkling: Type.Number({

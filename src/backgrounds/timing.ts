@@ -30,9 +30,9 @@ export default defineBackground<Params, Field>({
     brightness: Type.Number({
       title: 'Brightness',
       minimum: 0.02,
-      maximum: 0.2,
+      maximum: 1,
       step: 0.005,
-      default: 0.05,
+      default: 0.08,
       unit: '%',
     }),
     rate: Type.Number({
@@ -63,8 +63,8 @@ export default defineBackground<Params, Field>({
     ctx.textBaseline = 'middle';
     for (const c of field.cells) {
       const age = t - c.changedAt;
-      const a = p.brightness * (1 + (age < FADE_S ? 2.8 * (1 - age / FADE_S) : 0));
-      ctx.fillStyle = age < FLASH_S ? `rgba(180,90,255,${a + 0.04})` : `rgba(255,255,255,${a})`;
+      const a = Math.min(1, p.brightness * (1 + (age < FADE_S ? 2.8 * (1 - age / FADE_S) : 0)));
+      ctx.fillStyle = age < FLASH_S ? `rgba(180,90,255,${Math.min(1, a + 0.04)})` : `rgba(255,255,255,${a})`;
       ctx.fillText(c.text, c.x, c.y);
     }
   },
