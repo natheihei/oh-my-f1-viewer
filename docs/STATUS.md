@@ -131,8 +131,10 @@ The same mod with a 62px heading of its own still hid its message at 2 rows: see
   tried with DRM video on screen.
 - **A build that runs long enough to compact.** The build conversation isn't collapsed, so nothing depends on it, but it hasn't run.
 - **Dragging a draft from the strip onto the grid.** Enter and the host's add are checked. The drag is the same code as any suggestion's.
+- **Resizing a draft's preview in the strip.** Resizing a suggestion is checked by `scripts/suggestions-check.mjs`. A draft uses the same
+  grips, which sit above its content.
 
-- **The agent using `suggest_tiles`.** The strip, keys, drag and drop, and Esc are covered by `scripts/suggestions-check.mjs` in the real
+- **The agent using `suggest_tiles`.** The strip, keys, drag and drop, resizing a preview, and Esc are covered by `scripts/suggestions-check.mjs` in the real
   app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,
   still playing and ready, with the audio left on the main feed. The real agent hasn't been asked for a stream since it lost `add_streams`.
 
