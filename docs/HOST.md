@@ -37,7 +37,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `audio` | `string \| null` | The audible feed, or null if everything is muted |
 | `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
-| `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects), `primaryId` (the largest node), `manual` (whether the mouse has moved something) |
+| `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects, in the order they were added), `manual` (whether the mouse has moved something) |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
@@ -189,8 +189,7 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 | `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
 | `ungroup` | `group: target` | Breaks up a group but keeps its tiles. Returns whether a group matched |
-| `focus` | `target: target` | Makes the tile or group the largest thing on screen. Returns whether it matched |
-| `reset` | none | Goes back to the default arrangement, discarding any moves and resizes |
+| `autoLayout` | none | Re-tiles the grid in the order tiles were added, discarding any moves and resizes. `/auto-layout` runs it |
 | `move` | `tile: string`, `rect: { x, y, w, h }` | Moves or resizes a tile or group, in grid cells (24 × 24) |
 | `swap` | `a: string`, `b: string` | Swaps the places of two tiles or groups |
 
@@ -311,7 +310,7 @@ going. The tools today:
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
 `app_state` also carries the master volume next to the audible feed, so the agent never calls a feed audible at volume 0. It carries the
-playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add`, `focus` and `reset`, groups, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
+playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, groups, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 
 While build mode is on, messages go to a second agent with its own prompt (`shared/buildPrompt.ts`) and conversation. From this list it

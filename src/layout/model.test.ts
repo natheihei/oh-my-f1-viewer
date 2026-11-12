@@ -9,14 +9,12 @@ import {
   createGroup,
   EMPTY_LAYOUT,
   findTile,
-  focus,
   freeRectAt,
   GRID_COLUMNS,
   GRID_ROWS,
   largestFreeRect,
   measure,
   removeTile,
-  resetLayout,
   solveRects,
   swap,
   ungroup,
@@ -238,20 +236,6 @@ describe('editing', () => {
     expect(findTile(second, 'A')?.group?.children).toHaveLength(2);
   });
 
-  it('focus makes a node the largest, and reset restores the main feed', () => {
-    const s = build('main', 'A', 'B');
-    const focused = focus(s, 'B')!;
-    const b = findTile(focused, 'B')!.tile;
-    expect(area(b)).toBeGreaterThan(area(findTile(focused, 'main')!.tile));
-    const reset = resetLayout(focused);
-    expect(area(findTile(reset, 'main')!.tile)).toBeGreaterThan(area(findTile(reset, 'B')!.tile));
-  });
-
-  it('focus by a member promotes its group', () => {
-    const { state } = createGroup(build('main', 'X'), [spec('A'), spec('B')]);
-    const focused = focus(state, 'A')!;
-    expect(focused.primaryId).toBe(findTile(focused, 'A')!.group!.id);
-  });
 });
 
 describe('mouse edits', () => {
@@ -272,12 +256,14 @@ describe('mouse edits', () => {
     expect(area(findTile(s, 'A')!.tile)).toBeGreaterThan(36);
   });
 
-  it('are discarded by a reset', () => {
+  it('are discarded by an auto layout, which puts tiles back in the order they were added', () => {
     let s = build('main', 'A');
     s = applyMouseEdit(s, s.nodes[0].id, { x: 0, y: 0, w: 5, h: 5 });
-    s = resetLayout(s);
+    s = swap(s, s.nodes[0].id, s.nodes[1].id);
+    s = autoLayout(s);
     expect(s.manual).toBe(false);
     expect(s.nodes[0].w).toBeGreaterThan(5);
+    expect(area(findTile(s, 'main')!.tile)).toBeGreaterThan(area(findTile(s, 'A')!.tile));
   });
 
   it('do not count as an edit when nothing moved', () => {

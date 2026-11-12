@@ -179,6 +179,16 @@ const afterClose = await hostRects();
 check('closing leaves the other tiles where they were', JSON.stringify(afterClose.HAM) === JSON.stringify(placed.HAM), JSON.stringify([placed.HAM, afterClose.HAM]));
 await page.screenshot({ path: path.join(outDir, 'layout-closed.png') });
 
+// /auto-layout re-tiles in the order tiles were added, undoing the drag and resize.
+await page.locator('[data-testid=palette-input]').fill('/auto-layout');
+await page.keyboard.press('Enter');
+await settle();
+const retiled = await hostRects();
+const retiledState = await page.evaluate(() => window.layoutStore.layout.snapshot());
+check('/auto-layout clears the manual layout', retiledState.manual === false);
+check('/auto-layout gives the first tile added the largest slot again', retiled.MAIN.x === 0 && retiled.MAIN.w * retiled.MAIN.h > retiled.HAM.w * retiled.HAM.h, JSON.stringify(retiled));
+await page.screenshot({ path: path.join(outDir, 'layout-auto.png') });
+
 // Window resize.
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 640));
 await page.waitForTimeout(400);
