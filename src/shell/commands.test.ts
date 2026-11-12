@@ -5,6 +5,7 @@ vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { matchCommands, parseCommand, SLASH_COMMANDS } = await import('./commands');
+const { layout } = await import('../layout/store');
 
 const names = (input: string) => matchCommands(input).map((c) => c.name);
 
@@ -34,5 +35,19 @@ describe('/ commands', () => {
     expect(build?.description).toBe('Enter build mode');
     expect(build?.warning).toBe('the agent looks ahead without asking');
     expect(SLASH_COMMANDS.filter((c) => c.warning).map((c) => c.name)).toEqual(['/build']);
+  });
+
+  it('re-tiles a grid the mouse has changed', async () => {
+    layout.clear();
+    layout.add({ key: 'A', label: 'A', type: 'test', props: {} });
+    layout.add({ key: 'B', label: 'B', type: 'test', props: {} });
+    const [a, b] = layout.snapshot().nodes;
+    layout.swap(a.id, b.id);
+    expect(layout.snapshot().manual).toBe(true);
+    await SLASH_COMMANDS.find((c) => c.name === '/auto-layout')!.run('');
+    const after = layout.snapshot();
+    expect(after.manual).toBe(false);
+    expect(after.nodes[0]).toMatchObject({ x: a.x, y: a.y, w: a.w, h: a.h });
+    layout.clear();
   });
 });

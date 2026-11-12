@@ -44,6 +44,7 @@ blank page with the command palette, which tells you what to sign in to.
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
+| `/auto-layout` | Re-tile the grid, undoing moves and resizes |
 
 Everything else goes to the agent in plain words. Before it looks ahead of where you are, by reading ahead or moving playback forward, the palette
 shows a spoiler check: answer Allow once, Allow for this session or Don't allow. The timeline goes anywhere without asking.
