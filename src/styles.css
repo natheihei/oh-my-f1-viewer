@@ -390,10 +390,25 @@
   margin-right: 4px;
 }
 
-/* The history. Each line's mark hangs in its own column, and your own lines sit on a raised band. */
+/*
+ * The history. Each line's mark hangs in its own column, and your own lines sit on a raised band. It scrolls past
+ * 7 rows, or past the cap set by dragging the palette's top edge (--palette-history-cap), up to 60% of the window.
+ * Keep the 7 rows and 60% in step with persistPaletteHeight.ts.
+ */
 .palette-history {
   @apply overflow-y-auto border-b border-line py-1;
-  max-height: calc(var(--row) * 7 + 8px);
+  max-height: max(calc(var(--row) * 7 + 8px), min(var(--palette-history-cap, 0px), 60vh));
+}
+
+/* Drag the palette's top edge to let the history grow; double-click to go back to 7 rows. */
+.palette-resize {
+  @apply absolute top-0 right-0 left-0 z-10 h-1.5 -translate-y-1/2;
+  cursor: ns-resize;
+}
+
+.palette-resize:hover,
+.palette-resize-active {
+  background: var(--color-rule);
 }
 
 .palette-line {
