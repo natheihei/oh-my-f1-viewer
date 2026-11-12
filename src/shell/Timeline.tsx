@@ -81,18 +81,25 @@ export function Timeline() {
   const position = clock.live ? `-${formatTime(Math.max(0, end - shown))}` : formatTime(shown - start);
   const total = clock.live ? '' : formatTime(span);
   const muted = volume === 0 || audio == null;
+  const hoverFraction = hoverTime != null && span > 0 ? (hoverTime - start) / span : null;
+  // The tip centres on the pointer, but pins to the bar's ends rather than leave the window.
+  const tipShift = hoverFraction == null ? 0 : hoverFraction < 0.04 ? 0 : hoverFraction > 0.96 ? -100 : -50;
 
   return (
     <div className="timeline" data-testid="timeline">
       <button
         type="button"
-        className="timeline-button"
+        className="timeline-button timeline-play"
         data-testid="timeline-play"
         aria-label={clock.playing ? 'Pause' : 'Play'}
         onClick={() => host.playback.toggle()}
       >
-        {clock.playing ? '❚❚' : '▶'}
+        <PlayGlyph playing={clock.playing} />
       </button>
+      <span className="timeline-title" data-testid="session-title" title={session.title}>
+        {session.title}
+        {session.year && !session.title.includes(String(session.year)) ? <span className="timeline-total"> {session.year}</span> : null}
+      </span>
       <div
         ref={barRef}
         className="timeline-bar"
@@ -112,10 +119,12 @@ export function Timeline() {
         onPointerLeave={() => setHoverTime(null)}
       >
         <div className="timeline-track" />
+        {clock.live ? null : <Ticks span={span} />}
         <div className="timeline-fill" style={{ width: `${progress * 100}%` }} />
+        {hoverFraction != null ? <div className="timeline-hover-mark" style={{ left: `${hoverFraction * 100}%` }} /> : null}
         <div className="timeline-head" style={{ left: `${progress * 100}%` }} />
-        {hoverTime != null && span > 0 ? (
-          <div className="timeline-hover" style={{ left: `${((hoverTime - start) / span) * 100}%` }}>
+        {hoverFraction != null && hoverTime != null ? (
+          <div className="timeline-hover" style={{ left: `${hoverFraction * 100}%`, transform: `translateX(${tipShift}%)` }}>
             {clock.live ? `-${formatTime(end - hoverTime)}` : formatTime(hoverTime - start)}
           </div>
         ) : null}
@@ -124,14 +133,14 @@ export function Timeline() {
         {position}
         {total ? <span className="timeline-total"> / {total}</span> : null}
       </div>
-      {clock.buffering ? <div className="timeline-status">buffering</div> : null}
+      {clock.buffering ? <span className="timeline-tag">buffering</span> : null}
       {clock.live ? (
         <button
           type="button"
-          className={`timeline-live ${clock.atLiveEdge ? 'timeline-live-on' : ''}`}
+          className={`timeline-tag timeline-live ${clock.atLiveEdge ? 'timeline-live-on' : ''}`}
           onClick={() => host.playback.goLive()}
         >
-          ● LIVE
+          live
         </button>
       ) : null}
       <div className="timeline-volume">
@@ -160,7 +169,31 @@ export function Timeline() {
           onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
           onPointerUp={(e) => e.currentTarget.blur()}
         />
+        <span className="timeline-volume-value">{muted ? 'mute' : String(Math.round(volume * 100))}</span>
       </div>
+    </div>
+  );
+}
+
+function PlayGlyph({ playing }: { playing: boolean }) {
+  return (
+    <svg viewBox="0 0 10 10" className="timeline-glyph" aria-hidden="true">
+      {playing ? <path d="M1 1h3v8H1zM6 1h3v8H6z" fill="currentColor" /> : <path d="M1.5 0.5v9l8-4.5z" fill="currentColor" />}
+    </svg>
+  );
+}
+
+/** Neutral marks along the bar every 15 minutes (5 in a short session), longer on the hour. Nothing from the race. */
+function Ticks({ span }: { span: number }) {
+  if (span <= 0) return null;
+  const step = span > 3600 ? 900 : 300;
+  const marks: { at: number; major: boolean }[] = [];
+  for (let t = step; t < span; t += step) marks.push({ at: t / span, major: t % 3600 === 0 });
+  return (
+    <div className="timeline-ticks" aria-hidden>
+      {marks.map((m) => (
+        <span key={m.at} className={`timeline-tick ${m.major ? 'timeline-tick-major' : ''}`} style={{ left: `${m.at * 100}%` }} />
+      ))}
     </div>
   );
 }
