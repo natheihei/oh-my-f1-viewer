@@ -7,3 +7,6 @@ import timing from './timing';
 import track from './track';
 
 export const backgrounds: BackgroundDefinition[] = [grid, stars, track, streaks, timing];
+
+/** The style showing until the user picks one. */
+export const DEFAULT_BACKGROUND = timing.name;
