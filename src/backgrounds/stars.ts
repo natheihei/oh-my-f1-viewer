@@ -40,7 +40,7 @@ export default defineBackground<Params, Star[]>({
       minimum: 0.05,
       maximum: 1,
       step: 0.01,
-      default: 0.32,
+      default: 0.5,
       unit: '%',
     }),
     twinkling: Type.Number({
