@@ -1,6 +1,6 @@
 /**
- * `/` commands: account actions the user runs themselves, and `/build`, which changes who they're
- * talking to. They're a separate set, and the agent's tools (shared/tools.ts) are another: neither can
+ * `/` commands: account actions the user runs themselves, `/auto-layout`, and `/build`, which changes
+ * who they're talking to. They're a separate set, and the agent's tools (shared/tools.ts) are another: neither can
  * call the other, and anything to do with viewing goes to the agent.
  */
 import { FIRST_SEASON, host } from '../host';
@@ -58,6 +58,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     // The build agent reads the open session past the playhead without asking: see docs/BUILD_MODE.md.
     warning: 'the agent looks ahead without asking',
     run: (text) => enterBuild(text),
+  },
+  {
+    name: '/auto-layout',
+    description: 'Re-tile the grid, undoing moves and resizes',
+    async run() {
+      host.layout.autoLayout();
+      palette.push('system', 'Grid re-tiled.');
+    },
   },
   {
     name: '/settings-background',

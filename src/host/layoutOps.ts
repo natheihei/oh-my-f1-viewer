@@ -52,11 +52,7 @@ export const layoutOps = {
     { description: 'Dissolve a group but keep its tiles. Returns whether a group matched.', args: Type.Object({ group: Target }) },
     ({ group }) => layout.ungroup(group),
   ),
-  focus: write(
-    { description: 'Make a tile or group the largest thing on screen. Returns whether it matched.', args: Type.Object({ target: Target }) },
-    ({ target }) => layout.focus(target),
-  ),
-  reset: write({ description: 'Re-tile into the default arrangement, discarding manual moves and resizes.' }, () => layout.reset()),
+  autoLayout: write({ description: 'Re-tile the grid in the order tiles were added, discarding manual moves and resizes.' }, () => layout.autoLayout()),
   move: write(
     {
       description: 'Move or resize a tile or group.',
