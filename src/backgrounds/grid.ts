@@ -20,7 +20,7 @@ export default defineBackground<Params>({
       minimum: 0.03,
       maximum: 1,
       step: 0.01,
-      default: 0.5,
+      default: 0.2,
       unit: '%',
     }),
     size: Type.Number({

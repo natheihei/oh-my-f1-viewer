@@ -14,7 +14,7 @@ const NO_MARKS: Record<string, string> = {};
 
 /**
  * `highlight` outlines the tile with that component key. `marks` holds a word for some component types,
- * such as "edited": their tiles get a dashed outline and the word in a corner.
+ * such as "edited": their tiles get a dashed outline. The word itself is a slot in the tile's header.
  */
 export function Stage({
   registry,
@@ -78,7 +78,6 @@ export function Stage({
             }}
           >
             {Component ? <Component spec={tile.component} tileId={tile.id} /> : null}
-            {mark ? <span className="stage-mark">{mark}</span> : null}
           </div>
         );
       })}

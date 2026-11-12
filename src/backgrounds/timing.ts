@@ -32,7 +32,7 @@ export default defineBackground<Params, Field>({
       minimum: 0.02,
       maximum: 1,
       step: 0.005,
-      default: 0.13,
+      default: 0.095,
       unit: '%',
     }),
     rate: Type.Number({
