@@ -36,7 +36,7 @@ export default defineBackground<Params, Streak[]>({
       minimum: 0.02,
       maximum: 1,
       step: 0.005,
-      default: 0.11,
+      default: 0.18,
       unit: '%',
     }),
     speed: Type.Number({

@@ -42,7 +42,7 @@ export default defineBackground<Params, undefined, Data>({
       minimum: 0.02,
       maximum: 1,
       step: 0.005,
-      default: 0.12,
+      default: 0.19,
       unit: '%',
     }),
     leader: Type.Boolean({ title: 'Leader', default: true }),
