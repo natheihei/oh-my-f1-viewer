@@ -52,7 +52,7 @@ with no chart library, for the reasons in [PITWALL.md](PITWALL.md). They may onl
   rule, racing pace, and medians.
   The accent red is never used inside a chart: it would read as a team or a soft tyre.
 
-**Telemetry charts** (`track_map`, `speed_trace`, `telemetry_live`) read `location` and `car_data`, about 1.5 million rows a race,
+**Telemetry charts** (`track_map`, `speed_trace`, `car_telemetry`) read `location` and `car_data`, about 1.5 million rows a race,
 and need `telemetry`, which a live session doesn't have. Their geometry is in `kit/track.ts`: the outline turned and fitted to a tile,
 a car's line crossings from its positions, distance along a lap, and the time difference between two laps.
 - **Bound every telemetry query by `date` on both sides.** The key is `(session_key, date, driver_number)`, so a `date` range is an

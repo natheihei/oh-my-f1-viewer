@@ -190,7 +190,7 @@ export default defineComponent({
   name: 'race_trace',
   title: 'Race trace',
   description:
-    "Every driver's gap to the leader, lap by lap, as one line each. It shows how the race has unfolded: who is pulling away, who pitted, where a safety car closed the field up. Suggest it for the story of the race so far.",
+    "Every driver's gap to the leader, lap by lap, as one line each. It shows how the race has unfolded: who is pulling away, who pitted, where a safety car closed the field up. Suggest it for the story of the race so far, or how a driver got to where they are.",
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

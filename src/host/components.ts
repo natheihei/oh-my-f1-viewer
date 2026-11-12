@@ -24,6 +24,8 @@ interface Declared {
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
+  /** It reads car telemetry, which only a replay has: it is never offered in a live session. */
+  replayOnly?: boolean;
   /** A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by the least height. */
   size?: { aspect: number; min: [number, number] };
   /** How its content draws, when it doesn't simply fill the tile: the tile is shrunk to it. See `ContentFit`. */
@@ -53,6 +55,7 @@ export interface ComponentInfo {
   /** Null means any session type. */
   sessions: SessionType[] | null;
   needs: Dataset[];
+  replayOnly: boolean;
   size: { aspect: number; min: [number, number] } | null;
   looksAhead: boolean;
 }
@@ -81,6 +84,7 @@ function infoOf(c: ComponentDefinition): ComponentInfo {
     args: JSON.parse(JSON.stringify(c.args)),
     sessions: c.sessions ?? null,
     needs: c.needs ?? [],
+    replayOnly: c.replayOnly === true,
     size: c.size ?? null,
     looksAhead: c.looksAhead === true,
   };

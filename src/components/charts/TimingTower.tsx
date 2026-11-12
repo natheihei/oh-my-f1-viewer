@@ -1,7 +1,7 @@
-/** The running order, one row per driver: position, gaps, last lap and tyre. */
+/** The running order, one row per driver: position, places gained from the grid, gaps, last lap and tyre. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+import { defineComponent, useLive, useSql, type StartingGridEntry } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -45,6 +45,8 @@ ORDER BY is_out, pos.position`;
 export interface TowerRow {
   driver: number;
   position: number | null;
+  /** Places gained since the grid: negative is lost. Null without a grid slot, or once retired. */
+  gained: number | null;
   /** "+1.234", "+1 LAP", or "LAP 31" for the leader, "LAP 31/56" when the distance is known. "OUT" once retired. */
   gap: string;
   interval: string;
@@ -57,21 +59,29 @@ export interface TowerRow {
 
 /**
  * The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN, and retired ones "OUT".
- * `total` is the race distance.
+ * `total` is the race distance, and `grid` the starting order, which only a race or sprint has.
  */
-export function towerModel(rows: ReadonlyArray<Record<string, unknown>>, total: number | null = null): TowerRow[] {
+export function towerModel(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  total: number | null = null,
+  grid: readonly StartingGridEntry[] = [],
+): TowerRow[] {
+  const slots = new Map(grid.map((g) => [g.driver_number, g.position]));
   return rows.flatMap((r, i): TowerRow[] => {
     const driver = num(r.driver_number);
     if (driver === null) return [];
     const lap = num(r.lap);
     const start = num(r.lap_start);
     const out = Boolean(r.is_out);
+    const position = num(r.position);
+    const slot = slots.get(driver) ?? null;
     // The leader's gap is the lap it's on, once the session has gaps at all.
     const leader = i === 0 && !out;
     return [
       {
         driver,
-        position: num(r.position),
+        position,
+        gained: out || slot === null || position === null ? null : slot - position,
         gap: out ? 'OUT' : leader ? (r.gap_date != null && lap !== null ? `LAP ${lap}${total ? `/${total}` : ''}` : '') : formatGap(parseGap(r.gap_to_leader)),
         interval: out || leader ? '' : formatGap(parseGap(r.interval)),
         last: out ? '' : formatLapTime(num(r.last_lap)),
@@ -83,13 +93,14 @@ export function towerModel(rows: ReadonlyArray<Record<string, unknown>>, total: 
   });
 }
 
-type Key = 'position' | 'bar' | 'code' | 'gap' | 'interval' | 'last' | 'tyre';
+type Key = 'position' | 'bar' | 'code' | 'gain' | 'gap' | 'interval' | 'last' | 'tyre';
 
 /** Width in characters, and which go first when there's no room: higher drops sooner. */
 const COLUMNS: Array<{ key: Key; head: string; chars: number; drop: number }> = [
   { key: 'position', head: 'P', chars: 2, drop: 0 },
   { key: 'bar', head: '', chars: 0.5, drop: 0 },
   { key: 'code', head: '', chars: 3, drop: 0 },
+  { key: 'gain', head: '+/−', chars: 3, drop: 5 },
   { key: 'gap', head: 'GAP', chars: 9, drop: 1 },
   { key: 'interval', head: 'INT', chars: 7, drop: 3 },
   { key: 'last', head: 'LAST', chars: 8, drop: 4 },
@@ -112,6 +123,8 @@ const WIDEST = Math.ceil(
 
 interface Drawn {
   rows: TowerRow[];
+  /** Whether there's a grid to count places from: without one the column isn't drawn. */
+  gains: boolean;
   styles: Map<number, DriverStyle>;
 }
 
@@ -124,7 +137,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const ch = textWidth(ctx, '0', size);
 
   // Drop columns until the rest fit, with at least a character and a half between them.
-  let columns = COLUMNS.filter((col) => !compact || col.drop < 3);
+  let columns = COLUMNS.filter((col) => (!compact || col.drop < 3) && (m.gains || col.key !== 'gain'));
   const room = width - pad * 2;
   const needed = (cols: typeof columns) => cols.reduce((sum, col) => sum + col.chars, 0) * ch + (cols.length - 1) * 1.5 * ch;
   while (needed(columns) > room && columns.some((col) => col.drop > 0)) {
@@ -171,6 +184,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
         case 'code':
           text(ctx, style.code, x0, y, { color: ink, size, weight: 500 });
           break;
+        case 'gain':
+          if (row.gained === null) break;
+          if (row.gained === 0) text(ctx, '–', x1, y, { align: 'right', color: c.faint, size });
+          else text(ctx, `${row.gained > 0 ? '▲' : '▼'}${Math.abs(row.gained)}`, x1, y, { align: 'right', color: row.gained > 0 ? c.ink : c.dim, size });
+          break;
         case 'gap':
           text(ctx, row.gap, x1, y, { align: 'right', color: ink, size });
           break;
@@ -191,11 +209,17 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   });
 }
 
+const NO_GRID: StartingGridEntry[] = [];
+
 function TimingTower() {
   const view = useSql(SQL);
   const styles = useDriverStyles();
   const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
-  const model = useMemo(() => (view.state === 'ready' ? { rows: towerModel(view.rows, total), styles } : null), [view, styles, total]);
+  const grid = useLive((live) => (live.sessionData.state === 'ready' ? live.sessionData.startingGrid : NO_GRID));
+  const model = useMemo(
+    () => (view.state === 'ready' ? { rows: towerModel(view.rows, total, grid), gains: grid.some((g) => g.position != null), styles } : null),
+    [view, styles, total, grid],
+  );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} />}
@@ -207,7 +231,7 @@ export default defineComponent({
   name: 'timing_tower',
   title: 'Timing tower',
   description:
-    'The running order: position, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview of the race, or whenever the user asks where someone is.',
+    'The running order: position, places gained or lost since the grid in a race, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview, whenever the user asks where someone is, or who has gained or lost places.',
   args: Type.Object({}),
   needs: NEEDS,
   size: { aspect: 0.6, min: [6, 12] },

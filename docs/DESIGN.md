@@ -189,7 +189,7 @@ Reasons can reach the agent, so they must not hint at what happened in the race.
 ## Per-year and per-race differences
 
 **Started, with one rule.** [src/data/spec.ts](../src/data/spec.ts) holds the tree below, and `specFor` resolves it for the open session
-into `live.spec`. Its first entry is `chaseAid`: 2026's cars have no DRS, so the 1 second line in the gap chart and the battle card is called
+into `live.spec`. Its first entry is `chaseAid`: 2026's cars have no DRS, so the 1 second line in the gap chart is called
 Overtake ("OT") from 2026. Parsers aren't in it yet, since the default parser still handles every season and a season with no data just fails
 to load, which `state: 'failed'` reports. Add them when a season or Grand Prix needs its own.
 

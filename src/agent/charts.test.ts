@@ -127,7 +127,7 @@ describe('the chart list', () => {
   it('lists each chart in a line, and the tool takes their names', () => {
     host.components.register({ components: [gap, pit, field, weather] });
     expect(describeCharts(read().components).split('\n')).toEqual([
-      'Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One that can take none picks its own.',
+      'Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One marked replays only cannot be suggested in a live session. One that can take none picks its own.',
       'test_gap, Test gap, exactly 2 drivers, race/sprint: The gap between two drivers.',
       'test_pit, Test pit window, exactly 1 driver, any session: When one driver could stop.',
       'test_field, Test field, 0 to 6 drivers, any session: Up to six drivers, or the ones it picks.',
@@ -157,6 +157,16 @@ describe('suggesting charts', () => {
     layout.clear();
     useSession.setState({ session: null, channels: [] });
     useSessionData.setState({ state: 'idle' }, true);
+  });
+
+  it('lists a replay-only chart as such, and refuses it in a live session', async () => {
+    expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, exactly 1 driver, any session, replays only: ');
+    useSession.setState({ session: { ...race, status: 'live' }, channels });
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).rejects.toThrow(
+      'car_telemetry works in replays only, and this session is live: leave it out. Nothing was suggested.',
+    );
+    useSession.setState({ session: race, channels });
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).resolves.toContain('Suggested: Telemetry');
   });
 
   it('suggests a chart next to the onboards, with drivers as car numbers', async () => {

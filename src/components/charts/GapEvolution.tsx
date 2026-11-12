@@ -1,4 +1,7 @@
-/** The gap between two drivers over the last laps, moving within a lap as interval samples arrive. */
+/**
+ * The gap between two drivers over the last laps, moving within a lap as interval samples arrive, with each
+ * one's tyre and last lap beside it and whether the car behind is in DRS or Overtake range.
+ */
 import { useMemo } from 'react';
 import Type from 'typebox';
 import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
@@ -7,7 +10,9 @@ import {
   ChartFrame,
   codeOf,
   colors,
+  compoundLetter,
   dot,
+  formatLapTime,
   gapSeconds,
   gapTrend,
   hline,
@@ -17,7 +22,10 @@ import {
   polyline,
   styleOf,
   text,
+  textWidth,
   ticks,
+  tyreAgeNow,
+  tyreColour,
   useDriverStyles,
   xAxis,
   yAxis,
@@ -34,21 +42,30 @@ const TREND_LAPS = 3;
 const SPIKE = 1;
 
 // The pair's lap starts over the window, both drivers' gaps to the leader since its first lap, and
-// each one's gap as it crossed the line on the laps of the window, for the trend.
+// each one's laps of the window: the gap as it crossed the line, for the trend, and its time and tyre.
 export const SQL = `
 WITH pair AS (
   SELECT lap_number, MIN(date_start) AS date_start FROM laps
   WHERE driver_number IN (?1, ?2) AND date_start IS NOT NULL GROUP BY lap_number
 ),
 win AS (SELECT MAX(MAX(lap_number) - ${WINDOW}, 1) AS first FROM pair)
-SELECT 'lap' AS kind, lap_number AS n, date_start AS date, NULL AS gap, NULL AS lap, NULL AS stint FROM pair WHERE lap_number >= (SELECT first FROM win)
+SELECT 'lap' AS kind, lap_number AS n, date_start AS date, NULL AS gap, NULL AS lap, NULL AS stint, NULL AS lap_duration, NULL AS compound, NULL AS tyre_age FROM pair WHERE lap_number >= (SELECT first FROM win)
 UNION ALL
-SELECT 'gap', driver_number, date, gap_to_leader, NULL, NULL FROM intervals
+SELECT 'gap', driver_number, date, gap_to_leader, NULL, NULL, NULL, NULL, NULL FROM intervals
 WHERE driver_number IN (?1, ?2) AND date >= COALESCE((SELECT date_start FROM pair WHERE lap_number = (SELECT first FROM win)), 0)
 UNION ALL
-SELECT 'end', driver_number, date_end, gap_to_leader, lap_number, stint_number FROM lap_summary
-WHERE driver_number IN (?1, ?2) AND date_end IS NOT NULL AND lap_number >= (SELECT first FROM win)
+SELECT 'end', driver_number, date_end, gap_to_leader, lap_number, stint_number, lap_duration, compound, tyre_age FROM lap_summary
+WHERE driver_number IN (?1, ?2) AND lap_number >= (SELECT first FROM win)
 ORDER BY date`;
+
+/** One driver beside the gap: the tyre they're on and the last lap they finished. */
+export interface GapSide {
+  driver: number;
+  compound: string | null;
+  age: number | null;
+  /** Seconds. */
+  last: number | null;
+}
 
 export interface GapModel {
   /** `x` is the lap, with a fraction for how far into it; `gap` is the second driver's gap behind the first, in seconds. Null breaks the line. */
@@ -59,6 +76,8 @@ export interface GapModel {
   current: number | null;
   /** How much the gap grew per lap over the last laps: negative is closing. */
   trend: number | null;
+  /** In the order asked for. */
+  sides: [GapSide, GapSide];
 }
 
 /** Where `t` falls in laps: lap n's start is n, and halfway through it is n.5. */
@@ -81,7 +100,19 @@ export function gapModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: r
     if (r.kind === 'lap' && n !== null && date !== null) laps.push({ n, date });
   }
   laps.sort((x, y) => x.n - y.n);
-  const empty: GapModel = { points: [], from: 0, to: 1, current: null, trend: null };
+  // Each driver's laps of the window, the one in progress last: it has the tyre, and no time yet.
+  const side = (driver: number): GapSide => {
+    const own = rows.filter((r) => r.kind === 'end' && num(r.n) === driver).sort((x, y) => (num(x.lap) ?? 0) - (num(y.lap) ?? 0));
+    const latest = own.at(-1);
+    return {
+      driver,
+      compound: typeof latest?.compound === 'string' ? latest.compound : null,
+      age: latest ? tyreAgeNow(latest) : null,
+      last: num(own.filter((r) => num(r.lap_duration) !== null).at(-1)?.lap_duration),
+    };
+  };
+  const sides: [GapSide, GapSide] = [side(a), side(b)];
+  const empty: GapModel = { points: [], from: 0, to: 1, current: null, trend: null, sides };
   if (laps.length === 0) return empty;
 
   // The leader has no gap to itself: null means 0 there. Text such as "+1 LAP" is not a time.
@@ -111,9 +142,9 @@ export function gapModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: r
   const from = laps[0].n;
   // A lapped car's latest gap isn't a time, so there's no current value to tell.
   const known = last.get(a) != null && last.get(b) != null;
-  // The trend as the battle card tells it, from the gaps at the line rather than a sample that may sit on a pit stop.
+  // The trend from the gaps at the line, rather than a sample that may sit on a pit stop.
   const ends = rows
-    .filter((r) => r.kind === 'end')
+    .filter((r) => r.kind === 'end' && r.date != null)
     .map((r) => ({ driver_number: r.n, lap_number: r.lap, date_end: r.date, gap_to_leader: r.gap, stint_number: r.stint }));
   return {
     points,
@@ -121,6 +152,7 @@ export function gapModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: r
     to: Math.max(now.x, from + 1),
     current: known ? now.gap : null,
     trend: known ? gapTrend(ends, [a, b], TREND_LAPS) : null,
+    sides,
   };
 }
 
@@ -161,7 +193,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const big = compact ? 15 : 22;
   // The value sits top right, beside the plot.
-  const side = compact ? 0 : 92;
+  const side = compact ? 0 : 96;
   const left = compact ? 6 : 38;
   const right = width - (compact ? 6 : side + 8);
   const top = compact ? 8 : 12;
@@ -205,6 +237,27 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     text(ctx, `${sign}${Math.abs(m.trend).toFixed(2)} s/lap`, vx, top + big + 22, { align: 'right', color: c.ink });
     text(ctx, `last ${TREND_LAPS} laps`, vx, top + big + 35, { align: 'right' });
   }
+
+  // Under the gap: whether the car behind is in range, then each driver's tyre and last lap.
+  let at = top + big + 56;
+  const inRange = m.current !== null && Math.abs(m.current) < m.aid.within;
+  if (inRange && at + 10 < bottom) {
+    text(ctx, `${m.aid.label} IN RANGE`, vx, at, { align: 'right', color: c.ink, size: 10, weight: 600 });
+    at += 18;
+  }
+  m.sides.forEach((s, i) => {
+    if (at + 26 > bottom) return;
+    const style = i === 0 ? m.first : m.second;
+    hline(ctx, vx - side + 12, vx, at - 9);
+    text(ctx, style.code, vx - side + 12, at, { color: c.ink, size: 10, weight: 600 });
+    if (s.compound) {
+      const age = s.age === null ? '' : ` ${s.age}`;
+      text(ctx, age, vx, at, { align: 'right', color: c.ink, size: 10 });
+      text(ctx, compoundLetter(s.compound), vx - textWidth(ctx, age, 10), at, { align: 'right', color: tyreColour(s.compound), size: 10, weight: 600 });
+    }
+    text(ctx, formatLapTime(s.last), vx, at + 13, { align: 'right', size: 10 });
+    at += 32;
+  });
 }
 
 const NEEDS = ['timing' as const];
@@ -235,7 +288,7 @@ export default defineComponent({
   name: 'gap_evolution',
   title: 'Gap evolution',
   description:
-    "The gap between two drivers over the last laps, with the 1 second line where DRS opens (Overtake from 2026). Suggest it for a battle or a chase, next to both drivers' onboards.",
+"Two drivers' battle: the gap between them over the last laps and whether it is closing, the line where DRS opens (Overtake from 2026) and whether the car behind is inside it, and each one's tyre and last lap. The one chart for a battle or a chase, next to both drivers' onboards.",
   args: Type.Object({ drivers: Drivers }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
