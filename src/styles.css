@@ -245,7 +245,13 @@
 }
 
 .palette-input-row {
-  @apply flex items-center gap-2 px-2.5 py-1.5;
+  @apply flex items-start gap-2 px-2.5 py-1.5;
+}
+
+/* The row aligns to the top so a wrapped prompt grows downwards; the 16px tags centre on its first line. */
+.palette-input-row > .build-tag,
+.palette-input-row > .palette-tag {
+  margin-top: calc((1rlh - 16px) / 2);
 }
 
 .palette-prompt {
@@ -263,7 +269,8 @@
 }
 
 .palette-input {
-  @apply min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-faint;
+  @apply min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-ink outline-none placeholder:text-faint;
+  line-height: inherit;
 }
 
 /* Timeline */
