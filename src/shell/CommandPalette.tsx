@@ -19,6 +19,9 @@ import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
 /** While the agent is still working, a second Esc this soon after the first stops it. */
 const ESC_AGAIN_MS = 2000;
 
+/** The input grows with a long prompt up to this many lines, then scrolls. */
+const INPUT_MAX_LINES = 6;
+
 const ROLE_PREFIX: Record<EntryRole, string> = {
   user: '> ',
   agent: '',
@@ -31,10 +34,8 @@ export function CommandPalette() {
   const blank = useLive((s) => s.session == null);
   const [value, setValue] = useState('');
   const [selected, setSelected] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const historyRef = useRef<HTMLDivElement | null>(null);
-  const sentRef = useRef<string[]>([]);
-  const recallRef = useRef<number | null>(null);
   const stripRef = useRef<SuggestionStripHandle | null>(null);
   const promptRef = useRef<LookAheadPromptHandle | null>(null);
   const asking = useLookAhead((s) => s.asking);
@@ -103,6 +104,15 @@ export function CommandPalette() {
     inputRef.current?.focus();
   };
 
+  // The input wraps a long prompt and grows to fit it, up to INPUT_MAX_LINES.
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    const line = parseFloat(getComputedStyle(input).lineHeight);
+    input.style.height = `${Math.min(input.scrollHeight, line * INPUT_MAX_LINES)}px`;
+  }, [value, showing, panel]);
+
   useLayoutEffect(() => {
     const box = historyRef.current;
     if (box) box.scrollTop = box.scrollHeight;
@@ -158,8 +168,6 @@ export function CommandPalette() {
     if (!text) return;
     setValue('');
     setSelected(0);
-    recallRef.current = null;
-    sentRef.current.push(text);
     if (text.startsWith('/')) {
       const { name, rest } = parseCommand(text);
       const command = SLASH_COMMANDS.find((c) => c.name === name) ?? (rest ? undefined : suggestions[selected]);
@@ -173,21 +181,6 @@ export function CommandPalette() {
       return;
     }
     void sendToAgent(text);
-  };
-
-  const recall = (direction: -1 | 1) => {
-    const sent = sentRef.current;
-    if (sent.length === 0) return;
-    const current = recallRef.current ?? sent.length;
-    const next = current + direction;
-    if (next < 0) return;
-    if (next >= sent.length) {
-      recallRef.current = null;
-      setValue('');
-      return;
-    }
-    recallRef.current = next;
-    setValue(sent[next]);
   };
 
   return (
@@ -248,10 +241,11 @@ export function CommandPalette() {
       ) : null}
       <div className="palette-input-row">
         <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
-        <input
+        <textarea
           ref={inputRef}
           data-testid="palette-input"
           className="palette-input"
+          rows={1}
           value={value}
           spellCheck={false}
           autoComplete="off"
@@ -279,15 +273,15 @@ export function CommandPalette() {
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
               setValue(suggestions[selected].name);
-            } else if (e.key === 'ArrowDown') {
+            } else if (e.key === 'ArrowDown' && suggestions.length > 0) {
               e.preventDefault();
-              if (suggestions.length > 0) setSelected((selected + 1) % suggestions.length);
-              else recall(1);
-            } else if (e.key === 'ArrowUp') {
+              setSelected((selected + 1) % suggestions.length);
+            } else if (e.key === 'ArrowUp' && suggestions.length > 0) {
               e.preventDefault();
-              if (hasTiles && !value && suggestions.length === 0) stripRef.current?.focus();
-              else if (suggestions.length > 0) setSelected((selected - 1 + suggestions.length) % suggestions.length);
-              else recall(-1);
+              setSelected((selected - 1 + suggestions.length) % suggestions.length);
+            } else if (e.key === 'ArrowUp' && hasTiles && !value) {
+              e.preventDefault();
+              stripRef.current?.focus();
             }
           }}
         />
