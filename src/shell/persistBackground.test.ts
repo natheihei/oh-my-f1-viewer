@@ -9,7 +9,7 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 import Type from 'typebox';
 import { defineBackground, host, read } from '../host';
 import { formatSetting, nudge } from './BackgroundPanel';
-import { parseSavedBackground, restoreBackground, saveBackground } from './persistBackground';
+import { changedParams, parseSavedBackground, restoreBackground, saveBackground } from './persistBackground';
 import type { UiStorage } from './uiState';
 
 function memoryStorage(): UiStorage {
@@ -133,6 +133,23 @@ test('saves and restores the style showing and every style’s settings', () => 
       grid: { brightness: 0.3 },
     },
   });
+});
+
+test('saves only the settings changed from their defaults', () => {
+  expect(
+    changedParams(read().backgrounds, {
+      stars: { density: 7, twinkle: true, size: 24 },
+      grid: { brightness: 0.1 },
+      lava: { heat: 1 },
+    }),
+  ).toEqual({ stars: { density: 7 }, lava: { heat: 1 } });
+});
+
+test('restoring only the changed settings leaves the rest at their defaults', () => {
+  const storage = memoryStorage();
+  saveBackground({ style: 'stars', params: { stars: { density: 7 } } }, storage);
+  restoreBackground(storage);
+  expect(read().background.params.stars).toEqual({ density: 7, twinkle: true, size: 24 });
 });
 
 test('restores a style that is gone as off, and keeps a setting that no longer fits at what it was', () => {
