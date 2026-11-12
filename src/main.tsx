@@ -5,7 +5,7 @@ import * as typebox from 'typebox';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
-import { backgrounds } from './backgrounds/registry';
+import { backgrounds, DEFAULT_BACKGROUND } from './backgrounds/registry';
 import * as kit from './components/charts/kit';
 import { components } from './components/registry';
 import * as f1a from './host';
@@ -22,7 +22,8 @@ startMods({ f1a, 'f1a/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, 
 startBuild();
 // Before the first render too, so the volume slider starts at the saved level rather than jumping from 100%.
 restoreVolume();
-// And the background, so the gaps don't flash black first.
+// And the background, so the gaps don't flash black first. With nothing saved, the default shows.
+host.appearance.setBackground({ style: DEFAULT_BACKGROUND });
 restoreBackground();
 
 // No StrictMode: effects own real streams, and a double mount would start each one twice.
