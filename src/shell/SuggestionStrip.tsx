@@ -6,13 +6,16 @@
  * In build mode, a mod the build added or changed shows as a draft: its preview works, so the viewer can
  * try it there, and its name underneath is what adds or drags it. See docs/BUILD_MODE.md.
  *
+ * A preview can be resized by hand from its right edge, bottom edge or corner; double-clicking one of
+ * them gives it back its own shape. See `clampPreviewSize` for the limits.
+ *
  * Keys, once a suggestion has focus: ← → move, Enter adds, ↓ or typing goes back to the input,
  * Esc is the palette's (see CommandPalette).
  */
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ComponentView, host, previewScope, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
-import { previewAspect } from './stripShape';
+import { clampPreviewSize, manualSizes, MAX_PREVIEW_HEIGHT_OF_WINDOW, previewAspect } from './stripShape';
 
 export interface SuggestionStripHandle {
   /** Gives the strip keyboard focus, on the suggestion it last had. */
@@ -20,6 +23,10 @@ export interface SuggestionStripHandle {
 }
 
 const DRAG_THRESHOLD_PX = 4;
+
+/** The edges a preview is resized from: its right, its bottom, or the corner between them. */
+type Edge = 'e' | 's' | 'se';
+const EDGES: readonly Edge[] = ['e', 's', 'se'];
 
 interface Drag {
   key: string;
@@ -50,6 +57,8 @@ export const SuggestionStrip = forwardRef<
   const [drag, setDrag] = useState<Drag | null>(null);
   const cards = useRef<(HTMLDivElement | null)[]>([]);
   const suppressClick = useRef(false);
+  /** Re-renders when a size in `manualSizes` changes. */
+  const [, setResized] = useState(0);
 
   const current = Math.min(index, items.length - 1);
 
@@ -126,11 +135,48 @@ export const SuggestionStrip = forwardRef<
     window.addEventListener('pointercancel', end);
   };
 
+  /** Resizing never starts a drag or adds the card, and never reaches a draft's own content. */
+  const onResizeStart = (e: PointerEvent<HTMLDivElement>, spec: ComponentSpec, edge: Edge) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const grip = e.currentTarget;
+    const view = grip.closest('.strip-view');
+    const strip = grip.closest('.strip');
+    if (!view || !strip) return;
+    const start = view.getBoundingClientRect();
+    const padding = getComputedStyle(strip);
+    const maxWidth = strip.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev: globalThis.PointerEvent) => {
+      const width = start.width + (edge === 's' ? 0 : ev.clientX - startX);
+      const height = start.height + (edge === 'e' ? 0 : ev.clientY - startY);
+      manualSizes.set(spec.key, clampPreviewSize({ width, height }, maxWidth, window.innerHeight * MAX_PREVIEW_HEIGHT_OF_WINDOW));
+      setResized((n) => n + 1);
+    };
+    const end = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', end);
+      grip.removeEventListener('pointercancel', end);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+  };
+
+  const resetSize = (spec: ComponentSpec) => {
+    manualSizes.delete(spec.key);
+    setResized((n) => n + 1);
+  };
+
   return (
     <div className="strip" data-testid="suggestion-strip" role="listbox" aria-label="Suggested tiles" aria-orientation="horizontal">
       {items.map((spec, i) => {
         const present = onScreen.has(spec.key);
         const draft = present ? undefined : drafts.get(spec.type);
+        const manual = manualSizes.get(spec.key);
         return (
           <div
             key={spec.key}
@@ -146,6 +192,8 @@ export const SuggestionStrip = forwardRef<
             data-key={spec.key}
             data-draft={draft}
             data-on-screen={present}
+            data-resized={manual ? true : undefined}
+            style={manual ? { width: manual.width } : undefined}
             onFocus={() => {
               setIndex(i);
               host.suggestions.highlight({ key: spec.key });
@@ -155,7 +203,7 @@ export const SuggestionStrip = forwardRef<
             onMouseLeave={() => host.suggestions.highlight({ key: null })}
             onPointerDown={(e) => onPointerDown(e, spec)}
             onClick={(e) => {
-              if (insideDraft(spec, e.target)) return;
+              if (insideDraft(spec, e.target) || (e.target instanceof Element && e.target.closest('.strip-resize'))) return;
               if (suppressClick.current) {
                 suppressClick.current = false;
                 return;
@@ -164,7 +212,9 @@ export const SuggestionStrip = forwardRef<
             }}
             onKeyDown={(e) => onKeyDown(e, spec, i)}
           >
-            <div className="strip-view" style={{ aspectRatio: previewAspect(spec.size?.aspect, draft ? 'draft' : 'suggestion') }} data-draft-type={draft ? spec.type : undefined}>
+            <div
+              className="strip-view"
+              style={manual ? { height: manual.height } : { aspectRatio: previewAspect(spec.size?.aspect, draft ? 'draft' : 'suggestion') }} data-draft-type={draft ? spec.type : undefined}>
               {present ? (
                 <div className="strip-placeholder">{spec.label}</div>
               ) : (
@@ -177,6 +227,19 @@ export const SuggestionStrip = forwardRef<
                   {present ? 'already on screen' : '+'}
                 </div>
               )}
+              {EDGES.map((edge) => (
+                <div
+                  key={edge}
+                  className={`strip-resize strip-resize-${edge}`}
+                  data-testid={`strip-resize-${edge}`}
+                  aria-hidden
+                  onPointerDown={(e) => onResizeStart(e, spec, edge)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    resetSize(spec);
+                  }}
+                />
+              ))}
             </div>
             <div className="strip-label">
               <span className="strip-label-text">{spec.label}</span>

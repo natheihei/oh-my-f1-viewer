@@ -396,6 +396,31 @@
   @apply opacity-100;
 }
 
+/* Resize grips on a preview's right edge, bottom edge and corner, shown like the grid's on hover. */
+.strip-resize {
+  @apply absolute z-20 opacity-0;
+}
+
+.strip-item:hover .strip-resize,
+.strip-item:focus-visible .strip-resize {
+  @apply opacity-100;
+}
+
+.strip-resize-e {
+  @apply top-0 right-0 bottom-0 w-1.5;
+  cursor: ew-resize;
+}
+
+.strip-resize-s {
+  @apply right-0 bottom-0 left-0 h-1.5;
+  cursor: ns-resize;
+}
+
+.strip-resize-se {
+  @apply right-0 bottom-0 h-2.5 w-2.5 border-r-2 border-b-2 border-ink;
+  cursor: nwse-resize;
+}
+
 .strip-item-dragging {
   @apply opacity-40;
 }
