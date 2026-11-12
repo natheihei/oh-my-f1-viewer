@@ -1,6 +1,7 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isFilling, loadWindowState, MIN_SIZE, openingState, saveWindowState, type WindowState } from './windowState';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { devEnv, devToolsAllowed } = require('./vendor/f1ov/devFlags');
@@ -51,10 +52,61 @@ function harden(win: BrowserWindow): void {
   });
 }
 
+const SAVE_DELAY_MS = 500;
+
+/**
+ * Opens the window where the user last left it, or fitted to the display the mouse is on, and saves its
+ * size and position as they change. What's saved is its last size when neither maximized nor full
+ * screen, plus whether it was maximized, so un-maximizing after a restart goes back to that size.
+ * A window manager may still size and place the window itself, as a tiling one does, and Wayland never
+ * tells an app its window's position, so there the position saved is 0,0.
+ */
+function placeWindow(): { state: WindowState; track: (win: BrowserWindow) => void } {
+  const file = path.join(app.getPath('userData'), 'window-state.json');
+  const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const state = openingState(
+    loadWindowState(file),
+    screen.getAllDisplays().map((d) => d.workArea),
+    cursorDisplay.workArea,
+  );
+  const track = (win: BrowserWindow) => {
+    let normal = { x: state.x, y: state.y, width: state.width, height: state.height };
+    let timer: NodeJS.Timeout | null = null;
+    const save = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (win.isDestroyed()) return;
+      const bounds = win.getBounds();
+      const maximized = isFilling(win.isMaximized(), bounds, screen.getDisplayMatching(bounds).workArea);
+      if (!maximized && !win.isFullScreen() && !win.isMinimized()) {
+        const [width, height] = win.getContentSize();
+        normal = { x: bounds.x, y: bounds.y, width, height };
+      }
+      saveWindowState(file, { ...normal, maximized });
+    };
+    const later = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(save, SAVE_DELAY_MS);
+    };
+    win.on('resize', later);
+    win.on('move', later);
+    win.on('maximize', later);
+    win.on('unmaximize', later);
+    win.on('close', save);
+  };
+  return { state, track };
+}
+
 export function createMainWindow(): BrowserWindow {
+  const { state, track } = placeWindow();
   const win = new BrowserWindow({
-    width: 1400,
-    height: 860,
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+    useContentSize: true, // sizes are the page's area, so they mean the same with or without a frame
+    minWidth: MIN_SIZE.width,
+    minHeight: MIN_SIZE.height,
     backgroundColor: '#000000',
     title: 'f1a',
     webPreferences: {
@@ -68,6 +120,8 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
+  if (state.maximized) win.maximize();
+  track(win);
   harden(win);
 
   win.webContents.on('console-message', (event) => {
