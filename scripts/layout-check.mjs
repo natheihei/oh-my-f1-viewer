@@ -43,7 +43,7 @@ const hostRects = () =>
     ),
   );
 const settle = () => page.waitForTimeout(350);
-const TITLE = 18;
+const TITLE = 22;
 
 // Main fills the surface.
 await page.evaluate(() => window.layoutStore.layout.add(window.spec('MAIN')));

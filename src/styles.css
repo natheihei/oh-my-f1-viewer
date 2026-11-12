@@ -1,13 +1,32 @@
 @import 'tailwindcss';
 
+/*
+ * The platform's chrome is always on, on one rhythm. Every chrome row (tile header, palette row, panel
+ * row) is one --row tall, and there are three type sizes: --text-s for labels and hints, --text-m for
+ * what's read and typed, --text-l for the rare display figure.
+ *
+ * Colour has narrow jobs: ink is active, selected, heard and the playhead; red is live, error and spoiler only;
+ * yellow (--color-medium) is build mode. Everything else is grey. Tiles and panels are black on a
+ * slightly lifted ground, so they stand off it by value where no hairline separates them.
+ */
 @theme {
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --radius-*: initial;
   --color-ink: #e7e7e7;
   --color-dim: #8a8a8a;
+  /* Hint text: the quietest grey still readable on black (about 4.3:1). */
+  --color-mute: #767676;
+  /* Charts draw with faint, so it stays; the chrome uses it only for non-text marks. */
   --color-faint: #4a4a4a;
   --color-line: #2c2c2c;
-  --color-panel: rgb(10 10 10 / 0.94);
+  /* A brighter hairline: what floats over tiles is framed with it. */
+  --color-rule: #5a5a5a;
+  /* What shows where there's no tile. */
+  --color-ground: #121212;
+  --color-raised: #151515;
+  --color-select: #1e1e1e;
+  /* The palette's surface: lifted above the ground, so it stands off the black tiles it covers. */
+  --color-panel: #1a1a1a;
   --color-accent: #ff3b30;
 }
 
@@ -20,20 +39,46 @@
   --color-wet: #3d8fe0;
 }
 
+:root {
+  --row: 22px;
+  --text-s: 11px;
+  --text-m: 13px;
+  --text-l: 20px;
+  --pad: 10px;
+}
+
 @layer base {
   html,
   body,
   #root {
     @apply h-full bg-black font-mono text-ink;
-    font-size: 13px;
-    line-height: 1.45;
+    font-size: var(--text-m);
+    line-height: var(--row);
     overflow: hidden;
   }
   * {
     border-radius: 0 !important;
-    /* Every scrollable area (the suggestion strip, the palette history) gets a thin themed bar, not Chromium's default. */
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-faint) transparent;
+  }
+  /* Every scrollable area gets a thin square bar with no arrow buttons, not Chromium's default. */
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-faint);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-dim);
+  }
+  ::-webkit-scrollbar-button,
+  ::-webkit-scrollbar-corner {
+    display: none;
+  }
+  kbd {
+    font-family: inherit;
   }
 }
 
@@ -43,6 +88,7 @@
 
 .surface {
   @apply relative min-h-0 flex-1 overflow-hidden;
+  background: var(--color-ground);
 }
 
 /* Layer order, bottom to top: components, grid placeholders, countdown, palette. */
@@ -60,6 +106,7 @@
   @apply pointer-events-none absolute inset-0 z-0 block h-full w-full;
 }
 
+/* Sized by its box, not by GridStack's own row count. */
 .grid-surface {
   @apply absolute! inset-0 z-10;
   height: 100% !important;
@@ -70,6 +117,32 @@
 .grid-surface .grid-stack-item-content {
   overflow: hidden !important;
   background: transparent;
+}
+
+/*
+ * Seams: a tile draws a hairline on its right and bottom edges only, so neighbours share one. It draws
+ * none at its grid's last column or row, where the window's edge or the timeline's rule already is.
+ */
+.grid-surface .grid-stack-item::after {
+  @apply pointer-events-none absolute inset-0;
+  border: 0 solid var(--color-line);
+  border-width: 0 1px 1px 0;
+  content: '';
+  z-index: 5;
+}
+
+.grid-surface .grid-stack-item.tile-last-column::after {
+  border-right-width: 0;
+}
+
+.grid-surface .grid-stack-item.tile-last-row::after {
+  border-bottom-width: 0;
+}
+
+/* A group is framed all round, in the brighter hairline. */
+.grid-surface .grid-stack-item.tile-group::after {
+  border-width: 1px;
+  border-color: var(--color-rule);
 }
 
 /* The grid only takes the mouse at title bars and resize handles; the rest reaches the components. */
@@ -89,29 +162,77 @@
   pointer-events: auto;
 }
 
+/* A tile's header: label, state slots, close. Always on, the same for feeds and views. */
 .tile-titlebar {
-  @apply flex items-center border border-b-0 border-line bg-black pl-1.5 text-dim;
-  height: 18px;
-  font-size: 11px;
-  line-height: 18px;
+  @apply flex items-center bg-black text-dim;
+  height: var(--row);
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--text-s);
+  line-height: calc(var(--row) - 1px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .tile-titlebar:hover {
+  @apply text-ink;
+  background: var(--color-raised);
+}
+
+/* The tile that carries the sound: a lit label with an ink square before it. */
+.tile-titlebar-audio .tile-title {
   @apply text-ink;
 }
 
 .tile-title {
   @apply min-w-0 flex-1 truncate;
+  padding-left: 8px;
+}
+
+.tile-titlebar-audio .tile-title::before {
+  @apply mr-2 inline-block bg-ink;
+  width: 6px;
+  height: 6px;
+  vertical-align: 1px;
+  content: '';
+}
+
+.tile-slots {
+  @apply flex shrink-0 items-center gap-1 pr-1;
+}
+
+.tile-slot {
+  @apply border border-line px-1 text-dim;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+}
+
+.tile-slot[hidden] {
+  display: none;
+}
+
+.tile-slot-on {
+  @apply border-ink text-ink;
+}
+
+.tile-slot-build {
+  border-color: var(--color-medium);
+  color: var(--color-medium);
+}
+
+.tile-slot-warn,
+.tile-slot-error {
+  @apply border-accent text-accent;
 }
 
 .tile-close {
-  @apply h-full w-[18px] shrink-0 cursor-pointer text-center text-dim hover:bg-white/10 hover:text-accent;
-  font-size: 13px;
-  line-height: 16px;
+  @apply flex h-full shrink-0 cursor-pointer items-center justify-center text-dim hover:bg-select hover:text-ink;
+  width: 30px;
+  border-left: 1px solid var(--color-line);
+  font-size: var(--text-m);
+  letter-spacing: 0;
 }
 
 .tile-group > .grid-stack-item-content {
-  border: 1px solid var(--color-accent);
   pointer-events: none;
 }
 
@@ -120,36 +241,77 @@
 }
 
 .group-title {
-  @apply z-10 truncate bg-black px-1.5 text-dim;
-  height: 18px;
-  line-height: 18px;
-  font-size: 11px;
+  @apply z-10 truncate text-dim;
+  height: var(--row);
+  line-height: calc(var(--row) - 1px);
+  padding-left: 8px;
+  border-bottom: 1px solid var(--color-rule);
+  background: var(--color-raised);
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.group-title::before {
+  content: 'group  ';
+  white-space: pre;
+  color: var(--color-mute);
 }
 
 /* The nested grid fills what the group title leaves. */
 .grid-stack-nested {
   position: absolute !important;
-  inset: 18px 0 0 0;
+  inset: var(--row) 0 0 0;
   min-height: 0 !important;
   height: auto !important;
 }
 
 .grid-stack-placeholder > .placeholder-content {
-  background: rgb(255 255 255 / 0.08) !important;
-  border: 1px solid var(--color-faint);
+  background: rgb(255 255 255 / 0.06) !important;
+  border: 1px solid var(--color-dim);
 }
 
+/* Resize handles: quiet corner brackets and edge lines that show on hover, instead of nothing. */
 .grid-stack > .grid-stack-item > .ui-resizable-handle {
   opacity: 0;
+}
+
+.grid-stack .grid-stack-item > .ui-resizable-se,
+.grid-stack .grid-stack-item > .ui-resizable-sw {
+  width: 14px;
+  height: 14px;
+  transform: none;
+  background-image: none;
+}
+
+.grid-stack .grid-stack-item > .ui-resizable-se {
+  background:
+    linear-gradient(var(--color-dim), var(--color-dim)) right 3px bottom 3px / 8px 1px no-repeat,
+    linear-gradient(var(--color-dim), var(--color-dim)) right 3px bottom 3px / 1px 8px no-repeat;
+}
+
+.grid-stack .grid-stack-item > .ui-resizable-sw {
+  background:
+    linear-gradient(var(--color-dim), var(--color-dim)) left 3px bottom 3px / 8px 1px no-repeat,
+    linear-gradient(var(--color-dim), var(--color-dim)) left 3px bottom 3px / 1px 8px no-repeat;
+}
+
+.grid-stack .grid-stack-item > .ui-resizable-e:hover,
+.grid-stack .grid-stack-item > .ui-resizable-w:hover {
+  background: linear-gradient(var(--color-dim), var(--color-dim)) center / 1px 100% no-repeat;
+}
+
+.grid-stack .grid-stack-item > .ui-resizable-s:hover {
+  background: linear-gradient(var(--color-dim), var(--color-dim)) center / 100% 1px no-repeat;
 }
 
 .grid-stack > .grid-stack-item:hover > .ui-resizable-handle {
   opacity: 1;
 }
 
-/* Components */
+/* Components: the frame belongs to the grid, so a tile draws none of its own. */
 .tile {
-  @apply absolute inset-0 border border-line bg-black;
+  @apply absolute inset-0 bg-black;
 }
 
 .tile-video {
@@ -164,14 +326,11 @@
   @apply block h-full w-full bg-black object-contain;
 }
 
-.tile-audio {
-  @apply absolute top-1 left-1 bg-black/70 px-1.5 text-accent;
-  font-size: 11px;
-}
-
 .tile-status {
   @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
-  font-size: 12px;
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .tile-status-name {
@@ -182,11 +341,6 @@
   @apply text-accent;
 }
 
-.tile-resync {
-  @apply absolute top-1 right-1 bg-black/70 px-1.5 text-dim;
-  font-size: 11px;
-}
-
 /* Charts draw on a canvas that fills the tile. */
 .chart-canvas {
   @apply absolute inset-0 block h-full w-full;
@@ -194,26 +348,79 @@
 
 .chart-message {
   @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
-  font-size: 11px;
+  font-size: var(--text-s);
 }
 
-/* Palette */
+/* The palette: opaque, framed by the brighter hairline with a black ring, so it stands off whatever it covers. */
 .palette {
-  @apply absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 flex-col border border-faint bg-panel;
-  width: min(720px, calc(100% - 32px));
+  @apply absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 flex-col bg-panel;
+  width: min(760px, calc(100% - 32px));
+  border: 1px solid var(--color-rule);
+  box-shadow: 0 0 0 1px #000;
+  /* Its own raised and selected steps, since it starts lighter than a tile. */
+  --color-raised: #222;
+  --color-select: #2b2b2b;
+  --color-line: #333;
 }
 
+.bg-panel-head {
+  @apply flex shrink-0 items-center gap-2 text-dim;
+  height: var(--row);
+  padding-inline: var(--pad);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-raised);
+  font-size: var(--text-s);
+  line-height: calc(var(--row) - 1px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* With no session open: what this is and what to type. */
+.palette-intro {
+  @apply border-b border-line py-1;
+  padding-inline: var(--pad);
+}
+
+.palette-intro-try {
+  @apply text-dim;
+}
+
+.palette-example {
+  @apply border border-line px-1.5 text-ink;
+  margin-right: 4px;
+}
+
+/* The history. Each line's mark hangs in its own column, and your own lines sit on a raised band. */
 .palette-history {
-  @apply overflow-y-auto border-b border-line px-2.5 py-1.5;
-  max-height: calc(1.45em * 7 + 12px);
+  @apply overflow-y-auto border-b border-line py-1;
+  max-height: calc(var(--row) * 7 + 8px);
 }
 
 .palette-line {
-  @apply break-words whitespace-pre-wrap;
+  @apply flex break-words whitespace-pre-wrap;
+  padding-inline: var(--pad);
+}
+
+.palette-mark {
+  @apply w-[2ch] shrink-0 text-dim;
+}
+
+.palette-text {
+  @apply min-w-0 flex-1;
 }
 
 .palette-user {
-  @apply text-dim;
+  @apply text-ink;
+  background: var(--color-select);
+}
+
+/* A new turn stands a little off the one before it. */
+.palette-line + .palette-user {
+  @apply mt-1;
+}
+
+.palette-user + .palette-line {
+  @apply mt-0.5;
 }
 
 .palette-agent {
@@ -224,38 +431,68 @@
   @apply text-dim;
 }
 
-.palette-error {
+.palette-error,
+.palette-error .palette-mark {
   @apply text-accent;
 }
 
+/* Commands: a two-column table. */
 .palette-suggestions {
-  @apply border-b border-line py-0.5;
+  @apply border-b border-line py-1;
 }
 
 .palette-suggestion {
-  @apply flex cursor-pointer justify-between gap-4 px-2.5;
+  @apply grid cursor-pointer gap-4 border-l-2 border-transparent;
+  grid-template-columns: 22ch minmax(0, 1fr);
+  padding-left: calc(var(--pad) - 2px);
+  padding-right: var(--pad);
 }
 
-.palette-suggestion-active {
-  @apply bg-white/10;
+.palette-suggestion:hover {
+  background: var(--color-raised);
+}
+
+.palette-suggestion-active,
+.palette-suggestion-active:hover {
+  @apply border-ink text-ink;
+  background: var(--color-select);
 }
 
 .palette-suggestion-desc {
-  @apply text-dim;
+  @apply min-w-0 truncate text-dim;
+}
+
+.palette-suggestion-active .palette-suggestion-desc {
+  @apply text-ink;
+}
+
+/* What a command does that the viewer should know before running it. */
+.palette-suggestion-warning {
+  @apply ml-3 whitespace-nowrap text-dim;
 }
 
 .palette-input-row {
-  @apply flex items-start gap-2 px-2.5 py-1.5;
+  @apply flex items-start;
+  padding: 4px var(--pad);
+  min-height: calc(var(--row) + 8px);
 }
 
-/* The row aligns to the top so a wrapped prompt grows downwards; the 16px tags centre on its first line. */
+/* The row aligns to the top so a wrapped prompt grows downwards; the tags centre on its first line. */
 .palette-input-row > .build-tag,
 .palette-input-row > .palette-tag {
-  margin-top: calc((1rlh - 16px) / 2);
+  margin-top: 2px;
+}
+
+/* Beside the input: the agent may look ahead for this session. */
+.palette-tag {
+  @apply shrink-0 cursor-pointer border border-accent bg-transparent px-1.5 text-accent uppercase hover:bg-accent hover:text-black;
+  font-size: var(--text-s);
+  line-height: 16px;
+  letter-spacing: 0.06em;
 }
 
 .palette-prompt {
-  @apply w-[1ch] text-accent;
+  @apply w-[2ch] shrink-0 text-ink;
 }
 
 .palette-prompt-busy {
@@ -269,83 +506,159 @@
 }
 
 .palette-input {
-  @apply min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-ink outline-none placeholder:text-faint;
+  @apply min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-ink outline-none;
   line-height: inherit;
 }
 
-/* Timeline */
+.palette-input::placeholder {
+  color: var(--color-mute);
+}
+
+/* The transport: one row. Play, what's open, the scrub track, the time, the volume. */
 .timeline {
-  @apply z-20 flex h-8 shrink-0 items-center gap-3 border-t border-line bg-black px-2.5;
+  @apply z-20 flex shrink-0 items-center gap-3 bg-black text-dim;
+  height: 32px;
+  padding-right: var(--pad);
+  border-top: 1px solid var(--color-line);
+  font-size: var(--text-s);
+  letter-spacing: 0.04em;
 }
 
 .timeline-button {
-  @apply w-5 cursor-pointer text-center text-ink hover:text-accent;
-  font-size: 11px;
+  @apply flex h-full shrink-0 cursor-pointer items-center justify-center text-ink hover:bg-select;
 }
 
+.timeline-play {
+  width: 40px;
+  border-right: 1px solid var(--color-line);
+}
+
+.timeline-glyph {
+  width: 9px;
+  height: 9px;
+}
+
+.timeline-title {
+  @apply min-w-0 shrink truncate;
+  max-width: 34ch;
+}
+
+/* The whole row's height takes the pointer; the track is the 4px line through its middle. */
 .timeline-bar {
   @apply relative h-full min-w-0 flex-1 cursor-pointer touch-none;
 }
 
+.timeline-track,
+.timeline-fill {
+  @apply absolute left-0;
+  top: 14px;
+  height: 4px;
+}
+
 .timeline-track {
-  @apply absolute top-1/2 right-0 left-0 h-px bg-faint;
+  @apply right-0;
+  background: #242424;
 }
 
 .timeline-fill {
-  @apply absolute top-1/2 left-0 h-px bg-accent;
+  background: var(--color-dim);
+}
+
+.timeline-bar:hover .timeline-fill {
+  @apply bg-ink;
+}
+
+.timeline-ticks {
+  @apply pointer-events-none absolute inset-0;
+}
+
+.timeline-tick {
+  @apply absolute w-px;
+  top: 19px;
+  height: 4px;
+  background: var(--color-rule);
+}
+
+.timeline-tick-major {
+  top: 10px;
+  height: 13px;
+  background: var(--color-dim);
 }
 
 .timeline-head {
-  @apply absolute top-1/2 h-3 w-px -translate-y-1/2 bg-ink;
+  @apply absolute -translate-x-1/2 bg-ink;
+  top: 9px;
+  width: 3px;
+  height: 14px;
+}
+
+.timeline-hover-mark {
+  @apply pointer-events-none absolute w-px bg-dim;
+  top: 11px;
+  height: 10px;
 }
 
 .timeline-hover {
-  @apply pointer-events-none absolute -top-5 -translate-x-1/2 border border-line bg-black px-1 text-ink;
-  font-size: 11px;
+  @apply pointer-events-none absolute border border-rule bg-black px-1.5 text-ink tabular-nums;
+  bottom: calc(100% + 2px);
+  line-height: 18px;
 }
 
 .timeline-time {
-  @apply whitespace-nowrap tabular-nums;
+  @apply whitespace-nowrap text-ink tabular-nums;
+  font-size: var(--text-m);
 }
 
 .timeline-total {
   @apply text-dim;
 }
 
-.timeline-status {
-  @apply text-dim;
+.timeline-tag {
+  @apply shrink-0 border border-line bg-transparent px-1 text-dim uppercase;
+  line-height: 14px;
 }
 
 .timeline-live {
-  @apply cursor-pointer text-dim;
+  @apply cursor-pointer;
 }
 
 .timeline-live-on {
-  @apply text-accent;
+  @apply border-accent text-accent;
 }
 
 .timeline-volume {
-  @apply flex h-full shrink-0 items-center gap-1;
+  @apply flex h-full shrink-0 items-center gap-2;
+}
+
+.timeline-volume > .timeline-button {
+  width: 22px;
 }
 
 .timeline-speaker {
-  @apply mx-auto h-3.5 w-3.5;
+  @apply h-3.5 w-3.5;
 }
 
+/* Ten segments, lit up to the level. */
 .timeline-volume-slider {
-  @apply h-full w-16 cursor-pointer touch-none appearance-none bg-transparent;
+  @apply h-full w-[70px] cursor-pointer touch-none appearance-none bg-transparent;
 }
 
 .timeline-volume-slider::-webkit-slider-runnable-track {
-  height: 1px;
-  background: linear-gradient(to right, var(--color-accent) var(--level), var(--color-faint) var(--level));
+  height: 8px;
+  background:
+    repeating-linear-gradient(to right, transparent 0 6px, #000 6px 7px),
+    linear-gradient(to right, var(--color-ink) var(--level), #2a2a2a var(--level));
 }
 
 .timeline-volume-slider::-webkit-slider-thumb {
-  @apply appearance-none bg-ink;
+  @apply appearance-none bg-transparent;
   width: 1px;
-  height: 12px;
-  margin-top: -5.5px;
+  height: 8px;
+}
+
+.timeline-volume-value {
+  @apply text-right tabular-nums uppercase;
+  width: 4ch;
 }
 
 /* Countdown */
@@ -354,7 +667,9 @@
 }
 
 .countdown-title {
-  @apply text-dim;
+  @apply text-dim uppercase;
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
 }
 
 .countdown-time {
@@ -362,13 +677,16 @@
   font-size: 40px;
 }
 
-/* Suggested tiles: a strip between the palette's history and its input. */
+/* Suggested tiles: a strip between the transcript and the input. Cards shrink to fit before it scrolls. */
 .strip {
-  @apply flex items-end gap-2 overflow-x-auto border-b border-line px-2.5 pt-2 pb-1.5;
+  @apply flex items-end gap-2 overflow-x-auto border-b border-line pt-2 pb-1;
+  padding-inline: var(--pad);
 }
 
 .strip-item {
-  @apply relative flex w-56 shrink-0 cursor-pointer flex-col outline-none select-none;
+  @apply relative flex min-w-0 cursor-pointer flex-col outline-none select-none;
+  flex: 0 1 14rem;
+  min-width: 9.5rem;
   touch-action: none;
 }
 
@@ -383,19 +701,21 @@
 }
 
 .strip-placeholder {
-  @apply flex h-full items-center justify-center px-2 text-center text-faint;
-  font-size: 11px;
+  @apply flex h-full items-center justify-center px-2 text-center uppercase;
+  color: var(--color-mute);
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
 }
 
 /* The + shows on hover and on keyboard focus. */
 .strip-overlay {
   @apply pointer-events-none absolute inset-0 flex items-center justify-center bg-black/50 text-ink opacity-0;
-  font-size: 28px;
+  font-size: var(--text-l);
 }
 
 .strip-item-present .strip-overlay {
-  @apply bg-black text-dim;
-  font-size: 11px;
+  @apply bg-black text-dim uppercase;
+  font-size: var(--text-s);
 }
 
 .strip-item:hover .strip-overlay,
@@ -424,7 +744,7 @@
 }
 
 .strip-resize-se {
-  @apply right-0 bottom-0 h-2.5 w-2.5 border-r-2 border-b-2 border-ink;
+  @apply right-0 bottom-0 h-2.5 w-2.5 border-r border-b border-ink;
   cursor: nwse-resize;
 }
 
@@ -433,8 +753,10 @@
 }
 
 .strip-label {
-  @apply flex items-center gap-1.5 pt-0.5 text-dim;
-  font-size: 11px;
+  @apply flex min-w-0 items-center gap-1.5 text-dim uppercase;
+  height: var(--row);
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
 }
 
 .strip-item:hover .strip-label,
@@ -447,19 +769,21 @@
 }
 
 .strip-badge {
-  @apply shrink-0 border border-faint px-1 text-dim;
-  font-size: 10px;
+  @apply shrink-0 border border-line px-1 text-dim;
   line-height: 14px;
 }
 
-.strip-hint {
-  @apply border-b border-line px-2.5 py-0.5 text-faint;
-  font-size: 11px;
+.strip-hint,
+.bg-panel-foot {
+  @apply border-b border-line;
+  padding-inline: var(--pad);
+  color: var(--color-mute);
+  font-size: var(--text-s);
 }
 
 .strip-ghost {
-  @apply pointer-events-none fixed z-50 border border-ink bg-panel px-1.5 text-ink;
-  font-size: 11px;
+  @apply pointer-events-none fixed z-50 border border-ink bg-panel px-1.5 text-ink uppercase;
+  font-size: var(--text-s);
   transform: translate(8px, 8px);
 }
 
@@ -469,18 +793,19 @@
 }
 
 .drop-preview {
-  @apply absolute border-2 border-accent bg-accent/15;
+  @apply absolute border border-ink bg-white/10;
 }
 
 /* The tile a suggestion duplicates, while that suggestion is hovered or focused. */
 .stage-host-highlight::after {
-  @apply pointer-events-none absolute inset-0 border-2 border-accent;
+  @apply pointer-events-none absolute inset-0 border border-ink;
   content: '';
 }
 
 /* The spoiler check: between the palette's history and the suggested tiles. */
 .spoiler {
-  @apply flex flex-col gap-2 border-b border-line px-2.5 py-2;
+  @apply flex flex-col gap-2 border-b border-line py-2;
+  padding-inline: var(--pad);
 }
 
 .spoiler-label {
@@ -492,30 +817,29 @@
 }
 
 .spoiler-answer {
-  @apply cursor-pointer border border-faint bg-transparent px-2.5 text-ink outline-none;
-  padding-block: 2px;
+  @apply cursor-pointer border border-rule bg-transparent px-3 text-ink outline-none;
+  height: var(--row);
+  line-height: calc(var(--row) - 2px);
 }
 
 .spoiler-answer:hover,
 .spoiler-answer:focus-visible {
-  @apply border-ink bg-white/10;
+  @apply border-ink bg-ink text-black;
 }
 
-.palette-tag {
-  @apply shrink-0 cursor-pointer border border-faint bg-transparent px-1 text-dim hover:text-ink;
-  font-size: 10px;
-  line-height: 14px;
-}
-
-/* Background settings, in the palette's place. */
+/* Settings (background, agent) in the palette's place, on the same rows. */
 .bg-panel-head {
-  @apply flex items-center justify-between border-b border-line pl-2.5;
+  @apply justify-between pr-0 text-ink;
+}
+
+.bg-panel-head > .tile-close {
+  height: calc(var(--row) - 1px);
 }
 
 .bg-panel-body {
   @apply grid;
-  grid-template-columns: 170px 1fr;
-  min-height: 162px;
+  grid-template-columns: 180px 1fr;
+  min-height: calc(var(--row) * 7 + 8px);
 }
 
 .bg-styles {
@@ -523,35 +847,35 @@
 }
 
 .bg-styles button {
-  @apply w-full cursor-pointer bg-transparent px-2.5 text-left text-dim hover:text-ink;
+  @apply w-full cursor-pointer border-l-2 border-transparent bg-transparent text-left text-dim hover:text-ink;
+  height: var(--row);
+  padding-left: calc(var(--pad) - 2px);
 }
 
-.bg-styles button::before {
-  content: ' ';
-  white-space: pre;
-  @apply mr-1.5 inline-block w-[1ch];
+.bg-styles button:hover {
+  background: var(--color-raised);
 }
 
 .bg-styles button[aria-pressed='true'] {
-  @apply bg-white/10 text-ink;
-}
-
-.bg-styles button[aria-pressed='true']::before {
-  content: '>';
-  @apply text-accent;
+  @apply border-ink text-ink;
+  background: var(--color-select);
 }
 
 .bg-settings {
-  @apply grid content-start gap-1.5 px-3 py-1.5;
+  @apply grid content-start py-1;
+  padding-inline: 12px;
+  grid-auto-rows: minmax(var(--row), auto);
+  row-gap: 4px;
 }
 
 .bg-note {
-  @apply text-faint;
+  color: var(--color-mute);
 }
 
 .bg-setting {
   @apply grid items-center gap-3;
-  grid-template-columns: 150px 1fr 120px 1.2em;
+  grid-template-columns: 150px 1fr 90px 1.2em;
+  height: var(--row);
 }
 
 .bg-setting label {
@@ -568,7 +892,7 @@
 
 .bg-panel button:focus-visible,
 .bg-panel [data-control]:focus-visible {
-  outline: 1px solid var(--color-dim);
+  outline: 1px solid var(--color-ink);
   outline-offset: 1px;
 }
 
@@ -577,12 +901,12 @@
 }
 
 .bg-panel-foot {
-  @apply border-t border-line px-2.5 py-0.5 text-faint;
-  font-size: 11px;
+  @apply border-t border-b-0;
+  line-height: var(--row);
 }
 
 .bg-reset {
-  @apply cursor-pointer bg-transparent p-0 text-faint hover:text-ink;
+  @apply cursor-pointer bg-transparent p-0 text-dim hover:text-ink;
 }
 
 .bg-choices {
@@ -590,11 +914,13 @@
 }
 
 .bg-toggle {
-  @apply cursor-pointer border border-line bg-transparent px-2 text-dim hover:text-ink;
+  @apply cursor-pointer border border-line bg-transparent px-2 text-dim hover:border-rule hover:text-ink;
+  height: var(--row);
+  line-height: calc(var(--row) - 2px);
 }
 
 .bg-toggle[aria-pressed='true'] {
-  @apply border-ink text-ink;
+  @apply border-ink bg-ink text-black;
 }
 
 .bg-slider {
@@ -602,15 +928,15 @@
 }
 
 .bg-slider::-webkit-slider-runnable-track {
-  height: 1px;
-  background: linear-gradient(var(--color-ink), var(--color-ink)) 0 / var(--fill, 50%) 100% no-repeat, var(--color-faint);
+  height: 4px;
+  background: linear-gradient(var(--color-ink), var(--color-ink)) 0 / var(--fill, 50%) 100% no-repeat, #2a2a2a;
 }
 
 .bg-slider::-webkit-slider-thumb {
   @apply appearance-none border-0 bg-ink;
-  width: 7px;
-  height: 13px;
-  margin-top: -6px;
+  width: 3px;
+  height: 14px;
+  margin-top: -5px;
 }
 
 /* Agent settings (/settings-agent), in the palette's place. Built on the background panel's layout. */
@@ -628,22 +954,12 @@
 }
 
 .agent-model {
-  @apply flex cursor-pointer justify-between gap-3 bg-transparent px-2 text-left text-dim hover:text-ink;
-}
-
-.agent-model::before {
-  content: ' ';
-  white-space: pre;
-  @apply inline-block w-[1ch];
+  @apply flex cursor-pointer justify-between gap-3 border-l-2 border-transparent bg-transparent px-2 text-left text-dim hover:text-ink;
 }
 
 .agent-model[aria-selected='true'] {
-  @apply bg-white/10 text-ink;
-}
-
-.agent-model[aria-selected='true']::before {
-  content: '>';
-  @apply text-accent;
+  @apply border-ink text-ink;
+  background: var(--color-select);
 }
 
 .agent-model > span:first-child {
@@ -651,7 +967,7 @@
 }
 
 .agent-model-note {
-  @apply text-faint;
+  color: var(--color-mute);
 }
 
 .agent-thinking {
@@ -659,7 +975,7 @@
 }
 
 .agent-way {
-  @apply grid items-baseline gap-3;
+  @apply grid items-center gap-3;
   grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
 }
 
@@ -669,7 +985,7 @@
 
 .agent-code {
   @apply text-ink;
-  font-size: 20px;
+  font-size: var(--text-l);
   font-weight: 600;
   letter-spacing: 0.12em;
 }
@@ -683,7 +999,7 @@
 }
 
 .agent-settings [data-control]:focus-visible {
-  outline: 1px solid var(--color-dim);
+  outline: 1px solid var(--color-ink);
   outline-offset: 1px;
 }
 
@@ -691,7 +1007,8 @@
 
 /* A draft in the strip: wider, since its preview is there to be tried. Only its name adds or drags it. */
 .strip-item-draft {
-  @apply w-80 cursor-default;
+  @apply cursor-default;
+  flex-basis: 20rem;
 }
 
 .strip-item-draft .strip-view {
@@ -724,13 +1041,6 @@
   content: '';
 }
 
-.stage-mark {
-  @apply pointer-events-none absolute top-0 right-0 z-10 bg-black px-1;
-  color: var(--color-medium);
-  font-size: 10px;
-  line-height: 14px;
-}
-
 /* What a component draws in, in a tile or a strip preview: the host checks it for content cut off below. */
 .view-frame {
   @apply absolute inset-0 overflow-hidden;
@@ -739,20 +1049,20 @@
 /* A component with more below than its tile shows: the bottom edge fades out and a quiet mark says so. */
 .overflow-mark {
   @apply pointer-events-none absolute inset-x-0 bottom-0 z-10;
-  height: 22px;
+  height: var(--row);
   background: linear-gradient(to bottom, transparent, black);
 }
 
 .overflow-mark-label {
-  @apply absolute right-0 bottom-0 border-t border-l border-line bg-black px-1 text-dim;
-  font-size: 10px;
-  line-height: 14px;
+  @apply absolute right-0 bottom-0 border-t border-l border-line bg-black px-1 text-dim uppercase;
+  font-size: var(--text-s);
+  line-height: 16px;
 }
 
 /* A tile asking to read past the playhead: it covers the tile until the viewer allows it. */
 .tile-warning {
   @apply absolute inset-0 z-10 flex items-center justify-center gap-4 bg-black p-2 text-dim;
-  font-size: 11px;
+  font-size: var(--text-s);
 }
 
 .tile-warning-title {
@@ -760,29 +1070,21 @@
 }
 
 .tile-warning-allow {
-  @apply shrink-0 cursor-pointer border border-faint bg-black px-3 py-1 text-ink hover:border-ink;
-  font-size: 12px;
-}
-
-/* What a command does that the viewer should know before running it. */
-.palette-suggestion-warning {
-  @apply shrink-0 whitespace-nowrap text-accent;
-}
-
-.palette-suggestion-desc {
-  @apply min-w-0 flex-1 text-right;
+  @apply shrink-0 cursor-pointer border border-rule bg-black px-3 text-ink hover:border-ink hover:bg-ink hover:text-black;
+  height: var(--row);
 }
 
 /* A line in the history the viewer can act on. */
 .palette-action {
-  @apply cursor-pointer border border-faint bg-transparent px-1.5 text-ink hover:border-ink;
+  @apply cursor-pointer border border-rule bg-transparent px-1.5 text-ink hover:border-ink;
+  line-height: 18px;
 }
 
 /* Beside the input while building: what changed, and the two ways out. */
 .build-tag {
-  @apply flex shrink-0 items-center gap-1.5;
-  font-size: 10px;
-  line-height: 14px;
+  @apply flex shrink-0 items-center gap-1.5 uppercase;
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
 }
 
 .build-tag-label {
@@ -790,7 +1092,9 @@
 }
 
 .build-tag-button {
-  @apply cursor-pointer border bg-transparent px-1.5 hover:text-ink;
+  @apply cursor-pointer border bg-transparent px-1.5 uppercase hover:text-ink;
+  line-height: 16px;
+  letter-spacing: 0.06em;
   border-color: var(--color-medium);
   color: var(--color-medium);
 }

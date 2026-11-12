@@ -9,23 +9,65 @@
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { useEffect, useRef } from 'react';
-import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, type LayoutNode, type Rect, type TileNode } from './model';
+import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, TITLE_BAR_PX, type LayoutNode, type Rect, type TileNode } from './model';
 import { layout, useLayout } from './store';
 
-const GROUP_TITLE_PX = 18;
+const GROUP_TITLE_PX = TITLE_BAR_PX;
 const TOP_GRIP = 'grip-top';
 const SUB_GRIP = 'grip-sub';
 
-const NO_NOTES: Record<string, string> = {};
+/**
+ * What a tile's header says about it besides its label, in fixed slots on the right: which tile
+ * carries the sound, whether its stream is catching up, and whether it may look ahead.
+ */
+export interface TileState {
+  /** This tile's feed is the one heard: 'on' when audible, 'muted' when the volume is down. */
+  audio?: 'on' | 'muted';
+  /** A short word while the stream isn't playing cleanly, e.g. "sync". */
+  status?: string;
+  /** The status is a failure. */
+  error?: boolean;
+  /** The viewer let this tile read past the playhead. */
+  ahead?: boolean;
+  /** What build mode did to this tile's mod: "draft" or "edited". */
+  mark?: string;
+}
 
-function signature(nodes: LayoutNode[], notes: Record<string, string> = NO_NOTES): string {
+const NO_STATES: Record<string, TileState> = {};
+
+function signature(nodes: LayoutNode[]): string {
   return JSON.stringify(
     nodes.map((n) =>
       n.kind === 'tile'
-        ? [n.id, n.x, n.y, n.w, n.h, n.component.label, notes[n.id]]
-        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label, notes[c.id]])],
+        ? [n.id, n.x, n.y, n.w, n.h, n.component.label]
+        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label])],
     ),
   );
+}
+
+/** Fills a header's state slots in place, so a change of audio or sync doesn't rebuild the grid. */
+function applyState(bar: Element, state: TileState = {}): void {
+  bar.classList.toggle('tile-titlebar-audio', state.audio != null);
+  const slot = (name: string, text: string | null, cls = '') => {
+    const el = bar.querySelector<HTMLElement>(`:scope .tile-slot-${name}`);
+    if (!el) return;
+    el.textContent = text ?? '';
+    el.hidden = text == null;
+    el.className = `tile-slot tile-slot-${name} ${cls}`;
+  };
+  slot('status', state.status ?? null, state.error ? 'tile-slot-error' : '');
+  slot('mark', state.mark ?? null, 'tile-slot-build');
+  slot('ahead', state.ahead ? 'ahead' : null, 'tile-slot-warn');
+  slot('audio', state.audio === 'on' ? 'aud' : state.audio === 'muted' ? 'mute' : null, state.audio === 'on' ? 'tile-slot-on' : '');
+}
+
+/**
+ * A tile draws its seam on its right and bottom edges only, so neighbours share one hairline. One that
+ * ends at its grid's last column or row draws none there: the frame around the grid is that edge.
+ */
+function markEdges(item: Element, rect: Rect, columns: number, rows: number): void {
+  item.classList.toggle('tile-last-column', rect.x + rect.w >= columns);
+  item.classList.toggle('tile-last-row', rect.y + rect.h >= rows);
 }
 
 const baseOptions: GridStackOptions = {
@@ -39,15 +81,28 @@ const baseOptions: GridStackOptions = {
   resizable: { handles: 'e,s,se,w,sw' },
 };
 
-/** The tile's title bar: dragging it moves the tile, and its x closes it. */
-function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void, note?: string): void {
+/**
+ * The tile's header: dragging it moves the tile, and its x closes it. One grammar for every tile:
+ * label, state slots, close.
+ */
+function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void): void {
   const content = item.querySelector(':scope > .grid-stack-item-content');
   if (!content || content.querySelector(':scope > .tile-titlebar')) return;
   const bar = document.createElement('div');
   bar.className = `tile-titlebar tile-grip ${className}`;
+  bar.dataset.tileId = tile.id;
+  bar.dataset.kind = tile.component.type === 'video' ? 'video' : 'view';
   const title = document.createElement('span');
   title.className = 'tile-title';
-  title.textContent = note ? `${tile.component.label} · ${note}` : tile.component.label;
+  title.textContent = tile.component.label;
+  const slots = document.createElement('span');
+  slots.className = 'tile-slots';
+  for (const name of ['status', 'mark', 'ahead', 'audio']) {
+    const el = document.createElement('span');
+    el.className = `tile-slot tile-slot-${name}`;
+    el.hidden = true;
+    slots.append(el);
+  }
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'tile-close';
@@ -61,7 +116,7 @@ function addTitleBar(item: Element, className: string, tile: TileNode, onClose: 
     e.stopPropagation();
     onClose(tile.id);
   });
-  bar.append(title, close);
+  bar.append(title, slots, close);
   content.appendChild(bar);
 }
 
@@ -69,16 +124,14 @@ export function GridSurface({
   onMove,
   onSwap,
   onClose,
-  notes = NO_NOTES,
+  states = NO_STATES,
 }: {
   onMove: (id: string, rect: Rect) => void;
   onSwap: (a: string, b: string) => void;
   onClose: (id: string) => void;
-  /** A few quiet words after some tiles' titles, by tile id. */
-  notes?: Record<string, string>;
+  /** What each tile's header slots show, by tile id. */
+  states?: Record<string, TileState>;
 }) {
-  const notesRef = useRef(notes);
-  notesRef.current = notes;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
   const renderedRef = useRef('');
@@ -104,7 +157,7 @@ export function GridSurface({
         if (item.id == null) continue;
         onMove(String(item.id), { x: item.x ?? 0, y: item.y ?? 0, w: item.w ?? 1, h: item.h ?? 1 });
       }
-      renderedRef.current = signature(layout.snapshot().nodes, notesRef.current);
+      renderedRef.current = signature(layout.snapshot().nodes);
     });
 
     // Dropped on another tile: swap them. Deferred because the swap rebuilds the placeholders, which
@@ -152,7 +205,7 @@ export function GridSurface({
     const grid = gridRef.current;
     const host = hostRef.current;
     if (!grid || !host) return;
-    const sig = signature(nodes, notes);
+    const sig = signature(nodes);
     if (sig === renderedRef.current) return;
     renderedRef.current = sig;
 
@@ -165,7 +218,10 @@ export function GridSurface({
       const rect = { id: node.id, x: node.x, y: node.y, w: node.w, h: node.h };
       if (node.kind === 'tile') {
         const el = grid.addWidget(rect);
-        if (el) addTitleBar(el, TOP_GRIP, node, onClose, notes[node.id]);
+        if (el) {
+          markEdges(el, node, GRID_COLUMNS, GRID_ROWS);
+          addTitleBar(el, TOP_GRIP, node, onClose);
+        }
       } else {
         const el = grid.addWidget({
           ...rect,
@@ -185,16 +241,24 @@ export function GridSurface({
           title.textContent = node.title;
           el.querySelector(':scope > .grid-stack-item-content')?.prepend(title);
           el.classList.add('tile-group');
+          markEdges(el, node, GRID_COLUMNS, GRID_ROWS);
           el.querySelectorAll('.grid-stack-nested > .grid-stack-item').forEach((child) => {
             const tile = node.children.find((c) => c.id === child.getAttribute('gs-id'));
-            if (tile) addTitleBar(child, SUB_GRIP, tile, onClose, notes[tile.id]);
+            if (!tile) return;
+            markEdges(child, tile, GROUP_COLUMNS, GROUP_ROWS);
+            addTitleBar(child, SUB_GRIP, tile, onClose);
           });
         }
       }
     }
     grid.batchUpdate(false);
     rebuildingRef.current = false;
-  }, [nodes, notes]);
+  }, [nodes]);
+
+  // Runs after any rebuild above, so fresh headers get their slots filled too.
+  useEffect(() => {
+    hostRef.current?.querySelectorAll<HTMLElement>('.tile-titlebar[data-tile-id]').forEach((bar) => applyState(bar, states[bar.dataset.tileId ?? '']));
+  }, [nodes, states]);
 
   return <div ref={hostRef} className="grid-stack grid-surface" data-testid="grid-surface" />;
 }
