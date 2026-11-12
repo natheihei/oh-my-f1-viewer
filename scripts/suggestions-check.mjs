@@ -131,6 +131,61 @@ await page.evaluate(() => {
 await settle();
 check('the palette stays open while there are suggestions', await page.locator('[data-testid=suggestion-strip]').isVisible());
 
+// Resizing a preview by hand: it neither adds nor drags the card.
+await page.evaluate(() => {
+  window.host.suggestions.newTurn();
+  window.host.suggestions.offer({ items: window.videos(['1:4']) });
+});
+await settle();
+const nor = page.locator('[data-testid=suggestion][data-key="1:4"]');
+const norView = nor.locator('.strip-view');
+const sizeOf = async () => {
+  const [c, v] = [await nor.boundingBox(), await norView.boundingBox()];
+  return { width: Math.round(c.width), height: Math.round(v.height) };
+};
+const grab = async (edge, dx, dy) => {
+  await nor.hover();
+  const g = await nor.locator(`[data-testid=strip-resize-${edge}]`).boundingBox();
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 + dx, g.y + g.height / 2 + dy, { steps: 6 });
+  const dragging = await page.locator('[data-testid=drop-preview]').count();
+  await page.mouse.up();
+  await settle();
+  return dragging;
+};
+const before = await sizeOf();
+const dragged = await grab('se', 80, 40);
+const after = await sizeOf();
+check('the corner resizes both ways', Math.abs(after.width - before.width - 80) <= 2 && Math.abs(after.height - before.height - 40) <= 2, `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+check('resizing neither drags nor adds', dragged === 0 && JSON.stringify(await labels()) === '["NOR"]');
+await page.screenshot({ path: path.join(outDir, 'suggestions-resized.png') });
+await grab('e', -40, 30);
+const wider = await sizeOf();
+check('the right edge only changes the width', Math.abs(wider.width - after.width + 40) <= 2 && wider.height === after.height, JSON.stringify(wider));
+await grab('s', 0, 2000);
+const tallest = await sizeOf();
+const half = await page.evaluate(() => window.innerHeight / 2);
+check('it stops at half the window', Math.abs(tallest.height - half) <= 2, `${tallest.height} vs ${half}`);
+await grab('se', -2000, -2000);
+const least = await sizeOf();
+check('it stops at the least size', least.width === 120 && least.height === 60, JSON.stringify(least));
+await grab('se', 100, 40);
+const picked = await sizeOf();
+await page.evaluate(() => {
+  window.host.suggestions.newTurn();
+  window.host.suggestions.offer({ items: window.videos(['1:4']) });
+});
+await settle();
+check('the size carries to a later turn', JSON.stringify(await sizeOf()) === JSON.stringify(picked), JSON.stringify(await sizeOf()));
+await nor.hover();
+await nor.locator('[data-testid=strip-resize-se]').dblclick();
+await settle();
+check('double-clicking a grip gives back its own shape', JSON.stringify(await sizeOf()) === JSON.stringify(before) && JSON.stringify(await labels()) === '["NOR"]', JSON.stringify(await sizeOf()));
+await nor.click();
+await settle();
+check('a click on the preview still adds it', (await onScreen()).includes('NOR'));
+
 await app.close();
 await server.close();
 console.log(failures ? `${failures} failed` : 'all ok');
