@@ -26,7 +26,7 @@ export default defineBackground<Params, Streak[]>({
     density: Type.Number({
       title: 'Density',
       minimum: 5,
-      maximum: 100,
+      maximum: 250,
       step: 1,
       default: 36,
       unit: '/1000px',
@@ -34,9 +34,9 @@ export default defineBackground<Params, Streak[]>({
     brightness: Type.Number({
       title: 'Brightness',
       minimum: 0.02,
-      maximum: 0.3,
+      maximum: 1,
       step: 0.005,
-      default: 0.07,
+      default: 0.11,
       unit: '%',
     }),
     speed: Type.Number({
