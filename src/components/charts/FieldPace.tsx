@@ -120,7 +120,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   });
 }
 
-function StintPace() {
+function FieldPace() {
   const view = useSql(SQL);
   const styles = useDriverStyles();
   const model = useMemo(() => (view.state === 'ready' ? { rows: paceModel(view.rows), styles } : null), [view, styles]);
@@ -132,14 +132,14 @@ function StintPace() {
 }
 
 export default defineComponent({
-  name: 'stint_pace',
+  name: 'field_pace',
   title: 'Pace',
   description:
-    'Who is quick right now: each driver\'s median over their last five clean laps, ranked, with their tyre and its age. Suggest it when the user asks who is fastest at the moment.',
+    'The whole field ranked by pace right now: each driver\'s median over their last five clean laps, with their tyre and its age. It takes no drivers. Suggest it when the user asks who is fastest at the moment.',
   args: Type.Object({}),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 0.7, min: [6, 9] },
-  spec: () => ({ key: 'stint_pace', label: 'Pace' }),
-  View: StintPace,
+  spec: () => ({ key: 'field_pace', label: 'Pace' }),
+  View: FieldPace,
 });

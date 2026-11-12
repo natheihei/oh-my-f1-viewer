@@ -114,9 +114,9 @@ export function describeEvents(index: EventIndex): string {
 export function describeCharts(components: ComponentInfo[]): string {
   const charts = components.filter((c) => c.name !== 'video');
   if (charts.length === 0) return '';
-  const lines = ['Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One that can take none picks its own.'];
+  const lines = ['Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One marked replays only cannot be suggested in a live session. One that can take none picks its own.'];
   for (const c of charts) {
-    lines.push(`${c.name}, ${c.title}, ${driverCount(c).text}, ${c.sessions ? c.sessions.join('/') : 'any session'}: ${c.description}`);
+    lines.push(`${c.name}, ${c.title}, ${driverCount(c).text}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description}`);
   }
   return lines.join('\n');
 }

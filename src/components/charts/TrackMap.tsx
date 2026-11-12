@@ -257,7 +257,8 @@ export default defineComponent({
   name: 'track_map',
   title: 'Track',
   description:
-    'Every running car as a dot on the circuit, where it is right now. Retired cars are left off. Suggest it when the user asks where cars are on track, or wants to see traffic. Replays only: a live session has no car positions.',
+    'Every running car as a dot on the circuit, where it is right now. Retired cars are left off. Suggest it when the user asks where cars are on track, or wants to see traffic.',
+  replayOnly: true,
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   needs: NEEDS,
   size: { aspect: 10 / 7, min: [10, 7] },

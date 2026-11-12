@@ -8,19 +8,16 @@ const { gapModel } = await import('./GapEvolution');
 const { tyreModel } = await import('./TyreStrategy');
 const { towerModel } = await import('./TimingTower');
 const { traceModel } = await import('./RaceTrace');
-const { positionModel } = await import('./PositionChart');
-const { compareModel } = await import('./LapTimeCompare');
-const { degModel, fitLine, formatSlope } = await import('./TyreDegradation');
-const { paceModel } = await import('./StintPace');
+const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
+const { paceModel } = await import('./FieldPace');
 const { pitWindowModel, CLEAR_AIR } = await import('./PitWindow');
-const { battleModel } = await import('./BattleCard');
 const { sectorModel, spanOf } = await import('./SectorDelta');
 const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, wrap } = await import('./RaceControl');
 const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
-const { telemetryModel } = await import('./TelemetryLive');
+const { telemetryModel } = await import('./CarTelemetry');
 const { components } = await import('../registry');
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
@@ -28,6 +25,21 @@ const gap = (driver: number, date: number, value: unknown) => ({ kind: 'gap', n:
 const end = (driver: number, n: number, value: unknown, stint: number | null = 1) => ({ kind: 'end', n: driver, date: (n + 1) * 100, gap: value, lap: n, stint });
 
 describe('gap_evolution', () => {
+  it("sets each driver's tyre and last lap beside the gap", () => {
+    const rows = [
+      lap(10, 0),
+      { ...end(44, 10, null), lap_duration: 90.5, compound: 'MEDIUM', tyre_age: 12 },
+      { ...end(44, 11, null), date: null, lap_duration: null, compound: 'MEDIUM', tyre_age: 13 },
+      { ...end(1, 10, 1.2), lap_duration: 90.1, compound: 'HARD', tyre_age: 3 },
+    ];
+    const m = gapModel(rows, [44, 1]);
+    // The lap in progress isn't counted in the age, as in the timing tower.
+    expect(m.sides).toEqual([
+      { driver: 44, compound: 'MEDIUM', age: 12, last: 90.5 },
+      { driver: 1, compound: 'HARD', age: 3, last: 90.1 },
+    ]);
+  });
+
   it('follows the difference of the two gaps to the leader, sample by sample', () => {
     const rows = [
       lap(10, 0),
@@ -160,9 +172,9 @@ describe('timing_tower', () => {
   it('writes each row: the leader on its lap, the rest with gaps', () => {
     const rows = towerModel([row(4, 1, null, null), row(1, 2, 1.2, 1.2), row(44, 3, '+1 LAP', 20.5, { last_lap: null, compound: null, lap_start: null })]);
     expect(rows).toEqual([
-      { driver: 4, position: 1, gap: 'LAP 31', interval: '', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
-      { driver: 1, position: 2, gap: '+1.200', interval: '+1.200', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
-      { driver: 44, position: 3, gap: '+1 LAP', interval: '+20.500', last: '', compound: null, age: null, out: false },
+      { driver: 4, position: 1, gained: null, gap: 'LAP 31', interval: '', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 1, position: 2, gained: null, gap: '+1.200', interval: '+1.200', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 44, position: 3, gained: null, gap: '+1 LAP', interval: '+20.500', last: '', compound: null, age: null, out: false },
     ]);
   });
 
@@ -170,6 +182,17 @@ describe('timing_tower', () => {
     const [first, second] = towerModel([row(4, 1, null, null, { is_out: 1 }), row(1, 2, '+2 LAPS', 30, { is_out: 1 })]);
     expect(first).toMatchObject({ gap: 'OUT', interval: '', last: '', out: true, compound: 'MEDIUM' });
     expect(second).toMatchObject({ gap: 'OUT', interval: '', last: '', out: true });
+  });
+
+  it('counts places gained from the grid, but not for a retired car or one without a slot', () => {
+    const grid = [
+      { driver_number: 4, position: 3, lap_duration: null },
+      { driver_number: 1, position: 1, lap_duration: null },
+      { driver_number: 44, position: 2, lap_duration: null },
+      { driver_number: 16, position: null, lap_duration: null },
+    ];
+    const rows = towerModel([row(4, 1, null, null), row(1, 2, 1.2, 1.2), row(16, 3, 2, 0.8), row(44, 4, 9, 7, { is_out: 1 })], null, grid);
+    expect(rows.map((r) => r.gained)).toEqual([2, -1, null, null]);
   });
 
   it('gives the leader the race distance when it is known', () => {
@@ -248,26 +271,6 @@ describe('race_trace', () => {
   });
 });
 
-describe('position_chart', () => {
-  const grid = (driver_number: number, position: number | null) => ({ driver_number, position, lap_duration: null });
-
-  it('starts from the grid and orders the lines by latest position', () => {
-    const rows = [ls(1, 1, { position: 1 }), ls(44, 1, { position: 2 }), ls(1, 2, { position: 2 }), ls(44, 2, { position: 1 })];
-    const m = positionModel(rows, [grid(44, 1), grid(1, 2), grid(16, null)]);
-    expect(m.lap).toBe(2);
-    expect(m.cars).toBe(3);
-    expect(m.lines).toEqual([
-      { driver: 44, points: [{ lap: 0, position: 1 }, { lap: 1, position: 2 }, { lap: 2, position: 1 }] },
-      { driver: 1, points: [{ lap: 0, position: 2 }, { lap: 1, position: 1 }, { lap: 2, position: 2 }] },
-    ]);
-  });
-
-  it('puts a car that stopped below those still running, and works without a grid', () => {
-    const rows = [ls(1, 1, { position: 1 }), ls(4, 1, { position: 2 }), ls(1, 2, { position: 1 })];
-    expect(positionModel(rows, []).lines.map((l) => l.driver)).toEqual([1, 4]);
-  });
-});
-
 describe('lap_time_compare', () => {
   it('draws racing laps and breaks the line at a stop and a safety car', () => {
     const rows = [
@@ -292,6 +295,7 @@ describe('lap_time_compare', () => {
         { lap: 7, time: 92.4 },
       ],
       pits: [3],
+      trends: [],
       compound: 'HARD',
       // The lap in progress isn't counted, as in the timing tower.
       age: 4,
@@ -305,8 +309,8 @@ describe('lap_time_compare', () => {
   });
 });
 
-describe('tyre_degradation', () => {
-  it('fits a line through clean laps only, per stint', () => {
+describe('lap_time_compare trends', () => {
+  it('fits a line through the clean laps of each stint, by tyre age', () => {
     const rows = [
       ls(44, 1, { tyre_age: 1, lap_duration: 99 }),
       ...[2, 3, 4, 5, 6].map((n) => ls(44, n, { tyre_age: n, lap_duration: 90 + 0.05 * n })),
@@ -315,17 +319,16 @@ describe('tyre_degradation', () => {
       // Four clean laps: too few for a line.
       ...[9, 10, 11, 12].map((n) => ls(44, n, { stint_number: 2, compound: 'HARD', tyre_age: n - 7, lap_duration: 90 })),
     ];
-    const m = degModel(rows, [44]);
-    expect(m.stints).toHaveLength(2);
-    expect(m.stints[0].laps.map((l) => l.age)).toEqual([2, 3, 4, 5, 6]);
-    expect(m.stints[0].fit?.slope).toBeCloseTo(0.05);
-    expect(m.stints[1]).toMatchObject({ compound: 'HARD', fit: null });
-    expect(m.maxAge).toBe(6);
+    const { trends } = compareModel(rows, [44]).series[0];
+    expect(trends).toHaveLength(1);
+    expect(trends[0].slope).toBeCloseTo(0.05);
+    expect(trends[0].from).toEqual({ lap: 2, time: expect.closeTo(90.1) });
+    expect(trends[0].to).toEqual({ lap: 6, time: expect.closeTo(90.3) });
   });
 
-  it('orders the picked drivers by their rank', () => {
+  it('orders the drivers it picked by their rank', () => {
     const rows = [ls(16, 2, { rank: 2 }), ls(4, 2, { rank: 1 }), ls(81, 2, { rank: 3 })];
-    expect(degModel(rows).stints.map((s) => s.driver)).toEqual([4, 16, 81]);
+    expect(compareModel(rows).series.map((s) => s.driver)).toEqual([4, 16, 81]);
   });
 
   it('fits and writes slopes', () => {
@@ -337,7 +340,7 @@ describe('tyre_degradation', () => {
   });
 });
 
-describe('stint_pace', () => {
+describe('field_pace', () => {
   it('ranks medians of the last five clean laps, with too few clean laps last', () => {
     const laps = (driver: number, times: number[], more: Record<string, unknown> = {}) => times.map((t, i) => ls(driver, i + 2, { lap_duration: t, ...more }));
     const rows = [
@@ -439,75 +442,6 @@ describe('pit_window', () => {
     const m = pitWindowModel([running(1, 1, null), running(44, 2, 1.5)], 44, 20);
     expect(m.lapTime).toBeNull();
     expect(m.out).toMatchObject({ position: 2, behind: { driver: 1, by: 21.5 } });
-  });
-});
-
-const blap = (driver: number, lap: number, more: Record<string, unknown> = {}): Record<string, unknown> => ({
-  kind: 'lap',
-  driver_number: driver,
-  lap_number: lap,
-  date_end: lap * 100,
-  lap_duration: 90,
-  position: null,
-  gap_to_leader: null,
-  interval: null,
-  compound: 'MEDIUM',
-  tyre_age: lap,
-  trap: null,
-  ...more,
-});
-
-describe('battle_card', () => {
-  // 44 leads; 1 runs second, 3.0s behind after lap 1, then 2.5, 2.2, 1.9, and 0.8 now on lap 5.
-  const rows = [
-    ...[1, 2, 3, 4].map((n) => blap(44, n, { position: 1, lap_duration: [91, 90.5, 90.4, 90.6][n - 1] })),
-    blap(44, 5, { position: 1, date_end: null, lap_duration: null }),
-    ...[3, 2.5, 2.2, 1.9].map((g, i) => blap(1, i + 1, { position: 2, gap_to_leader: g, interval: g, lap_duration: [92, 90, 90.1, 90.3][i] })),
-    blap(1, 5, { position: 2, gap_to_leader: 0.9, interval: 0.8, date_end: null, lap_duration: null, compound: 'HARD', tyre_age: 3 }),
-    { kind: 'trap', driver_number: 44, trap: 318 },
-    { kind: 'trap', driver_number: 1, trap: 324 },
-  ];
-
-  it('sets the two drivers side by side, in the order asked for', () => {
-    const m = battleModel(rows, [1, 44], 1);
-    expect(m.sides[0]).toEqual({ driver: 1, position: 2, last: 90.3, best: 90, compound: 'HARD', age: 2, trap: 324 });
-    expect(m.sides[1]).toMatchObject({ driver: 44, position: 1, last: 90.6, best: 90.4, trap: 318 });
-    expect(m.ahead).toBe(1);
-  });
-
-  it("takes the gap from the car behind's interval, says it is within range, and closing over three laps", () => {
-    const m = battleModel(rows, [44, 1], 1);
-    expect(m.gap).toBeCloseTo(0.8);
-    expect(m.inRange).toBe(true);
-    // Lap 5 is in progress, so the trend runs from the end of lap 1 to the end of lap 4: (1.9 − 3) / 3.
-    expect(m.trend).toBeCloseTo(-0.3667, 3);
-  });
-
-  it('has no trend across a stop only one of them made, and keeps it otherwise', () => {
-    // Stints by lap for 44 and for 1, over the laps the trend spans: the end of lap 1 to the end of lap 4.
-    const withStints = (of44: number[], of1: number[]) =>
-      rows.map((r) => (r.kind === 'lap' && typeof r.lap_number === 'number' ? { ...r, stint_number: (r.driver_number === 44 ? of44 : of1)[r.lap_number - 1] } : r));
-    // 1 stopped in that time and 44 didn't: the change in the gap is a pit stop.
-    expect(battleModel(withStints([1, 1, 1, 1, 1], [1, 2, 2, 2, 2]), [44, 1], 1).trend).toBeNull();
-    // Both stopped in that time: the stops roughly cancel.
-    expect(battleModel(withStints([1, 2, 2, 2, 2], [1, 1, 2, 2, 2]), [44, 1], 1).trend).toBeCloseTo(-0.3667, 3);
-    // A two-stopper catching a one-stopper, both stops long past: the trend shows.
-    expect(battleModel(withStints([2, 2, 2, 2, 2], [3, 3, 3, 3, 3]), [44, 1], 1).trend).toBeCloseTo(-0.3667, 3);
-  });
-
-  it('uses the difference of the gaps to the leader when they are not nose to tail', () => {
-    const apart = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 3, gap_to_leader: 1.4, interval: 0.3 } : r));
-    const m = battleModel(apart, [44, 1], 1);
-    expect(m.gap).toBeCloseTo(1.4);
-    expect(m.inRange).toBe(false);
-  });
-
-  it("can't tell the gap to a lapped car, and has no trend without three laps", () => {
-    const lapped = rows.map((r) => (r.driver_number === 1 && r.lap_number === 5 ? { ...r, position: 9, gap_to_leader: '+1 LAP', interval: 2 } : r));
-    expect(battleModel(lapped, [44, 1], 1)).toMatchObject({ gap: null, inRange: null });
-    const early = rows.filter((r) => r.kind === 'trap' || (r.lap_number as number) <= 2);
-    expect(battleModel(early, [44, 1], 1).trend).toBeNull();
-    expect(battleModel([], [44, 1], 1)).toMatchObject({ ahead: null, gap: null, trend: null, inRange: null });
   });
 });
 
@@ -769,7 +703,7 @@ describe('speed_trace', () => {
   });
 });
 
-describe('telemetry_live', () => {
+describe('car_telemetry', () => {
   const sample = (date: number, more: Record<string, unknown> = {}) => ({ date, speed: 300, rpm: 11420, n_gear: 8, throttle: 100, brake: 0, drs: null, ...more });
 
   it('shows the latest sample, with the minute before it as a trace broken at gaps', () => {
@@ -797,26 +731,28 @@ describe('the registry', () => {
     expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap 44 · 1' });
     expect(byName.tyre_strategy.spec({})).toEqual({ key: 'tyre_strategy:all', label: 'Tyres' });
     expect(byName.timing_tower.spec({})).toEqual({ key: 'timing_tower', label: 'Timing' });
-    for (const name of ['race_trace', 'position_chart', 'tyre_degradation', 'stint_pace']) expect(byName[name].sessions).toEqual(['race', 'sprint']);
+    for (const name of ['race_trace', 'field_pace']) expect(byName[name].sessions).toEqual(['race', 'sprint']);
     expect(byName.lap_time_compare.sessions).toBeUndefined();
     expect(byName.race_trace.spec({})).toEqual({ key: 'race_trace:all', label: 'Race trace' });
     expect(byName.lap_time_compare.spec({ drivers: [44, 1] })).toEqual({ key: 'lap_time_compare:44-1', label: 'Lap times 44 · 1' });
-    expect(byName.tyre_degradation.spec({})).toEqual({ key: 'tyre_degradation:top', label: 'Deg' });
+    expect(byName.lap_time_compare.spec({})).toEqual({ key: 'lap_time_compare:top', label: 'Lap times' });
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
-    for (const name of ['battle_card', 'pit_stops']) expect(byName[name].sessions).toEqual(['race', 'sprint']);
+    expect(byName.pit_stops.sessions).toEqual(['race', 'sprint']);
     for (const name of ['sector_delta', 'race_control', 'weather']) expect(byName[name].sessions).toBeUndefined();
-    expect(byName.battle_card.spec({ drivers: [44, 1] })).toEqual({ key: 'battle_card:44-1', label: '44 v 1' });
     expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
-    for (const name of ['track_map', 'speed_trace', 'telemetry_live']) {
+    for (const name of ['track_map', 'speed_trace', 'car_telemetry']) {
       expect(byName[name].sessions).toBeUndefined();
+      expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
     expect(byName.speed_trace.spec({ drivers: [44, 1] })).toEqual({ key: 'speed_trace:44-1', label: 'Speed 44 · 1' });
-    expect(byName.telemetry_live.spec({ drivers: [44] })).toEqual({ key: 'telemetry_live:44', label: 'Telemetry 44' });
+    expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
+    for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
+    expect(components).toHaveLength(15);
   });
 });

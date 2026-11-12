@@ -187,7 +187,7 @@ export default defineComponent({
   name: 'sector_delta',
   title: 'Sector delta',
   description:
-    'Where on the lap one driver is gaining on another: the difference in each of the three sectors over the last ten laps. Suggest it when the user asks where a driver is quicker.',
+    'Which part of the lap one driver is gaining on another in: the difference in each of the three sectors over the last ten laps. Suggest it when the user asks in which sector or part of the lap a driver is quicker.',
   args: Type.Object({ drivers: Drivers }),
   needs: NEEDS,
   size: { aspect: 1.6, min: [8, 6] },
