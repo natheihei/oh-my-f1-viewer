@@ -122,6 +122,10 @@ strip.
 
 - Click or Enter adds a suggestion where auto-layout puts it. Dragging one onto the grid splits the tile under the pointer across its longer
   side, or fills the gap there. Either way it leaves the strip, and an empty strip closes.
+- A preview can be resized by hand from its right edge, bottom edge or corner, like a tile. Its size starts from the component's
+  `size.aspect` (see `src/shell/stripShape.ts`). A hand-picked size is at least 120×60, at most the strip's width and half the window's
+  height, and holds for that component for the rest of the app session, across turns but not restarts. Double-clicking a grip gives back
+  the automatic shape. Resizing never adds or drags the card, and the size doesn't carry to the tile it becomes.
 - Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, up to four
   streams. The user's next message clears it, and tells the agent what they added, dismissed or left.
 - Keys: the first suggestion takes focus. ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
