@@ -12,6 +12,7 @@ import * as f1a from './host';
 import { host, startBuild, startMods } from './host';
 import { App } from './shell/App';
 import { restoreBackground } from './shell/persistBackground';
+import { restorePaletteHeight } from './shell/persistPaletteHeight';
 import { restoreVolume } from './shell/persistVolume';
 
 // Before the first render: the grid and the agent read components from the host.
@@ -25,6 +26,8 @@ restoreVolume();
 // And the background, so the gaps don't flash black first. With nothing saved, the default shows.
 host.appearance.setBackground({ style: DEFAULT_BACKGROUND });
 restoreBackground();
+// And the palette's history cap, so it opens at the height last chosen.
+restorePaletteHeight();
 
 // No StrictMode: effects own real streams, and a double mount would start each one twice.
 createRoot(document.getElementById('root')!).render(<App />);

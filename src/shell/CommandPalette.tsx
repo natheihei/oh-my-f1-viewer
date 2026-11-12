@@ -4,7 +4,7 @@
  * is a scroll away. Sits above the timeline, over the video. It stays open while there are suggestions
  * or a spoiler check.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { host, read, useLive } from '../host';
 import { AgentPanel, describeAgent } from './AgentPanel';
 import { BackgroundPanel } from './BackgroundPanel';
@@ -14,6 +14,7 @@ import { matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { palette, usePalette, type EntryRole } from './palette';
+import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
 
 /** While the agent is still working, a second Esc this soon after the first stops it. */
@@ -46,6 +47,9 @@ export function CommandPalette() {
   const building = useLive((s) => s.build.active);
   const changeCount = useLive((s) => s.build.changes.length);
   const [armed, setArmed] = useState(false);
+  const historyCap = usePaletteHeight((s) => s.height);
+  /** The cap being dragged to, shown as the history's height until the drag ends. */
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
   const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
@@ -117,7 +121,8 @@ export function CommandPalette() {
   useLayoutEffect(() => {
     const box = historyRef.current;
     if (box) box.scrollTop = box.scrollHeight;
-  }, [entries, showing]);
+    // Resizing keeps the latest lines in view too, as the box grows up from the input.
+  }, [entries, showing, dragHeight, historyCap]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -130,6 +135,33 @@ export function CommandPalette() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [blank]);
+
+  /** Dragging the top edge up raises the history's cap, from wherever it is now, within its bounds. */
+  const onResizeStart = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const grip = e.currentTarget;
+    const min = minHistoryHeight(parseFloat(getComputedStyle(grip).getPropertyValue('--row')) || 22);
+    const start = clampHistoryHeight(usePaletteHeight.getState().height ?? min, min, window.innerHeight);
+    const startY = e.clientY;
+    let height = start;
+    grip.setPointerCapture(e.pointerId);
+    setDragHeight(start);
+    const move = (ev: globalThis.PointerEvent) => {
+      height = clampHistoryHeight(start + startY - ev.clientY, min, window.innerHeight);
+      setDragHeight(height);
+    };
+    const end = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', end);
+      grip.removeEventListener('pointercancel', end);
+      setDragHeight(null);
+      if (height !== start) setPaletteHeight(height > min ? height : null);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+  };
 
   if (!showing) return null;
 
@@ -196,7 +228,26 @@ export function CommandPalette() {
         </div>
       ) : null}
       {entries.length > 0 ? (
-        <div ref={historyRef} className="palette-history" data-testid="palette-history">
+        <div
+          className={`palette-resize ${dragHeight != null ? 'palette-resize-active' : ''}`}
+          data-testid="palette-resize"
+          title="Drag to resize · double-click to reset"
+          onPointerDown={onResizeStart}
+          onDoubleClick={() => setPaletteHeight(null)}
+        />
+      ) : null}
+      {entries.length > 0 ? (
+        <div
+          ref={historyRef}
+          className="palette-history"
+          data-testid="palette-history"
+          style={
+            {
+              ...(historyCap != null ? { '--palette-history-cap': `${historyCap}px` } : {}),
+              ...(dragHeight != null ? { height: dragHeight, maxHeight: dragHeight } : {}),
+            } as CSSProperties
+          }
+        >
           {entries.map((entry) => (
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
               <span className="palette-mark">{ROLE_MARK[entry.role]}</span>
