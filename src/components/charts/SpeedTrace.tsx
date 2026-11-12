@@ -300,7 +300,8 @@ export default defineComponent({
   name: 'speed_trace',
   title: 'Speed trace',
   description:
-    'Speed through one lap for two drivers, overlaid, with the time gained or lost along the lap. Suggest it when the user asks where exactly a driver is faster: braking, corner speed or the straights. Replays only.',
+    'Speed through one lap for two drivers, overlaid, with the time gained or lost along the lap, corner by corner. Suggest it when the user asks where exactly a driver is faster: braking, corner speed or the straights.',
+  replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
   needs: NEEDS,
   size: { aspect: 16 / 9, min: [12, 7] },

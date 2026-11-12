@@ -247,6 +247,7 @@ describe('components', () => {
       args: expect.objectContaining({ type: 'object', required: ['driver'] }),
       sessions: null,
       needs: ['timing'],
+      replayOnly: false,
       size: null,
       looksAhead: false,
     });

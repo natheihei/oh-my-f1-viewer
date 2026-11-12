@@ -84,6 +84,9 @@ and "This tile looks ahead of where you are.", with an Allow button, and draws t
 and show nothing from it. The flag is the author's to set and nothing enforces it: a mod that reads the whole session without it and
 shows the result can spoil the race for the viewer.
 
+A component that reads car telemetry (`car_data` or `location`), which only a replay has, says `replayOnly: true`. The agent's chart list marks it,
+and it can't be suggested in a live session.
+
 ## How the app loads mods
 
 The main process owns the folder, and the renderer imports what main hands it.
