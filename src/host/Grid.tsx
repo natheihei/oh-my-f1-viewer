@@ -1,7 +1,7 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
 import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Value from 'typebox/value';
-import { GridSurface } from '../layout/GridSurface';
+import { GridSurface, type TileState } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
 import { allTiles, GRID_COLUMNS, GRID_ROWS } from '../layout/model';
 import { useLayout } from '../layout/store';
@@ -9,6 +9,7 @@ import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
 import { componentOf, useComponents } from './components';
 import { layoutOps } from './layoutOps';
+import { useLive } from './live';
 import { tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { useHiddenBelow } from './overflow';
@@ -160,15 +161,36 @@ export function Grid() {
   );
   const approved = useTileLookAhead((s) => s.approved);
   const nodes = useLayout((s) => s.nodes);
-  // An approval outlives an edit that drops `looksAhead`, but the title only says so while it applies.
-  const notes = useMemo(() => {
+  const audio = useLive((s) => s.audio);
+  const muted = useLive((s) => s.volume === 0);
+  const streams = useLive((s) => s.streams);
+  // What each header's slots say. An approval outlives an edit that drops `looksAhead`, but the header
+  // only says so while it applies.
+  const states = useMemo(() => {
     const ahead = new Set(components.filter((c) => c.looksAhead).map((c) => c.name));
-    return Object.fromEntries(allTiles({ nodes }).filter((t) => approved[t.id] && ahead.has(t.component.type)).map((t) => [t.id, 'looks ahead']));
-  }, [approved, components, nodes]);
+    const out: Record<string, TileState> = {};
+    for (const t of allTiles({ nodes })) {
+      const state: TileState = {};
+      if (approved[t.id] && ahead.has(t.component.type)) state.ahead = true;
+      if (marks[t.component.type]) state.mark = marks[t.component.type];
+      if (t.component.type === 'video') {
+        const feed = t.component.key;
+        if (feed === audio) state.audio = muted ? 'muted' : 'on';
+        const status = streams[feed]?.status;
+        if (status === 'error') {
+          state.status = 'error';
+          state.error = true;
+        } else if (status === 'resolving' || status === 'loading') state.status = 'load';
+        else if (status === 'syncing') state.status = 'sync';
+      }
+      out[t.id] = state;
+    }
+    return out;
+  }, [approved, components, nodes, audio, muted, streams, marks]);
   return (
     <>
       <Stage registry={registry} highlight={highlight} marks={marks} />
-      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} notes={notes} />
+      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} states={states} />
       <DropPreview />
     </>
   );

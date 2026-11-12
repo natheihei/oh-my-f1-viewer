@@ -6,7 +6,6 @@ import { defineComponent, read, useLive, Video } from '../host';
 function VideoTile({ props, label }: { props: { feed: string }; label: string }) {
   const { feed } = props;
   const view = useLive((s) => s.streams[feed]);
-  const audible = useLive((s) => s.audio === feed);
   // Once shown, a tile stays visible through seeks: its status line says when it is catching up.
   const [revealed, setRevealed] = useState(false);
 
@@ -29,14 +28,11 @@ function VideoTile({ props, label }: { props: { feed: string }; label: string })
   return (
     <div className="tile" data-status={status}>
       <Video feed={feed} className={`tile-video ${revealed ? '' : 'tile-video-hidden'}`} />
-      {/* The label is on the title bar the grid draws. */}
-      {audible ? <div className="tile-audio">♪</div> : null}
+      {/* The label, which feed is heard, and catching up after a seek are in the header the grid draws. */}
       {statusText && (status === 'error' || !revealed) ? (
         <div className={`tile-status ${status === 'error' ? 'tile-status-error' : ''}`} data-testid="tile-status">
           <span className="tile-status-name">{label}</span> {statusText}
         </div>
-      ) : statusText ? (
-        <div className="tile-resync">{statusText}</div>
       ) : null}
     </div>
   );

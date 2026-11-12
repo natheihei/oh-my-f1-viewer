@@ -22,11 +22,12 @@ const ESC_AGAIN_MS = 2000;
 /** The input grows with a long prompt up to this many lines, then scrolls. */
 const INPUT_MAX_LINES = 6;
 
-const ROLE_PREFIX: Record<EntryRole, string> = {
-  user: '> ',
+/** The mark before each line of the history. It hangs in its own column, so wrapped text stays clear of it. */
+const ROLE_MARK: Record<EntryRole, string> = {
+  user: '>',
   agent: '',
-  system: '# ',
-  error: '! ',
+  system: '#',
+  error: '!',
 };
 
 export function CommandPalette() {
@@ -185,20 +186,31 @@ export function CommandPalette() {
 
   return (
     <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
+      {blank && entries.length <= 1 ? (
+        <div className="palette-intro" data-testid="palette-intro">
+          <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>
+          <div className="palette-intro-try">
+            try <span className="palette-example">2025 Mexico race</span> <span className="palette-example">last qualifying</span>{' '}
+            <span className="palette-example">/</span> for commands
+          </div>
+        </div>
+      ) : null}
       {entries.length > 0 ? (
         <div ref={historyRef} className="palette-history" data-testid="palette-history">
           {entries.map((entry) => (
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
-              {ROLE_PREFIX[entry.role]}
-              {entry.text}
-              {entry.action ? (
-                <>
-                  {' '}
-                  <button type="button" className="palette-action" data-testid="palette-action" onClick={() => palette.act(entry.id)}>
-                    {entry.action.label}
-                  </button>
-                </>
-              ) : null}
+              <span className="palette-mark">{ROLE_MARK[entry.role]}</span>
+              <span className="palette-text">
+                {entry.text}
+                {entry.action ? (
+                  <>
+                    {' '}
+                    <button type="button" className="palette-action" data-testid="palette-action" onClick={() => palette.act(entry.id)}>
+                      {entry.action.label}
+                    </button>
+                  </>
+                ) : null}
+              </span>
             </div>
           ))}
         </div>
@@ -229,12 +241,14 @@ export function CommandPalette() {
               }}
             >
               <span>{command.name}</span>
-              <span className="palette-suggestion-desc">{command.description}</span>
-              {command.warning ? (
-                <span className="palette-suggestion-warning" data-testid="command-warning">
-                  <span className="spoiler-label">! spoiler</span> {command.warning}
-                </span>
-              ) : null}
+              <span className="palette-suggestion-desc">
+                {command.description}
+                {command.warning ? (
+                  <span className="palette-suggestion-warning" data-testid="command-warning">
+                    <span className="spoiler-label">! spoiler</span> {command.warning}
+                  </span>
+                ) : null}
+              </span>
             </div>
           ))}
         </div>

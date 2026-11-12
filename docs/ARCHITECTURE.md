@@ -113,8 +113,11 @@ re-adds it in the DOM, which would stop a `<video>`, but placeholders hold nothi
 tree changes.
 
 - Auto-layout is broadcast-first: the primary node is largest, with the rest in a rail and then a band below it.
-- Each tile has a title bar drawn by the grid, with its label and a close button. Only the title bar drags and only the edges resize:
-  everything else on the grid lets the mouse through to the component underneath.
+- Each tile has a title bar drawn by the grid, with its label, state slots and a close button. The slots say which tile carries the sound,
+  when a stream is loading or catching up, and when a tile may look ahead, so nothing floats over the content. Only the title bar drags
+  and only the edges resize: everything else on the grid lets the mouse through to the component underneath.
+- A tile draws a hairline on its right and bottom edges only, so neighbours share one seam. Tiles are black on a slightly lifted
+  ground, which is what separates them where there's no neighbour.
 - A full grid has no empty cells to drag into, so dropping a tile on another swaps them.
 - After a mouse edit the layout stays as arranged, and new tiles go in the largest free space, or re-tile if there is none.
 

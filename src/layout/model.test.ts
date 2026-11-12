@@ -104,8 +104,8 @@ describe('fitting content', () => {
   const cell = { w: 70, h: 40 };
   const sized = measure(EMPTY_LAYOUT, cell);
   const video = (key: string): ComponentSpec => ({ ...spec(key), fit: { aspect: 16 / 9 } });
-  /** 352 by 500 pixels at most: 6 columns and 13 rows with the title bar. */
-  const tower: ComponentSpec = { type: 'chart', key: 'tower', label: 'tower', props: {}, size: { aspect: 0.6, min: [6, 12] }, fit: { width: 352, height: 500 } };
+  /** 352 by 496 pixels at most: 6 columns and 13 rows with the title bar. */
+  const tower: ComponentSpec = { type: 'chart', key: 'tower', label: 'tower', props: {}, size: { aspect: 0.6, min: [6, 12] }, fit: { width: 352, height: 496 } };
   const chart = (key: string, min: [number, number], aspect = 1.6): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect, min } });
   const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
   const withTower = addTile(addTile(sized, video('main')), tower);
