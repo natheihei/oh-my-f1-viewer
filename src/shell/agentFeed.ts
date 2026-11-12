@@ -7,7 +7,8 @@ import { loadEvents } from './commands';
 import { askViewer, lookAhead } from './lookAhead';
 import { palette, usePalette } from './palette';
 
-const AUTO_HIDE_MS = 2000;
+// Long enough to read the reply before the palette goes.
+const AUTO_HIDE_MS = 10_000;
 
 export function connectAgent(): () => void {
   let streaming: number | null = null;
