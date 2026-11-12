@@ -1,7 +1,8 @@
 /**
  * The shape of a preview in the suggestion strip. It follows the component's `size.aspect`, so a
  * component is previewed in something like the tile it asks for, within limits that keep the strip
- * from growing: a card's width is fixed, and only its height gives.
+ * from growing: a card's width is fixed, and only its height gives. The user can resize a preview by
+ * hand, in both directions, and then that size holds instead (see `clampPreviewSize`).
  */
 
 /**
@@ -20,3 +21,31 @@ export function previewAspect(aspect: number | undefined, kind: keyof typeof STR
   const wanted = aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : shape.aspect;
   return Math.min(shape.width / shape.minHeight, Math.max(shape.width / shape.maxHeight, wanted));
 }
+
+/** A preview's size in CSS pixels, once the user has resized it by hand. */
+export interface PreviewSize {
+  width: number;
+  height: number;
+}
+
+/** The least a hand-resized preview may be, in CSS pixels, so its grip stays usable. */
+export const MIN_PREVIEW = { width: 120, height: 60 } as const;
+
+/** The tallest a hand-resized preview may be, as a share of the window, so the palette's input stays on screen. */
+export const MAX_PREVIEW_HEIGHT_OF_WINDOW = 0.5;
+
+/**
+ * Keeps a hand-picked size within limits: no smaller than `MIN_PREVIEW`, no wider than `maxWidth` (the
+ * strip) and no taller than `maxHeight` (a share of the window). The least wins over the most when
+ * there's no room for both.
+ */
+export function clampPreviewSize(size: PreviewSize, maxWidth: number, maxHeight: number): PreviewSize {
+  const clamp = (v: number, min: number, max: number) => Math.round(Math.max(min, Math.min(max, v)));
+  return { width: clamp(size.width, MIN_PREVIEW.width, maxWidth), height: clamp(size.height, MIN_PREVIEW.height, maxHeight) };
+}
+
+/**
+ * The sizes the user gave previews by hand, by component key, for as long as the app runs: a
+ * component suggested again in a later turn comes back at that size. Nothing carries to the tile.
+ */
+export const manualSizes = new Map<string, PreviewSize>();
