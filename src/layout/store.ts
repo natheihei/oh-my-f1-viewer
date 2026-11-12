@@ -5,14 +5,13 @@ import {
   addTileAt,
   allTiles,
   applyMouseEdit,
+  autoLayout,
   closeGroup,
   createGroup,
   EMPTY_LAYOUT,
   findTile,
-  focus,
   measure,
   removeTile,
-  resetLayout,
   swap,
   ungroup,
   type Cell,
@@ -56,12 +55,8 @@ export const layout = {
     if (next) set(next);
     return next != null;
   },
-  focus(ref: string): boolean {
-    const next = focus(get(), ref);
-    if (next) set(next);
-    return next != null;
-  },
-  reset: () => set(resetLayout(get())),
+  /** Re-tiles the grid, discarding manual moves and resizes. */
+  autoLayout: () => set(autoLayout(get())),
   /** The grid's cell size on screen changed, in pixels. */
   measure: (cell: CellPx) => set(measure(get(), cell)),
   mouseEdit: (id: string, rect: Rect) => set(applyMouseEdit(get(), id, rect)),

@@ -63,15 +63,13 @@ export type LayoutNode = TileNode | GroupNode;
 
 export interface LayoutState {
   nodes: LayoutNode[];
-  /** The node given the largest area; the first node when unset. */
-  primaryId: string | null;
   /** The mouse has moved something, so auto-layout leaves existing tiles where they are. */
   manual: boolean;
   /** A grid cell's size on screen. Zero until the grid is measured, and nothing is fitted till then. */
   cell: CellPx;
 }
 
-export const EMPTY_LAYOUT: LayoutState = { nodes: [], primaryId: null, manual: false, cell: { w: 0, h: 0 } };
+export const EMPTY_LAYOUT: LayoutState = { nodes: [], manual: false, cell: { w: 0, h: 0 } };
 
 export const GRID_COLUMNS = 24;
 export const GRID_ROWS = 24;
@@ -234,14 +232,15 @@ function rise<T extends Rect & { id: string }>(nodes: T[]): T[] {
   return nodes.map((n) => moved.get(n.id)!);
 }
 
-/** Re-tile everything. Node order is insertion order and doesn't change, so a reset finds the main feed again. */
+/**
+ * Re-tiles everything, discarding manual moves and resizes. Nodes are ranked by insertion order, which
+ * doesn't change: the first one added gets the largest slot.
+ */
 export function autoLayout(state: LayoutState): LayoutState {
-  const primary = state.nodes.find((n) => n.id === state.primaryId) ?? state.nodes[0];
-  const ranked = primary ? [primary, ...state.nodes.filter((n) => n !== primary)] : [];
-  const heights = ranked.map((n) => (n.kind === 'tile' ? (n.component.size?.min[1] ?? null) : null));
-  const rects = solveRects(ranked.length, ranked.some((n) => n.kind === 'group'), heights);
-  const rectOf = new Map(ranked.map((n, i) => [n.id, rects[i]]));
-  return { ...state, nodes: rise(state.nodes.map((n) => fit({ ...withChildren(n), ...rectOf.get(n.id) }, state.cell))) };
+  const { nodes } = state;
+  const heights = nodes.map((n) => (n.kind === 'tile' ? (n.component.size?.min[1] ?? null) : null));
+  const rects = solveRects(nodes.length, nodes.some((n) => n.kind === 'group'), heights);
+  return { ...state, manual: false, nodes: rise(nodes.map((n, i) => fit({ ...withChildren(n), ...rects[i] }, state.cell))) };
 }
 
 const rectsOf = (nodes: LayoutNode[]) => JSON.stringify(nodes.map(({ id, x, y, w, h }) => [id, x, y, w, h]));
@@ -344,7 +343,7 @@ function place(state: LayoutState, added: LayoutNode | null): LayoutState {
     return area(free) > 0 ? into(free) : autoLayout(state);
   }
   const free = largestFreeRect(others);
-  return area(free) < MIN_FREE_AREA ? autoLayout({ ...state, manual: false }) : into(free);
+  return area(free) < MIN_FREE_AREA ? autoLayout(state) : into(free);
 }
 
 export function allTiles(state: Pick<LayoutState, 'nodes'>): TileNode[] {
@@ -466,9 +465,7 @@ function rectMinus(r: Rect, half: Rect): Rect {
 /** Removes a tile. A group left with one member dissolves into a plain tile. */
 export function removeTile(state: LayoutState, key: string): LayoutState {
   if (!findTile(state, key)) return state;
-  const detached = detach(state, key);
-  const primaryId = detached.nodes.some((n) => n.id === state.primaryId) ? state.primaryId : null;
-  const next = { ...detached, primaryId };
+  const next = detach(state, key);
   return state.manual ? { ...next, nodes: next.nodes.map(withChildren) } : autoLayout(next);
 }
 
@@ -531,8 +528,7 @@ export function closeGroup(state: LayoutState, ref: string): { state: LayoutStat
   const group = resolveGroup(state, ref);
   if (!group) return null;
   const nodes = state.nodes.filter((n) => n !== group);
-  const primaryId = state.primaryId === group.id ? null : state.primaryId;
-  const next = { ...state, nodes, primaryId };
+  const next = { ...state, nodes };
   return { state: state.manual ? next : autoLayout(next), removed: group.children.map((c) => c.component) };
 }
 
@@ -540,25 +536,7 @@ export function ungroup(state: LayoutState, ref: string): LayoutState | null {
   const group = resolveGroup(state, ref);
   if (!group) return null;
   const nodes = state.nodes.flatMap<LayoutNode>((n) => (n === group ? group.children : [n]));
-  return autoLayout({ ...state, nodes, manual: false, primaryId: state.primaryId === group.id ? null : state.primaryId });
-}
-
-/** Makes a tile or group the largest thing on screen. A tile inside a group promotes the group. */
-export function focus(state: LayoutState, ref: string): LayoutState | null {
-  const group = resolveGroup(state, ref);
-  const needle = ref.trim().toLowerCase();
-  const tile = state.nodes.find(
-    (n) =>
-      n.kind === 'tile' &&
-      (n.component.key.toLowerCase() === needle || n.component.label.toLowerCase() === needle),
-  );
-  const node = tile ?? group;
-  if (!node) return null;
-  return autoLayout({ ...state, primaryId: node.id, manual: false });
-}
-
-export function resetLayout(state: LayoutState): LayoutState {
-  return autoLayout({ ...state, manual: false, primaryId: null });
+  return autoLayout({ ...state, nodes });
 }
 
 /**
