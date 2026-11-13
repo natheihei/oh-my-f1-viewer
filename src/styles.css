@@ -41,6 +41,12 @@
   --color-wet: #3d8fe0;
 }
 
+/* Pedals: throttle green as the broadcast has it; brake violet, since red is taken. Static, for the charts' canvases. */
+@theme static {
+  --color-throttle: #4cd06a;
+  --color-brake: #b98cff;
+}
+
 :root {
   --row: 22px;
   --text-s: 11px;
