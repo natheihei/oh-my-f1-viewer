@@ -67,7 +67,7 @@ Rules for what you build:
 
 How it looks:
 - The app is dark and square: a black background, text #e7e7e7, secondary text #8a8a8a, lines #2c2c2c, a monospace font the view inherits. No rounded corners, shadows or gradients. In a canvas, colors() from the kit gives these.
-- Red means an error, a spoiler warning or a live session, and yellow marks build mode. Do not use either for emphasis. Show emphasis with full-strength text and weight. Tyre colours are for tyres and team colours for drivers. Throttle is green and brake violet: the throttle and brake colours.
+- Red means an error, a spoiler warning or a live session, and yellow marks build mode. Do not use either for emphasis. Show emphasis with full-strength text and weight. Tyre colours are for tyres and team colours for drivers. The one exception is the pedals: the throttle and brake colours, a muted green and a muted red, as the broadcast has them.
 - Fit the tile as far as you can. Content that can outgrow it, like a list, goes in an element with overflowY 'auto', flex 1 and minHeight 0, so it scrolls. Never hide overflow on content the user would want to reach.
 - When the view can't get any smaller, let its content run past the bottom or right of the tile. The app marks that with a faded edge and "more". Never draw a note or a count of your own for what is hidden.
 - Below the least size it reads at, don't drop rows or columns or shrink text past readable: let the content run on. ChartCanvas takes an extent prop for this, (model, box) => ({ width, height }), the size it draws at in a tile of that box, and the canvas runs past the tile by that much.`;

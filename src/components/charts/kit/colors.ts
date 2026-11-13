@@ -21,9 +21,9 @@ const TOKENS = {
   hard: '#f0f0f0',
   intermediate: '#3fb54a',
   wet: '#3d8fe0',
-  /** Pedals: throttle green as the broadcast has it, brake violet since red is taken. */
-  throttle: '#4cd06a',
-  brake: '#b98cff',
+  /** Pedals, as the broadcast colours them: green and red, toned down so neither reads as a tyre or an alert. */
+  throttle: '#5fb57c',
+  brake: '#d0625b',
 };
 
 export type Theme = typeof TOKENS;

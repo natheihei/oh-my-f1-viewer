@@ -95,7 +95,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Red and yellow are taken.** Red means an error, a spoiler warning or a live session. Yellow marks build mode. Neither is used for
   emphasis, which is shown with ink and weight.
 - **Tyre colours are for tyres, team colours for drivers.**
-- **Pedals have their own colours:** throttle green, as the broadcast has it, and brake violet, since red is taken. (2026-11-13)
+- **Pedals have their own colours, and brake is the one red that isn't an alert.** Throttle green and brake red, as every
+  broadcast and telemetry screen draws them, toned down (`throttle`, `brake`) so the red reads as data, not as the red that
+  warns or as a soft tyre. (2026-11-13. Violet was tried first, to keep red for alerts, and read as foreign.)
 
 ### Spoilers
 
@@ -147,6 +149,8 @@ Polished 2026-11-13.
 - **One lap of speed, with a scale.** The trace is as long as the car's last lap time, between 60 and 120 seconds, so each corner
   is in it once. Rules at 100, 200 and 300 km/h are labelled at the left. A dot marks where the line is now, and each corner's
   low point has its speed and gear.
+- **Pedals as segments.** Throttle and brake are stacks of 4px segments lit from the bottom, in the pedal colours, so a part
+  throttle reads as a count. The feed sends brake as off or on, so its stack is all lit or none.
 - **Sized to sit under its onboard.** Fit 480 by 200 and shape 2.4, a strip under a video of the same width: past that, a taller
   tile only stretched the trace and the bars. Least 300 by 150, where the readouts, the chip and a trace with its rules still
   read. `scripts/telemetry-check.mjs` shows it in the real app.
