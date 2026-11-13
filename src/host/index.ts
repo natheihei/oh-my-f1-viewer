@@ -146,7 +146,7 @@ const data = {
       description:
         'Read the open session with SQL. Tables: car_data, intervals, laps, location, overtakes, pit, position, race_control, stints, weather. ' +
         'Each holds only what the feed had revealed at the frame on screen, unless asOf is "session": then everything the session holds. ' +
-        'Times are UTC milliseconds. SELECT only.',
+        'Times are UTC milliseconds. In car_data, a throttle or brake of 104 means the feed has no reading, and drs is empty from 2026. SELECT only.',
       args: Type.Object({
         sql: Type.String(),
         params: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number(), Type.Null()]))),
