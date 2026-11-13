@@ -9,7 +9,7 @@
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { useEffect, useRef } from 'react';
-import { GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, TITLE_BAR_PX, type LayoutNode, type Rect, type TileNode } from './model';
+import { allTiles, GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, TITLE_BAR_PX, type ComponentSpec, type LayoutNode, type Rect, type TileNode } from './model';
 import { layout, useLayout } from './store';
 
 const GROUP_TITLE_PX = TITLE_BAR_PX;
@@ -125,12 +125,15 @@ export function GridSurface({
   onSwap,
   onClose,
   states = NO_STATES,
+  drawTitle,
 }: {
   onMove: (id: string, rect: Rect) => void;
   onSwap: (a: string, b: string) => void;
   onClose: (id: string) => void;
   /** What each tile's header slots show, by tile id. */
   states?: Record<string, TileState>;
+  /** Fills a tile's title from its component; a new function redraws every title. Without it, the title is the label. */
+  drawTitle?: (el: HTMLElement, component: ComponentSpec) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
@@ -254,6 +257,17 @@ export function GridSurface({
     grid.batchUpdate(false);
     rebuildingRef.current = false;
   }, [nodes]);
+
+  // After any rebuild above, and whenever the drawer changes, such as when the roster loads.
+  useEffect(() => {
+    if (!drawTitle) return;
+    const tiles = new Map(allTiles({ nodes }).map((t) => [t.id, t.component]));
+    hostRef.current?.querySelectorAll<HTMLElement>('.tile-titlebar[data-tile-id]').forEach((bar) => {
+      const component = tiles.get(bar.dataset.tileId ?? '');
+      const title = bar.querySelector<HTMLElement>(':scope > .tile-title');
+      if (component && title) drawTitle(title, component);
+    });
+  }, [nodes, drawTitle]);
 
   // Runs after any rebuild above, so fresh headers get their slots filled too.
   useEffect(() => {

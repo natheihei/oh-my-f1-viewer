@@ -5,7 +5,6 @@ import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
-  codeOf,
   colors,
   hline,
   linear,
@@ -330,6 +329,6 @@ export default defineComponent({
   needs: NEEDS,
   size: { aspect: Math.round((FIT.width / FIT.height) * 100) / 100, min: { width: 300, height: 150 } },
   fit: FIT,
-  spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: `Telemetry ${codeOf(drivers[0])}` }),
+  spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: 'Telemetry', drivers: [drivers[0]] }),
   View: CarTelemetry,
 });

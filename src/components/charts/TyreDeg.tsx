@@ -4,12 +4,14 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+import { defineComponent, useLive, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   colors,
   compoundLetter,
+  drawCode,
+  drawParts,
   isCleanLap,
   median,
   num,
@@ -218,9 +220,7 @@ function draw(ctx: Ctx, d: Drawn, { width, height }: Box): void {
       ctx.fillRect(0, top, width, pitch);
     }
     if (row.position !== null) text(ctx, String(row.position), PAD + 2 * ch, y, { align: 'right', color: c.dim, size: SIZE });
-    ctx.fillStyle = style.colour;
-    ctx.fillRect(PAD + 3 * ch, top + pitch * 0.25, 2, pitch * 0.5);
-    text(ctx, style.code, PAD + 3 * ch + 6, y, { color: c.ink, size: SIZE, weight: watched ? 700 : 500 });
+    drawCode(ctx, style, PAD + 3 * ch, y, { size: SIZE, strong: watched, barHeight: pitch * 0.56 });
     // A compound the feed hasn't named is left blank, age and all.
     const letter = compoundLetter(row.compound);
     if (row.compound && letter !== '?') {
@@ -243,8 +243,8 @@ function draw(ctx: Ctx, d: Drawn, { width, height }: Box): void {
   // Under the grid: the retired cars, then the key.
   let y = HEAD + m.rows.length * pitch + LINE / 2 + 2;
   if (m.out.length) {
-    const names = m.out.map((o) => `${styleOf(d.styles, o.driver).code} L${o.lap}`).join(' · ');
-    text(ctx, `OUT  ${names}`, PAD, y, { color: c.mute, size: SIZE });
+    const names = m.out.flatMap((o, i): Part[] => [i ? ' · ' : '', { driver: o.driver }, ` L${o.lap}`]);
+    drawParts(ctx, ['OUT  ', ...names], d.styles, PAD, y, { color: c.mute, size: SIZE });
     y += LINE;
   }
   const label = 'VS OWN MEDIAN';

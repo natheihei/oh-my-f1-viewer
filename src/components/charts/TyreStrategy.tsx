@@ -5,8 +5,8 @@ import { defineComponent, useLive, useSql } from "../../host";
 import {
   ChartCanvas,
   ChartFrame,
-  codeOf,
   colors,
+  drawCode,
   linear,
   num,
   stintAge,
@@ -245,13 +245,7 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
         color: c.ink,
         size: SIZE,
       });
-    ctx.fillStyle = style.colour;
-    ctx.fillRect(BAR_X, rowTop + pitch * 0.22, 3, pitch * 0.56);
-    text(ctx, style.code, CODE_X, mid, {
-      color: c.ink,
-      size: SIZE,
-      weight: 500,
-    });
+    drawCode(ctx, style, BAR_X, mid, { size: SIZE, barHeight: pitch * 0.56 });
     const last = stints[stints.length - 1];
     // The laps still to come, behind a car that's running.
     if (!out && last && m.total !== null && last.to < m.total) {
@@ -347,9 +341,8 @@ export default defineComponent({
   fit: MOST,
   spec: ({ drivers }) => ({
     key: `tyre_strategy:${drivers?.join("-") ?? "all"}`,
-    label: drivers?.length
-      ? `Tyres ${drivers.map(codeOf).join(" · ")}`
-      : "Tyres",
+    label: "Tyres",
+    drivers,
   }),
   View: TyreStrategy,
 });

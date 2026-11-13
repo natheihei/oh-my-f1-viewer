@@ -10,6 +10,7 @@ import {
   ChartFrame,
   circuitMessage,
   colors,
+  drawCode,
   hline,
   neutralOf,
   num,
@@ -94,18 +95,18 @@ export function lossNow(loss: { normal: number | null; safetyCar: number | null;
   return loss.normal;
 }
 
-type Key = 'position' | 'bar' | 'code' | 'rejoin' | 'cost' | 'short' | 'spare' | 'ahead' | 'air';
+type Key = 'position' | 'driver' | 'rejoin' | 'cost' | 'short' | 'spare' | 'ahead' | 'air';
 
 /** Width in characters. Every column is always drawn, and a tile too narrow lets the table run past its right edge. */
 const COLUMNS: Array<{ key: Key; head: string; chars: number; thumbnail: boolean }> = [
   { key: 'position', head: 'P', chars: 2, thumbnail: true },
-  { key: 'bar', head: '', chars: 0.5, thumbnail: true },
-  { key: 'code', head: '', chars: 3, thumbnail: true },
+  // The team bar and the code, drawn as one by drawCode: 3 for the code, and a little over one for the bar and its gap.
+  { key: 'driver', head: '', chars: 4.1, thumbnail: true },
   { key: 'rejoin', head: 'REJOIN', chars: 3, thumbnail: true },
   { key: 'cost', head: 'COST', chars: 3, thumbnail: true },
   { key: 'short', head: 'SHORT', chars: 4, thumbnail: false },
   { key: 'spare', head: 'SPARE', chars: 4, thumbnail: false },
-  { key: 'ahead', head: 'CAR AHEAD', chars: 8, thumbnail: false },
+  { key: 'ahead', head: 'CAR AHEAD', chars: 9, thumbnail: false },
   { key: 'air', head: 'AIR', chars: 7, thumbnail: true },
 ];
 
@@ -125,7 +126,7 @@ const ADVANCE = 0.6;
 const CLOSE = 1;
 
 function widthAt(columns: typeof COLUMNS, size: number, spacing: number): number {
-  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'bar' || col.key === 'code' ? ADVANCE : spacing), 0);
+  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? ADVANCE : spacing), 0);
   return chars * size * ADVANCE + PAD * 2;
 }
 const heightAt = (rows: number, pitch: number): number => HEAD + rows * pitch + PAD;
@@ -178,11 +179,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 
   const room = width - pad * 2;
   const chars = columns.reduce((s, col) => s + col.chars, 0);
-  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - 2 * ADVANCE * ch) / Math.max(1, columns.length - 3)));
+  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - ADVANCE * ch) / Math.max(1, columns.length - 2)));
   const edges = new Map<Key, { x0: number; x1: number }>();
   let at = pad;
   for (const col of columns) {
-    const gap = col.key === 'code' || col.key === 'bar' ? ch * ADVANCE : spacing;
+    const gap = col.key === 'driver' ? ch * ADVANCE : spacing;
     if (at > pad) at += gap;
     edges.set(col.key, { x0: at, x1: at + col.chars * ch });
     at += col.chars * ch;
@@ -217,12 +218,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
         case 'position':
           text(ctx, String(row.from), x1, y, { align: 'right', color: c.ink, size });
           break;
-        case 'bar':
-          ctx.fillStyle = style.colour;
-          ctx.fillRect(x0, top + pitch * 0.22, Math.max(2, x1 - x0), pitch * 0.56);
-          break;
-        case 'code':
-          text(ctx, style.code, x0, y, { color: c.ink, size, weight: watched ? 700 : 500 });
+        case 'driver':
+          drawCode(ctx, style, x0, y, { size, strong: watched, barHeight: pitch * 0.56 });
           break;
         case 'rejoin':
           if (row.pit) text(ctx, 'PIT', x1, y, { align: 'right', color: c.dim, size });
@@ -253,7 +250,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
             text(ctx, '–', x1, y, { align: 'right', color: c.faint, size });
             break;
           }
-          text(ctx, styleOf(m.styles, row.ahead.driver).code, x0, y, { size, color: c.dim });
+          drawCode(ctx, styleOf(m.styles, row.ahead.driver), x0, y, { size, tone: 'dim', barHeight: pitch * 0.56 });
           text(ctx, row.ahead.by.toFixed(1), x1, y, { align: 'right', size, color: c.dim });
           break;
         case 'air':

@@ -6,8 +6,8 @@ import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
-  codeOf,
   colors,
+  drawCode,
   formatLapTime,
   linear,
   num,
@@ -248,7 +248,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
 
   // Whose laps, if the title bar doesn't say; then the turn numbers, where they don't crowd each other.
   if (!compact) {
-    if (m.picked) text(ctx, m.style.code, pad, head / 2, { color: m.style.colour, size: 10, weight: 700 });
+    if (m.picked) drawCode(ctx, m.style, pad, head / 2, { size: 10, strong: true });
     else if (m.corners.length) text(ctx, 'TURN', pad, head / 2, { color: c.faint, size: 9 });
     let lastX = -Infinity;
     for (const corner of m.corners) {
@@ -343,7 +343,8 @@ export default defineComponent({
   fit: { width: 640, height: 200 },
   spec: ({ drivers }) => ({
     key: `pedal_barcode:${drivers?.[0] ?? 'lead'}`,
-    label: drivers?.length ? `Pedals ${codeOf(drivers[0])}` : 'Pedals',
+    label: 'Pedals',
+    drivers: drivers?.slice(0, 1),
   }),
   View: PedalBarcode,
 });
