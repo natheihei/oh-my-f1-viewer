@@ -244,16 +244,25 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
   every car is, `speed_trace` how two drivers' laps compare against distance, `car_telemetry` one car's pedals and revs over time,
   `pedal_barcode` whether every lap is driven the same.
 - **One lap, on the circuit.** The car's positions over a window as long as its latest lap time, kept within 60 and 120 seconds,
-  drawn on the faint outline turned by the circuit's `rotation`, as the track map is. Each position takes the speed and brake of the
+  drawn on the faint outline turned by the circuit's `rotation`, as the track map is. Each position takes the speed and pedals of the
   latest `car_data` sample at or before it. Positions more than 2 s apart break the ribbon.
-- **Width is speed, colour is the pedal.** 1px at 60 km/h and below, 6px from 340 km/h. Green (`throttle`) off the brake and red
-  (`brake`) on it, over the rest in a black casing so a brake zone stays its own mark for a viewer who can't tell red from green. A
-  brake of 104 is the feed having no reading, drawn as not braking. (2026-11-13. It was the team colour with the brake in red, and
-  McLaren's orange and Ferrari's red couldn't be told from the brake.) The team colour is left for the driver's code.
-- **The readout holds still.** The speed sits right-aligned in a three-digit slot, so the gear after it doesn't jump when the speed
-  goes from two digits to three.
+- **Width is speed, colour is the pedal.** 1px at 60 km/h and below, 6px from 340 km/h. Green (`throttle`) flat out, the same
+  green at half strength on a lift (under 95% throttle and off the brake: a lift, a coast, a part-throttle exit), and red (`brake`)
+  on the brake, over the rest in a black casing so a brake zone stays its own mark for a viewer who can't tell red from green. A
+  throttle or brake of 104 is the feed having no reading, drawn as neither braking nor lifting. (2026-11-13. It was the team colour
+  with the brake in red, and McLaren's orange and Ferrari's red couldn't be told from the brake.) The team colour is left for the
+  driver's code.
+- **Each corner's slowest speed,** in ink just outside the track: the lowest speed after each braking zone, once the car is 10 km/h
+  faster again, so a zone it's still in has none yet. These are placed before the turn numbers, which give way where they'd touch.
+- **The pedals now in the readout:** speed, gear, a BRAKE chip lit in the brake colour while braking, and throttle in per cent. While
+  the feed sends 104 the chip is unlit and the throttle a dash.
+- **The readout holds still.** Each number sits right-aligned in a slot as wide as its widest value, so nothing after it moves
+  when the speed goes from two digits to three, or the throttle from 99% to 100%.
+- **The timing line,** a bar across the track at the outline's first point, as the track map draws it, so the lap's start reads.
 - **The leader when no driver is named,** and then the readout names them, since the title bar can't.
-- **Turn numbers just outside the track,** in the hint grey, left out where they would touch the readout or another number.
+- **Turn numbers just outside the track,** in the hint grey, left out where they would touch the readout, a corner speed or another
+  number. (Corner speeds, lifts, the pedals in the readout and the timing line were picked from the speed ribbon proposals,
+  2026-11-13.)
 - **Size.** Least 300 by 220: the readout's row over a circuit large enough for its turn numbers to sit apart. Fit 560 by 400, where
   a circuit stops gaining detail. `scripts/ribbon-check.mjs` shows it at both and below in the real app.
 

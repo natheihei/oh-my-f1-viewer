@@ -20,7 +20,7 @@ const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
-const { ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
+const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
 type ComponentSpec = import('../../layout/model').ComponentSpec;
@@ -832,28 +832,36 @@ describe('speed_trace', () => {
 });
 
 describe('speed_ribbon', () => {
-  const at = (date: number, x: number, y: number) => ({ date, x, y, speed: null, n_gear: null, brake: null });
-  const car = (date: number, speed: number, brake = 0, n_gear = 7) => ({ date, x: null, y: null, speed, n_gear, brake });
+  const at = (date: number, x: number, y: number) => ({ date, x, y, speed: null, n_gear: null, throttle: null, brake: null });
+  const car = (date: number, speed: number, brake = 0, throttle = 100, n_gear = 7) => ({ date, x: null, y: null, speed, n_gear, throttle, brake });
+  const point = (x: number, speed: number | null, more: Record<string, unknown> = {}) => ({ x, y: x, speed, braking: false, lifting: false, ...more });
 
-  it('gives each position the speed and brake of the latest sample at or before it', () => {
-    const m = ribbonModel([car(0, 300), at(100, 1, 1), car(200, 280, 100), at(300, 2, 2), at(450, 3, 3), car(500, 250, 100, 5)]);
-    expect(m.path).toEqual([
-      { x: 1, y: 1, speed: 300, braking: false },
-      { x: 2, y: 2, speed: 280, braking: true },
-      { x: 3, y: 3, speed: 280, braking: true },
-    ]);
-    expect(m).toMatchObject({ now: { x: 3, y: 3 }, speed: 250, gear: 5 });
+  it('gives each position the speed and pedals of the latest sample at or before it', () => {
+    const m = ribbonModel([car(0, 300), at(100, 1, 1), car(200, 280, 100, 0), at(300, 2, 2), car(400, 150, 0, 40), at(450, 3, 3), car(500, 250, 100, 0, 5)]);
+    expect(m.path).toEqual([point(1, 300), point(2, 280, { braking: true }), point(3, 150, { lifting: true })]);
+    expect(m).toMatchObject({ now: { x: 3, y: 3 }, speed: 250, gear: 5, throttle: 0, braking: true });
   });
 
-  it('reads a brake of 104 as no reading, not braking', () => {
+  it('reads 104 as no reading: neither braking nor lifting, and no pedals in the readout', () => {
     // São Paulo 2026, car 3, lap 38: brake goes to 104 mid-corner.
-    expect(ribbonModel([car(0, 93, 104), at(100, 1, 1)]).path).toEqual([{ x: 1, y: 1, speed: 93, braking: false }]);
+    const m = ribbonModel([car(0, 93, 104, 46), at(100, 1, 1)]);
+    expect(m.path).toEqual([point(1, 93)]);
+    expect(m).toMatchObject({ throttle: null, braking: null });
   });
 
   it('breaks at a gap, and leaves out the placeholder position', () => {
     const m = ribbonModel([at(0, 1, 1), at(250, 0, 0), at(3000, 2, 2), car(3100, 200)]);
-    expect(m.path).toEqual([{ x: 1, y: 1, speed: null, braking: false }, null, { x: 2, y: 2, speed: null, braking: false }]);
-    expect(ribbonModel([])).toEqual({ path: [], now: null, speed: null, gear: null });
+    expect(m.path).toEqual([point(1, null), null, point(2, null)]);
+    expect(ribbonModel([])).toEqual({ path: [], now: null, speed: null, gear: null, throttle: null, braking: null });
+  });
+
+  it("finds each corner's slowest speed once the car is out of it", () => {
+    const run = [[300, true], [200, true], [120, false], [95, false], [98, false], [130, false], [250, false], [200, true], [110, false], [100, false]] as const;
+    const path = run.map(([speed, braking], i) => point(i, speed, { braking }));
+    // The second zone's low isn't settled: the car hasn't picked up 10 km/h since.
+    expect(cornerSpeeds(path).map((p) => p.speed)).toEqual([95]);
+    // A gap ends a zone with no low.
+    expect(cornerSpeeds([point(0, 200, { braking: true }), point(1, 90), null, point(2, 200)])).toEqual([]);
   });
 
   it('is one lap long, within a minute and two, and wider the faster', () => {
@@ -1023,7 +1031,7 @@ describe('the registry', () => {
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(17);
+    expect(components).toHaveLength(18);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
