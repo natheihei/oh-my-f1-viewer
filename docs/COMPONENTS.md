@@ -426,6 +426,19 @@ Polished 2026-11-13.
   no codes. Only the thumbnail, under 300 wide or 150 high, fits its box with bars alone. All are computed from the draw
   constants, and `scripts/tyre-check.mjs` shows it at both and below in the real app.
 
+### Lap times
+
+Removed 2026-11-13.
+
+- **Lap times for one to four drivers, lap by lap with a trend through each stint, was taken out.** Whose pace is better between
+  two drivers is `sector_table`'s question, sector by sector, and how a battle moves over laps is `gap_evolution`'s, so it didn't
+  answer anything those two don't. Polishing it was proposed from São Paulo 2026 (a pace range per stint, so a stint on inters
+  isn't dropped from the scale, pit laps marked at their laps, the slope only over the latest laps, names under the pointer), and
+  so were a pace card, the field as a ruler and small multiples. None was needed beside those two.
+- The kit's helpers only it used went with it: the lap axis with its safety car, VSC and red flag shading, its lap ticks, and racing
+  pace.
+- A saved layout with a `lap_time_compare` tile draws nothing in it, as for a mod's component that is gone.
+
 ## Where it lives
 
 | Piece | File |
