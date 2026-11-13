@@ -297,6 +297,18 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
 - **Size.** Least 300 by 220: the readout's row over a circuit large enough for its turn numbers to sit apart. Fit 560 by 400, where
   a circuit stops gaining detail. `scripts/ribbon-check.mjs` shows it at both and below in the real app.
 
+### Race trace
+
+Removed 2026-11-13.
+
+- **Every driver's gap to the leader, one line each, was taken out.** Twenty-odd lines in team colours, many of them alike, tangled
+  in any tile beside a video. A pit stop's 20 to 40 second dive was the loudest mark on it, and the codes at the line ends were pushed
+  away from their lines or left off. Proposals to polish it (11px labels tied to their lines, the interval beside each code, faded
+  history, quieter pit laps, labelling only the battles) and three other directions (battles in words, small multiples of the gap
+  ahead, the field on a ruler with trails) were drawn from São Paulo 2026, and none was good enough to keep. A battle between two
+  drivers is `gap_evolution`'s question.
+- A saved layout with a `race_trace` tile draws nothing in it, as for a mod's component that is gone.
+
 ## Where it lives
 
 | Piece | File |

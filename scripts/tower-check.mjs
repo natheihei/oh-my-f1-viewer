@@ -146,7 +146,7 @@ console.log(`onboards on screen: ${watched.map((w) => w.props.feed).join(', ') |
 
 await shoot('1-beside-video', [tower]);
 await shoot('2-with-onboards', [tower, ...watched]);
-await shoot('3-crowded', [tower, ...watched, { type: 'gap_evolution', props: { drivers: [3, 44] } }, { type: 'tyre_strategy', props: {} }, { type: 'race_trace', props: {} }]);
+await shoot('3-crowded', [tower, ...watched, { type: 'gap_evolution', props: { drivers: [3, 44] } }, { type: 'tyre_strategy', props: {} }, { type: 'field_pace', props: {} }]);
 // Below its least size: about 200 by 290, then narrow and tall, then wide and short.
 await shoot('4-squeezed', [tower, ...watched], [200, 290]);
 await shoot('5-narrow', [tower, ...watched], [240, 560]);

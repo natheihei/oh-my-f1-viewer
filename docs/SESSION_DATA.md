@@ -70,7 +70,7 @@ it gives.
 
 On session 11396, the three cars marked are the three the result lists as DNF, each on its last lap, and at laps 20, 30 and 53 the
 timing tower showed the same cars out as the broadcast. The charts use only this: `timing_tower` shows them as `OUT` at the bottom,
-`track_map` leaves them off, `field_pace` gives them a dash, `pit_window` leaves them off the ring, and `race_trace` leaves them out of its range.
+`track_map` leaves them off, `field_pace` gives them a dash, and `pit_window` leaves them off the ring.
 
 On session 11396 at the end of the race, through the real worker in the app (`scripts/charts-check.mjs`, median of 5): `SELECT * FROM
 lap_summary` took 27ms for 1,166 rows, one driver's laps 6ms, every driver's position and gap per lap 13ms, and everyone's last 5 laps 11ms.
