@@ -17,7 +17,7 @@ type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
 const { trackModel, placeLabels, inLane, toggleDriver, pinnedOf, lanePath, dotAt } = await import('./TrackMap');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
-const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
+const { lapsOf, lapColumn, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
@@ -1045,6 +1045,44 @@ describe('pedal_barcode', () => {
     // Before a lap is completed, there's nothing to query.
     expect(pastParams(1, laps.slice(-1))).toEqual([1, 0, -1]);
     expect(lapsOf([]).driver).toBeNull();
+  });
+
+  it("marks a lap that isn't pace by why, and compares a lap only with a racing lap before it", () => {
+    // 2026 Mexico City, VER: the red flag in lap 45, the suspension in lap 46 (out of the pit lane), the
+    // standing restart in lap 47, which the feed flags yellow; yellow stays to the end.
+    const row = (lap: number, time: number | null, track_status: string, more: Record<string, unknown> = {}) => ({
+      ...lapRow(lap, lap * 100_000, time),
+      track_status,
+      is_pit_in_lap: 0,
+      is_pit_out_lap: 0,
+      ...more,
+    });
+    const rows = [
+      row(44, 93.284, 'SCDeployed'),
+      row(45, 120.377, 'Red'),
+      row(46, 2429.241, 'Red', { is_pit_out_lap: 1 }),
+      row(47, 143.067, 'Yellow'),
+      row(48, 81.142, 'Yellow'),
+      row(49, 80.137, 'Yellow'),
+      row(50, 79.8, 'Yellow'),
+      row(51, null, 'Yellow'),
+    ];
+    const { laps } = lapsOf(rows);
+    expect(laps.map((l) => [l.lap, l.skip])).toEqual([
+      [46, 'RED'],
+      [47, 'START'],
+      [48, null],
+      [49, null],
+      [50, null],
+      [51, null],
+    ]);
+    const drawn = laps.map((l, i) => ({ ...l, cells: [], done: i < laps.length - 1 })).reverse();
+    expect(drawn.map((l, i) => lapColumn(l, drawn[i + 1])?.text ?? null)).toEqual([null, '−0.337', '−1.005', '1:21.142', 'START', 'RED']);
+    // The lap before the oldest shown still tells a restart.
+    const later = lapsOf([...rows.slice(2), row(52, null, 'Yellow')]).laps;
+    expect(later.map((l) => [l.lap, l.skip])[0]).toEqual([47, 'START']);
+    expect(lapsOf([row(12, 95, 'AllClear', { is_pit_in_lap: 1 }), row(13, 99, 'VSCDeployed', { is_pit_out_lap: 1 }), row(14, 110, 'VSCEnding')]).laps.map((l) => l.skip)).toEqual(['PIT', 'PIT', 'VSC']);
+    expect(lapsOf([row(1, 88.2, 'AllClear'), row(2, 83.4, 'AllClear')]).laps.map((l) => l.skip)).toEqual(['START', null]);
   });
 
   it('places each lap by distance from the line, so a corner falls in one place whatever the lap time', () => {

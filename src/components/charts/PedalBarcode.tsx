@@ -10,6 +10,7 @@ import {
   drawCode,
   formatLapTime,
   linear,
+  neutralOf,
   num,
   outlineLength,
   projector,
@@ -20,6 +21,7 @@ import {
   type Box,
   type Ctx,
   type DriverStyle,
+  type Neutral,
 } from './kit';
 
 const NEEDS = ['telemetry' as const];
@@ -36,18 +38,21 @@ const BREAK_MS = 2000;
 /** A lap's time when there's none to scale by, in seconds: only used for a lap without positions. */
 const GUESS_LAP_S = 90;
 
-const LAP_COLUMNS = 'driver_number, lap_number, date_start, lap_duration';
+const LAP_COLUMNS = 'driver_number, lap_number, date_start, lap_duration, is_pit_in_lap, is_pit_out_lap, track_status';
+
+/** Laps queried: those shown and the one before, to tell a restart by the red flag before it. */
+const LAPS_READ = LAPS_SHOWN + 1;
 
 /**
- * The driver's latest laps, the one in progress first. With none named, the car in the lead at the
- * playhead, which the query picks itself.
+ * The driver's latest laps, the one in progress first, and one more. With none named, the car in the
+ * lead at the playhead, which the query picks itself.
  */
 export const lapsSql = (named: boolean) =>
   named
-    ? `SELECT ${LAP_COLUMNS} FROM lap_summary WHERE driver_number = ?1 AND date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_SHOWN}`
+    ? `SELECT ${LAP_COLUMNS} FROM lap_summary WHERE driver_number = ?1 AND date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_READ}`
     : `WITH pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
 lead AS (SELECT driver_number FROM pos WHERE position IS NOT NULL ORDER BY position LIMIT 1)
-SELECT ${LAP_COLUMNS} FROM lap_summary JOIN lead USING (driver_number) WHERE date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_SHOWN}`;
+SELECT ${LAP_COLUMNS} FROM lap_summary JOIN lead USING (driver_number) WHERE date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_READ}`;
 
 /**
  * The completed laps' pedals and positions. Bounded by `date` both ways, from the oldest lap's start to the
@@ -61,20 +66,45 @@ UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date 
 export const NOW_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1
 UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1`;
 
+/** Why a lap's time isn't pace: a red flag, a pit stop, a safety car or a virtual one, or a standing start. */
+export type Skip = 'PIT' | Neutral | 'START';
+
 export interface LapRow {
   lap: number;
   /** UTC ms. */
   start: number;
   /** Seconds; null for the lap in progress. */
   time: number | null;
+  /** Why the lap isn't compared, or null for a racing lap. */
+  skip: Skip | null;
+}
+
+/**
+ * Why a lap isn't compared, from its `lap_summary` row and the previous lap's. A red flag comes first, as
+ * the cars go to the pit lane under it; then a pit lap, a safety car or a virtual one, and a standing
+ * start: lap 1, or the lap after a red flag, the restart. Yellows are racing: the feed can stay on one
+ * for the rest of a race.
+ */
+export function skipOf(r: Record<string, unknown>, before: Record<string, unknown> | undefined): Skip | null {
+  const neutral = neutralOf(r.track_status);
+  if (neutral === 'RED') return neutral;
+  if (r.is_pit_in_lap || r.is_pit_out_lap) return 'PIT';
+  if (neutral) return neutral;
+  if (num(r.lap_number) === 1 || neutralOf(before?.track_status) === 'RED') return 'START';
+  return null;
 }
 
 /** The rows of `lapsSql` as laps, oldest first, and whose they are. */
 export function lapsOf(rows: ReadonlyArray<Record<string, unknown>>): { driver: number | null; laps: LapRow[] } {
-  const laps = rows
+  const sorted = rows
     .filter((r) => num(r.lap_number) !== null && num(r.date_start) !== null)
-    .map((r) => ({ lap: num(r.lap_number)!, start: num(r.date_start)!, time: num(r.lap_duration) }))
-    .sort((a, b) => a.lap - b.lap)
+    .sort((a, b) => num(a.lap_number)! - num(b.lap_number)!);
+  const laps = sorted
+    .map((r, i) => {
+      const prev = sorted[i - 1];
+      const before = prev && num(prev.lap_number) === num(r.lap_number)! - 1 ? prev : undefined;
+      return { lap: num(r.lap_number)!, start: num(r.date_start)!, time: num(r.lap_duration), skip: skipOf(r, before) };
+    })
     .slice(-LAPS_SHOWN);
   return { driver: num(rows[0]?.driver_number), laps };
 }
@@ -177,7 +207,9 @@ export function pedalModel(
     .filter((p): p is { date: number; x: number; y: number } => p.date !== null && p.x !== null && p.y !== null && !(p.x === 0 && p.y === 0))
     .sort((a, b) => a.date - b.date)
     .map((p) => ({ date: p.date, s: project(p.x, p.y).s }));
-  const lastTime = [...laps].reverse().find((l, i) => i > 0 && l.time !== null)?.time ?? GUESS_LAP_S;
+  // A racing lap's time if there is one: a red flag's lap can be forty minutes.
+  const completed = [...laps].reverse().filter((l, i) => i > 0 && l.time !== null);
+  const lastTime = (completed.find((l) => !l.skip) ?? completed[0])?.time ?? GUESS_LAP_S;
   const drawn = laps.map((l, i) => {
     const done = l.time !== null && i < laps.length - 1;
     const end = done ? l.start + l.time! * 1000 : playhead;
@@ -235,6 +267,20 @@ const GUIDE = 'rgba(0,0,0,0.65)';
 /** "−0.158" or "+0.036": a lap against the one before it. */
 export const lapDelta = (seconds: number) => `${seconds < 0 ? '−' : '+'}${Math.abs(seconds).toFixed(3)}`;
 
+/**
+ * A row's time column: why it isn't compared, as "RED" or "PIT"; its difference to the lap before, when
+ * both are completed racing laps; or else its own time. Nothing for a racing lap still being driven.
+ */
+export function lapColumn(lap: PedalLap, before: PedalLap | undefined): { text: string; delta: number | null } | null {
+  if (lap.skip) return { text: lap.skip, delta: null };
+  if (!lap.done || lap.time === null) return null;
+  if (before?.done && before.time !== null && !before.skip) {
+    const d = lap.time - before.time;
+    return { text: lapDelta(d), delta: d };
+  }
+  return { text: formatLapTime(lap.time), delta: null };
+}
+
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const pad = compact ? 2 : PAD;
@@ -288,13 +334,12 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     if (compact) return;
     const y = top + rowH / 2;
     text(ctx, `L${lap.lap}`, pad, y, { color: lap.done ? c.dim : c.ink, size: 11, weight: lap.done ? 400 : 700 });
-    if (!lap.done || lap.time === null) return;
-    // Against the lap before, ink when faster; the oldest row has none before it, so it keeps its time.
-    const before = m.laps[i + 1];
-    if (before?.done && before.time !== null) {
-      const d = lap.time - before.time;
-      text(ctx, lapDelta(d), left - 6, y, { align: 'right', color: d < 0 ? c.ink : c.mute, size: 10, weight: d < 0 ? 700 : 400 });
-    } else text(ctx, formatLapTime(lap.time), left - 6, y, { align: 'right', color: c.mute, size: 10 });
+    // Against the lap before, ink when faster. The oldest row has none before it, and a lap after a pit
+    // stop, a neutralised lap or a start has none to go by, so each keeps its time.
+    const column = lapColumn(lap, m.laps[i + 1]);
+    if (!column) return;
+    const faster = column.delta !== null && column.delta < 0;
+    text(ctx, column.text, left - 6, y, { align: 'right', color: faster ? c.ink : c.mute, size: 10, weight: faster ? 700 : 400 });
   });
 }
 
