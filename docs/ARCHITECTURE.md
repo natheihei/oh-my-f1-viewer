@@ -48,8 +48,7 @@ with no chart library, for the reasons in [PITWALL.md](PITWALL.md). They may onl
   a thumbnail. `extent` lets a chart draw past its tile, and `onPointer` hands it the pointer, to name what's under it.
 - **Helpers:** linear scales and ticks, axis labels with grid lines only where a value is labelled, polylines, end labels pushed apart,
   text, gap and lap time parsing, tyre age, driver colours from the roster (a team's second driver dashed) and tyre colours from the theme.
-  For lap-based charts (`kit/laps.ts`): the lap axis to the race distance with safety car, VSC and red flag laps shaded, the clean-lap
-  rule, racing pace, and medians.
+  For lap-based charts (`kit/laps.ts`): neutralised laps, the clean-lap rule, tyre age, medians, and where the lap axis ends.
   The accent red is never used inside a chart: it would read as a team or a soft tyre.
 
 **Telemetry charts** (`track_map`, `car_telemetry`, `pedal_barcode`, `speed_ribbon`) read `location` and `car_data`, about 1.5 million rows a race,
