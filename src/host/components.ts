@@ -7,7 +7,7 @@ import Type, { type Static, type TObject } from 'typebox';
 import Value from 'typebox/value';
 import type { ComponentType } from 'react';
 import { create } from 'zustand';
-import type { SessionType } from '../../shared/api';
+import type { SessionInfo, SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
 import { allTiles, type ComponentSpec, type ContentFit, type SizeHint } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
@@ -20,7 +20,7 @@ interface Declared {
   title: string;
   /** What the agent reads when deciding what to suggest. */
   description: string;
-  /** Session types it applies to, as `SessionInfo.type` names them. Omitted means any. */
+  /** Session types it applies to, as `SessionInfo.type` names them. Omitted, or empty, means any. */
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
@@ -102,13 +102,44 @@ function infoOf(c: ComponentDefinition): ComponentInfo {
     title: c.title,
     description: c.description,
     args: JSON.parse(JSON.stringify(c.args)),
-    sessions: c.sessions ?? null,
+    sessions: c.sessions?.length ? c.sessions : null,
     needs: c.needs ?? [],
     replayOnly: c.replayOnly === true,
     size: sizeOf(c),
     looksAhead: c.looksAhead === true,
   };
 }
+
+/** What a component is checked against: the open session's type and status. */
+export type Occasion = Pick<SessionInfo, 'type' | 'status'>;
+
+const sessionTypeName = (type: SessionType) => type.replace('-', ' ');
+
+/**
+ * Each limit a component declares, as a check against the open session: why it doesn't fit, or null.
+ * A new limit is a field on `Declared` and one more check here; the agent's chart list and
+ * `suggest_tiles` both go through `misfit`.
+ */
+const limits: ((c: ComponentInfo, on: Occasion) => string | null)[] = [
+  (c, on) =>
+    c.sessions && !c.sessions.includes(on.type)
+      ? `is for ${c.sessions.map(sessionTypeName).join(', ')} sessions, and this is ${sessionTypeName(on.type)}`
+      : null,
+  (c, on) => (c.replayOnly && on.status === 'live' ? 'works in replays only, and this session is live' : null),
+];
+
+/** Why a component doesn't fit the open session, as a phrase after its name, or null if it does. Nothing is ruled out with no session open. */
+export function misfit(c: ComponentInfo, on: Occasion | null | undefined): string | null {
+  if (!on) return null;
+  for (const limit of limits) {
+    const why = limit(c, on);
+    if (why) return why;
+  }
+  return null;
+}
+
+/** The components that fit the open session: all of them with none open. */
+export const fitting = (list: ComponentInfo[], on: Occasion | null | undefined): ComponentInfo[] => list.filter((c) => !misfit(c, on));
 
 export const componentOps = {
   register: write(

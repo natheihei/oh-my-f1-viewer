@@ -303,6 +303,7 @@ export default defineComponent({
     'Speed through one lap for two drivers, overlaid, with the time gained or lost along the lap, corner by corner. Suggest it when the user asks where exactly a driver is faster: braking, corner speed or the straights.',
   replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
+  sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 16 / 9, min: { width: 440, height: 230 } },
   spec: ({ drivers }) => ({ key: `speed_trace:${drivers.join('-')}`, label: `Speed ${drivers.map(codeOf).join(' · ')}` }),
