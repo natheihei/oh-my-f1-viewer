@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { gapModel } = await import('./GapEvolution');
+const { gapModel, layoutMarks } = await import('./GapEvolution');
 const { tyreModel, tyreExtent } = await import('./TyreStrategy');
 const { towerModel, towerExtent } = await import('./TimingTower');
 const { degModel, degExtent, shadeOf } = await import('./TyreDeg');
@@ -138,6 +138,41 @@ describe('gap_evolution', () => {
 
   it('is empty before the first lap', () => {
     expect(gapModel([gap(44, 1000, 1), gap(1, 1000, 2)], [44, 1]).points).toEqual([]);
+  });
+
+  describe('marks', () => {
+    // Each driver named is 30px wide.
+    const width = (drivers: number[]) => 30 * drivers.length;
+
+    it('labels marks far apart each right of its line', () => {
+      expect(layoutMarks([{ at: 100, driver: 4 }, { at: 10, driver: 81 }], width, 400, 'all')).toEqual([
+        { at: 10, drivers: [81], align: 'left' },
+        { at: 100, drivers: [4], align: 'left' },
+      ]);
+    });
+
+    it('names stops a lap apart in one label at the first', () => {
+      // Mexico: PIA in on 44 and NOR on 45, a lap 20px wide.
+      expect(layoutMarks([{ at: 120, driver: 4 }, { at: 100, driver: 81 }], width, 400, 'all')).toEqual([{ at: 100, drivers: [81, 4], align: 'left' }]);
+      // Two in on the same lap.
+      expect(layoutMarks([{ at: 100, driver: 81 }, { at: 100, driver: 4 }], width, 400, 'all')).toEqual([{ at: 100, drivers: [81, 4], align: 'left' }]);
+    });
+
+    it('labels only the latest of passes close together', () => {
+      expect(layoutMarks([{ at: 100, driver: 81 }, { at: 115, driver: 4 }, { at: 130, driver: 81 }], width, 400, 'latest')).toEqual([
+        { at: 130, drivers: [81], align: 'left' },
+      ]);
+    });
+
+    it('puts a label left of its line by the panel, and merges it where that runs over the one before', () => {
+      expect(layoutMarks([{ at: 390, driver: 4 }], width, 400, 'all')).toEqual([{ at: 390, drivers: [4], align: 'right' }]);
+      // Right of 370 the label would reach 403, so it goes left: clear of a label at 300, over one at 340.
+      expect(layoutMarks([{ at: 300, driver: 81 }, { at: 370, driver: 4 }], width, 400, 'all')).toEqual([
+        { at: 300, drivers: [81], align: 'left' },
+        { at: 370, drivers: [4], align: 'right' },
+      ]);
+      expect(layoutMarks([{ at: 340, driver: 81 }, { at: 370, driver: 4 }], width, 400, 'all')).toEqual([{ at: 340, drivers: [81, 4], align: 'right' }]);
+    });
   });
 });
 
