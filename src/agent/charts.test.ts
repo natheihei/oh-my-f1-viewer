@@ -170,6 +170,14 @@ describe('suggesting charts', () => {
     await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).resolves.toContain('Suggested: Telemetry');
   });
 
+  it('lists the pedal barcode as one driver or none, and suggests it either way', async () => {
+    expect(describeCharts(read().components)).toContain('pedal_barcode, Pedals, 0 to 1 driver, race/sprint, replays only: Is a driver driving every lap the same');
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode' }] })).resolves.toContain('Suggested: Pedals.');
+    host.suggestions.newTurn();
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', drivers: ['HAM'] }] })).resolves.toContain('Suggested: Pedals HAM');
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', drivers: ['HAM', 'VER'] }] })).rejects.toThrow();
+  });
+
   it('suggests a chart next to the onboards, with drivers as car numbers', async () => {
     const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER'], charts: [{ chart: 'test_gap', drivers: ['Hamilton', 'max'] }] });
     expect(out).toBe('Suggested: HAM, VER, Gap 44 v 1. The user decides; nothing is on screen until they add it.');
