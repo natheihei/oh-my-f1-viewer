@@ -195,8 +195,8 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   1.4 s apart). All cars share each sample's `date`. Rows are revealed 0 to 1.9 s after their `date` (median 0.4 s), never before it. At
   300 km/h a sample is every 20 m or so, so braking points are approximate.
 - **`laps.date_start` isn't exactly the line.** By each car's positions, it comes 0.34 s after the car crosses the outline's first point
-  (median over 4 drivers' laps 3 to 45), give or take 0.1 to 0.2 s from lap to lap, and once 1.35 s. `speed_trace` finds each lap's ends from
-  the positions instead.
+  (median over 4 drivers' laps 3 to 45), give or take 0.1 to 0.2 s from lap to lap, and once 1.35 s. A chart that needs a lap's ends exactly should
+  find them from the positions instead.
 - **`car_data.drs` isn't DRS in 2026.** It's null throughout session 11396, and session 11404 has codes such as 17, 49 and 151 that aren't
   DRS's (2026's cars have no DRS). 2025's session 9877 has the usual 0 to 14. `car_telemetry` shows DRS only when every code in its minute
   is one of DRS's own.
