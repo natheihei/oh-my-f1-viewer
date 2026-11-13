@@ -146,9 +146,27 @@ export function sentenceCase(s: string, isCode: (word: string) => boolean): stri
   return i === 0 ? out[0].toUpperCase() + out.slice(1) : out;
 }
 
+/** A stewards' case as it stands: its cars, why, and its latest stage. */
+export interface Case {
+  time: string;
+  cars: number[];
+  turn: number | null;
+  reason: string;
+  stage: Stage;
+  /** "5s", once a penalty is given, and the car it's for. */
+  penalty: string | null;
+  penalised: number[];
+  /** The lap of its latest message. */
+  lap: number | null;
+}
+
 /** What is in force at the end of `rows`, oldest first. Each is null until a message has said it. */
 export interface Standing {
   track: Track;
+  /** The lap the red flag, safety car or VSC in force began on, or null when racing. */
+  since: number | null;
+  /** While the red flag is out: the order the cars restart in, and when, once race control has said. */
+  restart: { order: number[]; at: string | null } | null;
   /** Sectors under a yellow, by number. */
   sectors: Map<number, 'yellow' | 'double'>;
   grip: 'low' | 'normal' | null;
@@ -156,38 +174,79 @@ export interface Standing {
   aid: { name: string; on: boolean } | null;
   /** Stewards' cases noted or under investigation, not yet decided. */
   open: number;
+  /** Every case so far, in the order each was first noted. */
+  cases: Case[];
+  /** Laps deleted for track limits, by car. */
+  deleted: Map<number, number>;
+  /** Cars shown the black and white flag. */
+  blackWhite: Set<number>;
+  /** The lap of the latest message. */
+  lap: number | null;
 }
+
+const isOpen = (stage: Stage): boolean => stage === 'noted' || stage === 'investigating';
 
 export function standing(rows: ReadonlyArray<Record<string, unknown>>): Standing {
   const sectors = new Map<number, 'yellow' | 'double'>();
   let track: Track = 'green';
+  let since: number | null = null;
+  let restart = null as Standing['restart'];
   let grip: Standing['grip'] = null;
   let aid: Standing['aid'] = null;
-  const cases: Array<{ time: string; cars: number[]; stage: Stage }> = [];
+  let lap: number | null = null;
+  const cases: Case[] = [];
+  const deleted = new Map<number, number>();
+  const blackWhite = new Set<number>();
   for (const r of rows) {
     const message = text(r);
     const flag = upper(r.flag);
     const sector = num(r.sector);
+    lap = num(r.lap_number) ?? lap;
     if (r.scope === 'Sector' && sector !== null) {
       if (flag === 'CLEAR') sectors.delete(sector);
       else if (flag.includes('YELLOW')) sectors.set(sector, flag === 'DOUBLE YELLOW' ? 'double' : 'yellow');
     }
     // A red flag holds until the session starts again; a track clear or green flag ends a safety car's period.
+    const was = track;
     if (/^RED FLAG\b/.test(message)) track = 'red';
     else if (track === 'red') {
       if (r.category === 'SessionStatus' && message === 'SESSION STARTED') track = 'green';
     } else if (r.category === 'SafetyCar') track = safetyCar(message);
     else if (r.scope === 'Track' && (flag === 'CLEAR' || flag === 'GREEN')) track = 'green';
+    // A safety car's end is still its period; a red flag after a safety car starts a new one.
+    if (track === 'green') since = null;
+    else if (was === 'green' || (track === 'red') !== (was === 'red')) since = lap;
+    if (track !== 'red') restart = null;
+    else {
+      const order = message.match(/RESUMPTION ORDER: ([\d,\s]+)$/);
+      const at = message.match(/^RACE WILL RESUME AT (\d\d:\d\d)/);
+      const now = restart;
+      if (order) restart = { order: order[1].split(/,\s*/).map(Number), at: now?.at ?? null };
+      else if (at) restart = { order: now?.order ?? [], at: at[1] };
+    }
     if (/^(LOW|NORMAL) GRIP CONDITIONS$/.test(message)) grip = message.startsWith('LOW') ? 'low' : 'normal';
     const aidMatch = message.match(/^(OVERTAKE|DRS) (ENABLED|DISABLED)$/);
     if (aidMatch) aid = { name: aidMatch[1], on: aidMatch[2] === 'ENABLED' };
+    const limits = message.match(/^CAR (\d+) \(\w+\) (?:TIME [\d:.]+ )?(?:LAP )?DELETED - TRACK LIMITS/);
+    if (limits) deleted.set(Number(limits[1]), (deleted.get(Number(limits[1])) ?? 0) + 1);
+    const driver = num(r.driver_number);
+    if (flag === 'BLACK AND WHITE' && driver !== null) blackWhite.add(driver);
     const step = parseCase(message);
     if (step) {
-      const known = cases.find((c) => sameCase(c, step));
-      if (known) known.stage = step.stage;
-      else cases.push({ time: step.time, cars: step.cars, stage: step.stage });
+      let known = cases.find((c) => sameCase(c, step));
+      if (!known) {
+        known = { time: step.time, cars: step.cars, turn: step.turn, reason: step.reason, stage: step.stage, penalty: null, penalised: [], lap };
+        cases.push(known);
+      }
+      known.stage = step.stage;
+      known.lap = lap;
+      if (!known.reason) known.reason = step.reason;
+      if (step.penalty) {
+        known.penalty = step.penalty;
+        known.penalised = step.cars;
+      }
     }
   }
-  const open = cases.filter((c) => c.stage === 'noted' || c.stage === 'investigating').length;
-  return { track, sectors, grip, aid, open };
+  const open = cases.filter((c) => isOpen(c.stage)).length;
+  return { track, since, restart, sectors, grip, aid, open, cases, deleted, blackWhite, lap };
 }
