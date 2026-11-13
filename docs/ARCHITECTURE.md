@@ -45,7 +45,7 @@ with no chart library, for the reasons in [PITWALL.md](PITWALL.md). They may onl
   failed, or there are no rows yet, and it holds the chart's error boundary. Messages say what's missing, never anything about the race.
 - **`kit/ChartCanvas`** sizes a canvas to its tile at the screen's pixel ratio and calls the chart's `draw(ctx, model, box)` only when the
   model or size changes. Below 300 × 150 the box is `compact`, and charts drop axes and labels, so the suggestion strip's preview reads as
-  a thumbnail.
+  a thumbnail. `extent` lets a chart draw past its tile, and `onPointer` hands it the pointer, to name what's under it.
 - **Helpers:** linear scales and ticks, axis labels with grid lines only where a value is labelled, polylines, end labels pushed apart,
   text, gap and lap time parsing, tyre age, driver colours from the roster (a team's second driver dashed) and tyre colours from the theme.
   For lap-based charts (`kit/laps.ts`): the lap axis to the race distance with safety car, VSC and red flag laps shaded, the clean-lap
