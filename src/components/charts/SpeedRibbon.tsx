@@ -198,9 +198,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     text(ctx, m.style.code, x, row, { color: m.style.colour, size: 11, weight: 700 });
     x += textWidth(ctx, m.style.code, 11, 700) + 10;
   }
+  // The speed gets a three-digit slot, right-aligned, so what follows it doesn't move between 99 and 100.
   const speed = m.speed === null ? '—' : String(Math.round(m.speed));
-  text(ctx, speed, x, row, { color: c.ink, size: 18, weight: 700 });
-  x += textWidth(ctx, speed, 18, 700) + 5;
+  const slot = textWidth(ctx, '000', 18, 700);
+  text(ctx, speed, x + slot, row, { align: 'right', color: c.ink, size: 18, weight: 700 });
+  x += slot + 5;
   text(ctx, 'km/h', x, row + 3, { size: 10 });
   x += textWidth(ctx, 'km/h') + 12;
   text(ctx, 'GEAR', x, row + 3, { size: 10 });

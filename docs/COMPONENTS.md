@@ -250,6 +250,8 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
   (`brake`) on it, over the rest in a black casing so a brake zone stays its own mark for a viewer who can't tell red from green. A
   brake of 104 is the feed having no reading, drawn as not braking. (2026-11-13. It was the team colour with the brake in red, and
   McLaren's orange and Ferrari's red couldn't be told from the brake.) The team colour is left for the driver's code.
+- **The readout holds still.** The speed sits right-aligned in a three-digit slot, so the gear after it doesn't jump when the speed
+  goes from two digits to three.
 - **The leader when no driver is named,** and then the readout names them, since the title bar can't.
 - **Turn numbers just outside the track,** in the hint grey, left out where they would touch the readout or another number.
 - **Size.** Least 300 by 220: the readout's row over a circuit large enough for its turn numbers to sit apart. Fit 560 by 400, where
