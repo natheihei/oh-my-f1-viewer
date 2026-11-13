@@ -71,7 +71,7 @@ const allGroups = {
     { type: 'lap_time_compare', props: { drivers: [pair[0]] } },
   ],
   small: [
-    { type: 'sector_delta', props: { drivers: pair } },
+    { type: 'sector_table', props: { drivers: pair } },
     { type: 'pit_stops', props: {} },
     { type: 'race_control', props: {} },
     { type: 'race_status', props: {} },
@@ -167,12 +167,12 @@ async function shoot(moment) {
         const gap = await import('/src/components/charts/GapEvolution.tsx');
         const stops = await import('/src/components/charts/PitStops.tsx');
         const tower = await import('/src/components/charts/TimingTower.tsx');
-        const sectors = await import('/src/components/charts/SectorDelta.tsx');
+        const sectors = await import('/src/components/charts/SectorTable.tsx');
         const { points: _points, ...b } = gap.gapModel((await host.data.sql({ sql: gap.SQL, params: pair })).rows, pair);
-        const s = sectors.sectorModel((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
+        const s = sectors.sectorTable((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
         const p = stops.stopsModel((await host.data.sql({ sql: stops.sqlFor(0) })).rows).stops.slice(0, 4);
         const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));
-        return { gap: b, sectors: { laps: s.laps, averages: s.averages, skipped: s.skipped }, stops: p, tower: t };
+        return { gap: b, sectors: { laps: s.rows.map((r) => `${r.lap}${r.skip ? ` ${r.skip}` : ''}`), averages: s.averages, counted: s.counted }, stops: p, tower: t };
       }, pair);
       console.log(`small: ${JSON.stringify(check)}`);
     }
@@ -232,7 +232,7 @@ const timings = await page.evaluate(
     const [tower, gap, tyres, compare, pace, pit, sectors, stops, control] = await Promise.all(
       [
         'TimingTower', 'GapEvolution', 'TyreStrategy', 'LapTimeCompare', 'FieldPace', 'PitWindow',
-        'SectorDelta', 'PitStops', 'RaceControl',
+        'SectorTable', 'PitStops', 'RaceControl',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
     const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
@@ -253,7 +253,7 @@ const timings = await page.evaluate(
       lap_time_compare: await time(compare.sqlFor(2), pair),
       field_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),
-      sector_delta: await time(sectors.SQL, pair),
+      sector_table: await time(sectors.SQL, pair),
       pit_stops: await time(stops.sqlFor(0), []),
       race_control: await time(control.SQL, []),
       ...(await (async () => {

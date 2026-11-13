@@ -53,6 +53,12 @@
   --color-flag-blue: #5b8fd0;
 }
 
+/* Faster and slower, in every comparison: the pedals' green and the flags' yellow, named for what they mean here. Always with a sign, so neither reads by colour alone. */
+@theme static {
+  --color-gain: #5fb57c;
+  --color-loss: #d9b84a;
+}
+
 :root {
   --row: 22px;
   --text-s: 11px;
