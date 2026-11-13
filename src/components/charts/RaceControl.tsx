@@ -188,7 +188,7 @@ export default defineComponent({
     blue_flags: Type.Optional(Type.Boolean({ description: 'Show each blue flag on its own line. Left out, runs of them are counted on one line.' })),
   }),
   needs: NEEDS,
-  size: { aspect: 1.6, min: [8, 5] },
+  size: { aspect: 1.6, min: { width: 380, height: 150 } },
   spec: ({ blue_flags }) => ({ key: blue_flags ? 'race_control:blue' : 'race_control', label: 'Race control' }),
   View: RaceControl,
 });

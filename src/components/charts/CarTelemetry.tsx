@@ -202,7 +202,7 @@ export default defineComponent({
   replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
   needs: NEEDS,
-  size: { aspect: 1.6, min: [6, 5] },
+  size: { aspect: 1.6, min: { width: 300, height: 150 } },
   spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: `Telemetry ${codeOf(drivers[0])}` }),
   View: CarTelemetry,
 });

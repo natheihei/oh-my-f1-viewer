@@ -43,7 +43,7 @@ export default defineComponent({
   title: 'Race control list',
   description: 'A test list of messages.',
   args: Type.Object({ rows: Type.Optional(Type.Number()) }),
-  size: { aspect: 2, min: [6, 3] },
+  size: { aspect: 2, min: { width: 400, height: 100 } },
   spec: (props) => ({ key: '${NAME}-' + (props.rows ?? 4), label: 'race control (' + (props.rows ?? 4) + ')' }),
   View: List,
 });

@@ -292,7 +292,7 @@ export default defineComponent({
   args: Type.Object({ drivers: Drivers }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: [8, 6] },
+  size: { aspect: 16 / 9, min: { width: 330, height: 180 } },
   spec: ({ drivers }) => ({ key: `gap_evolution:${drivers.join('-')}`, label: `Gap ${drivers.map(codeOf).join(' · ')}` }),
   View: GapEvolution,
 });

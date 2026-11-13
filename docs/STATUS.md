@@ -60,6 +60,18 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 
 Live capture has only run in unit tests. See "Not verified".
 
+## Verified for layout
+
+On Linux, in the real app at 1600 by 900, over the 2026 São Paulo race replay (2026-11-12):
+
+- Each of the 14 charts alone at its declared least size drew in full, except field pace, which was compact at 267 wide and had its
+  least width raised to 300. The other least sizes were adjusted from what those captures showed.
+- Auto-layout over arrangements from a video with the timing tower to six tiles, three videos, and charts with no video: the
+  main feed took the main place, the tower sat beside it, wide charts went below, and no chart was below its least size.
+
+`src/components/charts/charts.test.ts` runs the built-in charts through nine arrangements at that window size on every test run.
+Other window sizes were only simulated: at 1280 by 640 some charts go below their least size from four tiles up.
+
 ## Verified for mods
 
 On Linux, in the real app, over replay races (2026-11-09):

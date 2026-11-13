@@ -257,8 +257,20 @@ describe('components', () => {
 
   it('build a video spec keyed by feed and labelled by channel', () => {
     host.layout.add({ items: [video('1:44')] });
-    expect(layout.tiles().map((t) => t.component)).toEqual([{ type: 'video', key: '1:44', label: 'HAM', props: { feed: '1:44' }, fit: { aspect: 16 / 9 } }]);
+    expect(layout.tiles().map((t) => t.component)).toEqual([
+      { type: 'video', key: '1:44', label: 'HAM', props: { feed: '1:44' }, fit: { aspect: 16 / 9 }, size: { aspect: 16 / 9, min: { width: 320, height: 180 } } },
+    ]);
     expect(() => host.layout.add({ items: [video('1:999')] })).toThrow(/Unknown feed/);
+  });
+
+  it('give a tile the main place only when asked, by key', () => {
+    host.layout.add({ items: [video('1:44')] });
+    expect(layout.snapshot().main).toBeNull();
+    expect(host.layout.setMain({ key: 'nothing' })).toBe(false);
+    expect(host.layout.setMain({ key: '1:44' })).toBe(true);
+    expect(layout.snapshot().main).toBe('1:44');
+    expect(host.layout.setMain({ key: null })).toBe(true);
+    expect(layout.snapshot().main).toBeNull();
   });
 
   it('reject an unknown type, or props that do not fit', () => {

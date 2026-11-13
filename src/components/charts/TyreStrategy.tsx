@@ -151,7 +151,7 @@ export default defineComponent({
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: [10, 7] },
+  size: { aspect: 16 / 9, min: { width: 380, height: 250 } },
   spec: ({ drivers }) => ({
     key: `tyre_strategy:${drivers?.join('-') ?? 'all'}`,
     label: drivers?.length ? `Tyres ${drivers.map(codeOf).join(' · ')}` : 'Tyres',

@@ -261,7 +261,7 @@ export default defineComponent({
 "Lap times for one to four drivers, or the top three when none are named, lap by lap over the whole session, with a trend line through each stint and its slope in seconds lost per lap. Suggest it when the user asks how a driver's pace has changed, how their tyres are holding up, or to compare a few drivers' pace over time.",
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: [10, 6] },
+  size: { aspect: 16 / 9, min: { width: 440, height: 220 } },
   spec: ({ drivers }) => ({
     key: `lap_time_compare:${drivers?.join('-') ?? 'top'}`,
     label: drivers?.length ? `Lap times ${drivers.map(codeOf).join(' · ')}` : 'Lap times',

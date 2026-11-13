@@ -45,6 +45,8 @@ export default defineComponent({
   args: Type.Object({ feed: Type.String({ description: 'A feed id from live.feeds' }) }),
   // Every feed is 16:9, letterboxed in whatever room it gets: the tile keeps only the picture.
   fit: { aspect: 16 / 9 },
+  // Below this a picture is a thumbnail.
+  size: { aspect: 16 / 9, min: { width: 320, height: 180 } },
   // Keyed by feed, so a feed is on screen at most once.
   spec: ({ feed }) => {
     const channel = read().feeds.find((c) => c.id === feed);

@@ -194,7 +194,7 @@ export default defineComponent({
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: [12, 7] },
+  size: { aspect: 16 / 9, min: { width: 400, height: 220 } },
   spec: ({ drivers }) => ({
     key: `race_trace:${drivers?.join('-') ?? 'all'}`,
     label: drivers?.length ? `Race trace ${drivers.map(codeOf).join(' · ')}` : 'Race trace',
