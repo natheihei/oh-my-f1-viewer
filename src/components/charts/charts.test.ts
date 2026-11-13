@@ -18,7 +18,7 @@ const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
-const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade } = await import('./PedalBarcode');
+const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
 type ComponentSpec = import('../../layout/model').ComponentSpec;
@@ -841,60 +841,59 @@ describe('pedal_barcode', () => {
     expect(throttleShade(0, '#5fb57c')).toBe('rgb(14,27,19)');
   });
 
+  it('gives a lap against the one before, signed', () => {
+    expect(lapDelta(-0.1584)).toBe('−0.158');
+    expect(lapDelta(0.036)).toBe('+0.036');
+  });
+
   it('keeps the latest laps, and queries the completed ones only until the lap in progress', () => {
     const rows = [lapRow(9, 90_000, null), lapRow(8, 80_000, 10), lapRow(7, 70_000, 10)];
     const { driver, laps } = lapsOf(rows);
     expect(driver).toBe(1);
     expect(laps.map((l) => l.lap)).toEqual([7, 8, 9]);
-    expect(pastParams(1, laps)).toEqual([1, 70_000, 90_000, 80_000]);
+    expect(pastParams(1, laps)).toEqual([1, 70_000, 90_000]);
     // Before a lap is completed, there's nothing to query.
-    expect(pastParams(1, laps.slice(-1))).toEqual([1, 0, -1, 0]);
+    expect(pastParams(1, laps.slice(-1))).toEqual([1, 0, -1]);
     expect(lapsOf([]).driver).toBeNull();
   });
 
-  it('draws a row per lap, newest first, scaled to the last completed lap, with each turn where the car passed it', () => {
-    const laps = lapsOf([lapRow(7, 70_000, 10), lapRow(8, 80_000, 9.5), lapRow(9, 89_500, null)]).laps;
-    const rows = [
-      sample(70_000, 100, 0),
-      sample(75_000, 0, 100),
-      sample(80_000, 100, 0),
-      sample(81_500, 104, 104),
-      sample(83_000, 30, 0),
-      sample(84_000, 100, 0),
-      // A gap of more than 2 s is left empty.
-      sample(86_500, 100, 0),
-      sample(89_500, 100, 0),
-      sample(91_000, 0, 100),
-      { date: 80_000, throttle: null, brake: null, x: 0, y: 10 },
-      { date: 84_000, throttle: null, brake: null, x: 400, y: 0 },
-      { date: 88_000, throttle: null, brake: null, x: 5000, y: 5000 },
-    ];
-    const corners = [
-      { number: 1, x: 400, y: 100, angle: 0, distance: 0 },
-      { number: 2, x: -9000, y: 0, angle: 0, distance: 0 },
-    ];
-    const m = pedalModel(laps, rows, 92_000, corners);
+  it('places each lap by distance from the line, so a corner falls in one place whatever the lap time', () => {
+    // A 1,000-unit square. Lap 7 at 100 units a second, lap 8 at 80, lap 9 at 100 and in progress.
+    const outline = { x: [0, 250, 250, 0], y: [0, 0, 250, 250] };
+    const corners = [{ number: 1, x: 250, y: 0, angle: 0, distance: 250 }];
+    const at = (u: number) => {
+      const s = ((u % 1000) + 1000) % 1000;
+      if (s < 250) return { x: s, y: 0 };
+      if (s < 500) return { x: 250, y: s - 250 };
+      if (s < 750) return { x: 750 - s, y: 250 };
+      return { x: 0, y: 1000 - s };
+    };
+    const u = (t: number) => (t < 10_000 ? t * 0.1 : t < 22_500 ? 1000 + (t - 10_000) * 0.08 : 2000 + (t - 22_500) * 0.1);
+    const rows: Array<Record<string, unknown>> = [];
+    for (let t = 0; t <= 25_000; t += 250) {
+      rows.push({ date: t, throttle: null, brake: null, ...at(u(t)) });
+      // Braking from 200 to 300 units into each lap; one sample with no reading in lap 8.
+      const into = u(t) % 1000;
+      const brake = into >= 200 && into < 300;
+      rows.push({ date: t + 10, throttle: t === 15_000 ? 104 : brake ? 0 : 100, brake: t === 15_000 ? 104 : brake ? 100 : 0, x: null, y: null });
+    }
+    const laps = lapsOf([lapRow(7, 0, 10), lapRow(8, 10_000, 12.5), lapRow(9, 22_500, null)]).laps;
+    const m = pedalModel(laps, rows, 25_000, { outline, corners });
+    expect(m.length).toBe(1000);
+    expect(m.corners).toEqual([{ number: 1, d: 250 }]);
     expect(m.laps.map((l) => [l.lap, l.done])).toEqual([
       [9, false],
       [8, true],
       [7, true],
     ]);
-    expect(m.span).toBe(9500);
-    expect(m.now).toBe(2500);
-    // Turn 2 is too far from anywhere the car went to place.
-    expect(m.corners).toEqual([{ number: 1, t: 4000 }]);
-    expect(m.laps[1].cells).toEqual([
-      { t0: 0, t1: 1500, pedal: 100 },
-      { t0: 1500, t1: 3000, pedal: 'none' },
-      { t0: 3000, t1: 4000, pedal: 30 },
-      { t0: 4000, t1: 6000, pedal: 100 },
-      { t0: 6500, t1: 8500, pedal: 100 },
-    ]);
-    // The lap in progress runs to the playhead.
-    expect(m.laps[0].cells).toEqual([
-      { t0: 0, t1: 1500, pedal: 100 },
-      { t0: 1500, t1: 2500, pedal: 'brake' },
-    ]);
+    const brakeStart = (lap: number) => m.laps.find((l) => l.lap === lap)!.cells.find((c) => c.pedal === 'brake')!.d0;
+    expect(brakeStart(7)).toBeCloseTo(201, 0);
+    expect(brakeStart(8)).toBeCloseTo(200.8, 0);
+    expect(m.laps[1].cells.some((c) => c.pedal === 'none')).toBe(true);
+    expect(m.now).toBeCloseTo(250);
+    // Without positions, the lap in progress is placed by time, scaled to the last completed lap's.
+    const blind = pedalModel(laps, rows.filter((r) => r.x === null || (r.date as number) < 22_500), 25_000, { outline, corners });
+    expect(blind.now).toBeCloseTo(200);
   });
 });
 
