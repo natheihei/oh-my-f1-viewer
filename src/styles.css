@@ -1056,7 +1056,7 @@
   content: '';
 }
 
-/* What a component draws in, in a tile or a strip preview: the host checks it for content cut off below. */
+/* What a component draws in, in a tile or a strip preview: the host checks whether its content runs past it. */
 .view-frame {
   @apply absolute inset-0 overflow-hidden;
 }
