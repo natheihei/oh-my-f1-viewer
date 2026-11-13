@@ -419,9 +419,9 @@ Polished 2026-11-13.
 - **A stop is marked and breaks the line,** with "PIT NOR" on a dashed rule at the start of the new stint. The scale fits the laps
   since the last stop, so the stop runs off the top, and its height is named there ("▲ 22.7"). Before, a stop set the scale to 30 s
   and flattened the battle.
-- **Marks don't draw over each other.** Every line stays, and labels that would cover one another or another line in their row are
-  combined. Stops close together are named in one label at the first, "PIT NOR · PIA". Passes close together are labelled only at
-  the latest, which says who came out ahead. Stops and passes have rows of their own. (2026-11-13, #93.)
+- **Marks don't draw over each other.** Each label stays at its own line, so it reads as that stop or pass. One that would cover
+  another drops a row, under it. Combining them ("PIT NOR · PIA") was tried and dropped: it tied both names to one line. The
+  passes' rows start under the stops'. (2026-11-13, #93.)
 - **The DRS or Overtake zone is a filled band,** so inside it reads as a place. Its label on the axis is the aid's name alone,
   "OT" or "DRS", which keeps the left margin to the axis's width.
 - **The car ahead is on top in the panel, and nothing in it is dropped.** It used to leave out the second driver at its least size.
