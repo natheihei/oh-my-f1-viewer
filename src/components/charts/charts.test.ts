@@ -17,7 +17,7 @@ const { messagesModel, signalOf, wrap } = await import('./RaceControl');
 const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
-const { telemetryModel } = await import('./CarTelemetry');
+const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
 type ComponentSpec = import('../../layout/model').ComponentSpec;
@@ -740,11 +740,44 @@ describe('speed_trace', () => {
 describe('car_telemetry', () => {
   const sample = (date: number, more: Record<string, unknown> = {}) => ({ date, speed: 300, rpm: 11420, n_gear: 8, throttle: 100, brake: 0, drs: null, ...more });
 
-  it('shows the latest sample, with the minute before it as a trace broken at gaps', () => {
-    const m = telemetryModel([sample(0, { speed: 100 }), sample(1000), sample(5000, { speed: 250, brake: 104, throttle: 104 })]);
-    expect(m).toMatchObject({ speed: 250, gear: 8, rpm: 11420, throttle: 100, brake: 100, drs: null });
-    expect(m.trace).toEqual([{ t: -5, speed: 100 }, { t: -4, speed: 300 }, null, { t: 0, speed: 250 }]);
+  it('shows the latest sample, with the window before it as a trace broken at gaps', () => {
+    const m = telemetryModel([sample(0, { speed: 100 }), sample(1000), sample(5000, { speed: 250, n_gear: 5 })]);
+    expect(m).toMatchObject({ speed: 250, gear: 5, rpm: 11420, throttle: 100, brake: 0, drs: null, seconds: 60 });
+    expect(m.trace).toEqual([{ t: -5, speed: 100, gear: 8 }, { t: -4, speed: 300, gear: 8 }, null, { t: 0, speed: 250, gear: 5 }]);
     expect(telemetryModel([]).speed).toBeNull();
+    expect(telemetryModel([sample(0, { speed: 100 }), sample(5000)], 4).trace).toEqual([{ t: 0, speed: 300, gear: 8 }]);
+  });
+
+  it('reads 104 as no reading: no throttle, brake or revs', () => {
+    // São Paulo 2026, car 3, lap 38: both go to 104 together and the revs freeze.
+    const m = telemetryModel([sample(0), sample(250, { speed: 109, rpm: 9424, n_gear: 2, throttle: 104, brake: 104 })]);
+    expect(m).toMatchObject({ speed: 109, gear: 2, rpm: null, throttle: null, brake: null });
+  });
+
+  it('is one lap long, within a minute and two', () => {
+    expect(traceSeconds([])).toBe(60);
+    expect(traceSeconds([{ lap_duration: 75.067 }])).toBe(75);
+    expect(traceSeconds([{ lap_duration: 41 }])).toBe(60);
+    expect(traceSeconds([{ lap_duration: 181.2 }])).toBe(120);
+  });
+
+  it('lights the chase aid within its line of the car ahead', () => {
+    const aid = { label: 'OT', within: 1 };
+    expect(chaseOf([{ interval: 0.858 }], aid)).toEqual({ label: 'OT', interval: 0.858, inRange: true });
+    expect(chaseOf([{ interval: 9.337 }], aid)).toMatchObject({ inRange: false });
+    // A lapped car's interval is text, and the leader has none.
+    expect(chaseOf([{ interval: '+1 LAP' }], aid)).toBeNull();
+    expect(chaseOf([], aid)).toBeNull();
+  });
+
+  it('finds the corners: low points well under the speed before them', () => {
+    const trace = [300, 280, 200, 120, 90, 110, 160, 220, 260, 250, 240, 230, 250, 280, 300, 200, 85, 85, 140, 200, 250, 280, 300, 310].map((speed, i) => ({ t: i * 0.5 - 9, speed, gear: speed < 100 ? 2 : 6 }));
+    // A 30 km/h lift isn't a corner; of two equal lows, the first is.
+    expect(corners([...trace.slice(0, 9), null, ...trace.slice(9)]).map((p) => [p.t, p.speed])).toEqual([[-7, 90], [-1, 85]]);
+    // The car still braking at the newest sample isn't at a corner yet.
+    expect(corners(trace.slice(0, 17)).map((p) => p.speed)).toEqual([90]);
+    // Nor is a dip it hasn't come out of.
+    expect(corners([...trace.slice(0, 17), ...[86, 87, 86, 87, 86, 87].map((speed, i) => ({ t: -0.5 + i * 0.5, speed, gear: 2 }))]).map((p) => p.speed)).toEqual([90]);
   });
 
   it("reads DRS only when the channel holds DRS's own codes", () => {
