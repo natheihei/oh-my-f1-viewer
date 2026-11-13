@@ -69,9 +69,15 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 
 - **The host says when there's more.** It checks every view for content below what the tile shows, and draws a faded bottom edge and
   "more ▾". One mark, one look, whatever the component is. (2026-11-11)
+- **The same mark covers content cut off at the right.** The right edge fades too, and the one chip in the bottom right corner names
+  the ways: "more ▾", "more ▸" or "more ▾▸". A single chip in a single place, not a second mark on the right edge, so the viewer
+  learns one place to look. Content scrolled off the top or left isn't marked, and nor is a line cut short with "…"
+  (`text-overflow: ellipsis`), which already says so. (2026-11-12)
 - **A component never draws its own "more" note or count of what's hidden.** A second form of the same message is what the host's
   mark exists to prevent. (2026-11-12)
 - **A list of elements scrolls:** `overflowY: 'auto'`, `flex: 1`, `minHeight: 0`. The host's mark shows until it's scrolled to the end.
+- **A table wider than its tile scrolls sideways,** `overflowX: 'auto'`, rather than hiding the columns that don't fit. The host's mark
+  shows "▸" until it's scrolled to the right end. A cell that would rather be shortened than scrolled ends in "…". (2026-11-12)
 - **A canvas of rows shrinks to a floor, then stops.** Rows get smaller with the tile down to the smallest size that still reads, 16px
   for a row of text. Below that the component stops shrinking and lets its rows run past the bottom of the tile, where the host marks
   the cut. It doesn't drop rows quietly, and it doesn't shrink type until it can't be read. (2026-11-12, **not built yet**: a chart's
@@ -109,7 +115,7 @@ Per-chart decisions go under a heading for that chart as each one is polished.
 | The rules as a mod's author reads them | `shared/modGuide.ts` |
 | The build agent's prompt, which includes them | `shared/buildPrompt.ts` |
 | Writing `AGENTS.md` into the mods folder | `electron/mods/index.ts` |
-| The host's overflow check and mark | `src/host/overflow.ts`, `src/host/Grid.tsx` |
+| The host's overflow check and mark, below and at the right | `src/host/overflow.ts`, `src/host/Grid.tsx` |
 | The size declaration | `src/host/components.ts` |
 | Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
