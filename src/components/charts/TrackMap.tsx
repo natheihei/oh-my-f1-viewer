@@ -1,7 +1,7 @@
 /** Every running car as a dot on the circuit, where it is now, from `location` and MultiViewer's outline. Retired cars are left off. */
 import { useMemo, useRef, useState } from 'react';
 import Type from 'typebox';
-import { defineComponent, host, useLive, useSql, useTile, type CircuitView } from '../../host';
+import { defineComponent, useLive, useSql, type CircuitView } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -332,7 +332,7 @@ const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
   minItems: 1,
   maxItems: MAX_CHOSEN,
   description:
-    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and labelled. The viewer can click a car to add or drop it.',
+    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and labelled. The viewer can click a car to add or drop it on the map itself, which leaves these props as they are.',
 });
 
 /** The chosen drivers with `driver` added, or dropped if it's there: none at all as an empty list. */
@@ -347,8 +347,11 @@ const MIN = { width: 360, height: 250 };
 const FIT = { width: 560, height: 400 };
 
 function TrackMap({ props }: { props: { drivers?: number[] } }) {
+  // Who's chosen is the map's own: it starts from the props, and a click adds or drops a car. New props start it again.
   const key = props.drivers?.join(',') ?? '';
-  const tile = useTile();
+  const [chosen, setChosen] = useState({ key, drivers: props.drivers ?? [] });
+  if (chosen.key !== key) setChosen({ key, drivers: props.drivers ?? [] });
+  const highlight = chosen.key === key ? chosen.drivers : (props.drivers ?? []);
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const view = useSql(SQL, [playhead ?? NO_PLAYHEAD]);
   // Without timing there are no laps, so no one is out: the map still draws.
@@ -368,15 +371,13 @@ function TrackMap({ props }: { props: { drivers?: number[] } }) {
         const [d, p] = [num(r.driver_number), num(r.position)];
         if (d !== null && p !== null) positions.set(d, p);
       }
-    return { cars, lane: inLane(cars, circuit.outline), positions, highlight: key ? key.split(',').map(Number) : [], circuit, styles };
-  }, [view, out, positionView, circuit, styles, key]);
+    return { cars, lane: inLane(cars, circuit.outline), positions, highlight, circuit, styles };
+  }, [view, out, positionView, circuit, styles, highlight]);
   // The pointer moves often: only the drawing follows it, not the model.
   const drawn = useMemo(() => (model ? { ...model, pointer, under } : null), [model, pointer]);
   const onClick = () => {
     const driver = under.current;
-    if (tile === null || driver === null || !model) return;
-    const drivers = toggleDriver(model.highlight, driver);
-    void host.layout.setProps({ tile, props: drivers.length ? { drivers } : {} });
+    if (driver !== null) setChosen((c) => ({ key: c.key, drivers: toggleDriver(c.drivers, driver) }));
   };
   return (
     <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit)]} views={[view]}>
