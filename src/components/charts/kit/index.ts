@@ -1,5 +1,5 @@
 /** What charts share. See docs/ARCHITECTURE.md, "Charts". */
-export { ChartCanvas, COMPACT_BELOW, compactSmall, type Box, type Draw } from './ChartCanvas';
+export { ChartCanvas, COMPACT_BELOW, compactSmall, type Box, type Draw, type Extent } from './ChartCanvas';
 export { ChartFrame, codeOf, useDriverStyles } from './ChartFrame';
 export { colors, DASH, driverStyles, styleOf, tyreColour, type DriverStyle } from './colors';
 export * from './draw';

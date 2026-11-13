@@ -8,8 +8,14 @@ import type { DriverEntry } from '../../../host';
 const TOKENS = {
   ink: '#e7e7e7',
   dim: '#8a8a8a',
+  /** The quietest grey text still reads in: column heads. */
+  mute: '#767676',
   faint: '#4a4a4a',
   line: '#2c2c2c',
+  /** Rules between rows of a dense table, under `line`. */
+  quiet: '#1b1b1b',
+  /** A lifted row, like a watched driver's. */
+  select: '#1e1e1e',
   soft: '#ff4d4d',
   medium: '#ffd12e',
   hard: '#f0f0f0',
