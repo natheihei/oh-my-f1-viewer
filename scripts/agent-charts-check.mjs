@@ -187,7 +187,7 @@ if (gap) {
 r = await say(`pit strategy for ${PIT_DRIVER}`, 'agent-3-pit-strategy.png');
 const pitNumber = await page.evaluate((name) => window.read().sessionData.drivers.find((d) => new RegExp(name, 'i').test(`${d.last_name ?? ''} ${d.full_name ?? ''} ${d.broadcast_name ?? ''}`))?.driver_number, PIT_DRIVER);
 check(`pit_window for ${PIT_DRIVER} is suggested`, r.strip.some((s) => s.type === 'pit_window' && s.drivers?.length === 1 && s.drivers[0] === pitNumber), `car ${pitNumber}`);
-check('a tyre chart comes with it', r.strip.some((s) => ['tyre_strategy', 'field_pace'].includes(s.type)));
+check('a tyre chart comes with it', r.strip.some((s) => ['tyre_strategy', 'tyre_deg'].includes(s.type)));
 hygiene(r);
 
 // 4: tyres, field-wide.
