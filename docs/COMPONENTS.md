@@ -123,8 +123,8 @@ Components drawn on a canvas with the kit, `src/components/charts/kit`.
   none. A mark without a label is named, with its value, when the pointer is on it: `ChartCanvas` passes the pointer to the chart
   with `onPointer`, the chart keeps it in what it draws from, and its `draw` names the mark under it. (2026-11-13, with the pit window.)
 - **A click on a car can choose it.** A chart whose `drivers` prop picks who stands out can let the viewer click a car to add or
-  drop it: the component changes its own tile's props with `host.layout.setProps`, by the id `useTile()` gives, so the tile keeps
-  its place and its title follows. The name under the pointer says what a click will do. (2026-11-13, with the track map.)
+  drop it, as the chart's own state: `ChartCanvas` passes the click with `onClick`. The props are where it starts, and new props
+  start it again. The name under the pointer says what a click will do. (2026-11-13, with the track map.)
 
 Per-chart decisions go under a heading for that chart as each one is polished.
 
@@ -492,7 +492,8 @@ Polished 2026-11-13, from the `track_map` proposals 1, 4, 5, 6, 10, 11 and 12.
 - **Codes at 11px,** a chosen driver's in bold ink. (They were 9px, and 10px chosen.)
 - **Choosing drivers makes the rest recede:** smaller, three quarters opaque and unlabelled, so the chosen are what reads. Without a
   choice every car is labelled. A car without a label is named under the pointer, with its position, and whether it's in the pit lane.
-- **Click a car to choose it, or to drop it,** up to six. The tile's title follows: Track, then Track VER · NOR.
+- **Click a car to choose it, or to drop it,** up to six. It's the map's own state, not its props: the tile and its title stay as they
+  are, and new props from the agent start the choice again.
 - **Turn numbers as the speed ribbon draws them:** just outside the track, 9px in the hint grey, stepped out until clear, and the
   first to give way to a car's label. (They were 8px in faint, and hidden in a tile less than 260px on its short side.)
 - **Size.** 16px of padding round the circuit (it was 30). Least 360 by 250, where the codes still sit beside their dots. Fit 560 by
@@ -513,7 +514,7 @@ Polished 2026-11-13, from the `track_map` proposals 1, 4, 5, 6, 10, 11 and 12.
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
 | A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
 | The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
-| A click on a chart, and a component changing its own props | `ChartCanvas` (`onClick`), `useTile` in `src/host/Grid.tsx`, `host.layout.setProps` |
+| A click on a chart | `src/components/charts/kit/ChartCanvas.tsx` (`onClick`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Reading race control's messages | `src/components/charts/raceControlMessages.ts` |
 | The race status board in the real app, at chosen messages, at its least size and squeezed | `scripts/status-check.mjs` |

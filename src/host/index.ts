@@ -29,7 +29,7 @@ export {
   type BackgroundView,
 } from './backgrounds';
 export { defineComponent, fitting, misfit, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
-export { ComponentView, Grid, useTile } from './Grid';
+export { ComponentView, Grid } from './Grid';
 export { startMods } from './mods';
 export { startBuild, type BuildView } from './build';
 export { previewScope } from './lookAhead';
