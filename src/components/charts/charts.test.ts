@@ -66,14 +66,33 @@ describe('gap_evolution', () => {
     expect(m.current).toBeCloseTo(0.8);
   });
 
-  it('takes out a brief spike when the leader changes, but keeps a pit stop', () => {
+  it('takes out spikes several samples long when the leader changes, but keeps a pit stop', () => {
     const rows: Array<Record<string, unknown>> = [lap(1, 0), gap(44, 0, 0)];
-    const b = [2, 2.1, 2.2, 25, 2.3, 2.4, 2.5, 22, 22, 22, 22, 22, 2.6];
+    const run = (n: number, g: number) => Array<number>(n).fill(g);
+    // A one-sample spike, a five-sample one, then a stop that lasts a lap and ends.
+    const b = [...run(12, 2), 25, ...run(10, 2.3), ...run(5, 30), ...run(12, 2.5), ...run(20, 22), ...run(12, 2.6)];
     b.forEach((g, i) => rows.push(gap(1, i * 1000 + 1, g)));
     const gaps = gapModel(rows, [44, 1]).points.map((p) => p?.gap);
-    expect(gaps[3]).toBeCloseTo(2.3);
-    expect(gaps.filter((g) => g === 22)).toHaveLength(5);
-    expect(gaps.at(-1)).toBeCloseTo(2.6);
+    expect(gaps[12]).toBeLessThan(3);
+    expect(gaps.slice(23, 28).every((g) => g! < 3)).toBe(true);
+    expect(gaps.filter((g) => g === 22)).toHaveLength(20);
+    expect(gaps.slice(-12)).toEqual(run(12, 2.6));
+  });
+
+  it('keeps the gap at each crossing of the line, the stops and the passes', () => {
+    // 1 closes on 44 and passes during lap 3; 44 stops at the end of lap 4.
+    const rows: Array<Record<string, unknown>> = [];
+    for (let n = 1; n <= 6; n++) rows.push(lap(n, n * 100));
+    rows.push(gap(44, 100, 0));
+    [0.4, 0.35, 0.3, 0.25, 0.2, 0.1, 0.05, -0.1, -0.2, -0.3].forEach((g, i) => rows.push(gap(1, 100 + i * 25, g)));
+    for (let n = 1; n <= 5; n++) rows.push(end(44, n, 0, n >= 5 ? 2 : 1), end(1, n, n === 1 ? 1.3 : -0.5, 1));
+    const m = gapModel(rows, [44, 1]);
+    expect(m.lapGaps.map((g) => g.lap)).toEqual([1, 2, 3, 4, 5]);
+    // Read off the trace where it has a sample at the line.
+    expect(m.lapGaps[0].gap).toBeCloseTo(0.2);
+    expect(m.lapGaps[4].stints).toEqual([2, 1]);
+    expect(m.pits).toEqual([{ driver: 44, lap: 5 }]);
+    expect(m.passes).toEqual([{ x: expect.closeTo(2.5, 1), ahead: 1 }]);
   });
 
   it('counts the leader as no gap', () => {
