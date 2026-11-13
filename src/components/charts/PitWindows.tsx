@@ -294,7 +294,7 @@ export default defineComponent({
   name: 'pit_windows',
   title: 'Pit windows',
   description:
-    "Every running car's pit stop if it stopped now, one row each: where it would rejoin, the places that costs, how many seconds short of the place ahead and how many spare, and the car it would come out behind and whether that is traffic. Suggest it for who in the field can stop cheaply, or who would land in traffic; pit_window is for one driver's stop, and pit_stops for stops already made.",
+    "Every running car's pit stop if it stopped now, one row each: where it would rejoin, the places that costs, how many seconds short of the place ahead and how many spare, and the car it would come out behind and whether that is traffic. Suggest it for who in the field can stop cheaply, or who would land in traffic; pit_window is for one driver's stop.",
   args: Type.Object({}),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
