@@ -52,16 +52,16 @@ with no chart library. They may only import from the host, and from the kit besi
   rule, racing pace, and medians.
   The accent red is never used inside a chart: it would read as a team or a soft tyre.
 
-**Telemetry charts** (`track_map`, `speed_trace`, `car_telemetry`) read `location` and `car_data`, about 1.5 million rows a race,
+**Telemetry charts** (`track_map`, `car_telemetry`, `pedal_barcode`, `speed_ribbon`) read `location` and `car_data`, about 1.5 million rows a race,
 and need `telemetry`, which a live session doesn't have. Their geometry is in `kit/track.ts`: the outline turned and fitted to a tile,
-a car's line crossings from its positions, distance along a lap, and the time difference between two laps.
+its length, and a position projected onto it as distance along the lap.
 - **Bound every telemetry query by `date` on both sides.** The key is `(session_key, date, driver_number)`, so a `date` range is an
   index range and a driver filter alone is a scan. Pass `sessionData.playheadMs` as a parameter and use `date > ? - window AND date <= ?`:
   a row is never revealed before its `date`, and without the upper bound the range runs on through every row after the playhead (13ms
   instead of 0.3ms at lap 20).
 - **Re-query only when the answer can change.** `useSql` runs again on every revision, about once a second, so parameters tied to the
-  playhead give a new query each time. That's right for the map and the live telemetry, which move every second. `speed_trace` keys its
-  samples on the laps it picked, so its parameters only change when a lap is completed.
+  playhead give a new query each time. That's right for the map and the live telemetry, which move every second. `pedal_barcode` keys its
+  completed laps on their starts, so those parameters only change when a lap is completed.
 
 To add one: write the file, keep the rows-to-model function pure and test it, and list the component in `src/components/registry.ts`.
 Keep the model's reference until its rows change (`useSql` already does for its result), so the canvas redraws only then.
