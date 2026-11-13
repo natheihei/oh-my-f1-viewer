@@ -30,6 +30,24 @@ export {
 } from './backgrounds';
 export { defineComponent, fitting, misfit, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
 export { ComponentView, Grid } from './Grid';
+export {
+  CODE_BAR,
+  CODE_WEIGHT,
+  codeOf,
+  DriverCode,
+  driverCodeElement,
+  driverStyles,
+  labelText,
+  Parts,
+  partsText,
+  styleOf,
+  useDriverStyles,
+  type CodeLook,
+  type CodeTone,
+  type CodeVariant,
+  type DriverStyle,
+  type Part,
+} from './drivers';
 export { startMods } from './mods';
 export { startBuild, type BuildView } from './build';
 export { previewScope } from './lookAhead';

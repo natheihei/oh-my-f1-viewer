@@ -227,6 +227,37 @@
   content: '';
 }
 
+/*
+ * A driver's code, as src/host/drivers.tsx draws it: its variant, weight and tone. The kit draws the
+ * same on a canvas from CODE_BAR and CODE_WEIGHT; keep the two in step. See docs/COMPONENTS.md.
+ */
+.driver-code {
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: inherit;
+}
+.driver-code-strong {
+  font-weight: 700;
+}
+.driver-code-ink {
+  @apply text-ink;
+}
+.driver-code-dim {
+  @apply text-dim;
+}
+.driver-code-mute {
+  @apply text-mute;
+}
+.driver-code-bar::before {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  margin-right: 4px;
+  background: var(--team);
+  vertical-align: -0.12em;
+  content: '';
+}
+
 .tile-slots {
   @apply flex shrink-0 items-center gap-1 pr-1;
 }
