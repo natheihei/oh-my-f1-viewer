@@ -11,6 +11,8 @@ import {
   formatLapTime,
   linear,
   num,
+  outlineLength,
+  projector,
   styleOf,
   text,
   textWidth,
@@ -31,8 +33,8 @@ export const NO_READING = 104;
 /** Samples further apart than this, in ms, leave a gap: the feed sends one about every 240 ms. */
 const BREAK_MS = 2000;
 
-/** A corner is placed only if the car passed within this of it, in `location`'s tenths of a metre: 60 m. */
-const CORNER_REACH = 600;
+/** A lap's time when there's none to scale by, in seconds: only used for a lap without positions. */
+const GUESS_LAP_S = 90;
 
 const LAP_COLUMNS = 'driver_number, lap_number, date_start, lap_duration';
 
@@ -48,15 +50,16 @@ lead AS (SELECT driver_number FROM pos WHERE position IS NOT NULL ORDER BY posit
 SELECT ${LAP_COLUMNS} FROM lap_summary JOIN lead USING (driver_number) WHERE date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_SHOWN}`;
 
 /**
- * The completed laps' pedals, and the last completed lap's positions for placing the corners. Bounded by
- * `date` both ways, from the oldest lap's start to the current lap's, so its parameters change only when
- * a lap is completed: about 30,000 rows of every car's, of which this one's 1,500 or so are kept.
+ * The completed laps' pedals and positions. Bounded by `date` both ways, from the oldest lap's start to the
+ * current lap's, so its parameters change only when a lap is completed: about 30,000 rows of each table,
+ * every car's, of which this one's 1,500 or so are kept.
  */
 export const PAST_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date >= ?2 AND date < ?3 AND driver_number = ?1
-UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?4 AND date < ?3 AND driver_number = ?1`;
+UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date < ?3 AND driver_number = ?1`;
 
 /** The lap in progress, from its start to the playhead (`?3`): a row is never revealed before its `date`. */
-export const NOW_SQL = `SELECT date, throttle, brake FROM car_data WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1`;
+export const NOW_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1
+UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1`;
 
 export interface LapRow {
   lap: number;
@@ -79,18 +82,17 @@ export function lapsOf(rows: ReadonlyArray<Record<string, unknown>>): { driver: 
 /** `PAST_SQL`'s parameters: an empty range until there's a completed lap. */
 export function pastParams(driver: number | null, laps: readonly LapRow[]): number[] {
   const current = laps.at(-1);
-  const last = laps.at(-2);
-  if (driver === null || !current || !last) return [driver ?? 0, 0, -1, 0];
-  return [driver, laps[0].start, current.start, last.start];
+  if (driver === null || !current || laps.length < 2) return [driver ?? 0, 0, -1];
+  return [driver, laps[0].start, current.start];
 }
 
 /** What a sample says: braking, the throttle from 0 to 100, or nothing read. */
 export type Pedal = 'brake' | 'none' | number;
 
 export interface Cell {
-  /** ms from the lap's start. */
-  t0: number;
-  t1: number;
+  /** How far from the line it starts and ends, in the outline's units (tenths of a metre). */
+  d0: number;
+  d1: number;
   pedal: Pedal;
 }
 
@@ -103,12 +105,12 @@ export interface PedalLap extends LapRow {
 export interface PedalModel {
   /** Newest first. */
   laps: PedalLap[];
-  /** The width of a row, in ms: the last completed lap's time, or the longest seen before there is one. */
-  span: number;
-  /** ms into the lap in progress, at the playhead. */
+  /** The width of a row: the outline's length, in its units. */
+  length: number;
+  /** How far into the lap in progress the car is at the playhead, in the outline's units. */
   now: number | null;
-  /** Each corner's ms into the last completed lap, where the car passed nearest it. */
-  corners: Array<{ number: number; t: number }>;
+  /** The circuit's corners, by distance from the line. */
+  corners: Array<{ number: number; d: number }>;
 }
 
 /** A sample's pedals. 104 on either is no reading: never full throttle and full brake at once. */
@@ -119,59 +121,88 @@ export function pedalOf(throttle: number | null, brake: number | null): Pedal {
 }
 
 /**
- * The laps and their samples as rows of cells. Each sample holds until the next, up to `BREAK_MS`, and
- * no further than its lap's end. The corners are placed on the last completed lap, at the sample of
- * the car's positions nearest each.
+ * Distance from the line at any time in a lap, from the car's positions projected onto the outline and
+ * carried on past each crossing, so it keeps growing through the lap. Interpolated between positions, and
+ * counted from the crossing nearest the lap's start. Null without two positions to go by.
+ */
+function distanceIn(
+  positions: ReadonlyArray<{ date: number; s: number }>,
+  start: number,
+  length: number,
+): ((t: number) => number) | null {
+  if (positions.length < 2) return null;
+  const run: Array<{ date: number; u: number }> = [];
+  let turns = 0;
+  positions.forEach((p, i) => {
+    if (i > 0 && p.s - positions[i - 1].s < -length / 2) turns += 1;
+    if (i > 0 && p.s - positions[i - 1].s > length / 2) turns -= 1;
+    run.push({ date: p.date, u: p.s + turns * length });
+  });
+  const at = (t: number) => {
+    let [lo, hi] = [0, run.length - 1];
+    if (t <= run[0].date) return run[0].u;
+    if (t >= run[hi].date) return run[hi].u;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (run[mid].date <= t) lo = mid;
+      else hi = mid;
+    }
+    const [a, b] = [run[lo], run[hi]];
+    return a.u + ((t - a.date) / (b.date - a.date)) * (b.u - a.u);
+  };
+  const base = Math.round(at(start) / length) * length;
+  return (t) => Math.max(0, Math.min(length, at(t) - base));
+}
+
+/**
+ * The laps and their samples as rows of cells, placed by distance from the line, so each corner falls in
+ * the same place on every lap whatever its time. Each sample holds until the next, up to `BREAK_MS`, and
+ * no further than its lap's end. A lap without positions is placed by time instead, scaled to the last
+ * completed lap's.
  */
 export function pedalModel(
   laps: readonly LapRow[],
   rows: ReadonlyArray<Record<string, unknown>>,
   playhead: number,
-  corners: Circuit['corners'],
+  circuit: Pick<Circuit, 'outline' | 'corners'>,
 ): PedalModel {
+  const length = outlineLength(circuit.outline);
+  const project = projector(circuit.outline);
   const samples = rows
     .map((r) => ({ date: num(r.date), throttle: num(r.throttle), brake: num(r.brake) }))
     .filter((s): s is { date: number; throttle: number | null; brake: number | null } => s.date !== null && (s.throttle !== null || s.brake !== null))
     .sort((a, b) => a.date - b.date);
-  const drawn = laps.map((l, i): PedalLap => {
+  const positions = rows
+    .map((r) => ({ date: num(r.date), x: num(r.x), y: num(r.y) }))
+    .filter((p): p is { date: number; x: number; y: number } => p.date !== null && p.x !== null && p.y !== null && !(p.x === 0 && p.y === 0))
+    .sort((a, b) => a.date - b.date)
+    .map((p) => ({ date: p.date, s: project(p.x, p.y).s }));
+  const lastTime = [...laps].reverse().find((l, i) => i > 0 && l.time !== null)?.time ?? GUESS_LAP_S;
+  const drawn = laps.map((l, i) => {
     const done = l.time !== null && i < laps.length - 1;
     const end = done ? l.start + l.time! * 1000 : playhead;
+    const mine = positions.filter((p) => p.date >= l.start - BREAK_MS && p.date <= end + BREAK_MS);
+    // Two positions inside the lap at least: the ones either side only help at its ends.
+    const placed = mine.filter((p) => p.date >= l.start && p.date <= end).length >= 2 ? distanceIn(mine, l.start, length) : null;
+    const along = placed ?? ((t: number) => Math.max(0, Math.min(length, ((t - l.start) / (lastTime * 1000)) * length)));
     const cells: Cell[] = [];
     const within = samples.filter((s) => s.date >= l.start && s.date < end);
     within.forEach((s, k) => {
       const next = within[k + 1]?.date ?? end;
       const t1 = Math.min(next, s.date + BREAK_MS, end);
-      if (t1 > s.date) cells.push({ t0: s.date - l.start, t1: t1 - l.start, pedal: pedalOf(s.throttle, s.brake) });
+      if (t1 > s.date) cells.push({ d0: along(s.date), d1: along(t1), pedal: pedalOf(s.throttle, s.brake) });
     });
-    return { ...l, cells, done };
+    return { lap: { ...l, cells, done } as PedalLap, along };
   });
-  const last = drawn.filter((l) => l.done).at(-1);
   const current = drawn.at(-1);
-  const span = last ? last.time! * 1000 : Math.max(60_000, ...drawn.map((l) => (l.cells.at(-1)?.t1 ?? 0)));
-  let placed: PedalModel['corners'] = [];
-  if (last) {
-    const end = last.start + last.time! * 1000;
-    const positions = rows
-      .map((r) => ({ date: num(r.date), x: num(r.x), y: num(r.y) }))
-      .filter((p): p is { date: number; x: number; y: number } => p.date !== null && p.x !== null && p.y !== null && !(p.x === 0 && p.y === 0))
-      .filter((p) => p.date >= last.start && p.date < end);
-    placed = corners
-      .map((c) => {
-        let best: { date: number; d: number } | null = null;
-        for (const p of positions) {
-          const d = Math.hypot(p.x - c.x, p.y - c.y);
-          if (!best || d < best.d) best = { date: p.date, d };
-        }
-        return best && best.d < CORNER_REACH ? { number: c.number, t: best.date - last.start } : null;
-      })
-      .filter((c): c is { number: number; t: number } => c !== null)
-      .sort((a, b) => a.t - b.t);
-  }
   return {
-    laps: drawn.slice().reverse(),
-    span,
-    now: current && !current.done ? playhead - current.start : null,
-    corners: placed,
+    laps: drawn.map((d) => d.lap).reverse(),
+    length,
+    now: current && !current.lap.done ? current.along(playhead) : null,
+    corners: circuit.corners
+      .map((c) => ({ number: c.number, d: c.distance }))
+      .filter((c) => c.d > 0 && c.d < length)
+      .sort((a, b) => a.d - b.d),
   };
 }
 
@@ -198,6 +229,12 @@ interface Drawn extends PedalModel {
   picked: boolean;
 }
 
+/** The turn guides: a dark hairline cut through the cells, so it reads on green and red alike. */
+const GUIDE = 'rgba(0,0,0,0.65)';
+
+/** "−0.158" or "+0.036": a lap against the one before it. */
+export const lapDelta = (seconds: number) => `${seconds < 0 ? '−' : '+'}${Math.abs(seconds).toFixed(3)}`;
+
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const pad = compact ? 2 : PAD;
@@ -206,34 +243,44 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const right = width - pad;
   const rows = Math.max(1, m.laps.length);
   const rowH = compact ? (height - pad * 2) / rows : Math.max(ROW.min, Math.min(ROW.max, (height - head - pad) / rows));
-  const x = linear([0, m.span || 1], [left, right]);
+  const x = linear([0, m.length || 1], [left, right]);
+  const top0 = compact ? pad : head;
 
-  // Whose laps, if the title bar does not say; then turn numbers where the car passed each on its last full lap, where they do not crowd.
+  // Whose laps, if the title bar doesn't say; then the turn numbers, where they don't crowd each other.
   if (!compact) {
     if (m.picked) text(ctx, m.style.code, pad, head / 2, { color: m.style.colour, size: 10, weight: 700 });
     else if (m.corners.length) text(ctx, 'TURN', pad, head / 2, { color: c.faint, size: 9 });
     let lastX = -Infinity;
     for (const corner of m.corners) {
-      const cx = x(corner.t);
+      const cx = x(corner.d);
       const label = String(corner.number);
       const w = textWidth(ctx, label, 9);
-      if (cx > right || cx - w / 2 < lastX + 4) continue;
+      if (cx - w / 2 < lastX + 4) continue;
       text(ctx, label, cx, head / 2, { align: 'center', color: c.faint, size: 9 });
       lastX = cx + w / 2;
     }
   }
 
   m.laps.forEach((lap, i) => {
-    const top = (compact ? pad : head) + i * rowH;
+    const top = top0 + i * rowH;
     const inset = rowH >= 12 ? 2 : 1;
     for (const cell of lap.cells) {
-      const x0 = x(cell.t0);
-      if (x0 >= right) break;
+      const x0 = x(cell.d0);
       // A cell is at least a pixel, so a brief brake still shows.
-      const x1 = Math.min(right, Math.max(x0 + 1, x(cell.t1)));
+      const x1 = Math.min(right, Math.max(x0 + 1, x(cell.d1)));
       ctx.fillStyle = cell.pedal === 'none' ? c.quiet : cell.pedal === 'brake' ? c.brake : throttleShade(cell.pedal, c.throttle);
       ctx.fillRect(x0, top + inset, x1 - x0, rowH - inset * 2);
     }
+  });
+
+  // A hairline at each turn, down through every row.
+  if (!compact) {
+    ctx.fillStyle = GUIDE;
+    for (const corner of m.corners) ctx.fillRect(Math.round(x(corner.d)), top0, 1, rows * rowH);
+  }
+
+  m.laps.forEach((lap, i) => {
+    const top = top0 + i * rowH;
     if (!lap.done && m.now !== null) {
       ctx.fillStyle = m.style.colour;
       ctx.fillRect(Math.min(right - 2, x(m.now)), top + 1, 2, rowH - 2);
@@ -241,7 +288,13 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     if (compact) return;
     const y = top + rowH / 2;
     text(ctx, `L${lap.lap}`, pad, y, { color: lap.done ? c.dim : c.ink, size: 11, weight: lap.done ? 400 : 700 });
-    if (lap.done && lap.time !== null) text(ctx, formatLapTime(lap.time), left - 6, y, { align: 'right', color: c.mute, size: 10 });
+    if (!lap.done || lap.time === null) return;
+    // Against the lap before, ink when faster; the oldest row has none before it, so it keeps its time.
+    const before = m.laps[i + 1];
+    if (before?.done && before.time !== null) {
+      const d = lap.time - before.time;
+      text(ctx, lapDelta(d), left - 6, y, { align: 'right', color: d < 0 ? c.ink : c.mute, size: 10, weight: d < 0 ? 700 : 400 });
+    } else text(ctx, formatLapTime(lap.time), left - 6, y, { align: 'right', color: c.mute, size: 10 });
   });
 }
 
@@ -267,7 +320,7 @@ function PedalBarcode({ props }: { props: { drivers?: number[] } }) {
   const circuit = useLive((s) => s.circuit);
   const model = useMemo(() => {
     if (driver === null || pastView.state !== 'ready' || nowView.state !== 'ready' || circuit.state !== 'ready') return null;
-    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit.corners), style: styleOf(styles, driver), picked: named === null };
+    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit), style: styleOf(styles, driver), picked: named === null };
   }, [driver, named, laps, pastView, nowView, playhead, circuit, styles]);
   const waiting = lapsView.state === 'ready' && laps.length === 0 ? 'Waiting for a lap' : null;
   return (
