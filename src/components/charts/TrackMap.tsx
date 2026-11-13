@@ -272,7 +272,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   ctx.stroke();
 
   const lit = new Set(m.highlight);
-  // Once someone is chosen, the rest recede: smaller, dimmer and unlabelled, named only under the pointer.
+  // Only the chosen are labelled; the rest are named under the pointer. Once someone is chosen, the rest also recede: smaller and dimmer.
   const recede = lit.size > 0;
   const radius = (d: number) => (lit.has(d) ? (compact ? 4 : 6) : compact ? 2.5 : recede ? 3 : 4);
   // A car off the line by more than the lane's own threshold sits on the lane as it's drawn, not on the track.
@@ -296,7 +296,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
       const r = radius(car.driver) + 1;
       return { x, y, w: r * 2, h: r * 2 };
     });
-    const labelled = [...order].reverse().filter((car) => !recede || lit.has(car.driver));
+    const labelled = [...order].reverse().filter((car) => lit.has(car.driver));
     const labels = placeLabels(
       labelled.map((car) => {
         const [x, y] = at.get(car.driver)!;
@@ -427,7 +427,7 @@ const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
   minItems: 1,
   maxItems: MAX_CHOSEN,
   description:
-    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and labelled. These are always chosen; the viewer can click other cars to add or drop them on the map itself, which leaves these props as they are.',
+    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and unlabelled. These are always chosen; the viewer can click other cars to add or drop them on the map itself, which leaves these props as they are.',
 });
 
 /**
