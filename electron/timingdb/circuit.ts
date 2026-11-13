@@ -45,6 +45,7 @@ export function parseCircuit(raw: unknown, circuitKey: number, now: number): Cir
     corners: (Array.isArray(r.corners) ? r.corners : []).map(corner).filter((c): c is CircuitCorner => c !== null),
     rotation: finite(r.rotation) ? r.rotation : 0,
     pitLoss: { normal: seconds(loss.normal), safetyCar: seconds(loss.sc), virtualSafetyCar: seconds(loss.vsc) },
+    marshalSectors: Array.isArray(r.marshalSectors) && r.marshalSectors.length ? r.marshalSectors.length : null,
   };
 }
 

@@ -24,6 +24,9 @@ const TOKENS = {
   /** Pedals, as the broadcast colours them: green and red, toned down so neither reads as a tyre or an alert. */
   throttle: '#5fb57c',
   brake: '#d0625b',
+  /** Flags, toned down as the pedals are: data, not the yellow of build mode. Green and red flags take `throttle` and `brake`. */
+  flagYellow: '#d9b84a',
+  flagBlue: '#5b8fd0',
 };
 
 export type Theme = typeof TOKENS;
@@ -36,7 +39,7 @@ export function colors(): Theme {
   if (typeof document === 'undefined') return TOKENS;
   const style = getComputedStyle(document.documentElement);
   const read = Object.fromEntries(
-    Object.entries(TOKENS).map(([name, fallback]) => [name, style.getPropertyValue(`--color-${name}`).trim() || fallback]),
+    Object.entries(TOKENS).map(([name, fallback]) => [name, style.getPropertyValue(`--color-${name.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`).trim() || fallback]),
   ) as Theme;
   // Only keep it once the stylesheet has loaded.
   if (style.getPropertyValue('--color-ink').trim()) theme = read;
