@@ -68,7 +68,6 @@ const allGroups = {
   ],
   small: [
     { type: 'sector_table', props: { drivers: pair } },
-    { type: 'pit_stops', props: {} },
     { type: 'race_control', props: {} },
     { type: 'race_status', props: {} },
   ],
@@ -157,18 +156,16 @@ async function shoot(moment) {
       console.log(`pit window: ${JSON.stringify(check)}`);
     }
     if (name === 'small') {
-      // The gap chart's sides and the latest stops in numbers, beside the tower's rows for the pair, to check by hand.
+      // The gap chart's sides and the sectors in numbers, beside the tower's rows for the pair, to check by hand.
       const check = await page.evaluate(async (pair) => {
         const { host, read } = await import('/src/host/index.ts');
         const gap = await import('/src/components/charts/GapEvolution.tsx');
-        const stops = await import('/src/components/charts/PitStops.tsx');
         const tower = await import('/src/components/charts/TimingTower.tsx');
         const sectors = await import('/src/components/charts/SectorTable.tsx');
         const { points: _points, ...b } = gap.gapModel((await host.data.sql({ sql: gap.SQL, params: pair })).rows, pair);
         const s = sectors.sectorTable((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
-        const p = stops.stopsModel((await host.data.sql({ sql: stops.sqlFor(0) })).rows).stops.slice(0, 4);
         const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));
-        return { gap: b, sectors: { laps: s.rows.map((r) => `${r.lap}${r.skip ? ` ${r.skip}` : ''}`), averages: s.averages, counted: s.counted }, stops: p, tower: t };
+        return { gap: b, sectors: { laps: s.rows.map((r) => `${r.lap}${r.skip ? ` ${r.skip}` : ''}`), averages: s.averages, counted: s.counted }, tower: t };
       }, pair);
       console.log(`small: ${JSON.stringify(check)}`);
     }
@@ -225,10 +222,10 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, pace, pit, sectors, stops, control] = await Promise.all(
+    const [tower, gap, tyres, pace, pit, sectors, control] = await Promise.all(
       [
         'TimingTower', 'GapEvolution', 'TyreStrategy', 'FieldPace', 'PitWindow',
-        'SectorTable', 'PitStops', 'RaceControl',
+        'SectorTable', 'RaceControl',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
     const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
@@ -249,7 +246,6 @@ const timings = await page.evaluate(
       field_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),
       sector_table: await time(sectors.SQL, pair),
-      pit_stops: await time(stops.sqlFor(0), []),
       race_control: await time(control.SQL, []),
       ...(await (async () => {
         const [map, live] = await Promise.all(['TrackMap', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));

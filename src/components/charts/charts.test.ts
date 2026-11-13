@@ -11,7 +11,6 @@ const { paceModel } = await import('./FieldPace');
 const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = await import('./PitWindow');
 const { pitWindowsModel, lossNow } = await import('./PitWindows');
 const { sectorTable } = await import('./SectorTable');
-const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, markOf, lineText } = await import('./RaceControl');
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
@@ -569,33 +568,6 @@ describe('sector_table', () => {
   });
 });
 
-describe('pit_stops', () => {
-  const stop = (driver: number, lap: number, lane: number | null, stop: number | null, compound: string | null) => ({
-    driver_number: driver,
-    lap_number: lap,
-    lane,
-    stop_duration: stop,
-    compound,
-  });
-
-  it('keeps the order given, newest first, with the tyre fitted and a shared lane scale', () => {
-    const m = stopsModel([stop(1, 20, 23.4, 2.1, 'HARD'), stop(44, 18, 25.76, null, null)]);
-    expect(m.stops).toEqual([
-      { driver: 1, lap: 20, compound: 'HARD', lane: 23.4, stop: 2.1 },
-      { driver: 44, lap: 18, compound: null, lane: 25.76, stop: null },
-    ]);
-    expect(m.hasStop).toBe(true);
-    expect(m.lane).toEqual([21, 26]);
-  });
-
-  it('hides the stationary time when no stop has one', () => {
-    const m = stopsModel([stop(1, 20, 23.4, null, 'HARD')]);
-    expect(m.hasStop).toBe(false);
-    expect(m.lane).toEqual([21, 26]);
-    expect(stopsModel([stop(1, 20, null, null, null)]).lane).toBeNull();
-  });
-});
-
 describe('race_control', () => {
   // Real messages from the 2026 São Paulo and Mexico City races.
   const rc = (lap: number, category: string, flag: string | null, message: string, more: Record<string, unknown> = {}) => ({
@@ -1046,9 +1018,7 @@ describe('the registry', () => {
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
     expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
-    expect(byName.pit_stops.sessions).toEqual(['race', 'sprint']);
     expect(byName.sector_table.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_table:44-1', label: 'Sectors 44 · 1' });
-    expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
@@ -1061,8 +1031,8 @@ describe('the registry', () => {
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
-    for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(15);
+    for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
+    expect(components).toHaveLength(14);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -1115,10 +1085,10 @@ describe('sizes', () => {
       ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'speed_ribbon', 'car_telemetry'],
       ['video', 'video', 'speed_ribbon', 'timing_tower'],
-      ['video', 'race_control', 'pit_stops', 'race_status'],
+      ['video', 'race_control', 'pit_windows', 'race_status'],
       ['video', 'pit_window', 'field_pace', 'sector_table'],
       ['video', 'timing_tower', 'pit_windows'],
-      ['video', 'pit_windows', 'pit_stops', 'race_control'],
+      ['video', 'pit_windows', 'tyre_strategy', 'race_control'],
       ['video', 'timing_tower', 'race_status', 'race_control'],
       ['timing_tower', 'gap_evolution', 'sector_table'],
     ];

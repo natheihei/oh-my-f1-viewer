@@ -1,7 +1,6 @@
 /** Every component a tile can show. Charts and other views get added here. */
 import type { ComponentDefinition } from '../host';
 import GapEvolution from './charts/GapEvolution';
-import PitStops from './charts/PitStops';
 import PitWindow from './charts/PitWindow';
 import PitWindows from './charts/PitWindows';
 import RaceControl from './charts/RaceControl';
@@ -25,7 +24,6 @@ export const components: ComponentDefinition[] = [
   PitWindow,
   PitWindows,
   SectorTable,
-  PitStops,
   RaceControl,
   RaceStatus,
   TrackMap,
