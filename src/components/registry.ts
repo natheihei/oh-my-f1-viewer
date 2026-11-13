@@ -15,7 +15,6 @@ import PedalBarcode from './charts/PedalBarcode';
 import TimingTower from './charts/TimingTower';
 import TrackMap from './charts/TrackMap';
 import TyreStrategy from './charts/TyreStrategy';
-import Weather from './charts/Weather';
 import VideoTile from './VideoTile';
 
 export const components: ComponentDefinition[] = [
@@ -31,7 +30,6 @@ export const components: ComponentDefinition[] = [
   PitStops,
   RaceControl,
   RaceStatus,
-  Weather,
   TrackMap,
   CarTelemetry,
   PedalBarcode,

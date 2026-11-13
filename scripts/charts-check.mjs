@@ -74,12 +74,7 @@ const allGroups = {
     { type: 'sector_delta', props: { drivers: pair } },
     { type: 'pit_stops', props: {} },
     { type: 'race_control', props: {} },
-    { type: 'weather', props: {} },
-  ],
-  // The strip shows four at a time: these two again, so the weather's preview is on screen.
-  context: [
-    { type: 'race_control', props: {} },
-    { type: 'weather', props: {} },
+    { type: 'race_status', props: {} },
   ],
   telemetry: [
     { type: 'track_map', props: { drivers: pair } },
@@ -234,10 +229,10 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, compare, pace, pit, sectors, stops, control, weather] = await Promise.all(
+    const [tower, gap, tyres, compare, pace, pit, sectors, stops, control] = await Promise.all(
       [
         'TimingTower', 'GapEvolution', 'TyreStrategy', 'LapTimeCompare', 'FieldPace', 'PitWindow',
-        'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
+        'SectorDelta', 'PitStops', 'RaceControl',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
     const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
@@ -261,7 +256,6 @@ const timings = await page.evaluate(
       sector_delta: await time(sectors.SQL, pair),
       pit_stops: await time(stops.sqlFor(0), []),
       race_control: await time(control.SQL, []),
-      weather: await time(weather.SQL, []),
       ...(await (async () => {
         const [map, live] = await Promise.all(['TrackMap', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));
         return {
