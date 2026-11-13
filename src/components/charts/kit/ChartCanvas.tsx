@@ -60,17 +60,20 @@ function useFontsReady(): boolean {
  * Draws `model` with `draw`, a function that doesn't change. Keep the model's reference until its data changes.
  * `extent`, also a function that doesn't change, lets the canvas be larger than the tile. `onPointer` hears
  * where the pointer is: a chart that names what's under it keeps the point in its model, and draws from it.
+ * `onClick` hears a click, at the point it was made.
  */
 export function ChartCanvas<M>({
   model,
   draw,
   extent,
   onPointer,
+  onClick,
 }: {
   model: M;
   draw: Draw<M>;
   extent?: Extent<M>;
   onPointer?: (point: Pointer) => void;
+  onClick?: (point: { x: number; y: number }) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLCanvasElement>(null);
@@ -123,6 +126,13 @@ export function ChartCanvas<M>({
           })
         }
         onPointerLeave={onPointer && (() => onPointer(null))}
+        onClick={
+          onClick &&
+          ((e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onClick({ x: e.clientX - r.left, y: e.clientY - r.top });
+          })
+        }
       />
     </div>
   );

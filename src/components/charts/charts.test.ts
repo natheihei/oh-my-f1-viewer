@@ -15,7 +15,7 @@ const { messagesModel, signalOf, markOf, lineText } = await import('./RaceContro
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
-const { trackModel, placeLabels } = await import('./TrackMap');
+const { trackModel, placeLabels, inLane, toggleDriver } = await import('./TrackMap');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
@@ -859,7 +859,28 @@ describe('track_map', () => {
     expect(overlap(a, b)).toBe(false);
     // Kept inside the tile: with no room above, the label goes below the line.
     expect(placeLabels([{ x: 100, y: 8, nx: 0, ny: -1, w: 24, h: 10 }], [], [], { width: 200, height: 200 })[0].y).toBeGreaterThan(8);
+    // With no clear place inside the tile, still inside it, not cut at its edge.
+    const crowded = placeLabels([{ x: 2, y: 100, nx: -1, ny: 0, w: 24, h: 10 }], [], [], { width: 30, height: 200 })[0];
+    expect(crowded.x - crowded.w / 2).toBeGreaterThanOrEqual(0);
     for (const box of [a, b]) expect(line.some(([x, y]) => Math.abs(x - box.x) * 2 < box.w && Math.abs(y - box.y) * 2 < box.h)).toBe(false);
+  });
+
+  it('tells a car in the pit lane, more than 10 m off the racing line, from one on it', () => {
+    // A square circuit 1 km a side, in tenths of a metre.
+    const outline = { x: [0, 10000, 10000, 0], y: [0, 0, 10000, 10000] };
+    const cars = [
+      { driver: 1, x: 5000, y: 15 },
+      { driver: 4, x: 5000, y: -210 },
+      { driver: 44, x: 9990, y: 6000 },
+    ];
+    expect([...inLane(cars, outline)]).toEqual([4]);
+  });
+
+  it('adds a clicked car to the chosen, drops one already there, and stops at six', () => {
+    expect(toggleDriver([], 44)).toEqual([44]);
+    expect(toggleDriver([1, 44], 1)).toEqual([44]);
+    expect(toggleDriver([44], 44)).toEqual([]);
+    expect(toggleDriver([1, 2, 3, 4, 5, 6], 7)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
 

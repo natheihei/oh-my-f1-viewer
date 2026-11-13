@@ -122,6 +122,9 @@ Components drawn on a canvas with the kit, `src/components/charts/kit`.
 - **A crowded chart labels what answers its question, and names the rest under the pointer.** Codes that land on each other read as
   none. A mark without a label is named, with its value, when the pointer is on it: `ChartCanvas` passes the pointer to the chart
   with `onPointer`, the chart keeps it in what it draws from, and its `draw` names the mark under it. (2026-11-13, with the pit window.)
+- **A click on a car can choose it.** A chart whose `drivers` prop picks who stands out can let the viewer click a car to add or
+  drop it: the component changes its own tile's props with `host.layout.setProps`, by the id `useTile()` gives, so the tile keeps
+  its place and its title follows. The name under the pointer says what a click will do. (2026-11-13, with the track map.)
 
 Per-chart decisions go under a heading for that chart as each one is polished.
 
@@ -478,6 +481,24 @@ Removed 2026-11-13.
   against the lane.
 - A saved layout with a `pit_stops` tile draws nothing in it, as for a mod's component that is gone.
 
+### Track map
+
+Polished 2026-11-13, from the `track_map` proposals 1, 4, 5, 6, 10, 11 and 12.
+
+- **Its question: where every car is on the track now.** One dot per running car, in its team colour; retired cars are left off.
+- **A car in the pit lane is a hollow ring,** with its code in grey. MultiViewer has no pit lane, so it's any car more than 10 m off
+  the racing line: the lane runs about 20 m off it, which at a tile's scale is 3 or 4 pixels, and before this a car in the lane read
+  as one racing down the straight. A car stopped off the track is drawn the same.
+- **Codes at 11px,** a chosen driver's in bold ink. (They were 9px, and 10px chosen.)
+- **Choosing drivers makes the rest recede:** smaller, three quarters opaque and unlabelled, so the chosen are what reads. Without a
+  choice every car is labelled. A car without a label is named under the pointer, with its position, and whether it's in the pit lane.
+- **Click a car to choose it, or to drop it,** up to six. The tile's title follows: Track, then Track VER · NOR.
+- **Turn numbers as the speed ribbon draws them:** just outside the track, 9px in the hint grey, stepped out until clear, and the
+  first to give way to a car's label. (They were 8px in faint, and hidden in a tile less than 260px on its short side.)
+- **Size.** 16px of padding round the circuit (it was 30). Least 360 by 250, where the codes still sit beside their dots. Fit 560 by
+  400, as the speed ribbon, where a circuit stops gaining detail. A label with no clear place is kept inside the tile, not cut at its
+  edge. `scripts/track-check.mjs` shows it in the real app: the pack on lap 2, the stops, chosen drivers, the pointer and a click.
+
 ## Where it lives
 
 | Piece | File |
@@ -492,6 +513,7 @@ Removed 2026-11-13.
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
 | A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
 | The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
+| A click on a chart, and a component changing its own props | `ChartCanvas` (`onClick`), `useTile` in `src/host/Grid.tsx`, `host.layout.setProps` |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Reading race control's messages | `src/components/charts/raceControlMessages.ts` |
 | The race status board in the real app, at chosen messages, at its least size and squeezed | `scripts/status-check.mjs` |
@@ -502,4 +524,5 @@ Removed 2026-11-13.
 | The sector table in the real app, at chosen laps and squeezed | `scripts/sector-check.mjs` |
 | Tyre strategy in the real app, at chosen laps, fitted, at its least size and squeezed | `scripts/tyre-check.mjs` |
 | Tyre deg in the real app, at chosen laps, beside onboards, at its least size and squeezed | `scripts/deg-check.mjs` |
+| The track map in the real app: the pack, the stops, choosing by click, fitted and squeezed | `scripts/track-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
