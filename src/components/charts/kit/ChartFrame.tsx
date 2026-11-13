@@ -1,7 +1,6 @@
 /** The shell every chart shares: it says what's missing instead of drawing, and keeps a broken chart in its tile. */
-import { Component, useMemo, type ReactNode } from 'react';
-import { read, useLive, type Dataset, type DriverEntry, type SqlView } from '../../../host';
-import { driverStyles, type DriverStyle } from './colors';
+import { Component, type ReactNode } from 'react';
+import { useLive, type Dataset, type SqlView } from '../../../host';
 import { dataMessage, viewMessage } from './status';
 
 interface BoundaryProps {
@@ -64,19 +63,4 @@ export function ChartFrame({
 /** Calls `render` while rendering inside the boundary, so what it throws is caught there. */
 function Run({ render }: { render: () => ReactNode }) {
   return <>{render()}</>;
-}
-
-const NO_DRIVERS: DriverEntry[] = [];
-
-/** A car's code for a tile label: from the roster, else its onboard feed, else the number itself. */
-export function codeOf(number: number): string {
-  const { sessionData, feeds } = read();
-  const entry = sessionData.state === 'ready' ? sessionData.drivers.find((d) => d.driver_number === number) : undefined;
-  return entry?.name_acronym ?? feeds.find((f) => f.number === number)?.label ?? String(number);
-}
-
-/** Each driver's code, team colour and dash, by car number, from the session's roster. */
-export function useDriverStyles(): Map<number, DriverStyle> {
-  const drivers = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.drivers : NO_DRIVERS));
-  return useMemo(() => driverStyles(drivers), [drivers]);
 }

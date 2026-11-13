@@ -277,8 +277,27 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   The suggestion strip uses it for previews.
 - `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.
   `args` is a TypeBox object schema for its props, which must stay JSON-safe. `spec(props)` returns the tile's unique `key` and
-  title-bar `label`. `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is its
+  title-bar `label`, and `drivers` when the tile is about some: then `label` is the name alone ("Gap"), the title bar draws each
+  driver as a code after it, and the tile's text label, which the agent and the strip read, is `labelText` of the two ("Gap NOR ·
+  PIA"). `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is its
   shape (`aspect`, width over height) and the least room its content reads in (`min`, in pixels). The layout arranges tiles by it, and the strip shapes its preview by it. See [COMPONENTS.md](COMPONENTS.md). `View` receives the tile's `props` and `label`, and may only use the host.
+
+### Driver codes
+
+A driver's code is drawn one way wherever it appears: in a title bar, a table, a chart's heading or a line of text. Everything takes
+a car number and finds the code and team colour in the roster. How the code looks is a variant the caller picks, not a place: see
+[COMPONENTS.md](COMPONENTS.md#driver-codes). From [src/host/drivers.tsx](../src/host/drivers.tsx) and [src/host/codes.ts](../src/host/codes.ts):
+
+- `CodeLook` is `{ variant?, strong?, tone? }`. `variant` is `bar` (the default: a short bar in the team colour, then the code) or
+  `plain` (the code alone, where the team colour is drawn already). `strong` sets it bold. `tone` is `ink` (the default), `dim`,
+  `mute`, or `inherit` to take the colour of the text around it.
+- `<DriverCode number={44} variant="bar" />` draws one code in React, and `driverCodeElement(number, look)` as a DOM element for
+  chrome built without React.
+- `Part` is a piece of text or `{ driver }`: text with drivers in it, as a parser finds them. `<Parts parts={...} look={...} />`
+  draws it, and `partsText(parts)` writes it out as text.
+- `codeOf(number)`, `labelText(name, drivers)`, `useDriverStyles()`, `driverStyles(roster)` and `styleOf(styles, number)` give the
+  code, a tile's text label, and each driver's code, team colour and dash.
+- `CODE_BAR` and `CODE_WEIGHT` are the bar's size and the weights, which the kit's `drawCode` and `drawParts` draw on a canvas with.
 
 ## The agent's view
 

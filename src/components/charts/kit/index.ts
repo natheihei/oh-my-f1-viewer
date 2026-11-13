@@ -1,7 +1,10 @@
 /** What charts share. See docs/ARCHITECTURE.md, "Charts". */
 export { ChartCanvas, COMPACT_BELOW, compactSmall, type Box, type Draw, type Extent, type Pointer } from './ChartCanvas';
-export { ChartFrame, codeOf, useDriverStyles } from './ChartFrame';
-export { colors, DASH, driverStyles, styleOf, tyreColour, type DriverStyle } from './colors';
+export { ChartFrame } from './ChartFrame';
+export { codeOf, useDriverStyles } from '../../../host';
+export * from './codes';
+export { colors, DASH, tyreColour } from './colors';
+export { driverStyles, styleOf, type DriverStyle } from '../../../host';
 export * from './draw';
 export * from './laps';
 export { spreadLabels } from './labels';
