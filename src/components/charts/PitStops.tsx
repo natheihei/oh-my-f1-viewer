@@ -158,7 +158,7 @@ export default defineComponent({
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 1.6, min: [6, 5] },
+  size: { aspect: 1.6, min: { width: 300, height: 150 } },
   spec: ({ drivers }) => ({
     key: `pit_stops:${drivers?.join('-') ?? 'all'}`,
     label: drivers?.length ? `Pit stops ${drivers.map(codeOf).join(' · ')}` : 'Pit stops',

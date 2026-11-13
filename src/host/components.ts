@@ -9,7 +9,7 @@ import type { ComponentType } from 'react';
 import { create } from 'zustand';
 import type { SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
-import { allTiles, type ComponentSpec, type ContentFit } from '../layout/model';
+import { allTiles, type ComponentSpec, type ContentFit, type SizeHint } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
 import { write } from './op';
 
@@ -26,8 +26,12 @@ interface Declared {
   needs?: Dataset[];
   /** It reads car telemetry, which only a replay has: it is never offered in a live session. */
   replayOnly?: boolean;
-  /** A size hint in grid cells: its shape, and the least room it reads in. Auto-layout shares a column by the least height. */
-  size?: { aspect: number; min: [number, number] };
+  /**
+   * A size hint: `aspect` is the shape it reads best in, as width over height, and `min` the least room
+   * its content reads in, in pixels, not counting the tile's title bar. Auto-layout puts it where its
+   * shape suits and keeps it at its least size while it can.
+   */
+  size?: SizeHint;
   /** How its content draws, when it doesn't simply fill the tile: the tile is shrunk to it. See `ContentFit`. */
   fit?: ContentFit;
   /**
@@ -56,7 +60,8 @@ export interface ComponentInfo {
   sessions: SessionType[] | null;
   needs: Dataset[];
   replayOnly: boolean;
-  size: { aspect: number; min: [number, number] } | null;
+  /** Its shape, and the least room it reads in, in pixels. */
+  size: SizeHint | null;
   looksAhead: boolean;
 }
 
@@ -73,6 +78,21 @@ export function defineComponent<S extends TObject>(
 
 const definitions = new Map<string, ComponentDefinition>();
 
+/**
+ * A definition's size hint, checked. A mod written when `min` was a pair of grid cells still loads: its
+ * shape is kept and its least size dropped, with a warning in its log.
+ */
+function sizeOf(c: ComponentDefinition): SizeHint | null {
+  const size = c.size as { aspect?: unknown; min?: unknown } | undefined;
+  if (!size || typeof size.aspect !== 'number' || !(size.aspect > 0)) return null;
+  const min = size.min as { width?: unknown; height?: unknown } | undefined;
+  if (min && !Array.isArray(min) && typeof min.width === 'number' && typeof min.height === 'number') {
+    return { aspect: size.aspect, min: { width: Math.max(0, min.width), height: Math.max(0, min.height) } };
+  }
+  console.warn(`${c.name}: size.min must be { width, height } in pixels. Its least size is ignored.`);
+  return { aspect: size.aspect, min: { width: 0, height: 0 } };
+}
+
 /** Replaced as a whole on each registration, so a `useLive` selector over it stays stable. */
 export const useComponents = create<{ list: ComponentInfo[] }>(() => ({ list: [] }));
 
@@ -85,7 +105,7 @@ function infoOf(c: ComponentDefinition): ComponentInfo {
     sessions: c.sessions ?? null,
     needs: c.needs ?? [],
     replayOnly: c.replayOnly === true,
-    size: c.size ?? null,
+    size: sizeOf(c),
     looksAhead: c.looksAhead === true,
   };
 }
@@ -138,5 +158,6 @@ export function specOf({ type, props }: Static<typeof Item>): ComponentSpec {
     const error = Value.Errors(definition.args, props)[0];
     throw new Error(`Invalid props for ${type}: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}`);
   }
-  return { type, ...definition.spec(props), props, ...(definition.size ? { size: definition.size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
+  const size = sizeOf(definition);
+  return { type, ...definition.spec(props), props, ...(size ? { size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
 }

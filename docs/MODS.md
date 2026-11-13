@@ -127,6 +127,13 @@ the app copies them to `mods/.types` and writes `mods/tsconfig.json`, which poin
 the app's own `node_modules`. `tsc -p ~/.config/f1a/mods` then type-checks every mod without the app running, and editors find the
 same types.
 
+## The guide for agents
+
+On every start the app also writes `mods/AGENTS.md`: what a mod is, a complete example, the host in brief and the rules a component
+follows, for a coding agent working in the folder. Edits to it are lost. The text is `shared/modGuide.ts`, the same one the app's
+build agent gets in its prompt. The rules in it are decided, with their reasons, in [COMPONENTS.md](COMPONENTS.md), and adopted into
+the guide by hand.
+
 ## Checking it
 
 `node scripts/mods-check.mjs <screenshot-dir>` runs a mod through its life in the real app, over a replay race: written into the
@@ -144,4 +151,5 @@ compiling, imports, errors, logs and waiting for a save.
 | The modules a mod shares with the app | `src/main.tsx` |
 | The error boundary on every tile | `src/host/Grid.tsx` |
 | Status and log types | `shared/mods.ts` |
+| The guide written as `AGENTS.md` | `shared/modGuide.ts` |
 | An example | `examples/mods/lap_form/main.tsx` |

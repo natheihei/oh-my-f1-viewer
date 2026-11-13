@@ -139,7 +139,7 @@ export default defineComponent({
   args: Type.Object({}),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 0.7, min: [6, 9] },
+  size: { aspect: 0.7, min: { width: 300, height: 320 } },
   spec: () => ({ key: 'field_pace', label: 'Pace' }),
   View: FieldPace,
 });

@@ -14,8 +14,9 @@ import {
   GRID_ROWS,
   largestFreeRect,
   measure,
+  minCells,
   removeTile,
-  solveRects,
+  setMain,
   swap,
   ungroup,
   type ComponentSpec,
@@ -23,8 +24,10 @@ import {
   type Rect,
 } from './model';
 
-const spec = (key: string): ComponentSpec => ({ type: 'video', key, label: key, props: {} });
-const build = (...keys: string[]) => keys.reduce<LayoutState>((s, k) => addTile(s, spec(k)), EMPTY_LAYOUT);
+/** A video: the picture keeps its shape, which is what makes the first one the main tile. */
+const spec = (key: string): ComponentSpec => ({ type: 'video', key, label: key, props: {}, fit: { aspect: 16 / 9 } });
+/** Videos added in order, the first one given the main place, as opening a session does. */
+const build = (...keys: string[]) => keys.slice(1).reduce<LayoutState>((s, k) => addTile(s, spec(k)), setMain(addTile(EMPTY_LAYOUT, spec(keys[0])), keys[0]));
 
 function area(r: Rect): number {
   return r.w * r.h;
@@ -32,8 +35,15 @@ function area(r: Rect): number {
 
 /** Every grid cell is covered exactly once. */
 function assertTilesGrid(rects: Rect[]): void {
+  assertNoOverlap(rects);
+  expect(rects.reduce((sum, r) => sum + area(r), 0)).toBe(GRID_COLUMNS * GRID_ROWS);
+}
+
+/** No two rectangles share a cell, and none leaves the grid. */
+function assertNoOverlap(rects: Rect[]): void {
   const seen = new Set<string>();
   for (const r of rects) {
+    expect(r.x >= 0 && r.y >= 0 && r.w >= 1 && r.h >= 1 && r.x + r.w <= GRID_COLUMNS && r.y + r.h <= GRID_ROWS, `outside the grid: ${JSON.stringify(r)}`).toBe(true);
     for (let y = r.y; y < r.y + r.h; y += 1) {
       for (let x = r.x; x < r.x + r.w; x += 1) {
         const cell = `${x},${y}`;
@@ -42,76 +52,147 @@ function assertTilesGrid(rects: Rect[]): void {
       }
     }
   }
-  expect(seen.size).toBe(GRID_COLUMNS * GRID_ROWS);
 }
 
-describe('solveRects', () => {
-  for (let slots = 1; slots <= 24; slots += 1) {
-    it(`fills the grid exactly with ${slots} slot(s), primary largest`, () => {
-      const rects = solveRects(slots, false);
-      expect(rects).toHaveLength(slots);
-      assertTilesGrid(rects);
-      for (const r of rects.slice(1)) expect(area(rects[0])).toBeGreaterThanOrEqual(area(r));
+/** 1600 by 816, so a cell is about 66.7 by 34. */
+const CELL = { w: 1600 / 24, h: 34 };
+const sized = measure(EMPTY_LAYOUT, CELL);
+const video = spec;
+const chart = (key: string, aspect: number, width: number, height: number): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect, min: { width, height } } });
+/** At most 396 by 500 pixels: 6 columns and 16 rows with the title bar. */
+const tower: ComponentSpec = { ...chart('tower', 0.75, 330, 376), fit: { width: 396, height: 500 } };
+const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
+const add = (state: LayoutState, ...specs: ComponentSpec[]) => specs.reduce(addTile, state);
+/** A measured grid with the main feed on it, in the main place. */
+const opened = setMain(addTile(sized, video('main')), 'main');
+
+describe('auto-layout', () => {
+  for (let tiles = 1; tiles <= 12; tiles += 1) {
+    it(`places ${tiles} tile(s) without overlap, the first one largest`, () => {
+      const s = build(...Array.from({ length: tiles }, (_, i) => `t${i}`));
+      expect(s.nodes).toHaveLength(tiles);
+      assertNoOverlap(s.nodes);
+      for (const n of s.nodes.slice(1)) expect(area(s.nodes[0])).toBeGreaterThanOrEqual(area(n));
     });
   }
 
-  it('widens the rail when a group needs room', () => {
-    expect(solveRects(2, true)[1].w).toBeGreaterThan(solveRects(2, false)[1].w);
+  it('fills the grid with one tile, and with the main tile and a rail', () => {
+    expect(build('main').nodes[0]).toMatchObject({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
+    const two = build('main', 'side');
+    expect(area(two.nodes[0]) + area(two.nodes[1])).toBe(GRID_COLUMNS * GRID_ROWS);
+    expect(two.nodes[1].x).toBe(two.nodes[0].w);
   });
 
-  it('shares the column beside the primary by least height when every tile there has a hint', () => {
-    // A timing tower (12 rows), a pace chart (9) and a small card (5) beside the main feed.
-    const rail = solveRects(4, false, [null, 12, 9, 5]);
-    assertTilesGrid(rail);
-    expect(rail.slice(1).map((r) => r.h)).toEqual([11, 8, 5]);
-    expect(rail[0]).toEqual(solveRects(4, false)[0]);
-    // Further down the layout, the two beside the primary share its height the same way; the band below doesn't change.
-    const band = solveRects(5, false, [null, 12, 5, 6, 6]);
-    assertTilesGrid(band);
-    expect(band.slice(1, 3).map((r) => r.h)).toEqual([11, 5]);
-    expect(band.slice(3)).toEqual(solveRects(5, false).slice(3));
-  });
-
-  it('splits evenly as before when any tile in the column has no hint, such as a video', () => {
-    for (const slots of [2, 3, 4, 5, 7, 9]) {
-      const heights = Array.from({ length: slots }, (_, i) => (i === 2 ? null : 6 + i));
-      expect(solveRects(slots, false, heights)).toEqual(solveRects(slots, false));
+  it('puts a tall tile beside the main one and a wide one below it, whatever order they were added in', () => {
+    // Too wide for the rail the tower sits in.
+    const wide = chart('wide', 4, 700, 150);
+    for (const order of [[tower, wide], [wide, tower]]) {
+      const r = rects(autoLayout(add(opened, ...order)));
+      expect(r.tower.x).toBeGreaterThanOrEqual(r.main.w);
+      expect(r.tower.y).toBe(0);
+      expect(r.wide.y).toBeGreaterThanOrEqual(r.main.h);
+      expect(r.wide.x).toBe(0);
     }
-    expect(solveRects(3, false, [null, 5, 5])).toEqual(solveRects(3, false));
+  });
+
+  it('gives the main place only to the tile it is assigned to, whatever was added first', () => {
+    const three = add(sized, tower, chart('gap', 16 / 9, 330, 180), video('feed'));
+    const assigned = rects(setMain(three, 'feed'));
+    expect(assigned.feed).toMatchObject({ x: 0, y: 0 });
+    for (const other of [assigned.gap, assigned.tower]) expect(assigned.feed.w * assigned.feed.h).toBeGreaterThan(other.w * other.h);
+    // A video that wasn't assigned it is laid out by its own size, like any other tile.
+    const plain = autoLayout(three);
+    expect(plain.main).toBeNull();
+    expect(rects(plain).feed).not.toEqual(assigned.feed);
+  });
+
+  it('keeps the main place with its tile, and promotes no other when that tile goes', () => {
+    const s = add(opened, video('onboard'), tower);
+    expect(s.main).toBe('main');
+    expect(setMain(s, 'nothing')).toBe(s);
+    const gone = removeTile(s, 'main');
+    expect(gone.main).toBeNull();
+    expect(rects(gone)).toEqual(rects(autoLayout({ ...gone, main: null })));
+    expect(removeTile(s, 'onboard').main).toBe('main');
+  });
+
+  it('takes the main place away with null, and leaves a hand-arranged layout where it is', () => {
+    const s = add(opened, chart('gap', 16 / 9, 330, 180));
+    const none = setMain(s, null);
+    expect(none.main).toBeNull();
+    expect(rects(none)).not.toEqual(rects(s));
+    const manual = applyMouseEdit(s, s.nodes[1].id, { x: 20, y: 0, w: 4, h: 6 });
+    const reassigned = setMain(manual, 'gap');
+    expect(reassigned.main).toBe('gap');
+    expect(reassigned.nodes).toBe(manual.nodes);
+  });
+
+  it('shares the grid when no tile has the main place, tall ones at the right', () => {
+    const four = ['gap', 'tyres', 'laps', 'trace'].map((key) => chart(key, 16 / 9, 400, 220));
+    const even = autoLayout(add(sized, ...four));
+    assertTilesGrid(even.nodes);
+    expect(new Set(even.nodes.map(area)).size).toBe(1);
+    const r = rects(autoLayout(add(sized, tower, ...four.slice(0, 2))));
+    expect(r.tower).toEqual({ x: 18, y: 0, w: 6, h: 16 });
+    expect(r.gap.w * r.gap.h).toBe(r.tyres.w * r.tyres.h);
+  });
+
+  it('gives one chart the whole grid, and a video the main place once it is assigned', () => {
+    const alone = autoLayout(add(sized, chart('gap', 16 / 9, 330, 180)));
+    expect(rects(alone).gap).toEqual({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
+    const r = rects(setMain(add(alone, video('feed')), 'feed'));
+    expect(r.feed).toMatchObject({ x: 0, y: 0 });
+    expect(r.feed.w * r.feed.h).toBeGreaterThan(r.gap.w * r.gap.h);
+  });
+
+  it('keeps every tile at its least size while there is room, by making the main tile smaller', () => {
+    const charts = [tower, chart('gap', 16 / 9, 330, 180), chart('tyres', 16 / 9, 380, 250), chart('laps', 16 / 9, 440, 220)];
+    const few = autoLayout(add(opened, ...charts.slice(0, 2)));
+    const more = autoLayout(add(opened, ...charts));
+    for (const s of [few, more]) {
+      assertNoOverlap(s.nodes);
+      for (const t of allTiles(s)) {
+        const [w, h] = minCells(t.component.size, CELL);
+        if (t.component.size) expect(t.w >= w && t.h >= h, `${t.component.key} is ${t.w}x${t.h}, needs ${w}x${h}`).toBe(true);
+      }
+    }
+    expect(area(more.nodes[0])).toBeLessThan(area(few.nodes[0]));
+  });
+
+  it('shares the shortfall when nothing fits, with no overlap', () => {
+    const many = add(opened, ...Array.from({ length: 10 }, (_, i) => chart(`c${i}`, 16 / 9, 440, 220)));
+    assertNoOverlap(many.nodes);
+    expect(many.nodes).toHaveLength(11);
+  });
+
+  it('gives a group room for its members side by side', () => {
+    const { state } = createGroup(opened, [video('a'), video('b')]);
+    const group = state.nodes[1];
+    expect(group.w * CELL.w).toBeGreaterThanOrEqual(640);
   });
 });
 
-describe('size hints', () => {
-  const chart = (key: string, h: number): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect: 1, min: [6, h] } });
-
-  it('gives a tall chart more of the rail than a small one, and leaves the main feed where it was', () => {
-    const s = [chart('tower', 12), chart('card', 5)].reduce(addTile, build('main'));
-    const [main, tower, card] = s.nodes;
-    expect(main).toMatchObject({ x: 0, y: 0, w: 16, h: GRID_ROWS });
-    expect(tower).toMatchObject({ x: 16, y: 0, w: 8, h: 17 });
-    expect(card).toMatchObject({ x: 16, y: 17, w: 8, h: 7 });
+describe('least sizes', () => {
+  it('are whole cells that hold the content and the title bar', () => {
+    expect(minCells({ aspect: 1, min: { width: 330, height: 376 } }, CELL)).toEqual([5, 12]);
+    expect(minCells({ aspect: 1, min: { width: 0, height: 0 } }, CELL)).toEqual([1, 1]);
+    expect(minCells(undefined, CELL)).toEqual([1, 1]);
   });
 
-  it('places a video beside charts exactly as without hints', () => {
-    const hinted = [chart('tower', 12), spec('onboard')].reduce(addTile, build('main'));
-    const plain = [spec('tower'), spec('onboard')].reduce(addTile, build('main'));
-    expect(hinted.nodes.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual(plain.nodes.map(({ x, y, w, h }) => ({ x, y, w, h })));
+  it('use a 16:9 window before the grid is measured', () => {
+    expect(minCells({ aspect: 1, min: { width: 330, height: 376 } }, { w: 0, h: 0 })).toEqual([5, 11]);
   });
 });
 
 describe('fitting content', () => {
-  /** 1680 by 960, so a cell is 70 by 40. */
-  const cell = { w: 70, h: 40 };
-  const sized = measure(EMPTY_LAYOUT, cell);
-  const video = (key: string): ComponentSpec => ({ ...spec(key), fit: { aspect: 16 / 9 } });
-  /** 352 by 496 pixels at most: 6 columns and 13 rows with the title bar. */
-  const tower: ComponentSpec = { type: 'chart', key: 'tower', label: 'tower', props: {}, size: { aspect: 0.6, min: [6, 12] }, fit: { width: 352, height: 496 } };
-  const chart = (key: string, min: [number, number], aspect = 1.6): ComponentSpec => ({ type: 'chart', key, label: key, props: {}, size: { aspect, min } });
-  const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
-  const withTower = addTile(addTile(sized, video('main')), tower);
+  const withTower = add(opened, tower);
 
-  it('shrinks the video to its picture and the tower to its content, leaving gaps right and below', () => {
-    expect(rects(withTower)).toEqual({ main: { x: 0, y: 0, w: 16, h: 17 }, tower: { x: 16, y: 0, w: 6, h: 13 } });
+  it('shrinks the video to its picture and the tower to its content', () => {
+    const r = rects(withTower);
+    expect(r.tower).toEqual({ x: 18, y: 0, w: 6, h: 16 });
+    expect(r.main).toMatchObject({ x: 0, y: 0, w: 18 });
+    // 18 columns are 1200 pixels, so the picture is 675 high, and with the title bar that is 21 rows.
+    expect(r.main.h).toBe(21);
   });
 
   it('narrows a video that is limited by height instead', () => {
@@ -119,47 +200,43 @@ describe('fitting content', () => {
   });
 
   it('fits nothing before the grid is measured', () => {
-    expect(rects(addTile(addTile(EMPTY_LAYOUT, video('main')), tower))).toEqual({
-      main: { x: 0, y: 0, w: 16, h: 24 },
-      tower: { x: 16, y: 0, w: 8, h: 24 },
-    });
+    const r = rects(add(EMPTY_LAYOUT, video('main'), tower));
+    expect(r.main.h).toBe(GRID_ROWS);
+    expect(r.tower.h).toBe(GRID_ROWS);
+    expect(r.main.w + r.tower.w).toBe(GRID_COLUMNS);
   });
 
   it('puts a new tile into the gap closest to its shape, and moves nothing else', () => {
-    const card = addTile(withTower, chart('card', [6, 5]));
-    expect(rects(card)).toEqual({ ...rects(withTower), card: { x: 16, y: 13, w: 8, h: 11 } });
+    const card = addTile(withTower, chart('card', 1.6, 300, 150));
+    expect(rects(card)).toEqual({ ...rects(withTower), card: { x: 18, y: 16, w: 6, h: 8 } });
     expect(card.manual).toBe(false);
-    expect(rects(addTile(withTower, chart('trace', [12, 7], 16 / 9))).trace).toEqual({ x: 0, y: 17, w: 24, h: 7 });
-    expect(rects(addTile(withTower, chart('flags', [2, 6], 0.2))).flags).toEqual({ x: 22, y: 0, w: 2, h: 24 });
   });
 
   it('re-tiles when no gap is big enough', () => {
-    const next = addTile(withTower, chart('big', [8, 12]));
-    expect(rects(next)).toEqual({
-      main: { x: 0, y: 0, w: 16, h: 17 },
-      tower: { x: 16, y: 0, w: 6, h: 12 },
-      big: { x: 16, y: 12, w: 8, h: 12 },
-    });
+    const next = addTile(withTower, chart('big', 16 / 9, 600, 300));
+    const r = rects(next);
+    expect(r.main).not.toEqual(rects(withTower).main);
+    const [w, h] = minCells(next.nodes[2].kind === 'tile' ? next.nodes[2].component.size : undefined, CELL);
+    expect(r.big.w >= w && r.big.h >= h).toBe(true);
+    assertNoOverlap(next.nodes);
   });
 
   it('never puts a video into a gap', () => {
-    expect(rects(addTile(withTower, spec('onboard'))).onboard.w).toBe(8);
+    const next = addTile(withTower, video('onboard'));
+    expect(rects(next)).toEqual(rects(autoLayout(next)));
+    assertNoOverlap(next.nodes);
   });
 
   it('leaves tiles alone on a resize that changes nothing re-tiling would do', () => {
-    const next = measure(withTower, { w: 70, h: 39.9 });
+    const next = measure(withTower, { w: CELL.w, h: CELL.h - 0.05 });
     expect(next.nodes).toBe(withTower.nodes);
-    expect(next.cell).toEqual({ w: 70, h: 39.9 });
+    expect(next.cell).toEqual({ w: CELL.w, h: CELL.h - 0.05 });
   });
 
-  it('re-fits on a resize that does, lifting tiles into the rows others leave', () => {
-    const filled = addTile(withTower, chart('flags', [2, 6], 0.2));
-    const narrow = measure(filled, { w: 50, h: 40 });
-    expect(rects(narrow)).toEqual({
-      main: { x: 0, y: 0, w: 16, h: 12 },
-      tower: { x: 16, y: 0, w: 8, h: 13 },
-      flags: { x: 16, y: 13, w: 8, h: 8 },
-    });
+  it('re-tiles on a resize that does', () => {
+    const narrow = measure(withTower, { w: 40, h: 40 });
+    expect(rects(narrow)).not.toEqual(rects(withTower));
+    assertNoOverlap(narrow.nodes);
   });
 
   it('leaves a hand-arranged layout alone on a resize', () => {
@@ -175,8 +252,8 @@ describe('the session journey', () => {
   });
 
   it('"Hamilton. Also battle between Norris and Leclerc", then closing that battle', () => {
-    let s = addTile(build('main'), spec('HAM'));
-    const { state } = createGroup(s, [spec('NOR'), spec('LEC')]);
+    let s = build('main', 'HAM');
+    const { state } = createGroup(s, [video('NOR'), video('LEC')]);
     s = state;
 
     expect(s.nodes.map((n) => n.kind)).toEqual(['tile', 'tile', 'group']);

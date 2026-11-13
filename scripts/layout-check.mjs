@@ -45,8 +45,11 @@ const hostRects = () =>
 const settle = () => page.waitForTimeout(350);
 const TITLE = 22;
 
-// Main fills the surface.
-await page.evaluate(() => window.layoutStore.layout.add(window.spec('MAIN')));
+// Main fills the surface. It is given the main place, as opening a session does for the main feed.
+await page.evaluate(() => {
+  window.layoutStore.layout.add(window.spec('MAIN'));
+  window.layoutStore.layout.setMain('MAIN');
+});
 await settle();
 let rects = await hostRects();
 const surface = await page.evaluate(() => {
@@ -179,14 +182,14 @@ const afterClose = await hostRects();
 check('closing leaves the other tiles where they were', JSON.stringify(afterClose.HAM) === JSON.stringify(placed.HAM), JSON.stringify([placed.HAM, afterClose.HAM]));
 await page.screenshot({ path: path.join(outDir, 'layout-closed.png') });
 
-// /auto-layout re-tiles in the order tiles were added, undoing the drag and resize.
+// /auto-layout re-tiles with the main tile largest again, undoing the drag and resize.
 await page.locator('[data-testid=palette-input]').fill('/auto-layout');
 await page.keyboard.press('Enter');
 await settle();
 const retiled = await hostRects();
 const retiledState = await page.evaluate(() => window.layoutStore.layout.snapshot());
 check('/auto-layout clears the manual layout', retiledState.manual === false);
-check('/auto-layout gives the first tile added the largest slot again', retiled.MAIN.x === 0 && retiled.MAIN.w * retiled.MAIN.h > retiled.HAM.w * retiled.HAM.h, JSON.stringify(retiled));
+check('/auto-layout gives the main tile the largest slot again', retiled.MAIN.x === 0 && retiled.MAIN.w * retiled.MAIN.h > retiled.HAM.w * retiled.HAM.h, JSON.stringify(retiled));
 await page.screenshot({ path: path.join(outDir, 'layout-auto.png') });
 
 // Window resize.

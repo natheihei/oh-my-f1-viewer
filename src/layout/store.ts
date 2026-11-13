@@ -12,6 +12,7 @@ import {
   findTile,
   measure,
   removeTile,
+  setMain,
   swap,
   ungroup,
   type Cell,
@@ -55,6 +56,8 @@ export const layout = {
     if (next) set(next);
     return next != null;
   },
+  /** Gives a tile the main place by its key, or takes it away with null. */
+  setMain: (key: string | null) => set(setMain(get(), key)),
   /** Re-tiles the grid, discarding manual moves and resizes. */
   autoLayout: () => set(autoLayout(get())),
   /** The grid's cell size on screen changed, in pixels. */

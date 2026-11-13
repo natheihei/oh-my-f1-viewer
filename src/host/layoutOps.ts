@@ -53,6 +53,18 @@ export const layoutOps = {
     ({ group }) => layout.ungroup(group),
   ),
   autoLayout: write({ description: 'Re-tile the grid in the order tiles were added, discarding manual moves and resizes.' }, () => layout.autoLayout()),
+  setMain: write(
+    {
+      description:
+        'Give a tile the main place in auto-layout: top left, and as large as the other tiles allow. Null takes it from whichever tile has it, and every tile is then laid out by its own size. Returns whether the key is on screen.',
+      args: Type.Object({ key: Type.Union([Type.String({ description: "A tile key: a video tile's is its feed id" }), Type.Null()]) }),
+    },
+    ({ key }) => {
+      if (key !== null && !findTile(useLayout.getState(), key)) return false;
+      layout.setMain(key);
+      return true;
+    },
+  ),
   move: write(
     {
       description: 'Move or resize a tile or group.',
