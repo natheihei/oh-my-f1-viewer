@@ -15,7 +15,7 @@ const { messagesModel, signalOf, markOf, lineText } = await import('./RaceContro
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
-const { trackModel, placeLabels, inLane, toggleDriver, chosenOf, lanePath, dotAt } = await import('./TrackMap');
+const { trackModel, placeLabels, inLane, toggleDriver, pinnedOf, lanePath, dotAt } = await import('./TrackMap');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
@@ -898,12 +898,12 @@ describe('track_map', () => {
     expect(dotAt(dots, { x: 140, y: 100 })).toBeNull();
   });
 
-  it('adds a clicked car to the chosen and drops one added, leaves the props\' drivers chosen, and stops at six', () => {
+  it('pins a clicked car and unpins one pinned by click, leaves the props\' drivers pinned, and stops at six', () => {
     expect(toggleDriver([], [44], 1)).toEqual([1]);
     expect(toggleDriver([1, 4], [44], 1)).toEqual([4]);
     expect(toggleDriver([1], [44], 44)).toEqual([1]);
     expect(toggleDriver([1, 2, 3], [44, 4, 5], 7)).toEqual([1, 2, 3]);
-    expect(chosenOf([44], [1, 44])).toEqual([44, 1]);
+    expect(pinnedOf([44], [1, 44])).toEqual([44, 1]);
   });
 });
 
