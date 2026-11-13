@@ -7,7 +7,7 @@ vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
 // A file of its own, so the stand-in charts registered here don't leak into other tests.
-const { runTool, toolDefinitions } = await import('./tools');
+const { offeredCharts, runTool, toolDefinitions } = await import('./tools');
 const { askAgent, describeAppState, describeCharts } = await import('./bridge');
 const { driversOf, resolveDriver } = await import('./matching');
 const { defineComponent, host, read } = await import('../host');
@@ -255,6 +255,26 @@ describe('suggesting charts', () => {
     } finally {
       useBuild.setState({ active: false, changes: [], enteredAtSec: null });
       send.mockRestore();
+    }
+  });
+
+  it('never offers a chart that declares no sessions', async () => {
+    const never = defineComponent({
+      name: 'test_never',
+      title: 'Test never',
+      description: 'Not ready for any session.',
+      sessions: [],
+      args: Type.Object({}),
+      spec: () => ({ key: 'test_never', label: 'Never' }),
+      View: () => null,
+    });
+    host.components.register({ components: [never] });
+    try {
+      expect(read().components.find((c) => c.name === 'test_never')?.sessions).toEqual([]);
+      expect(describeCharts(offeredCharts())).not.toContain('test_never');
+      await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_never' }] })).rejects.toThrow('test_never is for no session: leave it out.');
+    } finally {
+      host.components.unregister({ names: ['test_never'] });
     }
   });
 

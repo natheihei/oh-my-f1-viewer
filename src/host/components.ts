@@ -20,7 +20,7 @@ interface Declared {
   title: string;
   /** What the agent reads when deciding what to suggest. */
   description: string;
-  /** Session types it applies to, as `SessionInfo.type` names them. Omitted, or empty, means any. */
+  /** Session types it applies to, as `SessionInfo.type` names them. Omitted means any, and empty means none: it is never offered. */
   sessions?: SessionType[];
   /** The session data it reads. Omitted means none. */
   needs?: Dataset[];
@@ -56,7 +56,7 @@ export interface ComponentInfo {
   description: string;
   /** The props' schema, as plain JSON. */
   args: Record<string, unknown>;
-  /** Null means any session type. */
+  /** Null means any session type, and empty means none. */
   sessions: SessionType[] | null;
   needs: Dataset[];
   replayOnly: boolean;
@@ -102,7 +102,7 @@ function infoOf(c: ComponentDefinition): ComponentInfo {
     title: c.title,
     description: c.description,
     args: JSON.parse(JSON.stringify(c.args)),
-    sessions: c.sessions?.length ? c.sessions : null,
+    sessions: c.sessions ?? null,
     needs: c.needs ?? [],
     replayOnly: c.replayOnly === true,
     size: sizeOf(c),
@@ -123,7 +123,9 @@ const sessionTypeName = (type: SessionType) => type.replace('-', ' ');
 const limits: ((c: ComponentInfo, on: Occasion) => string | null)[] = [
   (c, on) =>
     c.sessions && !c.sessions.includes(on.type)
-      ? `is for ${c.sessions.map(sessionTypeName).join(', ')} sessions, and this is ${sessionTypeName(on.type)}`
+      ? c.sessions.length
+        ? `is for ${c.sessions.map(sessionTypeName).join(', ')} sessions, and this is ${sessionTypeName(on.type)}`
+        : 'is for no session'
       : null,
   (c, on) => (c.replayOnly && on.status === 'live' ? 'works in replays only, and this session is live' : null),
 ];
