@@ -5,7 +5,7 @@ vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { gapModel } = await import('./GapEvolution');
-const { tyreModel } = await import('./TyreStrategy');
+const { tyreModel, tyreExtent } = await import('./TyreStrategy');
 const { towerModel, towerExtent } = await import('./TimingTower');
 const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
 const { paceModel } = await import('./FieldPace');
@@ -164,17 +164,52 @@ describe('tyre_strategy', () => {
     expect(m.rows).toEqual([
       {
         driver: 1,
+        position: 1,
+        out: false,
         stints: [
           { from: 0, to: 16, compound: 'MEDIUM', age: 16, open: false },
           { from: 16, to: 31, compound: 'HARD', age: 15, open: true },
         ],
       },
-      { driver: 44, stints: [{ from: 0, to: 31, compound: 'HARD', age: 34, open: true }] },
+      { driver: 44, position: 2, out: false, stints: [{ from: 0, to: 31, compound: 'HARD', age: 34, open: true }] },
     ]);
   });
 
   it('copes with a stint that has no end yet', () => {
     expect(tyreModel([stint(1, 1, 1, null, 'SOFT')]).rows[0].stints[0]).toMatchObject({ from: 0, to: 1, open: true });
+  });
+
+  it('marks a car that is out', () => {
+    expect(tyreModel([{ ...stint(18, 1, 1, 9, 'SOFT', 0, 21), is_out: 1 }]).rows[0].out).toBe(true);
+  });
+
+  describe('extent', () => {
+    const tyres = components.find((c) => c.name === 'tyre_strategy')!;
+    const grid = (laps: number, total: number | null = 71) => ({
+      ...tyreModel(Array.from({ length: 22 }, (_, i) => stint(i + 1, 1, 1, laps, 'SOFT', 0, i + 1))),
+      styles: new Map(),
+      total,
+    });
+    const box = (width: number, height: number, compact = false) => ({ width, height, compact });
+
+    it('fits the tile while it has room', () => {
+      expect(tyreExtent(grid(30), box(600, 500))).toEqual({ width: 600, height: 500 });
+      expect(tyreExtent(grid(30), box(tyres.size!.min.width, tyres.size!.min.height))).toEqual(tyres.size!.min);
+    });
+
+    it('stops shrinking rows at 16px and laps at 4px, and runs past the tile from there', () => {
+      expect(tyreExtent(grid(30), box(380, 250)).height).toBe(tyres.size!.min.height);
+      expect(tyreExtent(grid(30, 78), box(320, 400)).width).toBeGreaterThan(320);
+    });
+
+    it('is a thumbnail in the suggestion strip, fitting its box', () => {
+      expect(tyreExtent(grid(30), box(182, 137, true))).toEqual({ width: 182, height: 137 });
+    });
+
+    it('declares the size it reads at least and the most it draws', () => {
+      expect(tyres.size!.min).toEqual({ width: 364, height: 374 });
+      expect(tyres.fit).toEqual({ width: 652, height: 506 });
+    });
   });
 });
 

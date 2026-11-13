@@ -404,6 +404,28 @@ Polished 2026-11-13.
   gaining detail. Alone beside a video it was given a 400 by 846 rail and stretched into it.
 - **Not taken for now:** a projection of where the trend leads, and the gap named under the pointer.
 
+### Tyre strategy
+
+Polished 2026-11-13.
+
+- **Running order, with retired cars last.** Rows follow the order at the playhead, as the timing tower and pit windows do. A car
+  that is out is dimmed with OUT after its last stint, and has no laps still to come.
+- **The row head is the tower's:** position, team bar and code, so the two read as one.
+- **The laps still to come are drawn.** A quiet track runs from each running car's last lap to the race distance, the lap
+  axis ends at that distance in bold, and the now line is named, "L39". Ticks past now are quieter.
+- **Inside a bar is always a stint's length.** The set a running car is on has its age outside, in the tyre's colour, just past
+  the now line, or past the bar's end where that is further right, so the line never runs through it. Before, the open stint
+  carried its age inside and the closed ones their length, and both read the same.
+- **A 3px cut at each stop,** so a stop onto the same compound shows. Nearly every stop in São Paulo 2026 was soft to soft, and
+  the 1.5px hairline before hid them.
+- **The lap axis is on top,** so the scale stays in view when the rows run past the bottom.
+- **Type doesn't go below 11px:** codes, positions and stint lengths. A length that doesn't fit its bar is left out.
+- **Size.** Least 364 by 374: a full grid of 22 at 16px rows, and a 72-lap race at 4px a lap. Fit 652 by 506: 22px rows and 8px a
+  lap, past which the scale stops growing and the room is left empty. The shape asked for is the fit's, 1.29. Below the least
+  the rows stop at 16px and the laps at 4px, and it runs past the tile for the host to mark; it used to shrink to 7px rows with
+  no codes. Only the thumbnail, under 300 wide or 150 high, fits its box with bars alone. All are computed from the draw
+  constants, and `scripts/tyre-check.mjs` shows it at both and below in the real app.
+
 ## Where it lives
 
 | Piece | File |
@@ -426,4 +448,5 @@ Polished 2026-11-13.
 | Pit windows in the real app, fitted and squeezed | `scripts/pit-windows-check.mjs` |
 | The speed ribbon in the real app, fitted and squeezed | `scripts/ribbon-check.mjs` |
 | The sector table in the real app, at chosen laps and squeezed | `scripts/sector-check.mjs` |
+| Tyre strategy in the real app, at chosen laps, fitted, at its least size and squeezed | `scripts/tyre-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
