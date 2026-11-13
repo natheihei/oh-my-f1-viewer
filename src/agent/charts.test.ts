@@ -162,6 +162,7 @@ describe('suggesting charts', () => {
 
   it('lists a replay-only chart as such, and refuses it in a live session', async () => {
     expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, exactly 1 driver, race/sprint, replays only: ');
+    expect(describeCharts(read().components)).toContain('speed_ribbon, Speed ribbon, 0 to 1 driver, race/sprint, replays only: ');
     useSession.setState({ session: { ...race, status: 'live' }, channels });
     await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).rejects.toThrow(
       'car_telemetry works in replays only, and this session is live: leave it out. Nothing was suggested.',
