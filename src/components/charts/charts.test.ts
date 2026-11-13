@@ -11,6 +11,7 @@ const { traceModel } = await import('./RaceTrace');
 const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
 const { paceModel } = await import('./FieldPace');
 const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = await import('./PitWindow');
+const { pitWindowsModel, lossNow } = await import('./PitWindows');
 const { sectorModel, spanOf } = await import('./SectorDelta');
 const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, wrap } = await import('./RaceControl');
@@ -514,6 +515,63 @@ describe('pit_window', () => {
   });
 });
 
+describe('pit_windows', () => {
+  // The same field as pit_window's: a 90 s lap, the leader on lap 7.
+  const T0 = 1_000_000;
+  const LAP = 90_000;
+  const running = (driver: number, position: number, gap: unknown, more: Record<string, unknown> = {}) =>
+    ls(driver, 7, { position, gap_to_leader: gap, date_start: T0 + 6 * LAP + (typeof gap === 'number' ? gap * 1000 : 0), lap_duration: null, ...more });
+  const field = (more16: Record<string, unknown> = {}) => [
+    ...[1, 2, 3, 4, 5, 6].map((n) => ls(1, n, { date_start: T0 + (n - 1) * LAP, date_end: T0 + n * LAP, lap_duration: 90, position: 1 })),
+    running(1, 1, null),
+    running(44, 2, 5),
+    running(16, 3, 18, more16),
+    running(4, 4, 22.5),
+    running(81, 5, 30),
+    running(77, 6, 85),
+    ls(63, 5, { date_start: T0 + 4 * LAP + 96_500, date_end: T0 + 5 * LAP + 96_500, position: 7 }),
+    ls(63, 6, { date_start: T0 + 5 * LAP + 96_500, lap_duration: null, position: 7, gap_to_leader: '+1 LAP', interval: 12 }),
+    ls(99, 3, { date_start: T0 + 2 * LAP, lap_duration: null, position: 8, gap_to_leader: 40, is_out: 1 }),
+  ];
+
+  it("plays out every running car's stop, in running order, with retired cars left off", () => {
+    const rows = pitWindowsModel(field(), 20);
+    expect(rows.map((r) => r.driver)).toEqual([1, 44, 16, 4, 81, 77, 63]);
+    const ham = rows.find((r) => r.driver === 44)!;
+    expect(ham).toMatchObject({ from: 2, pit: false, rejoin: 4, lost: 2, ahead: { driver: 4 }, clearAir: true });
+    // 2.5 s short of rejoining ahead of 4, 5 s before 81 gets by too.
+    expect(ham.short).toBeCloseTo(2.5);
+    expect(ham.spare).toBeCloseTo(5);
+    expect(ham.ahead!.by).toBeCloseTo(2.5);
+  });
+
+  it('has nothing spare for the last car, and loses it no place', () => {
+    const last = pitWindowsModel(field(), 20).at(-1)!;
+    expect(last).toMatchObject({ driver: 63, from: 7, rejoin: 7, lost: 0, spare: null });
+    expect(last.short).toBeCloseTo(32);
+  });
+
+  it('reads a car on its in-lap or out-lap as in the pits, with no stop to play out', () => {
+    const out = pitWindowsModel(field({ is_pit_out_lap: 1 }), 20).find((r) => r.driver === 16)!;
+    expect(out).toMatchObject({ pit: true, rejoin: null, lost: null, short: null, ahead: null });
+    expect(pitWindowsModel(field({ is_pit_in_lap: 1 }), 20).find((r) => r.driver === 16)!.pit).toBe(true);
+    // A finished out-lap is behind them.
+    expect(pitWindowsModel(field({ is_pit_out_lap: 1, date_end: T0 + 7 * LAP }), 20).find((r) => r.driver === 16)!.pit).toBe(false);
+  });
+
+  it('plays nothing out without a pit loss', () => {
+    expect(pitWindowsModel(field(), null).every((r) => r.rejoin === null && !r.pit)).toBe(true);
+  });
+
+  it("uses the safety car's or the VSC's pit loss while one is out", () => {
+    const loss = { normal: 21.84, safetyCar: 14.16, virtualSafetyCar: 15.05 };
+    expect(lossNow(loss, null)).toBe(21.84);
+    expect(lossNow(loss, 'SC')).toBe(14.16);
+    expect(lossNow(loss, 'VSC')).toBe(15.05);
+    expect(lossNow({ ...loss, safetyCar: null }, 'SC')).toBeNull();
+  });
+});
+
 const sec = (driver: number, lap: number, s: [number | null, number | null, number | null], more: Record<string, unknown> = {}) => ({
   driver_number: driver,
   lap_number: lap,
@@ -911,6 +969,7 @@ describe('the registry', () => {
     expect(byName.lap_time_compare.spec({})).toEqual({ key: 'lap_time_compare:top', label: 'Lap times' });
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
+    expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
     expect(byName.pit_stops.sessions).toEqual(['race', 'sprint']);
     expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
@@ -926,7 +985,7 @@ describe('the registry', () => {
     expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals 44' });
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(16);
+    expect(components).toHaveLength(17);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -979,6 +1038,8 @@ describe('sizes', () => {
       ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'race_control', 'pit_stops', 'weather'],
       ['video', 'pit_window', 'field_pace', 'sector_delta'],
+      ['video', 'timing_tower', 'pit_windows'],
+      ['video', 'pit_windows', 'pit_stops', 'race_control'],
       ['timing_tower', 'gap_evolution', 'lap_time_compare'],
     ];
     for (const names of arrangements) expect(short(arrange(names)), names.join(', ')).toEqual([]);

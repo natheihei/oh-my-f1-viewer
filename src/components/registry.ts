@@ -4,6 +4,7 @@ import GapEvolution from './charts/GapEvolution';
 import LapTimeCompare from './charts/LapTimeCompare';
 import PitStops from './charts/PitStops';
 import PitWindow from './charts/PitWindow';
+import PitWindows from './charts/PitWindows';
 import RaceControl from './charts/RaceControl';
 import RaceTrace from './charts/RaceTrace';
 import SectorDelta from './charts/SectorDelta';
@@ -26,6 +27,7 @@ export const components: ComponentDefinition[] = [
   TyreStrategy,
   FieldPace,
   PitWindow,
+  PitWindows,
   SectorDelta,
   PitStops,
   RaceControl,

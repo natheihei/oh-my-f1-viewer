@@ -211,6 +211,31 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 - **Queries.** The completed laps' pedals and positions are read once per lap, keyed on their starts; only the lap in progress
   follows the playhead.
 
+### Pit windows
+
+Added 2026-11-13, from direction B of the pit window proposals.
+
+- **Its own component, not a form of `pit_window`.** `pit_window` plays out one driver's stop and needs that driver;
+  `pit_windows` takes no props and answers who in the field could stop now, and for how much. One name drawing two charts
+  would leave the agent unable to tell them apart. Each description points at the other, and at `pit_stops` for stops
+  already made.
+- **The same stop as the ring.** Each row is `pitWindowModel` run for that car, so the two charts never disagree about a
+  rejoin, a gap or clear air.
+- **Running order.** Sorting by the cheapest stop was tried and left out: rows that move every lap are hard to follow.
+- **Sized like the timing tower.** The same type, rows, spacing and least-size rule, and every column always. Least 312 by
+  376, fit 403 by 508. Below its least size the table runs past the tile for the host's "more" mark.
+- **Who you're watching is lifted,** as in the tower: a car whose onboard is in a tile. With no props there is no chosen
+  driver.
+- **The pit loss follows the track status.** Under a safety car or a VSC every row uses MultiViewer's loss for it, and the
+  REJOIN head says what a stop adds, "+21.8" or, in ink, "+14.2 SC". A loss MultiViewer doesn't give is missing, not
+  the green-flag one.
+- **The margin either side.** SHORT is the seconds short of rejoining ahead of the next car up, SPARE the seconds before
+  the next car behind gets by as well. Under a second is in ink and bold: a good or bad stop decides it.
+- **A car in the pits reads PIT,** on its in-lap or while its out-lap runs, with the rest of its row blank: it has no stop
+  left to play out.
+- **Lapped cars are left as the ring has them.** A car ahead on the road within 2 s is traffic whatever lap it is on.
+  Marking a lap up or down, with blue flags as not traffic, was proposed and not picked.
+
 ## Where it lives
 
 | Piece | File |
@@ -228,4 +253,5 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
+| Pit windows in the real app, fitted and squeezed | `scripts/pit-windows-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
