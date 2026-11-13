@@ -59,16 +59,27 @@
   * {
     border-radius: 0 !important;
   }
-  /* Every scrollable area gets a thin square bar with no arrow buttons, not Chromium's default. */
+  /*
+   * Every scrollable area gets a thin square bar with no arrow buttons, not Chromium's default. A hairline
+   * track runs its whole length, so an area that scrolls says so at rest, and the thumb shows how much is
+   * in view. A component that scrolls has handled its overflow, so this is the only "more" it gets.
+   */
   ::-webkit-scrollbar {
     width: 7px;
     height: 7px;
     background: transparent;
   }
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-faint);
+  ::-webkit-scrollbar-track {
+    background: var(--color-line);
     border: 2px solid transparent;
     background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-rule);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    min-height: 16px;
+    min-width: 16px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-dim);
