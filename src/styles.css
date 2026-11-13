@@ -692,12 +692,34 @@
 }
 
 .palette-input {
-  @apply min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-ink outline-none;
+  @apply min-w-0 flex-1 overflow-y-auto bg-transparent text-ink outline-none;
   line-height: inherit;
+  /* A long prompt wraps and grows the box up to six lines, then scrolls. */
+  max-height: 6lh;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
 }
 
-.palette-input::placeholder {
+.palette-input:empty::before {
   color: var(--color-mute);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+/* A mention in the prompt: one piece the caret steps over. */
+.prompt-tag {
+  user-select: all;
+}
+
+/* The mention picker: eight rows, then it scrolls. Each row is the tag, then who it is. */
+.palette-mentions {
+  max-height: calc(var(--row) * 8 + 8px);
+  overflow-y: auto;
+}
+
+.palette-mention {
+  grid-template-columns: 6ch minmax(0, 1fr);
 }
 
 /* The transport: one row. Play, what's open, the scrub track, the time, the volume. */

@@ -73,7 +73,7 @@ check('focus moves to the neighbour', (await focused()) === '1:1', String(await 
 check('the outline goes away', (await page.locator('.stage-host-highlight').count()) === 0);
 
 await page.keyboard.press('h');
-check('typing goes to the input', (await focused()) === 'palette-input' && (await page.locator('[data-testid=palette-input]').inputValue()) === 'h');
+check('typing goes to the input', (await focused()) === 'palette-input' && (await page.locator('[data-testid=palette-input]').textContent()) === 'h');
 await page.keyboard.press('Backspace');
 await page.keyboard.press('ArrowUp');
 check('up from the empty input goes back to the strip', (await focused()) === '1:1', String(await focused()));
