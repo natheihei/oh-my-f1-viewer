@@ -114,7 +114,8 @@ tree changes.
 - Auto-layout is broadcast-first: the main tile is top left, and the rest go in a rail beside it or a band below it. The main
   tile is assigned with `host.layout.setMain`, which opening a session does for the main feed. With none assigned, tiles share the grid. Which goes where follows each component's declared shape and least size, and `src/layout/solve.ts` picks the arrangement that
   keeps tiles at their least size with the main tile as large as that allows. See [COMPONENTS.md](COMPONENTS.md).
-- Each tile has a title bar drawn by the grid, with its label, state slots and a close button. The slots say which tile carries the sound,
+- Each tile has a title bar drawn by the grid, with its label, state slots and a close button. A label that names drivers draws
+  each as a driver code, from the roster, and is drawn again when the roster changes. The slots say which tile carries the sound,
   when a stream is loading or catching up, and when a tile may look ahead, so nothing floats over the content. Only the title bar drags
   and only the edges resize: everything else on the grid lets the mouse through to the component underneath.
 - A tile draws a hairline on its right and bottom edges only, so neighbours share one seam. Tiles are black on a slightly lifted

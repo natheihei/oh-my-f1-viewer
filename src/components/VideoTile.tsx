@@ -51,7 +51,8 @@ export default defineComponent({
   spec: ({ feed }) => {
     const channel = read().feeds.find((c) => c.id === feed);
     if (!channel) throw new Error(`Unknown feed: ${feed}`);
-    return { key: feed, label: channel.label };
+    // An onboard names its car, so the title draws its code like any tile about a driver.
+    return channel.kind === 'onboard' && channel.number != null ? { key: feed, label: '', drivers: [channel.number] } : { key: feed, label: channel.label };
   },
   View: VideoTile,
 });

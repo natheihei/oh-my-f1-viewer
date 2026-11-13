@@ -1,5 +1,5 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
-import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Value from 'typebox/value';
 import { GridSurface, type TileState } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
@@ -7,6 +7,7 @@ import { allTiles, GRID_COLUMNS, GRID_ROWS } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
+import { fillTitle, useDriverStyles } from './drivers';
 import { componentOf, useComponents } from './components';
 import { layoutOps } from './layoutOps';
 import { useLive } from './live';
@@ -193,10 +194,13 @@ export function Grid() {
     }
     return out;
   }, [approved, components, nodes, audio, muted, streams, marks]);
+  // Titles draw their drivers' codes from the roster, so they're drawn again when it changes.
+  const styles = useDriverStyles();
+  const drawTitle = useCallback((el: HTMLElement, component: ComponentSpec) => fillTitle(el, component, styles), [styles]);
   return (
     <>
       <Stage registry={registry} highlight={highlight} marks={marks} />
-      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} states={states} />
+      <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} states={states} drawTitle={drawTitle} />
       <DropPreview />
     </>
   );

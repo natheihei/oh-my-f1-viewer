@@ -1,15 +1,18 @@
 /** Every running car as a dot on the circuit, where it is now, from `location` and MultiViewer's outline. Retired cars are left off. */
 import { useMemo, useRef, useState } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type CircuitView } from '../../host';
+import { defineComponent, useLive, useSql, type CircuitView, type CodeLook, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
-  codeOf,
+  codeWidth,
   colors,
+  drawCode,
+  drawParts,
   fitOutline,
   num,
+  partsWidth,
   projector,
   styleOf,
   text,
@@ -191,6 +194,8 @@ interface Drawn {
 const BACKGROUND = '#000';
 /** Type for car codes and the name under the pointer, at the 11px floor. */
 const TYPE = 11;
+/** A chosen car's label: its dot is the team mark, so the code is plain, in ink and bold. */
+const LABEL: CodeLook = { variant: 'plain', strong: true };
 /** Turn numbers, as the speed ribbon draws them: hints, smaller, and the first to give way. */
 const TURN_TYPE = 9;
 /** How far past the track's edge a turn number is tried, in pixels, in turn, as on the speed ribbon. */
@@ -301,8 +306,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
       labelled.map((car) => {
         const [x, y] = at.get(car.driver)!;
         const [nx, ny] = normalAt(x, y);
-        const code = styleOf(m.styles, car.driver).code;
-        return { x, y, nx, ny, w: textWidth(ctx, code, TYPE, lit.has(car.driver) ? 700 : 400) + 2, h: TYPE + 1 };
+        return { x, y, nx, ny, w: codeWidth(ctx, styleOf(m.styles, car.driver), { ...LABEL, size: TYPE }) + 2, h: TYPE + 1 };
       }),
       [...dots, { x: sx, y: sy, w: bar * 2, h: bar * 2 }],
       line,
@@ -338,7 +342,6 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
       const [x, y] = at.get(car.driver)!;
       const box = labels[i];
       const style = styleOf(m.styles, car.driver);
-      const mine = lit.has(car.driver);
       // A label set further out than the first step gets a short line back to its dot.
       const reach = Math.hypot(box.x - x, box.y - y) - Math.max(box.w, box.h) / 2;
       if (reach > 10) {
@@ -350,8 +353,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
         ctx.stroke();
       }
       // A car in the pit lane is labelled in grey, as its ring is hollow: it isn't racing on this stretch.
-      const colour = m.lane.has(car.driver) ? c.mute : mine ? c.ink : style.colour;
-      text(ctx, style.code, box.x, box.y, { align: 'center', color: colour, size: TYPE, weight: mine ? 700 : 400 });
+      drawCode(ctx, style, box.x, box.y, { ...LABEL, size: TYPE, align: 'center', tone: m.lane.has(car.driver) ? 'mute' : 'ink' });
     });
   }
 
@@ -388,27 +390,25 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const car = m.cars.find((c) => c.driver === driver);
   if (!car) return;
   const [x, y] = at.get(car.driver)!;
-  const style = styleOf(m.styles, car.driver);
   ctx.strokeStyle = c.ink;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(x, y, radius(car.driver) + 3, 0, Math.PI * 2);
   ctx.stroke();
   const position = m.positions.get(car.driver);
-  const name = `${style.code} P${position ?? '–'}${m.lane.has(car.driver) ? ' · pit lane' : ''}`;
+  const name: Part[] = [{ driver: car.driver }, ` P${position ?? '–'}${m.lane.has(car.driver) ? ' · pit lane' : ''}`];
   // A car from the props is pinned for good; any other says what a click does, unless six are pinned already.
   const hint = m.fixed.includes(car.driver) ? ' · pinned' : lit.has(car.driver) ? ' · click to unpin' : lit.size < MAX_PINNED ? ' · click to pin' : '';
-  const w = textWidth(ctx, name, TYPE) + textWidth(ctx, hint, TYPE) + 12;
+  const nameWidth = partsWidth(ctx, name, m.styles, { size: TYPE });
+  const w = nameWidth + textWidth(ctx, hint, TYPE) + 12;
   const bx = Math.min(Math.max(4, x - w / 2), width - w - 4);
   const by = y < 34 ? y + 12 : y - 32;
   ctx.fillStyle = c.select;
   ctx.fillRect(bx, by, w, 20);
   ctx.strokeStyle = c.line;
   ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 19);
-  ctx.fillStyle = style.colour;
-  ctx.fillRect(bx, by, 2, 20);
-  text(ctx, name, bx + 7, by + 10.5, { color: c.ink, size: TYPE });
-  text(ctx, hint, bx + 7 + textWidth(ctx, name, TYPE), by + 10.5, { color: c.mute, size: TYPE });
+  drawParts(ctx, name, m.styles, bx + 6, by + 10.5, { color: c.ink, size: TYPE });
+  text(ctx, hint, bx + 6 + nameWidth, by + 10.5, { color: c.mute, size: TYPE });
 }
 
 /** The car whose dot is nearest `point`, within `HIT` pixels, or null. */
@@ -516,7 +516,8 @@ export default defineComponent({
   fit: FIT,
   spec: ({ drivers }) => ({
     key: `track_map:${drivers?.join('-') ?? 'all'}`,
-    label: drivers?.length ? `Track ${drivers.map(codeOf).join(' · ')}` : 'Track',
+    label: 'Track',
+    drivers,
   }),
   View: TrackMap,
 });
