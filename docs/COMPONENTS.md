@@ -76,7 +76,8 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **A component never draws its own "more" note or count of what's hidden.** A second form of the same message is what the host's
   mark exists to prevent. (2026-11-12)
 - **A list of elements scrolls:** `overflowY: 'auto'`, `flex: 1`, `minHeight: 0`. It has handled its overflow, so the host doesn't
-  mark it, and its scrollbar shows there's more.
+  mark it. Its scrollbar shows there's more: a hairline track the whole length of the area, always drawn, and a brighter thumb for
+  what's in view. (2026-11-13. The thumb alone was 3px of faint grey, which nobody saw.)
 - **A component doesn't hide its own overflow** with `overflow: hidden` on content the viewer would want to reach. The host can't
   see past it, so the cut goes unmarked.
 - **A canvas of rows shrinks to a floor, then stops.** Rows get smaller with the tile down to the smallest size that still reads, 16px
