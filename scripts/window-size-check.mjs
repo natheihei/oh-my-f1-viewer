@@ -68,7 +68,7 @@ await page.evaluate(
       ],
     });
     host.suggestions.offer({
-      items: [{ type: 'video', props: { feed: onboards[2].id } }, { type: 'race_control', props: {} }, { type: 'weather', props: {} }],
+      items: [{ type: 'video', props: { feed: onboards[2].id } }, { type: 'race_control', props: {} }, { type: 'race_status', props: {} }],
     });
   },
   { onboards },
