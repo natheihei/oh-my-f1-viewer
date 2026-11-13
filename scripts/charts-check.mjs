@@ -63,8 +63,8 @@ const allGroups = {
     { type: 'gap_evolution', props: { drivers: pair } },
     { type: 'tyre_strategy', props: {} },
   ],
-  pace: [
-    { type: 'field_pace', props: {} },
+  deg: [
+    { type: 'tyre_deg', props: {} },
   ],
   small: [
     { type: 'sector_table', props: { drivers: pair } },
@@ -222,9 +222,9 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, pace, pit, sectors, control] = await Promise.all(
+    const [tower, gap, tyres, deg, pit, sectors, control] = await Promise.all(
       [
-        'TimingTower', 'GapEvolution', 'TyreStrategy', 'FieldPace', 'PitWindow',
+        'TimingTower', 'GapEvolution', 'TyreStrategy', 'TyreDeg', 'PitWindow',
         'SectorTable', 'RaceControl',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
@@ -243,7 +243,7 @@ const timings = await page.evaluate(
       timing_tower: await time(tower.SQL, []),
       gap_evolution: await time(gap.SQL, pair),
       tyre_strategy: await time(tyres.sqlFor(0), []),
-      field_pace: await time(pace.SQL, []),
+      tyre_deg: await time(deg.SQL, []),
       pit_window: await time(pit.SQL, []),
       sector_table: await time(sectors.SQL, pair),
       race_control: await time(control.SQL, []),
