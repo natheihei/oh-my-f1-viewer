@@ -8,6 +8,7 @@ import PitWindows from './charts/PitWindows';
 import RaceControl from './charts/RaceControl';
 import RaceTrace from './charts/RaceTrace';
 import SectorDelta from './charts/SectorDelta';
+import SpeedRibbon from './charts/SpeedRibbon';
 import SpeedTrace from './charts/SpeedTrace';
 import FieldPace from './charts/FieldPace';
 import CarTelemetry from './charts/CarTelemetry';
@@ -36,4 +37,5 @@ export const components: ComponentDefinition[] = [
   SpeedTrace,
   CarTelemetry,
   PedalBarcode,
+  SpeedRibbon,
 ];
