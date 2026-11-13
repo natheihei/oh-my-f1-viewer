@@ -14,8 +14,8 @@
  * playback landed.
  */
 import Type, { type Static, type TObject } from 'typebox';
-import type { AgentMode, AgentToolDefinition, Channel, SessionType } from '../../shared/api';
-import { FIRST_SEASON, host, MAX_SUGGESTED_STREAMS, read, tilesOf, type ComponentInfo, type Op } from '../host';
+import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
+import { FIRST_SEASON, fitting, host, MAX_SUGGESTED_STREAMS, misfit, read, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 
@@ -167,7 +167,8 @@ function isoDate(ms: number | null): string | null {
 const VIDEO = 'video';
 const chartsOf = (): ComponentInfo[] => read().components.filter((c) => c.name !== VIDEO);
 
-const sessionTypeName = (type: SessionType) => type.replace('-', ' ');
+/** The charts the viewing agent is offered: those that fit the open session. */
+export const offeredCharts = (): ComponentInfo[] => fitting(chartsOf(), read().session);
 
 /** How many drivers a chart takes, from its `drivers` property, and that count in words. */
 export function driverCount(chart: ComponentInfo): { fits(n: number): boolean; text: string } {
@@ -203,10 +204,10 @@ const SuggestArgs = Type.Object(
   { additionalProperties: false },
 );
 
-/** `suggest_tiles` as the model sees it: the chart names registered by now, or no charts at all. */
+/** `suggest_tiles` as the model sees it: the names of the charts it is offered, or no charts at all. */
 function suggestArgs(): typeof SuggestArgs {
   const schema = JSON.parse(JSON.stringify(SuggestArgs));
-  const names = chartsOf().map((c) => c.name);
+  const names = offeredCharts().map((c) => c.name);
   if (names.length) schema.properties.charts.items.properties.chart.enum = names;
   else delete schema.properties.charts;
   return schema;
@@ -216,7 +217,7 @@ type Item = { type: string; props: Record<string, unknown> };
 
 /**
  * Turns the charts the model named into items, with drivers as car numbers. A problem never depends on
- * how the session is going: only on the session type, missing data, an unknown name or the driver count.
+ * how the session is going: only on the session's type and whether it is live, missing data, an unknown name or the driver count.
  */
 function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problems: string[] } {
   const { session, sessionData, feeds } = read();
@@ -229,12 +230,9 @@ function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problem
       problems.push(`There is no chart "${chart}": pick a name from the chart list.`);
       continue;
     }
-    if (session && info.sessions && !info.sessions.includes(session.type)) {
-      problems.push(`${info.name} is for ${info.sessions.map(sessionTypeName).join(', ')} sessions, and this is ${sessionTypeName(session.type)}: leave it out.`);
-      continue;
-    }
-    if (session?.status === 'live' && info.replayOnly) {
-      problems.push(`${info.name} works in replays only, and this session is live: leave it out.`);
+    const why = misfit(info, session);
+    if (why) {
+      problems.push(`${info.name} ${why}: leave it out.`);
       continue;
     }
     if (info.needs.length && sessionData.state === 'unsupported') {
