@@ -19,6 +19,9 @@ const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel } = await import('./CarTelemetry');
 const { components } = await import('../registry');
+const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
+type ComponentSpec = import('../../layout/model').ComponentSpec;
+type LayoutState = import('../../layout/model').LayoutState;
 
 const lap = (n: number, date: number): Record<string, unknown> => ({ kind: 'lap', n, date, gap: null });
 const gap = (driver: number, date: number, value: unknown) => ({ kind: 'gap', n: driver, date, gap: value });
@@ -754,5 +757,64 @@ describe('the registry', () => {
     expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(15);
+  });
+});
+
+describe('sizes', () => {
+  const charts = components.filter((c) => c.name !== 'video');
+
+  it('gives every chart a least size it draws in full at, and that a window can give it', () => {
+    for (const c of charts) {
+      const min = c.size?.min;
+      expect(min, c.name).toBeDefined();
+      // Below these a chart is compact: marks only, as in the suggestion strip.
+      expect(min!.width, c.name).toBeGreaterThanOrEqual(300);
+      expect(min!.height, c.name).toBeGreaterThanOrEqual(150);
+      expect(min!.width, c.name).toBeLessThanOrEqual(480);
+      expect(min!.height, c.name).toBeLessThanOrEqual(400);
+      if (c.fit?.width) expect(c.fit.width, c.name).toBeGreaterThanOrEqual(min!.width);
+      if (c.fit?.height) expect(c.fit.height, c.name).toBeGreaterThanOrEqual(min!.height);
+    }
+  });
+
+  /** A 1600 by 900 window: the grid is about 1600 by 816 under the timeline. */
+  const cell = { w: 1600 / 24, h: 34 };
+  const specOf = (name: string, n: number): ComponentSpec => {
+    const c = components.find((d) => d.name === name)!;
+    return { type: name, key: `${name}:${n}`, label: name, props: {}, ...(c.size ? { size: c.size } : {}), ...(c.fit ? { fit: c.fit } : {}) };
+  };
+  const arrange = (names: string[]) => autoLayout(names.map(specOf).reduce(addTile, measure(EMPTY_LAYOUT, cell)));
+  const short = (state: LayoutState) =>
+    allTiles(state)
+      .filter((t) => {
+        const [w, h] = minCells(t.component.size, cell);
+        return t.component.size && (t.w < w || t.h < h);
+      })
+      .map((t) => `${t.component.type} ${t.w}x${t.h}`);
+
+  it('keeps every chart at its least size beside a video, alone', () => {
+    for (const c of charts) expect(short(arrange(['video', c.name])), c.name).toEqual([]);
+  });
+
+  it('keeps them there in the arrangements a viewer builds', () => {
+    const arrangements = [
+      ['video', 'timing_tower', 'gap_evolution'],
+      ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy'],
+      ['video', 'gap_evolution', 'tyre_strategy', 'timing_tower'],
+      ['video', 'video', 'video', 'timing_tower', 'gap_evolution'],
+      ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'lap_time_compare', 'race_trace'],
+      ['video', 'track_map', 'car_telemetry', 'speed_trace'],
+      ['video', 'race_control', 'pit_stops', 'weather'],
+      ['video', 'pit_window', 'field_pace', 'sector_delta'],
+      ['timing_tower', 'gap_evolution', 'lap_time_compare'],
+    ];
+    for (const names of arrangements) expect(short(arrange(names)), names.join(', ')).toEqual([]);
+  });
+
+  it('gives the main place to the video, and the timing tower a place beside it', () => {
+    const state = arrange(['timing_tower', 'gap_evolution', 'video']);
+    const by = Object.fromEntries(allTiles(state).map((t) => [t.component.type, t]));
+    expect(by.video).toMatchObject({ x: 0, y: 0 });
+    expect(by.timing_tower.x).toBeGreaterThanOrEqual(by.video.w);
   });
 });

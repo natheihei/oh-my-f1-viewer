@@ -365,7 +365,7 @@ export default defineComponent({
   args: Type.Object({ drivers: Drivers }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
-  size: { aspect: 1, min: [8, 8] },
+  size: { aspect: 1, min: { width: 330, height: 300 } },
   spec: ({ drivers }) => ({ key: `pit_window:${drivers[0]}`, label: `Pit window ${codeOf(drivers[0])}` }),
   View: PitWindow,
 });

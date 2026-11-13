@@ -129,7 +129,7 @@ export default defineComponent({
     'Track and air temperature, wind, humidity and rain, with how each has moved through the session. Suggest it when the user asks about rain or conditions.',
   args: Type.Object({}),
   needs: NEEDS,
-  size: { aspect: 1.6, min: [6, 5] },
+  size: { aspect: 1.6, min: { width: 300, height: 150 } },
   spec: () => ({ key: 'weather', label: 'Weather' }),
   View: Weather,
 });

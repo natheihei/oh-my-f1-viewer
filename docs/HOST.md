@@ -37,14 +37,14 @@ A selector must return a value or an existing reference. Building a new object o
 | `audio` | `string \| null` | The audible feed, or null if everything is muted |
 | `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
-| `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects, in the order they were added), `manual` (whether the mouse has moved something) |
+| `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects, in the order they were added), `manual` (whether the mouse has moved something), `main` (the key of the tile with the main place in auto-layout, or null) |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
 | `schedule` | `ScheduleView` | Every meeting and session from 2023 on, refreshed each time the app starts, plus `state` and `reason` |
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
-| `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (a hint in grid cells, or `null`). It only changes when something registers or unregisters |
+| `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
 | `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
@@ -190,6 +190,7 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
 | `ungroup` | `group: target` | Breaks up a group but keeps its tiles. Returns whether a group matched |
 | `autoLayout` | none | Re-tiles the grid in the order tiles were added, discarding any moves and resizes. `/auto-layout` runs it |
+| `setMain` | `key: string \| null` | Gives a tile the main place in auto-layout, top left and as large as the others allow, or with `null` takes it away. Returns whether the key is on screen. `layout.main` holds the key. Opening a session gives it to the main feed, and nothing else assigns it |
 | `move` | `tile: string`, `rect: { x, y, w, h }` | Moves or resizes a tile or group, in grid cells (24 × 24) |
 | `swap` | `a: string`, `b: string` | Swaps the places of two tiles or groups |
 
@@ -276,8 +277,8 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   The suggestion strip uses it for previews.
 - `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.
   `args` is a TypeBox object schema for its props, which must stay JSON-safe. `spec(props)` returns the tile's unique `key` and
-  title-bar `label`. `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is a hint in grid
-  cells: `aspect` and the least room it reads in. The layout uses it to place a new tile, and the strip to shape its preview. `View` receives the tile's `props` and `label`, and may only use the host.
+  title-bar `label`. `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is its
+  shape (`aspect`, width over height) and the least room its content reads in (`min`, in pixels). The layout arranges tiles by it, and the strip shapes its preview by it. See [COMPONENTS.md](COMPONENTS.md). `View` receives the tile's `props` and `label`, and may only use the host.
 
 ## The agent's view
 
