@@ -10,45 +10,67 @@ export interface Box {
   scrollHeight: number;
   clientHeight: number;
   scrollTop: number;
+  scrollWidth: number;
+  clientWidth: number;
+  scrollLeft: number;
   children: ArrayLike<Box>;
 }
+
+/** Which way content runs on past what a tile shows. */
+export interface Hidden {
+  below: boolean;
+  right: boolean;
+}
+
+export type Axis = 'x' | 'y';
 
 /** Slack for subpixel layout, which can leave a box a pixel short of its content. */
 const SLACK = 1;
 
+const NONE: Hidden = { below: false, right: false };
+
 /**
- * True if `root`, or anything in it that clips what it holds, has content below what it shows. Only
- * below: content scrolled off the top, or cut short sideways (a deliberate "…"), isn't marked. `clips`
- * says whether an element clips its content vertically; one that doesn't lets it spill into an
- * ancestor, which is checked in its place.
+ * Which way `root`, or anything in it that clips what it holds, has content past what it shows. Only
+ * below and to the right: content scrolled off the top or the left, or cut short with a deliberate
+ * "…", isn't marked. `clips` says whether an element clips its content along an axis; one that doesn't
+ * lets it spill into an ancestor, which is checked in its place.
  */
-export function hiddenBelow(root: Box, clips: (box: Box) => boolean): boolean {
+export function hiddenPast(root: Box, clips: (box: Box, axis: Axis) => boolean): Hidden {
+  let below = false;
+  let right = false;
   const stack: Box[] = [root];
-  while (stack.length) {
+  while (stack.length && !(below && right)) {
     const box = stack.pop()!;
-    if (box.scrollHeight - box.scrollTop - box.clientHeight > SLACK && (box === root || clips(box))) return true;
+    if (!below && box.scrollHeight - box.scrollTop - box.clientHeight > SLACK && (box === root || clips(box, 'y'))) below = true;
+    if (!right && box.scrollWidth - box.scrollLeft - box.clientWidth > SLACK && (box === root || clips(box, 'x'))) right = true;
     for (let i = 0; i < box.children.length; i++) stack.push(box.children[i]);
   }
-  return false;
+  return below || right ? { below, right } : NONE;
 }
 
 const CLIPPING = new Set(['hidden', 'auto', 'scroll', 'clip']);
-const clipsInBrowser = (box: Box) => CLIPPING.has(getComputedStyle(box as unknown as Element).overflowY);
+function clipsInBrowser(box: Box, axis: Axis): boolean {
+  const style = getComputedStyle(box as unknown as Element);
+  if (axis === 'y') return CLIPPING.has(style.overflowY);
+  // A line cut short with "…" says so itself.
+  return CLIPPING.has(style.overflowX) && style.textOverflow !== 'ellipsis';
+}
 
 /**
- * Watches the element `ref` holds, which must clip its own content, and says whether anything in it is
- * hidden below. It checks again, at most once a frame, when the element changes size, when anything in
+ * Watches the element `ref` holds, which must clip its own content, and says which way anything in it
+ * is hidden. It checks again, at most once a frame, when the element changes size, when anything in
  * it changes, and when anything in it scrolls.
  */
-export function useHiddenBelow(ref: RefObject<HTMLElement | null>): boolean {
-  const [hidden, setHidden] = useState(false);
+export function useHiddenPast(ref: RefObject<HTMLElement | null>): Hidden {
+  const [hidden, setHidden] = useState<Hidden>(NONE);
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
     let frame = 0;
     const check = () => {
       frame = 0;
-      setHidden(hiddenBelow(root, clipsInBrowser));
+      const next = hiddenPast(root, clipsInBrowser);
+      setHidden((prev) => (prev.below === next.below && prev.right === next.right ? prev : next));
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(check);

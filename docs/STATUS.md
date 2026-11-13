@@ -84,6 +84,9 @@ On Linux, in the real app, over replay races (2026-11-09):
 - A tile marking content cut off below it, with `scripts/overflow-check.mjs` (2026-11-11): a list mod showed "more ▾" with a faded
   bottom edge when resized below its `size.min`, when its scroll area was squeezed to 40px, and with 40 rows at its `size.min`, even
   scrolled part-way; no mark when it fit or was scrolled to the end; and the same in the suggestion strip.
+- The same mark at the right edge, with `scripts/overflow-check.mjs` (2026-11-12): a 900px table mod showed "more ▸" with a faded
+  right edge in a 400px tile, lost it when scrolled to its right end, showed "more ▾▸" when cut both ways, and showed nothing in a
+  1067px tile; a line cut short with "…" wasn't marked.
 - The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
 
 ## Verified for agent setup

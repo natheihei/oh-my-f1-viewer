@@ -12,7 +12,7 @@ import { layoutOps } from './layoutOps';
 import { useLive } from './live';
 import { tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
-import { useHiddenBelow } from './overflow';
+import { useHiddenPast } from './overflow';
 import { setGridFrame, useSuggestions } from './suggestions';
 
 interface BoundaryProps {
@@ -59,20 +59,26 @@ function LookAheadWarning({ scope }: { scope: string }) {
 }
 
 /**
- * Holds a drawn component and says, with a faded bottom edge and a quiet "more" mark, when it has
- * content below what the tile shows, whatever the component does with its overflow.
+ * Holds a drawn component and says, with a faded edge and a quiet "more" mark, when it has content
+ * below or to the right of what the tile shows, whatever the component does with its overflow. One mark
+ * in the bottom right corner names both ways: "more ▾", "more ▸" or "more ▾▸".
  */
 function ViewFrame({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const hidden = useHiddenBelow(ref);
+  const { below, right } = useHiddenPast(ref);
   return (
     <>
       <div ref={ref} className="view-frame">
         {children}
       </div>
-      {hidden ? (
-        <div className="overflow-mark" data-testid="overflow-mark" aria-hidden>
-          <span className="overflow-mark-label">more ▾</span>
+      {below || right ? (
+        <div className="overflow-mark" data-testid="overflow-mark" data-below={below || undefined} data-right={right || undefined} aria-hidden>
+          {below ? <div className="overflow-fade-below" /> : null}
+          {right ? <div className="overflow-fade-right" /> : null}
+          <span className="overflow-mark-label">
+            more {below ? '▾' : ''}
+            {right ? '▸' : ''}
+          </span>
         </div>
       ) : null}
     </>

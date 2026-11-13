@@ -68,8 +68,8 @@ Rules for what you build:
 How it looks:
 - The app is dark and square: a black background, text #e7e7e7, secondary text #8a8a8a, lines #2c2c2c, a monospace font the view inherits. No rounded corners, shadows or gradients. In a canvas, colors() from the kit gives these.
 - Red means an error, a spoiler warning or a live session, and yellow marks build mode. Do not use either for emphasis. Show emphasis with full-strength text and weight. Tyre colours are for tyres and team colours for drivers.
-- Content that can outgrow the tile, like a list, goes in an element with overflowY 'auto', flex 1 and minHeight 0, so it scrolls instead of being cut off. Never hide overflow on content the user would want to reach.
-- The app marks any tile that has content below what it shows, with a faded bottom edge and "more". Never draw a note or a count of your own for what is hidden.`;
+- Content that can outgrow the tile, like a list, goes in an element with overflowY 'auto', flex 1 and minHeight 0, so it scrolls instead of being cut off. A table wider than the tile goes in one with overflowX 'auto'. Never hide overflow on content the user would want to reach. A cell that should be shortened rather than scrolled ends in "…" with textOverflow 'ellipsis'.
+- The app marks any tile that has content below or to the right of what it shows, with a faded edge and "more". Never draw a note or a count of your own for what is hidden.`;
 
 /** The mods folder's AGENTS.md. */
 export const MODS_AGENTS_MD = `# Writing mods for f1a
