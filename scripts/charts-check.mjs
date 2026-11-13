@@ -64,11 +64,7 @@ const allGroups = {
     { type: 'tyre_strategy', props: {} },
   ],
   pace: [
-    { type: 'lap_time_compare', props: { drivers: pair } },
     { type: 'field_pace', props: {} },
-  ],
-  tyres: [
-    { type: 'lap_time_compare', props: { drivers: [pair[0]] } },
   ],
   small: [
     { type: 'sector_table', props: { drivers: pair } },
@@ -229,9 +225,9 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, compare, pace, pit, sectors, stops, control] = await Promise.all(
+    const [tower, gap, tyres, pace, pit, sectors, stops, control] = await Promise.all(
       [
-        'TimingTower', 'GapEvolution', 'TyreStrategy', 'LapTimeCompare', 'FieldPace', 'PitWindow',
+        'TimingTower', 'GapEvolution', 'TyreStrategy', 'FieldPace', 'PitWindow',
         'SectorTable', 'PitStops', 'RaceControl',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
@@ -250,7 +246,6 @@ const timings = await page.evaluate(
       timing_tower: await time(tower.SQL, []),
       gap_evolution: await time(gap.SQL, pair),
       tyre_strategy: await time(tyres.sqlFor(0), []),
-      lap_time_compare: await time(compare.sqlFor(2), pair),
       field_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),
       sector_table: await time(sectors.SQL, pair),

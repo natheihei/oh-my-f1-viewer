@@ -3,7 +3,7 @@ import type { DriverEntry, SessionDataView } from '../../../host';
 import { compactSmall } from './ChartCanvas';
 import { driverStyles } from './colors';
 import { spreadLabels } from './labels';
-import { axisLaps, isCleanLap, lapTicks, median, neutralBands, neutralOf, paceRange, tyreAgeNow } from './laps';
+import { axisLaps, isCleanLap, median, neutralOf, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
 import { circuitMessage, dataMessage, viewMessage } from './status';
 import { fitOutline, outlineLength, projector, rotate } from './track';
@@ -175,22 +175,6 @@ describe('laps', () => {
     expect(['SCDeployed', 'VSCDeployed', 'VSCEnding', 'Red', 'Yellow', 'AllClear', null].map(neutralOf)).toEqual(['SC', 'VSC', 'VSC', 'RED', null, null, null]);
   });
 
-  it('shades a lap when at least half the cars ran it neutralised, merging runs', () => {
-    const rows = [
-      lap(11, 'AllClear'), lap(11, 'SCDeployed'), lap(11, 'AllClear'),
-      lap(12, 'SCDeployed'), lap(12, 'SCDeployed'), lap(12, 'Yellow'),
-      lap(13, 'SCDeployed'), lap(13, 'SCDeployed'), lap(13, 'SCDeployed'),
-      lap(14, 'AllClear'), lap(14, 'AllClear'), lap(14, 'AllClear'),
-      lap(20, 'VSCDeployed'), lap(20, 'VSCEnding'), lap(21, 'Red'), lap(21, 'Red'),
-    ];
-    expect(neutralBands(rows)).toEqual([
-      { first: 12, last: 13, kind: 'SC' },
-      { first: 20, last: 20, kind: 'VSC' },
-      { first: 21, last: 21, kind: 'RED' },
-    ]);
-    expect(neutralBands([])).toEqual([]);
-  });
-
   it('counts a lap as clean only when it shows pace', () => {
     expect(isCleanLap(lap(5, 'AllClear'))).toBe(true);
     expect(isCleanLap(lap(1, 'AllClear'))).toBe(false);
@@ -214,21 +198,10 @@ describe('laps', () => {
     expect(median([])).toBeNull();
   });
 
-  it('keeps racing pace, fuel effect included, and drops a spin', () => {
-    const race = [95, 94.6, 94.2, 93.8, 93.5, 93.2, 93, 92.8, 92.6, 104];
-    expect(paceRange(race)).toEqual([92.6, 95]);
-    expect(paceRange([90, 90.2, 90.1])).toEqual([90, 90.2]);
-    expect(paceRange([])).toBeNull();
-  });
-
   it('ends the lap axis on the distance', () => {
     expect(axisLaps(31, 57)).toBe(57);
     expect(axisLaps(12, null)).toBe(12);
     expect(axisLaps(0, null)).toBe(1);
-    expect(lapTicks(57, 300)).toEqual([10, 20, 30, 40, 50, 57]);
-    expect(lapTicks(52, 300)).toEqual([10, 20, 30, 40, 52]);
-    expect(lapTicks(5, 400)).toEqual([1, 2, 3, 4, 5]);
-    expect(lapTicks(70, 100)).toEqual([70]);
   });
 });
 
