@@ -157,7 +157,7 @@ for (const lap of targetLaps) {
   }, pair);
   console.log(JSON.stringify(rows, null, 1));
   await shoot(`L${lap}-1-beside-video`, [table]);
-  await shoot(`L${lap}-2-with-pit-and-pace`, [{ type: 'pit_window', props: { drivers: [pair[0]] } }, { type: 'field_pace', props: {} }, table]);
+  await shoot(`L${lap}-2-with-pit-and-pace`, [{ type: 'pit_window', props: { drivers: [pair[0]] } }, { type: 'tyre_deg', props: {} }, table]);
   // Below its least size.
   await shoot(`L${lap}-3-squeezed`, [table], [260, 200]);
 }

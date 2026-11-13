@@ -425,6 +425,32 @@ Polished 2026-11-13.
   no codes. Only the thumbnail, under 300 wide or 150 high, fits its box with bars alone. All are computed from the draw
   constants, and `scripts/tyre-check.mjs` shows it at both and below in the real app.
 
+### Tyre deg
+
+Added 2026-11-13, in place of `field_pace`, from direction C of the Pace proposals.
+
+- **Its question: how fast is each car's tyre fading.** `field_pace` ranked the field by the median of its last five clean laps,
+  which said who was quick but not why, and mixed inters with slicks around a stop. The bars and a pace column were tried here and
+  left out. `tyre_strategy` is which tyres and when they stopped; this is what the set is doing now. A saved layout with a
+  `field_pace` tile draws nothing in it.
+- **One row per running car, its current set laid out by tyre age,** from fresh at the left, so cars line up at the same age and
+  a drop-off after 20 laps sits in one column. Earlier sets aren't drawn.
+- **Each lap against the car's own median on that set:** the median is mid grey, half a second quicker the lightest, a second
+  slower the darkest, on a smooth ramp with a key under the grid. The field's quickest lap, or its quickest quarter, were tried
+  as the reference: they say who is quick, not who is fading. Taking out an assumed fuel effect was proposed and not picked.
+- **Laps that don't count are said once.** A lap under a yellow, a safety car or a red is hatched; a pit lap or the race's first
+  lap is left empty. None of them are in the median. There is no "P" box, which read as an alert in the soft tyre's red.
+- **Race order,** with position, team bar and code as the tower draws them, then the compound and laps on it, "S 22", so rows
+  hold still and read with the tower. A car whose onboard is on screen is lifted, as in the tower.
+- **Retired cars on one line under the grid,** "OUT STR L31 · BOT L1", not a row of empty cells each.
+- **No number at the right.** A deg rate in seconds a lap was proposed and not picked: on a drying track the field gets quicker
+  together, and a rate would read that as no wear. In São Paulo 2026 the long soft stints were still getting quicker after 40
+  laps.
+- **Size.** Least 343 by 394: a full field at 16px rows, and a 40-lap stint at the narrowest cell, 6px. Fit 622 by 482: 20 laps at the widest cell, 26px, and 20px rows. A cell
+  never widens past 26px, so a field on fresh tyres is a few squares at the left, not wide bars. It narrows to 6px and then runs
+  past the right edge, and rows stop at 16px and run past the bottom, for the host to mark. Only the thumbnail, under 150 high,
+  fits its box with the cells alone. `scripts/deg-check.mjs` shows it in the real app.
+
 ### Lap times
 
 Removed 2026-11-13.
@@ -475,4 +501,5 @@ Removed 2026-11-13.
 | The speed ribbon in the real app, fitted and squeezed | `scripts/ribbon-check.mjs` |
 | The sector table in the real app, at chosen laps and squeezed | `scripts/sector-check.mjs` |
 | Tyre strategy in the real app, at chosen laps, fitted, at its least size and squeezed | `scripts/tyre-check.mjs` |
+| Tyre deg in the real app, at chosen laps, beside onboards, at its least size and squeezed | `scripts/deg-check.mjs` |
 | Colour and size tokens | `src/styles.css` |

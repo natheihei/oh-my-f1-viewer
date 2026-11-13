@@ -336,7 +336,7 @@ export default defineComponent({
   name: "tyre_strategy",
   title: "Tyre strategy",
   description:
-    "Every driver's stints as bars in tyre colours: which compound, for how many laps, and when they stopped. Suggest it for anything about tyres or strategy across the field.",
+    "Every driver's stints as bars in tyre colours: which compound, for how many laps, and when they stopped. Suggest it for tyre choices or strategy across the field; tyre_deg is for how fast the tyres are wearing.",
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ["race", "sprint"],
   needs: NEEDS,
