@@ -134,7 +134,7 @@ views built from them, such as `lap_summary`, in [electron/timingdb/schema.ts](.
 ## Writes
 
 Each write takes one object argument, or none. The schema describes it, and TypeScript checks it, but nothing checks it at runtime.
-The exception is a component's props: `host.layout.add`, `host.layout.setProps` and `host.suggestions.offer` check them against the component's `args`, and
+The exception is a component's props: `host.layout.add` and `host.suggestions.offer` check them against the component's `args`, and
 throw if they don't fit. Feeds are named by their `id` from `live.feeds`. Matching a name like "Hamilton" to an id is the caller's job.
 
 A *component item* is `{ type, props }`: a component's `name` from `live.components`, and props that fit its `args`. The host turns it
@@ -186,7 +186,6 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 | `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. One whose key is already on screen is skipped |
 | `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group. Returns the labels of those that were on screen |
 | `close` | `tile: string` | Takes one tile off screen. Returns whether a tile matched |
-| `setProps` | `tile: string`, `props` | Changes one tile's props in place, checked against its component's `args`: it keeps its place, and its key and label follow. Returns whether it changed, which it doesn't when no tile matches or another tile already has the new key. A component changes its own tile through it, with the id `useTile()` gives |
 | `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
 | `ungroup` | `group: target` | Breaks up a group but keeps its tiles. Returns whether a group matched |

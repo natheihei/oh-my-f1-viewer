@@ -37,20 +37,6 @@ export const layoutOps = {
     { description: 'Take one tile off screen by its tile id. Returns whether it matched.', args: Type.Object({ tile: Type.String() }) },
     ({ tile }) => layout.close(tile),
   ),
-  setProps: write(
-    {
-      description:
-        "Change one tile's props in place, by its tile id: it keeps its place and size. Returns whether it changed, which it doesn't when no tile matches or another tile already shows the same thing.",
-      args: Type.Object({ tile: Type.String(), props: Type.Record(Type.String(), Type.Unknown()) }),
-    },
-    ({ tile, props }) => {
-      const found = allTiles(useLayout.getState()).find((t) => t.id === tile);
-      if (!found) return false;
-      const spec = specOf({ type: found.component.type, props });
-      layout.replace(tile, spec);
-      return allTiles(useLayout.getState()).some((t) => t.id === tile && t.component.key === spec.key);
-    },
-  ),
   group: write(
     {
       description: 'Show feeds side by side as one group. Returns the group id.',
