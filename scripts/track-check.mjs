@@ -169,6 +169,7 @@ const dotOf = (driver) =>
     return { x: r.left + x, y: r.top + y };
   }, driver);
 
+/** The track tile's key, which a click must leave as it is. */
 const trackKey = () => page.evaluate(async () => {
   const { read, tilesOf } = await import('/src/host/index.ts');
   return tilesOf(read().layout).find((t) => t.component.type === 'track_map')?.component.key;
@@ -199,9 +200,10 @@ await page.screenshot({ path: path.join(outDir, '5-clicked.png') });
 await page.mouse.click(dot.x, dot.y + 1);
 await page.waitForTimeout(1500);
 const dropped = await trackKey();
-console.log(`click on ${third}: ${added}, then ${dropped}`);
+console.log(`click on ${third}: the tile is ${added}, then ${dropped}`);
 await page.mouse.move(5, 5);
 await shoot('6-fit', [all], [560, 420]);
 await shoot('7-least', [all], [360, 260]);
 await shoot('8-squeezed', [all], [300, 200]);
-await done(added === `track_map:${first}-${second}-${third}` && dropped === `track_map:${first}-${second}` ? 0 : 1);
+// A click changes the map's own state, not the tile: its key stays the one it was added with.
+await done(added === `track_map:${first}-${second}` && dropped === added ? 0 : 1);
