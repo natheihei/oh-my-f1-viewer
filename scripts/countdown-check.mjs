@@ -34,7 +34,7 @@ await page.evaluate(() => {
     if (e.type === 'turn_start' || e.type === 'tool_start') window.logAgentEvent(`${e.type} ${e.name ?? ''} ${e.args ? JSON.stringify(e.args) : ''}`);
   });
   const input = document.querySelector('[data-testid=palette-input]');
-  input?.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Enter') window.logAgentEvent(`real keyboard Enter in the palette: "${input.value}"`); }, true);
+  input?.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Enter') window.logAgentEvent(`real keyboard Enter in the palette: "${input.textContent}"`); }, true);
 });
 if (countdown?.contentId !== contentId) {
   log(`FAIL expected a countdown for ${contentId}`);
