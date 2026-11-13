@@ -95,6 +95,7 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Red and yellow are taken.** Red means an error, a spoiler warning or a live session. Yellow marks build mode. Neither is used for
   emphasis, which is shown with ink and weight.
 - **Tyre colours are for tyres, team colours for drivers.**
+- **Pedals have their own colours:** throttle green, as the broadcast has it, and brake violet, since red is taken. (2026-11-13)
 
 ### Spoilers
 
@@ -133,6 +134,23 @@ Polished 2026-11-13.
   type, the widest spacing. The shape asked for is that fit's, 0.78. Both are computed from the draw constants, so they move with
   them, and `scripts/tower-check.mjs` shows it at both and below in the real app.
 
+### Car telemetry
+
+Polished 2026-11-13.
+
+- **104 is no reading.** The feed sends 104 for throttle and brake together when it has no reading, and the revs freeze with
+  it. Throttle, brake and revs show a dash, never a full bar. Speed and gear stay, as the feed still sends them.
+- **The aid in the DRS slot.** 2026's cars have no DRS, and the feed's channel for it is empty. Where it's empty, the slot shows the
+  season's aid (`spec.chaseAid`, Overtake from 2026) as a chip lit while the interval to the car ahead is under its line, with
+  the interval beside it. A lapped car or the leader has no interval, and no chip. A DRS channel, in earlier seasons, is shown
+  as before.
+- **One lap of speed, with a scale.** The trace is as long as the car's last lap time, between 60 and 120 seconds, so each corner
+  is in it once. Rules at 100, 200 and 300 km/h are labelled at the left. A dot marks where the line is now, and each corner's
+  low point has its speed and gear.
+- **Sized to sit under its onboard.** Fit 480 by 200 and shape 2.4, a strip under a video of the same width: past that, a taller
+  tile only stretched the trace and the bars. Least 300 by 150, where the readouts, the chip and a trace with its rules still
+  read. `scripts/telemetry-check.mjs` shows it in the real app.
+
 ## Where it lives
 
 | Piece | File |
@@ -147,4 +165,5 @@ Polished 2026-11-13.
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
 | A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
+| Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
