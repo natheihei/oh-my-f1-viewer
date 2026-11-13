@@ -191,19 +191,25 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 - **Its question: is he driving every lap the same, and where did this one differ.** One car, a row per lap, the lap in progress on
   top and six in all. `car_telemetry` is the numbers right now and `speed_trace` two drivers' speed on one lap; this gives up both for
   the comparison between laps.
-- **x is time from the line, scaled to the last completed lap's time,** so the rows line up at each corner, and a slower lap runs
-  past the right edge rather than squeezing the others. Turn numbers along the top are the circuit's corners, placed where the car
-  passed nearest each on that lap, and left out where they'd crowd or the car never came within 60 m.
+- **x is distance from the line,** from the car's positions projected onto the circuit's outline, so each turn sits in one column
+  on every lap, whatever the lap's time. By time, a slow corner pushed everything after it right. A lap without positions is placed
+  by time instead, scaled to the last completed lap's. The turn numbers along the top are the circuit's corners, at their own
+  distances, left out where they'd crowd. (Distance, the guides and the delta were picked from the pedal barcode proposals,
+  2026-11-13.)
+- **A hairline at each turn, down through every row,** cut dark through the cells, so a brake point reads against its corner.
+- **Each lap against the one before,** "−0.158", in ink when faster and grey when slower. Consistency is the question, so the
+  difference is the number to read. The oldest row has no lap before it, and keeps its time.
 - **Red is braking, green is throttle, darker for less,** in the pedal colours. The feed sends the brake only as on or off, so
   it's one flat colour. The throttle runs from 15% of its colour with the pedal up to full, so coasting still differs from no reading.
 - **104 is no reading.** The feed sends 104 for throttle or brake, nearly always both, when it has none, while the revs freeze. That
   cell is drawn `quiet`, like a gap of more than 2 s, never as full throttle or full brake.
-- **The playhead is a mark in the team's colour** on the lap in progress. Lap numbers and times at the left, the current lap in ink.
+- **The playhead is a mark in the team's colour** on the lap in progress. Lap numbers at the left, the current lap in ink.
 - **With no driver named, the leader at the playhead,** whose code is drawn at the top left in the team's colour, since the title bar
   then says only "Pedals".
 - **Size.** Least 300 by 150: six 16px rows, the turn row and the 92px label column. Fit 640 by 200: 26px rows, and about two pixels a
   sample across a 75 s lap; wider only stretches the cells. Below the least size it's compact: the cells alone, which shrink to fit.
-- **Queries.** The completed laps are read once per lap, keyed on their starts; only the lap in progress follows the playhead.
+- **Queries.** The completed laps' pedals and positions are read once per lap, keyed on their starts; only the lap in progress
+  follows the playhead.
 
 ## Where it lives
 
