@@ -7,6 +7,7 @@ import { existsSync, promises as fsp, statSync, watch, type FSWatcher } from 'no
 import path from 'node:path';
 import * as esbuild from 'esbuild';
 import { SHARED_MODULES, type BuildState, type ModLogLine, type ModStatus } from '../../shared/mods';
+import { MODS_AGENTS_MD } from '../../shared/modGuide';
 import { BuildSnapshot, describeChanges } from './snapshot';
 
 export const MOD_SCHEME = 'f1a-mod';
@@ -109,6 +110,8 @@ export class Mods {
       console.log('[mods] undid an unfinished build');
     }
     if (this.types) await this.writeTypes(this.types).catch((e: Error) => console.warn('[mods] types:', e.message));
+    // App-owned, like tsconfig.json: what a coding agent working in the folder reads first.
+    await fsp.writeFile(path.join(this.dir, 'AGENTS.md'), MODS_AGENTS_MD).catch((e: Error) => console.warn('[mods] guide:', e.message));
     await this.scan();
     this.watcher = watch(this.dir, { recursive: true }, (_event, file) => this.changed(file ? String(file) : null));
     this.watcher.on('error', (e) => console.warn('[mods] watcher:', e.message));

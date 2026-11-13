@@ -89,7 +89,7 @@ export default defineComponent({
   description: "Each driver's last eight laps as coloured cells: session best, personal best or slower. Suggest it when the user asks who is quick right now.",
   args: Type.Object({}),
   needs: ['timing'],
-  size: { aspect: 1, min: [6, 6] },
+  size: { aspect: 1, min: { width: 260, height: 220 } },
   spec: () => ({ key: 'lap_form', label: 'Lap form' }),
   View: LapForm,
 });

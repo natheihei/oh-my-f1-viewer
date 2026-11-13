@@ -261,7 +261,7 @@ export default defineComponent({
   replayOnly: true,
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   needs: NEEDS,
-  size: { aspect: 10 / 7, min: [10, 7] },
+  size: { aspect: 10 / 7, min: { width: 380, height: 260 } },
   spec: ({ drivers }) => ({
     key: `track_map:${drivers?.join('-') ?? 'all'}`,
     label: drivers?.length ? `Track ${drivers.map(codeOf).join(' · ')}` : 'Track',

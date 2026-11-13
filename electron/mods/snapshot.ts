@@ -10,7 +10,7 @@ import type { BuildChange } from '../../shared/mods';
 
 const ENTRIES = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'];
 /** What the app writes into the mods folder itself: never copied, compared or removed. */
-const APP_TOP_LEVEL = new Set(['tsconfig.json']);
+const APP_TOP_LEVEL = new Set(['tsconfig.json', 'AGENTS.md']);
 const APP_IN_MOD = new Set(['mod.error', 'mod.log']);
 const FILES = 'files';
 /** Written last: a snapshot without it is a copy that didn't finish. */

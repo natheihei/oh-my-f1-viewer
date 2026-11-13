@@ -304,7 +304,7 @@ export default defineComponent({
   replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: [12, 7] },
+  size: { aspect: 16 / 9, min: { width: 440, height: 230 } },
   spec: ({ drivers }) => ({ key: `speed_trace:${drivers.join('-')}`, label: `Speed ${drivers.map(codeOf).join(' · ')}` }),
   View: SpeedTrace,
 });

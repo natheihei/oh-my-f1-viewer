@@ -98,7 +98,9 @@ instructions, and a separate session keeps what the build read out of the viewin
 
 - **It starts without the viewing conversation.** It gets the usual app state: the session, the playhead and what's on screen, and with
   it what the build has changed so far and every mod there is. That's enough for "make the chart I'm looking at show 12 laps".
-- **Its instructions are its own**, `shared/buildPrompt.ts`: what a mod is, a complete example, the host in brief, and the rules below.
+- **Its instructions are its own**, `shared/buildPrompt.ts`: how to work, and the mod guide in `shared/modGuide.ts`, which is what a
+  mod is, a complete example, the host in brief and the rules for a component. The app writes the same guide into the mods folder
+  as `AGENTS.md`. [COMPONENTS.md](COMPONENTS.md) is where those rules are decided.
   The chart and table lists follow them, as for the viewing agent. The event list doesn't: it can't find or open a session.
 - **It gets file tools for the mods folder.** They run in the main process and reach nothing outside the folder:
 
@@ -254,7 +256,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 | Begin, Save, Undo all, the check on start, and waiting for a save to load | `electron/mods/index.ts` |
 | The build conversation beside the viewing one | `electron/agent/agent.ts` |
 | The build agent's file tools | `electron/agent/extensions/modFiles.ts` |
-| Its instructions | `shared/buildPrompt.ts` |
+| Its instructions | `shared/buildPrompt.ts`, `shared/modGuide.ts` |
 | Its viewing tools, without the gate | `src/agent/tools.ts` |
 | Which agent a message goes to, and the line for the viewing agent | `src/agent/bridge.ts` |
 | The picture of a draft | `pictureOf` in `electron/ipc.ts` |
