@@ -14,7 +14,9 @@ const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = 
 const { pitWindowsModel, lossNow } = await import('./PitWindows');
 const { sectorModel, spanOf } = await import('./SectorDelta');
 const { stopsModel } = await import('./PitStops');
-const { messagesModel, signalOf, wrap } = await import('./RaceControl');
+const { messagesModel, signalOf, markOf, lineText } = await import('./RaceControl');
+const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
+type Line = import('./RaceControl').Line;
 const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
@@ -653,44 +655,111 @@ describe('pit_stops', () => {
 });
 
 describe('race_control', () => {
-  const rc = (lap: number, category: string, flag: string | null, message: string, driver: number | null = null) => ({
+  // Real messages from the 2026 São Paulo and Mexico City races.
+  const rc = (lap: number, category: string, flag: string | null, message: string, more: Record<string, unknown> = {}) => ({
     lap_number: lap,
     category,
     flag,
     message,
-    driver_number: driver,
+    driver_number: null,
+    scope: null,
+    sector: null,
+    ...more,
   });
+  const sector = (lap: number, flag: string, n: number) => rc(lap, 'Flag', flag, `${flag} IN TRACK SECTOR ${n}`, { scope: 'Sector', sector: n });
+  const blue = (lap: number, n: number, code: string) => rc(lap, 'Flag', 'BLUE', `WAVED BLUE FLAG FOR CAR ${n} (${code}) TIMED AT 14:26:52`, { scope: 'Driver', driver_number: n });
+  const CODES: Record<number, string> = { 51: 'CAM', 3: 'VER', 11: 'PER', 16: 'LEC', 23: 'ALB', 44: 'HAM', 87: 'BEA', 10: 'GAS', 55: 'SAI' };
+  const codeOf = (n: number) => CODES[n] ?? String(n);
+  const words = { codeOf, isCode: (w: string) => Object.values(CODES).includes(w) };
 
-  it('gives each message the colour of its flag, and a safety car the yellow', () => {
-    expect(signalOf(rc(1, 'Flag', 'DOUBLE YELLOW', ''))).toBe('yellow');
+  it('reads the red flag from its text, and tells a safety car from a VSC and from its end', () => {
+    expect(signalOf(rc(45, 'Other', null, 'RED FLAG - RACE SUSPENDED'))).toBe('red');
+    expect(signalOf(rc(7, 'SafetyCar', null, 'VSC DEPLOYED'))).toBe('vsc');
+    expect(signalOf(rc(8, 'SafetyCar', null, 'VSC ENDING'))).toBe('vscEnd');
+    expect(signalOf(rc(44, 'SafetyCar', null, 'SAFETY CAR DEPLOYED'))).toBe('sc');
+    expect(signalOf(rc(1, 'Flag', 'DOUBLE YELLOW', ''))).toBe('double');
     expect(signalOf(rc(1, 'Flag', 'CLEAR', ''))).toBe('green');
-    expect(signalOf(rc(1, 'SafetyCar', null, 'VSC DEPLOYED'))).toBe('yellow');
-    expect(signalOf(rc(1, 'Flag', 'BLACK AND WHITE', ''))).toBe('blackwhite');
-    expect(signalOf(rc(1, 'Flag', 'CHEQUERED', ''))).toBe('chequered');
-    expect(signalOf(rc(1, 'Other', null, 'CAR 1 (NOR) TIME 1:41.931 DELETED'))).toBe('note');
+    expect(signalOf(rc(58, 'Flag', 'BLACK AND WHITE', ''))).toBe('blackwhite');
+    expect(signalOf(rc(71, 'Flag', 'CHEQUERED', ''))).toBe('chequered');
+    expect(signalOf(rc(38, 'Other', null, 'CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00'))).toBe('note');
   });
 
-  it('collapses each run of blue flags into one line, keeping the messages as issued', () => {
+  it('says each message in fewer words, and one it does not know as sent, less car numbers and clock times', () => {
+    const say = (m: string) => sentenceCase(shorten(m, codeOf), words.isCode);
+    expect(say('CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00')).toBe('ALB lap 34 deleted · T1 limits');
+    expect(say('CAR 51 (CAM) LAP DELETED - TRACK LIMITS AT TURN 1 LAP 59 15:23:16 (PIT)')).toBe('CAM lap 59 deleted · T1 limits');
+    expect(say('FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 23 (ALB) - REJOINING UNSAFELY (14:50:05)')).toBe('ALB 5s penalty · rejoining unsafely');
+    expect(say('DOUBLE YELLOW IN TRACK SECTOR 2')).toBe('Double yellow S2');
+    expect(say('RED FLAG - RACE SUSPENDED')).toBe('Red flag - race suspended');
+    expect(say('PUSH CARS TO FRONT IN ORDER: 30, 55, 11, 23')).toBe('Push cars to front in order: 30 SAI PER ALB');
+    expect(say('RISK OF RAIN FOR THE F1 RACE IS 80%')).toBe('Risk of rain for the F1 race is 80%');
+  });
+
+  it("folds a stewards' case into one line that moves up as it changes", () => {
     const rows = [
-      rc(30, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 11 (PER)', 11),
-      rc(30, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 87 (BEA)', 87),
-      rc(29, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 11 (PER)', 11),
-      rc(28, 'Other', null, 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12'),
-      rc(27, 'Flag', 'BLUE', 'WAVED BLUE FLAG FOR CAR 43 (COL)', 43),
+      rc(37, 'Other', null, 'TURN 1 INCIDENT INVOLVING CARS 23 (ALB) AND 10 (GAS) NOTED (14:50:05)'),
+      rc(38, 'Other', null, 'CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00'),
+      rc(40, 'Other', null, 'FIA STEWARDS: TURN 1 INCIDENT INVOLVING CARS 23 (ALB) AND 10 (GAS) UNDER INVESTIGATION (14:50:05)'),
+      rc(42, 'Other', null, 'FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 23 (ALB) - REJOINING UNSAFELY (14:50:05)'),
     ];
+    const lines = messagesModel(rows);
+    expect(lines.map((l) => l.kind)).toEqual(['case', 'message']);
+    const c = lines[0] as Extract<Line, { kind: 'case' }>;
+    expect(c.lap).toBe(42);
+    expect(c.steps.map((s) => stageLabel(s.stage, s.penalty))).toEqual(['noted', 'investigating', '5s penalty']);
+    expect(lineText(c, words)).toBe('T1 ALB & GAS · rejoining unsafely');
+  });
+
+  it('puts a run of yellows and their clears on one line, and a clear with no yellow on its own', () => {
+    const rows = [
+      sector(1, 'CLEAR', 14),
+      sector(17, 'DOUBLE YELLOW', 2),
+      sector(17, 'YELLOW', 1),
+      blue(17, 11, 'PER'),
+      sector(18, 'CLEAR', 1),
+      sector(18, 'CLEAR', 2),
+    ];
+    const lines = messagesModel(rows);
+    expect(lines.map((l) => l.kind)).toEqual(['flags', 'blue', 'message']);
+    expect(markOf(lines[0])).toBe('cleared');
+    expect(lineText(lines[0], words)).toBe('Double yellow S2 · yellow S1 · cleared');
+    expect(lineText(lines[1], words)).toBe('Blue ×1  PER');
+  });
+
+  it('collapses each run of blue flags into one line unless asked for each', () => {
+    const rows = [blue(27, 43, 'COL'), rc(28, 'Other', null, 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12'), blue(29, 11, 'PER'), blue(30, 87, 'BEA'), blue(30, 11, 'PER')];
     expect(messagesModel(rows)).toEqual([
       { kind: 'blue', lap: 30, count: 3, drivers: [11, 87] },
-      { kind: 'message', lap: 28, signal: 'note', text: 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12' },
+      { kind: 'message', lap: 28, signal: 'note', message: 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12' },
       { kind: 'blue', lap: 27, count: 1, drivers: [43] },
     ]);
     expect(messagesModel(rows, true)).toHaveLength(5);
   });
 
-  it('wraps a message to the lines it may take, the last taking the rest', () => {
-    const measure = (s: string) => s.length;
-    expect(wrap(measure, 'FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 63', 14, 2)).toEqual(['FIA STEWARDS:', '5 SECOND TIME PENALTY FOR CAR 63']);
-    expect(wrap(measure, 'TRACK CLEAR', 20, 2)).toEqual(['TRACK CLEAR']);
-    expect(wrap(measure, 'DOUBLE YELLOW IN TRACK SECTOR 2', 10, 1)).toEqual(['DOUBLE YELLOW IN TRACK SECTOR 2']);
+  it('knows what is in force: a red flag until the session starts again, yellows until cleared, open cases', () => {
+    const rows = [
+      rc(1, 'Other', null, 'OVERTAKE DISABLED'),
+      rc(3, 'Other', null, 'TURN 4 INCIDENT INVOLVING CARS 44 (HAM) AND 16 (LEC) NOTED (14:03:57)'),
+      rc(44, 'SafetyCar', null, 'SAFETY CAR DEPLOYED'),
+      sector(44, 'DOUBLE YELLOW', 3),
+      rc(45, 'Other', null, 'RED FLAG - RACE SUSPENDED'),
+    ];
+    let s = standing(rows);
+    expect(s.track).toBe('red');
+    expect([...s.sectors]).toEqual([[3, 'double']]);
+    expect(s.aid).toEqual({ name: 'OVERTAKE', on: false });
+    expect(s.grip).toBeNull();
+    expect(s.open).toBe(1);
+    s = standing([...rows, rc(46, 'Flag', 'CLEAR', 'TRACK CLEAR', { scope: 'Track' }), sector(46, 'CLEAR', 3)]);
+    expect(s.track).toBe('red');
+    expect(s.sectors.size).toBe(0);
+    s = standing([
+      ...rows,
+      rc(46, 'SessionStatus', null, 'SESSION STARTED'),
+      rc(12, 'Other', null, 'FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 16 (LEC) - LEAVING THE TRACK AND GAINING AN ADVANTAGE (14:03:57)'),
+    ]);
+    expect(s.track).toBe('green');
+    expect(s.open).toBe(0);
   });
 });
 
