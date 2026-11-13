@@ -11,7 +11,7 @@ const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
 const { paceModel } = await import('./FieldPace');
 const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = await import('./PitWindow');
 const { pitWindowsModel, lossNow } = await import('./PitWindows');
-const { sectorModel, spanOf } = await import('./SectorDelta');
+const { sectorTable } = await import('./SectorTable');
 const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, markOf, lineText } = await import('./RaceControl');
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
@@ -536,43 +536,52 @@ const sec = (driver: number, lap: number, s: [number | null, number | null, numb
   ...more,
 });
 
-describe('sector_delta', () => {
+describe('sector_table', () => {
+  // Car 44 is 0.2s slower in S1 and 0.1s quicker in S2 than car 1 on every lap.
   const rows: Array<Record<string, unknown>> = [];
-  for (let lap = 1; lap <= 12; lap++) {
-    rows.push(sec(44, lap, [30, 40, 20]));
-    rows.push(sec(1, lap, [30.2, 39.9, 20], lap === 7 ? { is_pit_in_lap: 1 } : lap === 9 ? { track_status: 'VSCDeployed' } : {}));
+  for (let lap = 1; lap <= 14; lap++) {
+    rows.push(sec(44, lap, [30.2, 39.9, 20], lap === 13 ? { track_status: 'VSCDeployed' } : {}));
+    rows.push(sec(1, lap, [30, 40, 20]));
   }
   // The lap in progress: both have the first sector, only one the second.
-  rows.push(sec(44, 13, [30, 40, null]), sec(1, 13, [30.1, null, null]));
+  rows.push(sec(44, 15, [30.1, 40, null]), sec(1, 15, [30, null, null]));
 
-  it('shows the last ten laps both have started, positive where the first driver was faster', () => {
-    const m = sectorModel(rows, [44, 1]);
-    expect(m.laps).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
-    expect(m.deltas[0][0]).toBeCloseTo(0.2);
-    expect(m.deltas[1][0]).toBeCloseTo(-0.1);
-    expect(m.deltas[2][0]).toBe(0);
-    expect(m.deltas[0][9]).toBeCloseTo(0.1);
-    expect(m.deltas[1][9]).toBeNull();
+  it('goes back to ten laps that count, newest first, negative where the first driver was faster', () => {
+    const m = sectorTable(rows, [44, 1]);
+    expect(m.rows.map((r) => r.lap)).toEqual([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4]);
+    expect(m.rows[0]).toMatchObject({ live: true, total: null });
+    expect(m.rows[0].deltas[0]).toBeCloseTo(0.1);
+    expect(m.rows[0].deltas[1]).toBeNull();
+    expect(m.rows[1].deltas[0]).toBeCloseTo(0.2);
+    expect(m.rows[1].deltas[1]).toBeCloseTo(-0.1);
+    expect(m.rows[1].total).toBeCloseTo(0.1);
+    expect(m.rows[2]).toMatchObject({ skip: 'VSC', deltas: [null, null, null] });
+    expect(m.counted).toBe(10);
+    expect(m.averages[0]).toBeCloseTo(0.2);
+    expect(m.averages[2]).toBe(0);
+    expect(m.total).toBeCloseTo(0.1);
+    expect(m).toMatchObject({ sinceStop: false, averageAt: 12 });
   });
 
-  it('leaves pit laps and neutralised laps empty, and averages the rest', () => {
-    const m = sectorModel(rows, [44, 1]);
-    expect(m.skipped).toEqual([null, null, null, 'PIT', null, 'VSC', null, null, null, null]);
-    expect(m.deltas.map((row) => row[3])).toEqual([null, null, null]);
-    expect(m.averages[0]).toBeCloseTo((0.2 * 7 + 0.1) / 8);
-    expect(m.averages[1]).toBeCloseTo(-0.1);
+  it('stops at the pit laps of either driver\'s last stop, and averages only the laps since', () => {
+    const stopped = rows.map((r) =>
+      r.driver_number === 1 && r.lap_number === 10 ? { ...r, is_pit_in_lap: 1 } : r.driver_number === 1 && r.lap_number === 11 ? { ...r, is_pit_out_lap: 1 } : r,
+    );
+    const m = sectorTable(stopped, [44, 1]);
+    expect(m.rows.map((r) => r.lap)).toEqual([15, 14, 13, 12, 11, 10]);
+    expect(m.rows[4]).toMatchObject({ skip: 'PIT', pits: [{ who: 1, way: 'out' }] });
+    expect(m.rows[5].pits).toEqual([{ who: 1, way: 'in' }]);
+    expect(m).toMatchObject({ counted: 2, sinceStop: true, averageAt: 4 });
   });
 
-  it('counts an out-lap of either driver as a pit lap', () => {
-    const out = rows.map((r) => (r.driver_number === 44 && r.lap_number === 12 ? { ...r, is_pit_out_lap: 1 } : r));
-    expect(sectorModel(out, [44, 1]).skipped[8]).toBe('PIT');
+  it('leaves the standing start out', () => {
+    const m = sectorTable(rows.filter((r) => (r.lap_number as number) <= 3), [44, 1]);
+    expect(m.rows.map((r) => r.skip)).toEqual([null, null, 'START']);
+    expect(m.counted).toBe(2);
   });
 
-  it('has nothing before both have a sector, and scales between 0.2 and 1 second', () => {
-    expect(sectorModel([sec(44, 1, [30, null, null])], [44, 1]).laps).toEqual([]);
-    expect(spanOf([[0.04, null], [-0.1]])).toBe(0.2);
-    expect(spanOf([[0.34]])).toBe(0.4);
-    expect(spanOf([[-8]])).toBe(1);
+  it('has nothing before both have a sector', () => {
+    expect(sectorTable([sec(44, 1, [30, null, null])], [44, 1]).rows).toEqual([]);
   });
 });
 
@@ -1056,7 +1065,7 @@ describe('the registry', () => {
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
     expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
     expect(byName.pit_stops.sessions).toEqual(['race', 'sprint']);
-    expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
+    expect(byName.sector_table.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_table:44-1', label: 'Sectors 44 · 1' });
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
@@ -1125,7 +1134,7 @@ describe('sizes', () => {
       ['video', 'speed_ribbon', 'car_telemetry'],
       ['video', 'video', 'speed_ribbon', 'timing_tower'],
       ['video', 'race_control', 'pit_stops', 'race_status'],
-      ['video', 'pit_window', 'field_pace', 'sector_delta'],
+      ['video', 'pit_window', 'field_pace', 'sector_table'],
       ['video', 'timing_tower', 'pit_windows'],
       ['video', 'pit_windows', 'pit_stops', 'race_control'],
       ['video', 'timing_tower', 'race_status', 'race_control'],
