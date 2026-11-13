@@ -483,12 +483,17 @@ Removed 2026-11-13.
 
 ### Track map
 
-Polished 2026-11-13, from the `track_map` proposals 1, 4, 5, 6, 10, 11 and 12.
+Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12.
 
 - **Its question: where every car is on the track now.** One dot per running car, in its team colour; retired cars are left off.
 - **A car in the pit lane is a hollow ring,** with its code in grey. MultiViewer has no pit lane, so it's any car more than 10 m off
   the racing line: the lane runs about 20 m off it, which at a tile's scale is 3 or 4 pixels, and before this a car in the lane read
   as one racing down the straight. A car stopped off the track is drawn the same.
+- **The pit lane, drawn** as a thin faint line a fixed 7px beside the track, from the positions of the first car through the lane,
+  once the feed has told of a stop: before that there's none, and nothing about a stop to come is shown. It runs where that car was
+  more than 4 m off the racing line, carried on to where it was within 1.5 m, so it leaves and joins the track where the real lane
+  does, on the real lane's side. Its gap closes in where the lane is within 15 m of the track. A car more than 4 m off the line is
+  drawn on it, where it reads as in the lane, not as racing beside it.
 - **Codes at 11px,** a chosen driver's in bold ink. (They were 9px, and 10px chosen.)
 - **Choosing drivers makes the rest recede:** smaller, three quarters opaque and unlabelled, so the chosen are what reads. Without a
   choice every car is labelled. A car without a label is named under the pointer, with its position, and whether it's in the pit lane.

@@ -56,6 +56,56 @@ export function inLane(cars: readonly Car[], outline: Outline): Set<number> {
   return new Set(cars.filter((car) => project(car.x, car.y).off > IN_LANE).map((car) => car.driver));
 }
 
+/** The first stop the feed has told of, as of the playhead: whose, when they entered the lane, and how long they took through it. */
+export const STOP_SQL = `SELECT driver_number, date, lane_duration FROM pit WHERE date IS NOT NULL AND lane_duration IS NOT NULL ORDER BY date LIMIT 1`;
+
+/**
+ * That car's positions through its stop: `?1` the car, `?2` the stop's `date` and `?3` its lane time, in ms. A minute before and
+ * half a minute after, since the feed's `date` isn't always when the car turned in: the lane is picked out of them by `lanePath`.
+ */
+export const LANE_SQL = `SELECT x, y FROM location WHERE driver_number = ?1 AND date >= ?2 - 60000 AND date <= ?2 + ?3 + 30000 AND NOT (x = 0 AND y = 0) ORDER BY date`;
+
+/** A point the pit lane runs through, and the nearest point of the racing line, `fx` and `fy`, `off` away, all in outline units. */
+export interface LanePoint {
+  x: number;
+  y: number;
+  fx: number;
+  fy: number;
+  off: number;
+}
+
+/** How far off the racing line a car through a stop has to be for it to be in the lane, in outline units: 4 m. */
+const LANE_OFF = 40;
+/** How far off it still counts as leaving or joining the track, where the lane runs in from and out to it: 1.5 m. */
+const LANE_ENDS = 15;
+/** The fewest positions, about a quarter second apart, that make a lane: a run shorter is the car running wide. */
+const LANE_LEAST = 12;
+
+/**
+ * The pit lane, from one car's positions through a stop: the longest run of them more than 4 m off the racing line,
+ * carried on at each end while the car is still 1.5 m off it, where the lane leaves the track and joins it. MultiViewer
+ * has no pit lane, so this is the only one there is. Empty when there's no run long enough to be the lane.
+ */
+export function lanePath(positions: ReadonlyArray<{ x: number; y: number }>, outline: Outline): LanePoint[] {
+  const project = projector(outline);
+  const points = positions.map(({ x, y }) => ({ x, y, ...project(x, y) })).map(({ x, y, fx, fy, off }) => ({ x, y, fx, fy, off }));
+  let [start, end] = [0, -1];
+  for (let i = 0; i < points.length; ) {
+    if (points[i].off <= LANE_OFF) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < points.length && points[j + 1].off > LANE_OFF) j++;
+    if (j - i > end - start) [start, end] = [i, j];
+    i = j + 1;
+  }
+  if (end - start + 1 < LANE_LEAST) return [];
+  while (start > 0 && points[start - 1].off > LANE_ENDS) start--;
+  while (end + 1 < points.length && points[end + 1].off > LANE_ENDS) end++;
+  return points.slice(start, end + 1);
+}
+
 /**
  * The rows of `SQL` as cars, by car number, without those in `out`, the rows of `OUT_SQL`. A position of
  * exactly (0, 0) is the feed's placeholder for a car with none yet, before it leaves the garage, so it's left out.
@@ -127,13 +177,15 @@ interface Drawn {
   fixed: number[];
   /** Cars off the racing line: drawn as rings. */
   lane: Set<number>;
+  /** The pit lane, from the first stop's positions, or empty before there's been one. */
+  pitLane: LanePoint[];
   /** Each car's position in the race, by car number, for the name under the pointer. */
   positions: Map<number, number>;
   circuit: Extract<CircuitView, { state: 'ready' }>;
   styles: Map<number, DriverStyle>;
   pointer: Pointer;
-  /** Where the drawing leaves the car under the pointer, for a click to pick it. */
-  under: { current: number | null };
+  /** Where the drawing leaves each car's dot, for a click to find the car at its own point. */
+  dots: { current: ReadonlyArray<{ driver: number; x: number; y: number }> };
 }
 
 const BACKGROUND = '#000';
@@ -147,6 +199,10 @@ const TURN_STEPS = [3, 8, 14];
 const HIT = 12;
 /** How opaque the cars nobody chose are, once someone is chosen. */
 const RECEDE = 0.75;
+/** How far beside the track the pit lane is drawn, in pixels: fixed, since at a tile's scale its 20 m would be 3 or 4. */
+const LANE_GAP = 7;
+/** How far off the racing line, in outline units, the lane is drawn its full gap away: 15 m. Nearer, where it leaves and joins the track, it closes in. */
+const LANE_FULL = 150;
 
 function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
@@ -155,8 +211,28 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const fit = fitOutline(outline, rotation, { left: pad, top: pad, width: width - pad * 2, height: height - pad * 2 });
   const line = outline.x.map((x, i) => fit(x, outline.y[i]));
   const n = line.length;
-  m.under.current = null;
+  m.dots.current = [];
   if (n < 2) return;
+
+  // A point off the racing line, drawn the lane's gap beside the track on its own side, closing in as it nears it.
+  const beside = (p: { x: number; y: number; fx: number; fy: number; off: number }): [number, number] => {
+    const [px, py] = fit(p.x, p.y);
+    const [qx, qy] = fit(p.fx, p.fy);
+    const len = Math.hypot(px - qx, py - qy);
+    if (len === 0) return [qx, qy];
+    const gap = LANE_GAP * Math.min(1, p.off / LANE_FULL);
+    return [qx + ((px - qx) / len) * gap, qy + ((py - qy) / len) * gap];
+  };
+
+  // The pit lane, thin and under the track.
+  if (!compact && m.pitLane.length > 1) {
+    ctx.strokeStyle = c.faint;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    m.pitLane.map(beside).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.stroke();
+  }
 
   const track = compact ? 2.5 : 4;
   ctx.strokeStyle = c.faint;
@@ -199,7 +275,18 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   // Once someone is chosen, the rest recede: smaller, dimmer and unlabelled, named only under the pointer.
   const recede = lit.size > 0;
   const radius = (d: number) => (lit.has(d) ? (compact ? 4 : 6) : compact ? 2.5 : recede ? 3 : 4);
-  const at = new Map(m.cars.map((car) => [car.driver, fit(car.x, car.y)]));
+  // A car off the line by more than the lane's own threshold sits on the lane as it's drawn, not on the track.
+  const project = projector(outline);
+  const at = new Map(
+    m.cars.map((car) => {
+      const p = project(car.x, car.y);
+      return [car.driver, !compact && m.pitLane.length > 1 && p.off > LANE_OFF ? beside({ ...car, ...p }) : fit(car.x, car.y)];
+    }),
+  );
+  m.dots.current = m.cars.map((car) => {
+    const [x, y] = at.get(car.driver)!;
+    return { driver: car.driver, x, y };
+  });
   // Chosen cars are drawn last, so they sit on top, and labelled first, so they get the nearest places.
   const order = [...m.cars].sort((a, b) => Number(lit.has(a.driver)) - Number(lit.has(b.driver)));
 
@@ -297,14 +384,10 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   // The car under the pointer, named, with what a click does to it.
   const p = m.pointer;
   if (compact || !p) return;
-  const hit = m.cars.reduce<{ car: Car; x: number; y: number; dist: number } | null>((best, car) => {
-    const [x, y] = at.get(car.driver)!;
-    const dist = Math.hypot(x - p.x, y - p.y);
-    return dist < HIT && (!best || dist < best.dist) ? { car, x, y, dist } : best;
-  }, null);
-  if (!hit) return;
-  const { car, x, y } = hit;
-  m.under.current = car.driver;
+  const driver = dotAt(m.dots.current, p);
+  const car = m.cars.find((c) => c.driver === driver);
+  if (!car) return;
+  const [x, y] = at.get(car.driver)!;
   const style = styleOf(m.styles, car.driver);
   ctx.strokeStyle = c.ink;
   ctx.lineWidth = 1;
@@ -325,6 +408,16 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   ctx.fillRect(bx, by, 2, 20);
   text(ctx, name, bx + 7, by + 10.5, { color: c.ink, size: TYPE });
   text(ctx, hint, bx + 7 + textWidth(ctx, name, TYPE), by + 10.5, { color: c.mute, size: TYPE });
+}
+
+/** The car whose dot is nearest `point`, within `HIT` pixels, or null. */
+export function dotAt(dots: ReadonlyArray<{ driver: number; x: number; y: number }>, point: { x: number; y: number }): number | null {
+  let best: { driver: number; dist: number } | null = null;
+  for (const d of dots) {
+    const dist = Math.hypot(d.x - point.x, d.y - point.y);
+    if (dist < HIT && (!best || dist < best.dist)) best = { driver: d.driver, dist };
+  }
+  return best?.driver ?? null;
 }
 
 /** The most drivers the map draws chosen. */
@@ -353,6 +446,8 @@ export function chosenOf(fixed: readonly number[], added: readonly number[]): nu
 }
 
 const NO_PLAYHEAD = 0;
+/** A car number no car has, for the lane's query before there's been a stop. */
+const NO_CAR = -1;
 /** Least room: the circuit large enough for eleven-pixel codes to sit beside their dots. Fit: where a circuit stops gaining detail, as on the speed ribbon. */
 const MIN = { width: 360, height: 250 };
 const FIT = { width: 560, height: 400 };
@@ -368,10 +463,19 @@ function TrackMap({ props }: { props: { drivers?: number[] } }) {
   // Without timing there are no laps, so no one is out: the map still draws.
   const out = useSql(OUT_SQL);
   const positionView = useSql(POSITION_SQL);
-  const styles = useDriverStyles();
   const circuit = useLive((s) => s.circuit);
+  const stopView = useSql(STOP_SQL);
+  const stop = stopView.state === 'ready' ? stopView.rows[0] : undefined;
+  const stopParams = [num(stop?.driver_number) ?? NO_CAR, num(stop?.date) ?? 0, (num(stop?.lane_duration) ?? 0) * 1000];
+  const laneView = useSql(LANE_SQL, stopParams);
+  const outline = circuit.state === 'ready' ? circuit.outline : null;
+  const pitLane = useMemo(
+    () => (laneView.state === 'ready' && outline ? lanePath(laneView.rows.map((r) => ({ x: num(r.x) ?? 0, y: num(r.y) ?? 0 })), outline) : []),
+    [laneView, outline],
+  );
+  const styles = useDriverStyles();
   const [pointer, setPointer] = useState<Pointer>(null);
-  const under = useRef<number | null>(null);
+  const dots = useRef<ReadonlyArray<{ driver: number; x: number; y: number }>>([]);
   const model = useMemo(() => {
     if (view.state !== 'ready' || circuit.state !== 'ready') return null;
     const retired = out.state === 'ready' ? out.rows : [];
@@ -382,12 +486,13 @@ function TrackMap({ props }: { props: { drivers?: number[] } }) {
         const [d, p] = [num(r.driver_number), num(r.position)];
         if (d !== null && p !== null) positions.set(d, p);
       }
-    return { cars, lane: inLane(cars, circuit.outline), positions, highlight, fixed, circuit, styles };
-  }, [view, out, positionView, circuit, styles, highlight, fixed]);
+    return { cars, lane: inLane(cars, circuit.outline), pitLane, positions, highlight, fixed, circuit, styles };
+  }, [view, out, positionView, pitLane, circuit, styles, highlight, fixed]);
   // The pointer moves often: only the drawing follows it, not the model.
-  const drawn = useMemo(() => (model ? { ...model, pointer, under } : null), [model, pointer]);
-  const onClick = () => {
-    const driver = under.current;
+  const drawn = useMemo(() => (model ? { ...model, pointer, dots } : null), [model, pointer]);
+  // The car at the click's own point, among the dots as last drawn: the pointer it was named under may not have been drawn yet.
+  const onClick = (point: { x: number; y: number }) => {
+    const driver = dotAt(dots.current, point);
     if (driver !== null) setAdded((a) => toggleDriver(a, fixed, driver));
   };
   return (
