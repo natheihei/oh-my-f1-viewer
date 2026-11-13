@@ -378,6 +378,32 @@ Added 2026-11-13, replacing `sector_delta`, from direction D of its proposals.
   9px type. `scripts/sector-check.mjs` shows it in the real app.
 - A saved layout with a `sector_delta` tile draws nothing in it, as for a mod's component that is gone.
 
+### Gap evolution
+
+Polished 2026-11-13.
+
+- **Each lap's gap in ink, the live trace faint behind it.** The gap as both cars crossed the line gets a dot, read off the trace at
+  that moment rather than from `lap_summary`, whose gap to the leader is taken at a different moment for each car and can be a second
+  out. The trend reads through the jitter within a lap.
+- **A pass is marked.** Where the order flips on track, away from a stop and within 5 s, a hairline and "VER AHEAD". The line is
+  the gap's size, so before this a pass was only a dip to zero and back.
+- **A stop is marked and breaks the line,** with "PIT NOR" on a dashed rule at the start of the new stint. The scale fits the laps
+  since the last stop, so the stop runs off the top, and its height is named there ("▲ 22.7"). Before, a stop set the scale to 30 s
+  and flattened the battle.
+- **The DRS or Overtake zone is a filled band,** so inside it reads as a place. Its label on the axis is the aid's name alone,
+  "OT" or "DRS", which keeps the left margin to the axis's width.
+- **The car ahead is on top in the panel, and nothing in it is dropped.** It used to leave out the second driver at its least size.
+  Below what the panel needs the chart stops shrinking and runs past the tile, for the host to mark.
+- **Glitches several samples long are taken out:** a sample more than 1 s from the median of the 8 either side. A leader change
+  could throw a spike longer than the 2 samples allowed before (ANT and RUS around lap 50 in São Paulo 2026 reached 30 s). A stop
+  lasts longer than half that window, so it stays.
+- **Compact keeps its meaning:** the zone keeps its label, and the number gets ▼ closing or ▲ opening.
+- **Type doesn't go below 11px,** the axes, panel and marks included. The panel is 106px wide for it.
+- **The trend is said in words,** "closing 0.67/lap", "opening" or "holding" under 0.05.
+- **Size.** Least 330 by 162: the plot beside the whole panel with the car behind in range. Fit 640 by 340, where 15 laps stop
+  gaining detail. Alone beside a video it was given a 400 by 846 rail and stretched into it.
+- **Not taken for now:** a projection of where the trend leads, and the gap named under the pointer.
+
 ## Where it lives
 
 | Piece | File |
