@@ -6,7 +6,7 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { gapModel } = await import('./GapEvolution');
 const { tyreModel } = await import('./TyreStrategy');
-const { towerModel } = await import('./TimingTower');
+const { towerModel, towerExtent } = await import('./TimingTower');
 const { traceModel } = await import('./RaceTrace');
 const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
 const { paceModel } = await import('./FieldPace');
@@ -175,9 +175,9 @@ describe('timing_tower', () => {
   it('writes each row: the leader on its lap, the rest with gaps', () => {
     const rows = towerModel([row(4, 1, null, null), row(1, 2, 1.2, 1.2), row(44, 3, '+1 LAP', 20.5, { last_lap: null, compound: null, lap_start: null })]);
     expect(rows).toEqual([
-      { driver: 4, position: 1, gained: null, gap: 'LAP 31', interval: '', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
-      { driver: 1, position: 2, gained: null, gap: '+1.200', interval: '+1.200', last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
-      { driver: 44, position: 3, gained: null, gap: '+1 LAP', interval: '+20.500', last: '', compound: null, age: null, out: false },
+      { driver: 4, position: 1, gained: null, gap: 'LAP 31', interval: '', intervalSeconds: null, last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 1, position: 2, gained: null, gap: '+1.200', interval: '+1.200', intervalSeconds: 1.2, last: '1:32.345', compound: 'MEDIUM', age: 19, out: false },
+      { driver: 44, position: 3, gained: null, gap: '+1 LAP', interval: '+20.500', intervalSeconds: 20.5, last: '', compound: null, age: null, out: false },
     ]);
   });
 
@@ -200,6 +200,37 @@ describe('timing_tower', () => {
 
   it('gives the leader the race distance when it is known', () => {
     expect(towerModel([row(4, 1, null, null)], 56)[0].gap).toBe('LAP 31/56');
+  });
+
+  it('gives a lapped interval no seconds, so it is never read as within range', () => {
+    const [, second] = towerModel([row(4, 1, null, null), row(1, 2, '+1 LAP', '+1 LAP')]);
+    expect(second).toMatchObject({ interval: '+1 LAP', intervalSeconds: null });
+  });
+
+  describe('extent', () => {
+    const tower = components.find((c) => c.name === 'timing_tower')!;
+    const grid = (gains: boolean) => ({ rows: towerModel(Array.from({ length: 22 }, (_, i) => row(i + 1, i + 1, i, 1))), gains, styles: new Map(), watched: new Set<number>(), within: 1 });
+    const box = (width: number, height: number) => ({ width, height, compact: false });
+
+    it('fits the tile while it has room', () => {
+      expect(towerExtent(grid(true), box(500, 600))).toEqual({ width: 500, height: 600 });
+      expect(towerExtent(grid(true), box(tower.size!.min.width, tower.size!.min.height))).toEqual({ width: tower.size!.min.width, height: tower.size!.min.height });
+    });
+
+    it('stops shrinking at its least size, and runs past the tile from there, every column kept', () => {
+      expect(towerExtent(grid(true), box(200, 290))).toEqual(tower.size!.min);
+      // Without a grid there's no places column, so it needs less width.
+      expect(towerExtent(grid(false), box(200, 290)).width).toBeLessThan(tower.size!.min.width);
+    });
+
+    it('is a thumbnail in the suggestion strip, fitting its box', () => {
+      expect(towerExtent(grid(true), box(182, 137))).toEqual({ width: 182, height: 137 });
+    });
+
+    it('declares the size it reads at least and the most it draws', () => {
+      expect(tower.size!.min).toEqual({ width: 315, height: 376 });
+      expect(tower.fit).toEqual({ width: 396, height: 508 });
+    });
   });
 
   it('leaves the gaps blank in a session without them', () => {
