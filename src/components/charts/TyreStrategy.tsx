@@ -1,7 +1,7 @@
-/** Every driver's stints as bars in tyre colours, in running order. */
-import { useMemo } from 'react';
-import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+/** Every driver's stints as bars in tyre colours, in running order, with the laps still to come. */
+import { useMemo } from "react";
+import Type from "typebox";
+import { defineComponent, useLive, useSql } from "../../host";
 import {
   ChartCanvas,
   ChartFrame,
@@ -17,21 +17,22 @@ import {
   tyreColour,
   useDriverStyles,
   vline,
-  xAxis,
   type Box,
   type Ctx,
   type DriverStyle,
-} from './kit';
+} from "./kit";
 
-const NEEDS = ['timing' as const];
+const NEEDS = ["timing" as const];
 
-/** Stints with each driver's latest position. `filter` limits it to some drivers. */
+/** Stints with each driver's latest position and whether they're out, those out last. `filter` limits it to some drivers. */
 export const sqlFor = (count: number) => `
-WITH pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number)
-SELECT s.driver_number, s.stint_number, s.lap_start, s.lap_end, s.compound, s.tyre_age_at_start, pos.position
-FROM stints s LEFT JOIN pos USING (driver_number)
-${count ? `WHERE s.driver_number IN (${Array.from({ length: count }, () => '?').join(', ')})` : ''}
-ORDER BY pos.position IS NULL, pos.position, s.driver_number, s.stint_number`;
+WITH pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
+out AS (SELECT DISTINCT driver_number FROM laps WHERE is_out)
+SELECT s.driver_number, s.stint_number, s.lap_start, s.lap_end, s.compound, s.tyre_age_at_start, pos.position,
+  out.driver_number IS NOT NULL AS is_out
+FROM stints s LEFT JOIN pos USING (driver_number) LEFT JOIN out USING (driver_number)
+${count ? `WHERE s.driver_number IN (${Array.from({ length: count }, () => "?").join(", ")})` : ""}
+ORDER BY is_out, pos.position IS NULL, pos.position, s.driver_number, s.stint_number`;
 
 export interface Stint {
   /** The lap before its first, so laps 1 to 16 run from 0 to 16. */
@@ -44,18 +45,30 @@ export interface Stint {
   open: boolean;
 }
 
+export interface TyreRow {
+  driver: number;
+  /** The latest running position, or null before the feed has one. */
+  position: number | null;
+  /** Retired: dimmed, with no laps still to come. */
+  out: boolean;
+  stints: Stint[];
+}
+
 export interface TyreModel {
-  rows: Array<{ driver: number; stints: Stint[] }>;
-  /** The furthest lap any stint has reached. */
+  rows: TyreRow[];
+  /** The furthest lap any stint has reached: where the now line is. */
   lap: number;
 }
 
 /** Where the lap axis ends: the race distance, so the bars grow across a fixed axis, or the current lap without one. */
-const axisLaps = (model: Drawn): number => Math.max(1, model.lap, model.total ?? 0);
+const axisLaps = (model: Drawn): number =>
+  Math.max(1, model.lap, model.total ?? 0);
 
-/** The rows of the query as one bar row per driver, in running order. */
-export function tyreModel(rows: ReadonlyArray<Record<string, unknown>>): TyreModel {
-  const byDriver = new Map<number, Stint[]>();
+/** The rows of the query as one bar row per driver, in running order with those out last. */
+export function tyreModel(
+  rows: ReadonlyArray<Record<string, unknown>>,
+): TyreModel {
+  const byDriver = new Map<number, TyreRow>();
   let lap = 0;
   for (const r of rows) {
     const driver = num(r.driver_number);
@@ -63,13 +76,29 @@ export function tyreModel(rows: ReadonlyArray<Record<string, unknown>>): TyreMod
     if (driver === null || start === null) continue;
     const end = Math.max(num(r.lap_end) ?? start, start);
     lap = Math.max(lap, end);
-    const stints = byDriver.get(driver) ?? [];
-    stints.push({ from: start - 1, to: end, compound: typeof r.compound === 'string' ? r.compound : null, age: stintAge(start, end, num(r.tyre_age_at_start)), open: false });
-    byDriver.set(driver, stints);
+    const row = byDriver.get(driver) ?? {
+      driver,
+      position: num(r.position),
+      out: Boolean(r.is_out),
+      stints: [],
+    };
+    row.stints.push({
+      from: start - 1,
+      to: end,
+      compound: typeof r.compound === "string" ? r.compound : null,
+      age: stintAge(start, end, num(r.tyre_age_at_start)),
+      open: false,
+    });
+    byDriver.set(driver, row);
   }
-  // Rows arrive in running order, then stint order.
+  // Rows arrive in order, then stint order.
   return {
-    rows: [...byDriver].map(([driver, stints]) => ({ driver, stints: stints.map((s, i) => (i === stints.length - 1 ? { ...s, open: true } : s)) })),
+    rows: [...byDriver.values()].map((row) => ({
+      ...row,
+      stints: row.stints.map((s, i) =>
+        i === row.stints.length - 1 ? { ...s, open: true } : s,
+      ),
+    })),
     lap,
   };
 }
@@ -80,81 +109,247 @@ interface Drawn extends TyreModel {
   total: number | null;
 }
 
-/** The tallest a row gets as the tile grows. */
-const MAX_PITCH = 24;
+/** Type for codes, positions and stint lengths: the app's smallest. Axis labels are the kit's. */
+const SIZE = 11;
+/** JetBrains Mono's advance is 0.6 of its size. */
+const CH = SIZE * 0.6;
+/** The lap axis, on top so it stays in view when the rows run past the bottom. */
+const HEAD = 18;
+const PAD = 4;
+/** Position, the team bar and the code, as the timing tower has them. */
+const POS_X = PAD + 2 * CH;
+const BAR_X = POS_X + 4;
+const CODE_X = BAR_X + 3 + 4;
+const GUTTER = Math.ceil(CODE_X + 3 * CH + 6);
+/** Room past the flag for a tyre age drawn beside the now line on the last laps. */
+const RIGHT = Math.ceil(4 + 2 * CH + 4);
+/** A row's height: it shrinks with the tile down to the least that reads, then stops and the rows run on. */
+const MIN_PITCH = 16;
+const MAX_PITCH = 22;
+/** Pixels a lap: the axis keeps its labels apart down to the least, and a lap gains nothing past the most. */
+const MIN_LAP = 4;
+const MAX_LAP = 8;
+/** A full grid and a long race. Fewer cars leave room at the bottom; a longer race runs a little past the right. */
+const MAX_CARS = 22;
+const MAX_LAPS = 72;
+/** The gap cut at each stop, so a stop onto the same compound shows. */
+const CUT = 3;
 
-function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
-  const c = colors();
-  const left = compact ? 4 : 36;
-  const right = width - (compact ? 4 : 10);
-  const top = compact ? 4 : 6;
-  const axis = compact ? 4 : 20;
-  const laps = axisLaps(m);
-  const x = linear([0, laps], [left, right]);
-  const pitch = Math.min(compact ? 10 : MAX_PITCH, (height - top - axis) / Math.max(1, m.rows.length));
-  // The axis sits right under the last row, however few there are.
-  const bottom = top + pitch * Math.max(1, m.rows.length);
+const heightAt = (rows: number, pitch: number): number =>
+  HEAD + rows * pitch + PAD;
+const widthAt = (laps: number, perLap: number): number =>
+  GUTTER + laps * perLap + RIGHT;
+
+/** The least it draws in full at: a full grid at the smallest row, and a long race at the fewest pixels a lap. */
+export const LEAST = {
+  width: Math.ceil(widthAt(MAX_LAPS, MIN_LAP)),
+  height: heightAt(MAX_CARS, MIN_PITCH),
+};
+/** The most it ever draws: past it the tile is left empty. */
+export const MOST = {
+  width: Math.ceil(widthAt(MAX_LAPS, MAX_LAP)),
+  height: heightAt(MAX_CARS, MAX_PITCH),
+};
+
+const pitchOf = (m: Drawn, height: number): number =>
+  Math.min(
+    MAX_PITCH,
+    Math.max(MIN_PITCH, (height - HEAD - PAD) / Math.max(1, m.rows.length)),
+  );
+
+/** The tile itself while the chart fits it, and past its bottom or right edge once rows and laps stop shrinking. */
+export function tyreExtent(
+  m: Drawn,
+  { width, height, compact }: Box,
+): { width: number; height: number } {
+  if (compact) return { width, height };
+  return {
+    width: Math.max(width, Math.ceil(widthAt(axisLaps(m), MIN_LAP))),
+    height: Math.max(
+      height,
+      Math.ceil(heightAt(m.rows.length, pitchOf(m, height))),
+    ),
+  };
+}
+
+/** The thumbnail, as in the suggestion strip: bars only, fitting the box. */
+function drawCompact(ctx: Ctx, m: Drawn, { width, height }: Box): void {
+  const x = linear([0, axisLaps(m)], [4, width - 4]);
+  const pitch = Math.min(10, (height - 8) / Math.max(1, m.rows.length));
   const bar = Math.max(1, Math.round(pitch * 0.66));
-  const size = Math.min(10, Math.max(7, Math.floor(pitch * 0.62)));
-
-  if (!compact) {
-    const room = Math.max(1, Math.floor((right - left) / 36));
-    const step = [1, 2, 5, 10, 20].find((s) => laps / s <= room) ?? 20;
-    const values = ticks(step, laps, 0, step);
-    for (const v of values) vline(ctx, x(v), top, bottom);
-    xAxis(ctx, { scale: x, values, y: bottom + 12 });
-    text(ctx, 'LAP', left, bottom + 12, { color: c.faint, align: 'center' });
-  }
-
-  m.rows.forEach(({ driver, stints }, i) => {
-    const y = top + i * pitch + (pitch - bar) / 2;
-    if (!compact && pitch >= 8) text(ctx, styleOf(m.styles, driver).code, left - 6, y + bar / 2, { align: 'right', color: c.ink, size });
+  m.rows.forEach(({ stints }, i) => {
+    const y = 4 + i * pitch + (pitch - bar) / 2;
     stints.forEach((s, k) => {
-      // A hair between stints, so a stop on the same compound still shows.
-      const x0 = x(s.from) + (k ? 1.5 : 0);
+      const x0 = x(s.from) + (k ? 1 : 0);
+      if (x(s.to) > x0) {
+        ctx.fillStyle = tyreColour(s.compound);
+        ctx.fillRect(x0, y, x(s.to) - x0, bar);
+      }
+    });
+  });
+}
+
+function draw(ctx: Ctx, m: Drawn, box: Box): void {
+  if (box.compact) return drawCompact(ctx, m, box);
+  const c = colors();
+  const laps = axisLaps(m);
+  const pitch = pitchOf(m, box.height);
+  const left = GUTTER;
+  // The scale stops growing at the most pixels a lap.
+  const right = Math.min(box.width, widthAt(laps, MAX_LAP)) - RIGHT;
+  const x = linear([0, laps], [left, right]);
+  const top = HEAD;
+  const bottom = top + pitch * Math.max(1, m.rows.length);
+  const bar = Math.round(pitch - 5);
+  const now = m.lap;
+  const ended = m.total !== null && now >= m.total;
+  const ay = HEAD / 2;
+
+  // The axis: laps run, the laps still to come quieter, the flag at the race distance and the now line named.
+  const room = Math.max(1, Math.floor((right - left) / 36));
+  const step = [1, 2, 5, 10, 20].find((s) => laps / s <= room) ?? 20;
+  const nowLabel = ended ? null : `L${now}`;
+  const values = ticks(step, laps, 0, step).filter(
+    (v) =>
+      m.total === null || v === m.total || Math.abs(x(v) - x(m.total)) > 22,
+  );
+  for (const v of values)
+    vline(ctx, x(v), top, bottom, v > now ? c.quiet : c.line);
+  for (const v of values) {
+    if (v === m.total) continue;
+    if (nowLabel && Math.abs(x(v) - x(now)) < 24) continue;
+    text(ctx, String(v), x(v), ay, {
+      align: "center",
+      color: v > now ? c.faint : c.dim,
+    });
+  }
+  if (m.total !== null) {
+    vline(ctx, x(m.total), top, bottom, c.line);
+    text(ctx, String(m.total), x(m.total), ay, {
+      align: "center",
+      color: c.dim,
+      weight: ended ? 400 : 600,
+    });
+  }
+  text(ctx, "LAP", left - 6, ay, { align: "right", color: c.faint });
+
+  m.rows.forEach(({ driver, position, out, stints }, i) => {
+    const rowTop = top + i * pitch;
+    const y = rowTop + (pitch - bar) / 2;
+    const mid = y + bar / 2 + 0.5;
+    const style = styleOf(m.styles, driver);
+    ctx.globalAlpha = out ? 0.4 : 1;
+    if (position !== null)
+      text(ctx, String(position), POS_X, mid, {
+        align: "right",
+        color: c.ink,
+        size: SIZE,
+      });
+    ctx.fillStyle = style.colour;
+    ctx.fillRect(BAR_X, rowTop + pitch * 0.22, 3, pitch * 0.56);
+    text(ctx, style.code, CODE_X, mid, {
+      color: c.ink,
+      size: SIZE,
+      weight: 500,
+    });
+    const last = stints[stints.length - 1];
+    // The laps still to come, behind a car that's running.
+    if (!out && last && m.total !== null && last.to < m.total) {
+      ctx.fillStyle = c.quiet;
+      ctx.fillRect(x(last.to), y, x(m.total) - x(last.to), bar);
+    }
+    stints.forEach((s, k) => {
+      const x0 = x(s.from) + (k ? CUT : 0);
       const w = x(s.to) - x0;
       if (w <= 0) return;
       ctx.fillStyle = tyreColour(s.compound);
       ctx.fillRect(x0, y, w, bar);
-      if (compact || bar < 8) return;
-      // The open stint carries the set's age, a closed one its length.
-      const label = String(s.open ? s.age : s.to - s.from);
-      if (textWidth(ctx, label, size, 500) <= w - 6) text(ctx, label, x0 + w - 3, y + bar / 2 + 0.5, { align: 'right', color: '#000', size, weight: 500 });
+      // Inside a bar is always the stint's length. The set a running car is on has its age outside, after the now line.
+      const current = s.open && !out && !ended;
+      if (current) return;
+      const label = String(s.to - s.from);
+      if (textWidth(ctx, label, SIZE, 500) <= w - 6)
+        text(ctx, label, x0 + w - 3, mid, {
+          align: "right",
+          color: "#000",
+          size: SIZE,
+          weight: 500,
+        });
     });
+    if (last && !out && !ended) {
+      const colour = tyreColour(last.compound);
+      text(ctx, String(last.age), Math.max(x(last.to), x(now)) + 4, mid, {
+        color: colour === c.faint ? c.dim : colour,
+        size: SIZE,
+        weight: 500,
+      });
+    }
+    if (out && last)
+      text(ctx, "OUT", x(last.to) + 4, mid, { color: c.dim, size: SIZE });
+    ctx.globalAlpha = 1;
   });
-  if (!compact) vline(ctx, x(m.lap), top - 2, bottom, c.ink);
+
+  if (nowLabel) {
+    vline(ctx, x(now), top, bottom, c.ink);
+    const w = textWidth(ctx, nowLabel, 10, 600) + 6;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(x(now) - w / 2, ay - 7, w, 14);
+    text(ctx, nowLabel, x(now), ay, {
+      align: "center",
+      color: c.ink,
+      weight: 600,
+    });
+  }
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
+const Drivers = Type.Array(Type.Integer({ description: "A car number" }), {
   minItems: 1,
-  description: 'Drivers to show, as car numbers. Left out, it shows everyone.',
+  description: "Drivers to show, as car numbers. Left out, it shows everyone.",
 });
 
 function TyreStrategy({ props }: { props: { drivers?: number[] } }) {
   const drivers = props.drivers ?? [];
   const view = useSql(sqlFor(drivers.length), drivers);
   const styles = useDriverStyles();
-  const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
-  const model = useMemo(() => (view.state === 'ready' ? { ...tyreModel(view.rows), styles, total } : null), [view, styles, total]);
+  const total = useLive((live) =>
+    live.sessionData.state === "ready"
+      ? (live.sessionData.lapCount?.total ?? null)
+      : null,
+  );
+  const model = useMemo(
+    () =>
+      view.state === "ready"
+        ? { ...tyreModel(view.rows), styles, total }
+        : null,
+    [view, styles, total],
+  );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
-      {() => model && <ChartCanvas model={model} draw={draw} />}
+      {() =>
+        model && <ChartCanvas model={model} draw={draw} extent={tyreExtent} />
+      }
     </ChartFrame>
   );
 }
 
 export default defineComponent({
-  name: 'tyre_strategy',
-  title: 'Tyre strategy',
+  name: "tyre_strategy",
+  title: "Tyre strategy",
   description:
     "Every driver's stints as bars in tyre colours: which compound, for how many laps, and when they stopped. Suggest it for anything about tyres or strategy across the field.",
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
-  sessions: ['race', 'sprint'],
+  sessions: ["race", "sprint"],
   needs: NEEDS,
-  size: { aspect: 16 / 9, min: { width: 380, height: 250 } },
+  size: {
+    aspect: Math.round((MOST.width / MOST.height) * 100) / 100,
+    min: LEAST,
+  },
+  fit: MOST,
   spec: ({ drivers }) => ({
-    key: `tyre_strategy:${drivers?.join('-') ?? 'all'}`,
-    label: drivers?.length ? `Tyres ${drivers.map(codeOf).join(' · ')}` : 'Tyres',
+    key: `tyre_strategy:${drivers?.join("-") ?? "all"}`,
+    label: drivers?.length
+      ? `Tyres ${drivers.map(codeOf).join(" · ")}`
+      : "Tyres",
   }),
   View: TyreStrategy,
 });
