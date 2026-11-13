@@ -112,6 +112,9 @@ Components drawn on a canvas with the kit, `src/components/charts/kit`.
   so a chart reaches qualifying or practice once it's been made to make sense there. (2026-11-12)
 - **A chart that needs car telemetry sets `replayOnly`.** The feed has no telemetry while a session is live. (2026-11-12)
 - **Missing data is drawn as missing.** A value the feed hasn't sent is a gap or a dash, never a guess.
+- **A crowded chart labels what answers its question, and names the rest under the pointer.** Codes that land on each other read as
+  none. A mark without a label is named, with its value, when the pointer is on it: `ChartCanvas` passes the pointer to the chart
+  with `onPointer`, the chart keeps it in what it draws from, and its `draw` names the mark under it. (2026-11-13, with the pit window.)
 
 Per-chart decisions go under a heading for that chart as each one is polished.
 
@@ -155,6 +158,32 @@ Polished 2026-11-13.
   tile only stretched the trace and the bars. Least 300 by 150, where the readouts, the chip and a trace with its rules still
   read. `scripts/telemetry-check.mjs` shows it in the real app.
 
+### Pit window
+
+Polished 2026-11-13.
+
+- **Only the cars around the stop get a code:** the driver, the leader, the cars either side of where they'd rejoin, and any car in
+  the clear-air zone ahead of it. The rest are dots, named under the pointer. Before, every car had a code and they landed on each
+  other wherever the field bunched.
+- **The cars either side are said plainly,** "Car ahead COL 5.3 s" and "Car behind NOR 6.1 s · lapping", with whether each is
+  racing them, laps down on them ("lapped"), or a lap up ("a lap up" ahead, "lapping" behind). "Ahead of NOR −6.1" said none of that.
+- **The margin either side is the window:** seconds short of the place ahead, and seconds spare before losing the place they'd
+  rejoin in, in race order.
+- **The stop under a safety car and a virtual one,** from MultiViewer's shorter pit losses: a tick across the ring for each, and
+  the positions in the panel. The ticks are only labelled where the label stays clear of the answer and of OUT.
+- **A thicker ring and larger dots:** 5px ring and pit-loss arc, 5px cars, 7px for the driver and the rejoin marker.
+- **Type doesn't go below 11px,** codes round the ring, panel keys and the line over the answer included.
+- **The panel sits right under the ring,** not at the foot of a tall tile, in pairs that read across: pit loss and tyre, the cars
+  either side, the margins, then SC and VSC. "Rejoins" left the panel, since the middle of the ring says it, and "clear air" or
+  "traffic" moved under the answer. In a tile wide enough for both the panel goes beside the ring, one row to a line.
+- **Size.** Least 308 by 400: a 96px ring with room for its labels and the panel under it. Beside it, 470 by 280. Fit 578 by 508:
+  the ring stops growing at 150px. The shape asked for is the panel-under form's largest, 0.76. Below its least it stops shrinking
+  and runs past the tile for the host to mark, where it used to draw a bare ring with no answer. Only a thumbnail under 150px high
+  fits its box. All of these are computed from the draw constants, and `scripts/pit-window-check.mjs` shows it at its fit, least
+  and below in the real app.
+- **Pit loss is still MultiViewer's.** In São Paulo 2026 the race's own green-flag stops cost about 25 s against its 21.8 s, so the
+  rejoin reads optimistic there. Measuring it from the race was proposed and not taken for now.
+
 ## Where it lives
 
 | Piece | File |
@@ -168,6 +197,7 @@ Polished 2026-11-13.
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
 | A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
+| The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
