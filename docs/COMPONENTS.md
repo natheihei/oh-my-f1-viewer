@@ -84,7 +84,7 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   for a row of text. Below that the component stops shrinking and lets its rows run past the bottom of the tile, where the host marks
   the cut. It doesn't drop rows quietly, and it doesn't shrink type until it can't be read. A chart says how large it draws in a given
   tile with `ChartCanvas`'s `extent`, and the canvas runs past the tile by that much. (2026-11-12; built 2026-11-13 with the timing
-  tower. Pit stops still draws its own "N earlier" note, and moves to this when it's polished.)
+  tower.)
 - **Columns aren't dropped to fit either.** A table too wide for its tile keeps every column and runs past the right edge, where the
   host marks it "more ▸". A column that vanishes as the tile narrows reads as data that isn't there. (2026-11-13)
 
@@ -251,8 +251,7 @@ Added 2026-11-13, from direction B of the pit window proposals.
 
 - **Its own component, not a form of `pit_window`.** `pit_window` plays out one driver's stop and needs that driver;
   `pit_windows` takes no props and answers who in the field could stop now, and for how much. One name drawing two charts
-  would leave the agent unable to tell them apart. Each description points at the other, and at `pit_stops` for stops
-  already made.
+  would leave the agent unable to tell them apart. Each description points at the other.
 - **The same stop as the ring.** Each row is `pitWindowModel` run for that car, so the two charts never disagree about a
   rejoin, a gap or clear air.
 - **Running order.** Sorting by the cheapest stop was tried and left out: rows that move every lap are hard to follow.
@@ -438,6 +437,20 @@ Removed 2026-11-13.
 - The kit's helpers only it used went with it: the lap axis with its safety car, VSC and red flag shading, its lap ticks, and racing
   pace.
 - A saved layout with a `lap_time_compare` tile draws nothing in it, as for a mod's component that is gone.
+
+### Pit stops
+
+Removed 2026-11-13.
+
+- **The list of stops made so far, newest first, with lap, tyre fitted, time in the lane and time stationary, was taken out.**
+  It didn't feel core: which stops were made and on what tyres is already `tyre_strategy`'s, and what a stop now would cost is
+  `pit_windows`' and `pit_window`'s. Polishing it was proposed from São Paulo 2026 (rows to a floor with the host's mark in place
+  of its own "N earlier" note, stationary time first with the lane second, long stops and missing times marked, the watched
+  driver lifted), and so were a stop-time strip, a lap-by-lap timeline and per-team medians.
+- The feed's stationary time can't be trusted on its own: in São Paulo 2026 ALO's lap 46 stop reads 13.1 s stationary in a 24.4 s
+  lane, which leaves 11 s to drive it, and five stops have none. Anything that brings stop times back should check them
+  against the lane.
+- A saved layout with a `pit_stops` tile draws nothing in it, as for a mod's component that is gone.
 
 ## Where it lives
 
