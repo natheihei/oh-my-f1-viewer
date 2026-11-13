@@ -1061,11 +1061,24 @@
   @apply absolute inset-0 overflow-hidden;
 }
 
-/* A component with more below than its tile shows: the bottom edge fades out and a quiet mark says so. */
+/*
+ * A component with more than its tile shows: the cut edge fades out, below or at the right, and one quiet
+ * mark in the bottom right corner says which way.
+ */
 .overflow-mark {
-  @apply pointer-events-none absolute inset-x-0 bottom-0 z-10;
+  @apply pointer-events-none absolute inset-0 z-10;
+}
+
+.overflow-fade-below {
+  @apply absolute inset-x-0 bottom-0;
   height: var(--row);
   background: linear-gradient(to bottom, transparent, black);
+}
+
+.overflow-fade-right {
+  @apply absolute inset-y-0 right-0;
+  width: var(--row);
+  background: linear-gradient(to right, transparent, black);
 }
 
 .overflow-mark-label {
