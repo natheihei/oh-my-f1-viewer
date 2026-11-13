@@ -11,7 +11,15 @@ import type { SessionInfo, SessionType } from '../../shared/api';
 import type { Dataset } from '../../shared/sessionData';
 import { allTiles, type ComponentSpec, type ContentFit, type SizeHint } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
+import { labelText } from './drivers';
 import { write } from './op';
+
+/** A spec's key and label, and the drivers it names. */
+export interface Labelled {
+  key: string;
+  label: string;
+  drivers?: number[];
+}
 
 interface Declared {
   /** The spec's `type`. */
@@ -44,8 +52,11 @@ interface Declared {
 export interface ComponentDefinition extends Declared {
   /** The props, which must stay JSON-safe. */
   args: TObject;
-  /** The tile's unique key and title-bar label. May throw if the props name something that isn't there. */
-  spec(props: Record<string, unknown>): { key: string; label: string };
+  /**
+   * The tile's unique key and title-bar label. With `drivers`, the label is the name alone and the host
+   * adds the drivers' codes, drawn as codes in the title bar. May throw if the props name something that isn't there.
+   */
+  spec(props: Record<string, unknown>): Labelled;
   View: ComponentType<{ props: Record<string, unknown>; label: string }>;
 }
 
@@ -69,7 +80,7 @@ export interface ComponentInfo {
 export function defineComponent<S extends TObject>(
   definition: Declared & {
     args: S;
-    spec(props: Static<S>): { key: string; label: string };
+    spec(props: Static<S>): Labelled;
     View: ComponentType<{ props: Static<S>; label: string }>;
   },
 ): ComponentDefinition {
@@ -192,5 +203,7 @@ export function specOf({ type, props }: Static<typeof Item>): ComponentSpec {
     throw new Error(`Invalid props for ${type}: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}`);
   }
   const size = sizeOf(definition);
-  return { type, ...definition.spec(props), props, ...(size ? { size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
+  const { key, label, drivers } = definition.spec(props);
+  const named = drivers?.length ? { label: labelText(label, drivers), title: { name: label, drivers } } : { label };
+  return { type, key, ...named, props, ...(size ? { size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
 }

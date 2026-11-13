@@ -5,11 +5,12 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+import { defineComponent, partsText, useLive, useSql } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   colors,
+  drawCode,
   fitText,
   hline,
   num,
@@ -21,7 +22,7 @@ import {
   type Ctx,
   type DriverStyle,
 } from './kit';
-import { sentenceCase, stageLabel, standing, type Case, type Stage, type Standing, type Track } from './raceControlMessages';
+import { sentenceCase, stageLabel, standing, withCars, type Case, type Stage, type Standing, type Track } from './raceControlMessages';
 
 const NEEDS = ['timing' as const];
 
@@ -57,7 +58,6 @@ export interface BoardModel {
   /** Cars with laps deleted, most first, and whether each has had the black and white flag. */
   deleted: Array<{ car: number; laps: number; blackWhite: boolean }>;
   styles: Map<number, DriverStyle>;
-  isCode: (word: string) => boolean;
 }
 
 /** Owed penalties first, then cases being looked at, then fresh decisions, then those left for after the race. */
@@ -99,8 +99,6 @@ export function boardModel(
     .map(([car, laps]) => ({ car, laps, blackWhite: s.blackWhite.has(car) }))
     .sort((a, b) => b.laps - a.laps || a.car - b.car);
   for (const car of s.blackWhite) if (!s.deleted.has(car)) deleted.push({ car, laps: 0, blackWhite: true });
-  const codes = new Set([...options.styles.values()].map((d) => d.code));
-  for (const r of rows) for (const m of (typeof r.message === 'string' ? r.message : '').matchAll(/\d+ \((\w{3})\)/g)) codes.add(m[1]);
   return {
     track: s.track,
     since: s.since,
@@ -113,7 +111,6 @@ export function boardModel(
     cases,
     deleted,
     styles: options.styles,
-    isCode: (w) => codes.has(w),
   };
 }
 
@@ -177,7 +174,6 @@ export function drawBoard(ctx: Ctx, m: BoardModel, box: Pick<Box, 'width' | 'hei
   const c = colors();
   const W = box.width;
   const thumb = box.height < THUMB_BELOW;
-  const code = (n: number) => styleOf(m.styles, n).code;
   let y = 0;
   const head = (label: string) => {
     text(ctx, label, PAD, y + HEAD / 2, { size: SIZE, color: c.mute });
@@ -210,9 +206,7 @@ export function drawBoard(ctx: Ctx, m: BoardModel, box: Pick<Box, 'width' | 'hei
         const x = PAD + (i % across) * cell;
         const cy = y + Math.floor(i / across) * ROW + ROW / 2;
         text(ctx, String(i + 1), x + 14, cy, { size: SIZE, align: 'right', color: c.mute });
-        ctx.fillStyle = styleOf(m.styles, car).colour;
-        ctx.fillRect(x + 18, cy - 6, 3, 12);
-        text(ctx, code(car), x + 24, cy, { size: SIZE, color: c.ink, weight: 600 });
+        drawCode(ctx, styleOf(m.styles, car), x + 18, cy, { size: SIZE, strong: true, barHeight: 12 });
       });
       y += Math.ceil(m.restart.order.length / across) * ROW + 6;
     }
@@ -274,13 +268,11 @@ export function drawBoard(ctx: Ctx, m: BoardModel, box: Pick<Box, 'width' | 'hei
       const x = PAD + (i % across) * CAR;
       const cy = y + Math.floor(i / across) * ROW + ROW / 2;
       const off = line.penalty !== null && !line.penalised.includes(car);
-      ctx.fillStyle = styleOf(m.styles, car).colour;
-      ctx.fillRect(x, cy - 6, 3, 12);
-      text(ctx, code(car), x + 6, cy, { size: SIZE, color: off ? c.mute : c.ink, weight: off ? 400 : 600 });
+      drawCode(ctx, styleOf(m.styles, car), x, cy, { size: SIZE, strong: !off, tone: off ? 'mute' : 'ink', barHeight: 12 });
     });
     const lastY = y + (lines - 1) * ROW + ROW / 2;
     const after = PAD + Math.min(line.cars.length - (lines - 1) * across, across) * CAR + 2;
-    const reason = line.reason ? sentenceCase(line.reason, m.isCode) : line.turn ? `Turn ${line.turn}` : '';
+    const reason = line.reason ? partsText(sentenceCase(withCars(line.reason)), (n) => styleOf(m.styles, n).code) : line.turn ? `Turn ${line.turn}` : '';
     const said = fitText(ctx, reason, right - after, SIZE);
     if (said) text(ctx, said, after, lastY, { size: SIZE, color: c.dim });
     text(ctx, stage, W - PAD, y + ROW / 2, {
@@ -307,9 +299,7 @@ export function drawBoard(ctx: Ctx, m: BoardModel, box: Pick<Box, 'width' | 'hei
         y += ROW;
       }
       const cy = y + ROW / 2;
-      ctx.fillStyle = styleOf(m.styles, d.car).colour;
-      ctx.fillRect(x, cy - 6, 3, 12);
-      text(ctx, code(d.car), x + 6, cy, { size: SIZE, color: c.ink, weight: 600 });
+      drawCode(ctx, styleOf(m.styles, d.car), x, cy, { size: SIZE, strong: true, barHeight: 12 });
       ctx.fillStyle = c.dim;
       for (let i = 0; i < d.laps; i++) ctx.fillRect(x + 34 + i * 5, cy - 4, 3, 9);
       if (d.blackWhite) flagMark(ctx, 'blackwhite', x + 36 + d.laps * 5, cy - 5, 12, 10);

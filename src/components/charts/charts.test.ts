@@ -12,7 +12,7 @@ const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = 
 const { pitWindowsModel, lossNow } = await import('./PitWindows');
 const { sectorTable } = await import('./SectorTable');
 const { messagesModel, signalOf, markOf, lineText } = await import('./RaceControl');
-const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
+const { sentenceCase, shorten, stageLabel, standing, withCars } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
 const { trackModel, placeLabels, inLane, toggleDriver, pinnedOf, lanePath, dotAt } = await import('./TrackMap');
@@ -609,7 +609,10 @@ describe('race_control', () => {
   const blue = (lap: number, n: number, code: string) => rc(lap, 'Flag', 'BLUE', `WAVED BLUE FLAG FOR CAR ${n} (${code}) TIMED AT 14:26:52`, { scope: 'Driver', driver_number: n });
   const CODES: Record<number, string> = { 51: 'CAM', 3: 'VER', 11: 'PER', 16: 'LEC', 23: 'ALB', 44: 'HAM', 87: 'BEA', 10: 'GAS', 55: 'SAI' };
   const codeOf = (n: number) => CODES[n] ?? String(n);
-  const words = { codeOf, isCode: (w: string) => Object.values(CODES).includes(w) };
+  const numberOf = new Map(Object.entries(CODES).map(([n, code]) => [code, Number(n)]));
+  const words = { driverOf: (w: string) => numberOf.get(w) ?? null };
+  /** Parts as text, each driver as its code. */
+  const textOf = (parts: ReadonlyArray<string | { driver: number }>) => parts.map((p) => (typeof p === 'string' ? p : codeOf(p.driver))).join('');
 
   it('reads the red flag from its text, and tells a safety car from a VSC and from its end', () => {
     expect(signalOf(rc(45, 'Other', null, 'RED FLAG - RACE SUSPENDED'))).toBe('red');
@@ -624,7 +627,7 @@ describe('race_control', () => {
   });
 
   it('says each message in fewer words, and one it does not know as sent, less car numbers and clock times', () => {
-    const say = (m: string) => sentenceCase(shorten(m, codeOf), words.isCode);
+    const say = (m: string) => textOf(sentenceCase(shorten(m, words.driverOf)));
     expect(say('CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00')).toBe('ALB lap 34 deleted · T1 limits');
     expect(say('CAR 51 (CAM) LAP DELETED - TRACK LIMITS AT TURN 1 LAP 59 15:23:16 (PIT)')).toBe('CAM lap 59 deleted · T1 limits');
     expect(say('FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 23 (ALB) - REJOINING UNSAFELY (14:50:05)')).toBe('ALB 5s penalty · rejoining unsafely');
@@ -632,6 +635,15 @@ describe('race_control', () => {
     expect(say('RED FLAG - RACE SUSPENDED')).toBe('Red flag - race suspended');
     expect(say('PUSH CARS TO FRONT IN ORDER: 30, 55, 11, 23')).toBe('Push cars to front in order: 30 SAI PER ALB');
     expect(say('RISK OF RAIN FOR THE F1 RACE IS 80%')).toBe('Risk of rain for the F1 race is 80%');
+  });
+
+  it('keeps each car it reads as a driver, so the line can draw its code', () => {
+    expect(shorten('CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00')).toEqual([{ driver: 23 }, ' LAP 34 DELETED · T1 LIMITS']);
+    expect(shorten('PUSH CARS TO FRONT IN ORDER: 30, 55')).toEqual(['PUSH CARS TO FRONT IN ORDER: ', { driver: 30 }, ' ', { driver: 55 }]);
+    expect(withCars('CARS 23 (ALB) AND 10 (GAS) TO THE PIT LANE')).toEqual([{ driver: 23 }, ' AND ', { driver: 10 }, ' TO THE PIT LANE']);
+    // A roster code on its own is a driver; another word of three capitals isn't.
+    expect(withCars('HAM TO SERVE A DRIVE THROUGH', words.driverOf)).toEqual([{ driver: 44 }, ' TO SERVE A DRIVE THROUGH']);
+    expect(sentenceCase(['T1 ', { driver: 23 }, ' · CAUSING A COLLISION'])).toEqual(['T1 ', { driver: 23 }, ' · causing a collision']);
   });
 
   it("folds a stewards' case into one line that moves up as it changes", () => {
@@ -646,7 +658,7 @@ describe('race_control', () => {
     const c = lines[0] as Extract<Line, { kind: 'case' }>;
     expect(c.lap).toBe(42);
     expect(c.steps.map((s) => stageLabel(s.stage, s.penalty))).toEqual(['noted', 'investigating', '5s penalty']);
-    expect(lineText(c, words)).toBe('T1 ALB & GAS · rejoining unsafely');
+    expect(textOf(lineText(c, words))).toBe('T1 ALB & GAS · rejoining unsafely');
   });
 
   it('puts a run of yellows and their clears on one line, and a clear with no yellow on its own', () => {
@@ -661,8 +673,8 @@ describe('race_control', () => {
     const lines = messagesModel(rows);
     expect(lines.map((l) => l.kind)).toEqual(['flags', 'blue', 'message']);
     expect(markOf(lines[0])).toBe('cleared');
-    expect(lineText(lines[0], words)).toBe('Double yellow S2 · yellow S1 · cleared');
-    expect(lineText(lines[1], words)).toBe('Blue ×1  PER');
+    expect(textOf(lineText(lines[0], words))).toBe('Double yellow S2 · yellow S1 · cleared');
+    expect(textOf(lineText(lines[1], words))).toBe('Blue ×1  PER');
   });
 
   it('collapses each run of blue flags into one line unless asked for each', () => {
@@ -1080,14 +1092,14 @@ describe('the registry', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
     expect(byName.gap_evolution.sessions).toEqual(['race', 'sprint']);
     expect(byName.tyre_strategy.sessions).toEqual(['race', 'sprint']);
-    expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap 44 · 1' });
+    expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap', drivers: [44, 1] });
     expect(byName.tyre_strategy.spec({})).toEqual({ key: 'tyre_strategy:all', label: 'Tyres' });
     expect(byName.timing_tower.spec({})).toEqual({ key: 'timing_tower', label: 'Timing' });
     expect(byName.tyre_deg.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
-    expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
+    expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window', drivers: [44] });
     expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
-    expect(byName.sector_table.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_table:44-1', label: 'Sectors 44 · 1' });
+    expect(byName.sector_table.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_table:44-1', label: 'Sectors', drivers: [44, 1] });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
@@ -1095,10 +1107,10 @@ describe('the registry', () => {
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
-    expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
-    expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals 44' });
+    expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry', drivers: [44] });
+    expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals', drivers: [44] });
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
-    expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
+    expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon', drivers: [44] });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
     for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live', 'field_pace']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(14);

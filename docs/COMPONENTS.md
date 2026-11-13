@@ -23,7 +23,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 
 ### What it draws in
 
-- **No title of its own.** The tile's title bar shows the spec's label. The first thing in the view is content.
+- **No title of its own.** The tile's title bar shows the spec's label. The first thing in the view is content. A spec about some
+  drivers returns them as `drivers`, with the label as the name alone, and the title bar draws each as a code after the name.
+  (2026-11-13, #78. The label was one string, so in "TELEMETRY HAM" the code read with the same weight as the chart's name.)
 - **It works with no props.** That is how it's first seen, in the suggestion strip. Every arg is optional, and with no drivers given
   it picks from the data at the playhead.
 
@@ -94,7 +96,8 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   the app's monospace font. No rounded corners, shadows or gradients. `colors()` in the kit reads the tokens from `src/styles.css`.
 - **Red and yellow are taken.** Red means an error, a spoiler warning or a live session. Yellow marks build mode. Neither is used for
   emphasis, which is shown with ink and weight.
-- **Tyre colours are for tyres, team colours for drivers.**
+- **Tyre colours are for tyres, team colours for drivers.** A driver's team colour is drawn as its code's bar, or as its line or dot
+  on a plot, never as the colour of text: see "Driver codes".
 - **Pedals have their own colours, and brake is the one red that isn't an alert.** Throttle green and brake red, as every
   broadcast and telemetry screen draws them, toned down (`throttle`, `brake`) so the red reads as data, not as the red that
   warns or as a soft tyre. (2026-11-13. Violet was tried first, to keep red for alerts, and read as foreign.)
@@ -105,6 +108,29 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   the flags' toned yellow, named for what they mean there. They always sit beside a − or
   + sign, so neither is read by colour alone. (2026-11-13, with the sector table. Before, each comparison chart picked its own,
   and sector delta used the two drivers' colours.)
+
+### Driver codes
+
+A driver's code looks the same wherever it is drawn: a title bar, a table's column, a chart's heading, a plot or a line of text.
+`src/host/drivers.tsx` draws it in the DOM and React, and the kit's `drawCode` and `drawParts` on a canvas, from the same sizes.
+(2026-11-13, #78. Before, each chart picked its own colour and weight, so the same HAM was ink in one tile, team colour in another
+and dim text in race control.)
+
+- **The library names looks, not places.** It has variants and modifiers, and each place picks one. There's no "title code" or
+  "column code", so a new chart or a mod picks from the same set instead of adding a case, and a new look is added once, as a
+  variant anything can use.
+- **`bar` is the code everywhere: a 3px bar in the team colour, then the code in ink.** The title bar draws it bold. So does a
+  chart's own heading, such as the pedal barcode's or the speed ribbon's when the title bar doesn't name the driver. A table, such
+  as the timing tower, draws it at 500, and bold for a watched car. (Options explored: team-coloured text, a line key, an underline,
+  a chip and an outline. Team-coloured text didn't read for Cadillac and Haas, whose colour is the theme's dim, or for Williams
+  and Aston Martin, too dark on black. With the code always in ink, only the bar carries the team.)
+- **`plain` is for a plot.** A car's dot or line is already its team mark, so its label is the code alone, in ink: bold for the
+  chosen car. A car in the pit lane is labelled in `mute`.
+- **Text with drivers in it keeps them as drivers.** A parser that finds a car returns it as `{ driver }` among the text, and the
+  line draws it as a bold `bar` code in the line's own colour, so a quiet line stays quiet. Race control reads F1's
+  "CAR 23 (ALB)" and "CARS 23 (ALB) AND 10 (GAS)", a restart order's numbers, and a roster code standing alone.
+- **Teammates share a bar.** Both cars' bars are solid, as the tower always had them. Charts still dash a team's second car's line.
+- **No tile accent.** A team-colour edge or a tinted title bar was tried and left out: the code in the title says whose tile it is.
 
 ### Spoilers
 
@@ -242,7 +268,7 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 - **104 is no reading.** The feed sends 104 for throttle or brake, nearly always both, when it has none, while the revs freeze. That
   cell is drawn `quiet`, like a gap of more than 2 s, never as full throttle or full brake.
 - **The playhead is a mark in the team's colour** on the lap in progress. Lap numbers at the left, the current lap in ink.
-- **With no driver named, the leader at the playhead,** whose code is drawn at the top left in the team's colour, since the title bar
+- **With no driver named, the leader at the playhead,** whose code is drawn at the top left as a bold `bar` code, since the title bar
   then says only "Pedals".
 - **Size.** Least 300 by 150: six 16px rows, the turn row and the 92px label column. Fit 640 by 200: 26px rows, and about two pixels a
   sample across a 75 s lap; wider only stretches the cells. Below the least size it's compact: the cells alone, which shrink to fit.
@@ -287,7 +313,7 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
   on the brake, over the rest in a black casing so a brake zone stays its own mark for a viewer who can't tell red from green. A
   throttle or brake of 104 is the feed having no reading, drawn as neither braking nor lifting. (2026-11-13. It was the team colour
   with the brake in red, and McLaren's orange and Ferrari's red couldn't be told from the brake.) The team colour is left for the
-  driver's code.
+  driver's code, as its bar.
 - **Each corner's slowest speed,** in ink just outside the track: the lowest speed after each braking zone, once the car is 10 km/h
   faster again, so a zone it's still in has none yet. These are placed before the turn numbers, which give way where they'd touch.
 - **The pedals now in the readout:** speed, gear, a BRAKE chip lit in the brake colour while braking, and throttle in per cent. While

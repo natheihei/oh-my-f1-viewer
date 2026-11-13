@@ -4,18 +4,17 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
+import { defineComponent, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
-  codeOf,
   colors,
+  drawParts,
   hline,
   neutralOf,
   num,
   styleOf,
   text,
-  textWidth,
   useDriverStyles,
   type Box,
   type Ctx,
@@ -178,6 +177,7 @@ function cell(ctx: Ctx, v: number | null, right: number, y: number, pitch: numbe
 function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   const c = colors();
   const small = thumbnail(height);
+  const styles = new Map([m.first, m.second].map((s) => [s.number, s]));
   const size = small ? 9 : SIZE;
   const pitch = small ? Math.max(11, Math.min(MIN_PITCH, (height - 4) / lines(m))) : pitchOf(m, height);
   const left = small ? 4 : PAD;
@@ -187,15 +187,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 
   if (!small) {
     const mid = LEGEND / 2;
-    let x = left;
-    for (const [s, colour, weight] of [
-      [m.first.code, m.first.colour, 700],
-      [' vs ', c.dim, 400],
-      [m.second.code, m.second.colour, 700],
-    ] as const) {
-      text(ctx, s, x, mid, { color: colour, size: SIZE, weight });
-      x += textWidth(ctx, s, SIZE, weight);
-    }
+    drawParts(ctx, [{ driver: m.first.number }, ' vs ', { driver: m.second.number }], styles, left, mid, { size: SIZE, look: { strong: true } });
     const basis = m.counted ? `avg ${m.counted} lap${m.counted === 1 ? '' : 's'}${m.sinceStop ? ' since pit' : ''}` : m.sinceStop ? 'no lap since pit' : '';
     text(ctx, basis, end, mid, { align: 'right', color: c.dim, size: SIZE });
     const head = LEGEND + HEAD / 2;
@@ -227,11 +219,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
     } else if (i > 0 && i !== m.averageAt && !small) hline(ctx, left, end, y, c.quiet);
     text(ctx, `L${row.lap}`, left, mid, { color: row.live ? c.ink : c.dim, size, weight: row.live ? 600 : 400 });
     if (row.skip) {
-      const note =
+      const note: Part[] =
         row.skip === 'PIT'
-          ? ['PIT', ...row.pits.map((p) => `${(p.who ? m.second : m.first).code} ${p.way}`)].join(' · ')
-          : `${row.skip} · not counted`;
-      text(ctx, note, left + LAP_W, mid, { color: c.mute, size });
+          ? ['PIT', ...row.pits.flatMap((p): Part[] => [' · ', { driver: (p.who ? m.second : m.first).number }, ` ${p.way}`])]
+          : [`${row.skip} · not counted`];
+      drawParts(ctx, note, styles, left + LAP_W, mid, { color: c.mute, size });
     } else {
       // A sector still being driven is "…"; one the feed never sent is a dash.
       row.deltas.forEach((d, k) => {
@@ -277,6 +269,6 @@ export default defineComponent({
   needs: NEEDS,
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   fit: MOST,
-  spec: ({ drivers }) => ({ key: `sector_table:${drivers.join('-')}`, label: `Sectors ${drivers.map(codeOf).join(' · ')}` }),
+  spec: ({ drivers }) => ({ key: `sector_table:${drivers.join('-')}`, label: 'Sectors', drivers }),
   View: SectorTableView,
 });

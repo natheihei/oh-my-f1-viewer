@@ -6,8 +6,8 @@ import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
-  codeOf,
   colors,
+  drawCode,
   fitOutline,
   num,
   styleOf,
@@ -295,8 +295,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const row = READOUT / 2;
   let x = 10;
   if (m.picked) {
-    text(ctx, m.style.code, x, row, { color: m.style.colour, size: 11, weight: 700 });
-    x += textWidth(ctx, m.style.code, 11, 700) + 10;
+    x += drawCode(ctx, m.style, x, row, { size: 11, strong: true }) + 10;
   }
   // Numbers get a slot as wide as their widest value, right-aligned, so what follows them doesn't move.
   const speed = m.speed === null ? '—' : String(Math.round(m.speed));
@@ -423,7 +422,8 @@ export default defineComponent({
   fit: FIT,
   spec: ({ drivers }) => ({
     key: `speed_ribbon:${drivers?.[0] ?? 'leader'}`,
-    label: drivers?.length ? `Speed ribbon ${codeOf(drivers[0])}` : 'Speed ribbon',
+    label: 'Speed ribbon',
+    drivers: drivers?.slice(0, 1),
   }),
   View: SpeedRibbon,
 });
