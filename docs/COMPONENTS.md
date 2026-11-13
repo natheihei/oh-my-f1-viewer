@@ -67,17 +67,18 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 
 ### Overflow
 
-- **The host says when there's more.** It checks every view for content below what the tile shows, and draws a faded bottom edge and
-  "more ▾". One mark, one look, whatever the component is. (2026-11-11)
-- **The same mark covers content cut off at the right.** The right edge fades too, and the one chip in the bottom right corner names
-  the ways: "more ▾", "more ▸" or "more ▾▸". A single chip in a single place, not a second mark on the right edge, so the viewer
-  learns one place to look. Content scrolled off the top or left isn't marked, and nor is a line cut short with "…"
-  (`text-overflow: ellipsis`), which already says so. (2026-11-12)
+- **The component adapts, and the host marks only what it can't.** A component fits itself to its tile as far as it can: it scrolls
+  a list, shortens a label, draws a compact form. When it can't go smaller, it lets its content run past the tile. The host checks
+  only that, the frame it draws the component in, and never looks inside: content past the bottom gets a faded bottom edge, past
+  the right a faded right edge, and one chip in the bottom right corner names the ways, "more ▾", "more ▸" or "more ▾▸".
+  (2026-11-12. From 2026-11-11 the host searched the component for any clipped element, which made it guess at the component's
+  intent: a list scrolling on purpose, a label cut with "…". Dividing the work this way means it doesn't have to.)
 - **A component never draws its own "more" note or count of what's hidden.** A second form of the same message is what the host's
   mark exists to prevent. (2026-11-12)
-- **A list of elements scrolls:** `overflowY: 'auto'`, `flex: 1`, `minHeight: 0`. The host's mark shows until it's scrolled to the end.
-- **A table wider than its tile scrolls sideways,** `overflowX: 'auto'`, rather than hiding the columns that don't fit. The host's mark
-  shows "▸" until it's scrolled to the right end. A cell that would rather be shortened than scrolled ends in "…". (2026-11-12)
+- **A list of elements scrolls:** `overflowY: 'auto'`, `flex: 1`, `minHeight: 0`. It has handled its overflow, so the host doesn't
+  mark it, and its scrollbar shows there's more.
+- **A component doesn't hide its own overflow** with `overflow: hidden` on content the viewer would want to reach. The host can't
+  see past it, so the cut goes unmarked.
 - **A canvas of rows shrinks to a floor, then stops.** Rows get smaller with the tile down to the smallest size that still reads, 16px
   for a row of text. Below that the component stops shrinking and lets its rows run past the bottom of the tile, where the host marks
   the cut. It doesn't drop rows quietly, and it doesn't shrink type until it can't be read. (2026-11-12, **not built yet**: a chart's
@@ -115,7 +116,7 @@ Per-chart decisions go under a heading for that chart as each one is polished.
 | The rules as a mod's author reads them | `shared/modGuide.ts` |
 | The build agent's prompt, which includes them | `shared/buildPrompt.ts` |
 | Writing `AGENTS.md` into the mods folder | `electron/mods/index.ts` |
-| The host's overflow check and mark, below and at the right | `src/host/overflow.ts`, `src/host/Grid.tsx` |
+| The host's overflow check and mark | `src/host/overflow.ts`, `src/host/Grid.tsx` |
 | The size declaration | `src/host/components.ts` |
 | Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |

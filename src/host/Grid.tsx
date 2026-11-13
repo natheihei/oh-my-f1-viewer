@@ -59,9 +59,9 @@ function LookAheadWarning({ scope }: { scope: string }) {
 }
 
 /**
- * Holds a drawn component and says, with a faded edge and a quiet "more" mark, when it has content
- * below or to the right of what the tile shows, whatever the component does with its overflow. One mark
- * in the bottom right corner names both ways: "more ▾", "more ▸" or "more ▾▸".
+ * Holds a drawn component and says, with a faded edge and a quiet "more" mark, when the component has
+ * outgrown its tile: its content runs past the bottom or the right. One mark in the bottom right corner
+ * names both ways: "more ▾", "more ▸" or "more ▾▸".
  */
 function ViewFrame({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
