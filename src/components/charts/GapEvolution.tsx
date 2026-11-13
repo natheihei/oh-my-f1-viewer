@@ -260,41 +260,37 @@ function yTop(gaps: number[], line: number): number {
 
 /** Between a mark's line and its label, in pixels. */
 const MARK_PAD = 3;
-/** The least space, in pixels, between one label and the next line or label in its row. */
+/** The least space, in pixels, between two labels in a row. */
 const MARK_GAP = 4;
+/** From one row of marks to the next, in pixels. */
+const MARK_ROW = 12;
 
-/** How marks whose labels would collide are labelled: `all` names every driver in one label at the first line, `latest` only the last mark. */
-export type MarkMerge = 'all' | 'latest';
-
-/** A label in a row of marks: at a line `at`, naming `drivers`, on the `align` side of the line's text (left means it runs right of the line). */
+/** A mark's label: at its line `at`, on the `align` side of the text (left means it runs right of the line), in row `row` from the top. */
 export interface MarkLabel {
   at: number;
-  drivers: number[];
+  driver: number;
   align: 'left' | 'right';
+  row: number;
 }
 
 /**
- * Lays out a row of mark labels, each right of its line or left of it where it would pass `right`, so none
- * covers another or runs across another line in the row. Marks are `at` an x in pixels; `width` is how wide
- * a label naming those drivers draws. Ones that would collide become one label, as `merge` says.
+ * Lays out mark labels so none covers another: each stays at its own line, right of it or left of it where
+ * it would pass `right`, in the first row from the top where it clears the labels already there. Marks are
+ * `at` an x in pixels; `width` is how wide the label naming that driver draws.
  */
-export function layoutMarks(marks: ReadonlyArray<{ at: number; driver: number }>, width: (drivers: number[]) => number, right: number, merge: MarkMerge): MarkLabel[] {
-  const place = (at: number, drivers: number[]) => {
-    const w = width(drivers);
-    const room = right - at - MARK_PAD >= w;
-    return { at, drivers, align: room ? ('left' as const) : ('right' as const), from: room ? at + MARK_PAD : at - MARK_PAD - w, to: room ? at + MARK_PAD + w : at - MARK_PAD };
-  };
-  // Each label with the last line of the marks it stands for: together they're what the next one must clear.
-  const out: Array<ReturnType<typeof place> & { last: number }> = [];
-  for (const mk of [...marks].sort((p, q) => p.at - q.at)) {
-    let next = { ...place(mk.at, [mk.driver]), last: mk.at };
-    for (let prev = out.at(-1); prev && Math.max(prev.to, prev.last) + MARK_GAP > Math.min(next.from, next.at); prev = out.at(-1)) {
-      out.pop();
-      if (merge === 'all') next = { ...place(prev.at, [...new Set([...prev.drivers, ...next.drivers])]), last: mk.at };
-    }
-    out.push(next);
-  }
-  return out.map(({ at, drivers, align }) => ({ at, drivers, align }));
+export function layoutMarks(marks: ReadonlyArray<{ at: number; driver: number }>, width: (driver: number) => number, right: number): MarkLabel[] {
+  const rows: Array<Array<{ from: number; to: number }>> = [];
+  return [...marks]
+    .sort((p, q) => p.at - q.at)
+    .map(({ at, driver }) => {
+      const w = width(driver);
+      const room = right - at - MARK_PAD >= w;
+      const box = room ? { from: at + MARK_PAD, to: at + MARK_PAD + w } : { from: at - MARK_PAD - w, to: at - MARK_PAD };
+      let row = rows.findIndex((r) => r.every((o) => o.to + MARK_GAP <= box.from || box.to + MARK_GAP <= o.from));
+      if (row < 0) row = rows.push([]) - 1;
+      rows[row].push(box);
+      return { at, driver, align: room ? ('left' as const) : ('right' as const), row };
+    });
 }
 
 interface Drawn extends GapModel {
@@ -368,23 +364,21 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   hline(ctx, left, right, y(within), c.dim, [3, 3]);
 
   if (!compact) {
-    // Each label sits right of its line, or left of it where it would run into the panel; ones that would
-    // collide merge (pits) or give way to the latest (passes), and every line is still drawn.
-    const row = (marks: Array<{ at: number; driver: number }>, parts: (drivers: number[]) => Part[], y: number, merge: MarkMerge, style: { color?: string; weight?: number }) => {
+    // Each label sits at its own line, right of it or left of it by the panel, stacked a row down where it
+    // would cover another. The passes' rows start under the stops'.
+    const row = (marks: Array<{ at: number; driver: number }>, parts: (driver: number) => Part[], y: number, style: { color?: string; weight?: number }) => {
       const s = { ...style, size: TYPE };
-      for (const l of layoutMarks(marks, (d) => partsWidth(ctx, parts(d), styles, s), right, merge)) {
-        drawParts(ctx, parts(l.drivers), styles, l.align === 'left' ? l.at + MARK_PAD : l.at - MARK_PAD, y, { ...s, align: l.align });
+      const labels = layoutMarks(marks, (d) => partsWidth(ctx, parts(d), styles, s), right);
+      for (const l of labels) {
+        drawParts(ctx, parts(l.driver), styles, l.align === 'left' ? l.at + MARK_PAD : l.at - MARK_PAD, y + l.row * MARK_ROW, { ...s, align: l.align });
       }
+      return labels.length ? Math.max(...labels.map((l) => l.row)) + 1 : 0;
     };
     const pits = m.pits.filter((p) => p.lap >= m.from);
     for (const p of pits) vline(ctx, x(p.lap), top, bottom, c.faint, [2, 3]);
     for (const p of m.passes) vline(ctx, x(p.x), top, bottom, c.dim);
-    const pitParts = (drivers: number[]): Part[] => ['PIT ', ...drivers.flatMap((driver, i): Part[] => (i ? [' · ', { driver }] : [{ driver }]))];
-    row(pits.map((p) => ({ at: x(p.lap), driver: p.driver })), pitParts, top + 6, 'all', {});
-    row(m.passes.map((p) => ({ at: x(p.x), driver: p.ahead })), ([driver]) => [{ driver }, ' AHEAD'], top + (m.pits.length ? 18 : 6), 'latest', {
-      color: c.ink,
-      weight: 600,
-    });
+    const pitRows = row(pits.map((p) => ({ at: x(p.lap), driver: p.driver })), (driver) => ['PIT ', { driver }], top + 6, {});
+    row(m.passes.map((p) => ({ at: x(p.x), driver: p.ahead })), (driver) => [{ driver }, ' AHEAD'], top + 6 + pitRows * MARK_ROW, { color: c.ink, weight: 600 });
   }
 
   // The live trace, faint, broken across a stop.
