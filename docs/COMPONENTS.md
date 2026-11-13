@@ -98,6 +98,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Pedals have their own colours, and brake is the one red that isn't an alert.** Throttle green and brake red, as every
   broadcast and telemetry screen draws them, toned down (`throttle`, `brake`) so the red reads as data, not as the red that
   warns or as a soft tyre. (2026-11-13. Violet was tried first, to keep red for alerts, and read as foreign.)
+- **Flag colours are for flags, toned down the same way.** A flag is drawn as a small flag, never as the colour of text or a bar:
+  green and red take the pedals' `throttle` and `brake`, and yellow and blue their own toned `flag-yellow` and `flag-blue`, so
+  none reads as an alert, build mode or a tyre. (2026-11-13, with race control.)
 
 ### Spoilers
 
@@ -138,6 +141,34 @@ Polished 2026-11-13.
 - **Size.** Least 315 by 376: a full grid of 22 at 16px rows and 11px type with every column. Fit 396 by 508: 22px rows, 12px
   type, the widest spacing. The shape asked for is that fit's, 0.78. Both are computed from the draw constants, so they move with
   them, and `scripts/tower-check.mjs` shows it at both and below in the real app.
+
+### Race control
+
+Polished 2026-11-13.
+
+- **A list of elements, not a canvas.** A race has a couple of hundred messages, and every one stays reachable: the list scrolls
+  with the app's hairline track. A canvas could only run past the tile for the host's mark, which doesn't reach them. The
+  pointer on a line shows the messages it stands for, as sent.
+- **Fewer words, read from F1's wording.** The feed fills its structured columns only for flags. Deleted laps, the stewards'
+  cases, penalties, the red flag and the restart order are plain text, so `raceControlMessages.ts` reads them with a pattern for
+  each: "ALB lap 34 deleted · T1 limits" for "CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00". A
+  message no pattern knows is shown as sent, less car numbers and clock times. The patterns are tested on real messages from São
+  Paulo and Mexico City 2026.
+- **Sentence case,** with capitals left for driver codes, turns and sectors, so those stand out.
+- **One line per stewards' case.** Noted, under investigation and the decision are one case, known by its incident time and the
+  cars in it. Its line moves up as it changes and shows its stages under it, "noted › investigating › 5s penalty".
+- **A run of yellows and their clears is one line,** "Double yellow S2 · yellow S1 · cleared", until every sector is clear. A
+  clear with no yellow before it is its own line.
+- **What is in force, pinned on top:** a red flag, a safety car or a VSC, the sectors under yellow, grip, the season's aid
+  (Overtake or DRS) and how many cases are open. Grip and the aid are shown only once a message has said them. A red flag holds
+  until the session starts again.
+- **A red flag, a safety car and a VSC stand out:** their flag, in ink and bold, wherever they are in the list. The red flag comes
+  as plain text, with no flag, and is read from it. One ending is half yellow, half green.
+- **Each lap once, as a heading,** not a tag on every message.
+- **Blue flags are quiet:** one faint line per run, with the codes. They are most of the messages and the least read.
+- **Type is 11px.** The newest message is in ink, the rest dim.
+- **Size.** Least 320 by 160: the line on top and four one-line messages. Fit 520 wide, past which lines only get emptier. The
+  shape asked for is tall, 0.8, for the rail beside the video.
 
 ### Car telemetry
 
@@ -281,6 +312,7 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
 | A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
 | The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
+| Reading race control's messages | `src/components/charts/raceControlMessages.ts` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
 | Pit windows in the real app, fitted and squeezed | `scripts/pit-windows-check.mjs` |
