@@ -65,10 +65,10 @@ export function outlineLength(outline: Outline): number {
 
 /**
  * Projects points onto the outline as a closed line: how far along it the nearest point is, from its first
- * point, and how far off the line the point is, both in outline units. It looks near its last answer first,
+ * point, and how far off the line the point is, both in outline units, and that nearest point, `fx` and `fy`. It looks near its last answer first,
  * as a car moves on, and searches the whole outline when that's not close.
  */
-export function projector(outline: Outline): (x: number, y: number) => { s: number; off: number } {
+export function projector(outline: Outline): (x: number, y: number) => { s: number; off: number; fx: number; fy: number } {
   const n = outline.x.length;
   const along = [0];
   for (let i = 0; i < n; i++) along.push(along[i] + Math.hypot(outline.x[(i + 1) % n] - outline.x[i], outline.y[(i + 1) % n] - outline.y[i]));
@@ -79,10 +79,11 @@ export function projector(outline: Outline): (x: number, y: number) => { s: numb
     const [dx, dy] = [outline.x[j] - ax, outline.y[j] - ay];
     const len2 = dx * dx + dy * dy;
     const k = len2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
-    return { s: along[i] + k * Math.sqrt(len2), off: Math.hypot(ax + k * dx - x, ay + k * dy - y) };
+    const [fx, fy] = [ax + k * dx, ay + k * dy];
+    return { s: along[i] + k * Math.sqrt(len2), off: Math.hypot(fx - x, fy - y), fx, fy };
   };
   const search = (from: number, count: number, x: number, y: number) => {
-    let best = { s: 0, off: Infinity, i: 0 };
+    let best = { s: 0, off: Infinity, fx: 0, fy: 0, i: 0 };
     for (let c = 0; c < count; c++) {
       const i = (((from + c) % n) + n) % n;
       const p = onSegment(i, x, y);
@@ -96,6 +97,6 @@ export function projector(outline: Outline): (x: number, y: number) => { s: numb
     // Near enough to the line to trust the local search: 20 m, the track's width.
     if (!best || best.off > 200) best = search(0, n, x, y);
     last = best.i;
-    return { s: best.s, off: best.off };
+    return { s: best.s, off: best.off, fx: best.fx, fy: best.fy };
   };
 }

@@ -240,11 +240,11 @@ describe('track geometry', () => {
     expect(outlineLength(square)).toBe(300);
   });
 
-  it('projects points onto the outline, as distance along it and off it', () => {
+  it('projects points onto the outline, as distance along it and off it, and the nearest point', () => {
     const project = projector(square);
-    expect(project(50, -3)).toEqual({ s: 50, off: 3 });
-    expect(project(103, 25)).toEqual({ s: 125, off: 3 });
+    expect(project(50, -3)).toEqual({ s: 50, off: 3, fx: 50, fy: 0 });
+    expect(project(103, 25)).toEqual({ s: 125, off: 3, fx: 100, fy: 25 });
     // Back along the closing side, from (0, 50) to (0, 0).
-    expect(project(-1, 10)).toEqual({ s: 290, off: 1 });
+    expect(project(-1, 10)).toEqual({ s: 290, off: 1, fx: 0, fy: 10 });
   });
 });

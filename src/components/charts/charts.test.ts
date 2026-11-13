@@ -15,7 +15,7 @@ const { messagesModel, signalOf, markOf, lineText } = await import('./RaceContro
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
-const { trackModel, placeLabels, inLane, toggleDriver, chosenOf } = await import('./TrackMap');
+const { trackModel, placeLabels, inLane, toggleDriver, chosenOf, lanePath, dotAt } = await import('./TrackMap');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
@@ -874,6 +874,28 @@ describe('track_map', () => {
       { driver: 44, x: 9990, y: 6000 },
     ];
     expect([...inLane(cars, outline)]).toEqual([4]);
+  });
+
+  it('takes the pit lane from a stop: the long run off the line, and where it leaves and joins it', () => {
+    const outline = { x: [0, 10000, 10000, 0], y: [0, 0, 10000, 10000] };
+    // Down the bottom straight, y = 0: on the line, easing off to 20 m below it for 20 positions, and back.
+    const offs = [0, 2, 0, 10, 25, 60, ...Array<number>(20).fill(200), 60, 25, 10, 0, 1];
+    const positions = offs.map((off, i) => ({ x: 1000 + i * 100, y: -off }));
+    const lane = lanePath(positions, outline);
+    expect(lane.map((p) => Math.round(p.off))).toEqual([25, 60, ...Array<number>(20).fill(200), 60, 25]);
+    expect([Math.round(lane[0].fx), Math.round(lane[0].fy)]).toEqual([1400, 0]);
+    // A car running wide for a moment isn't a lane.
+    expect(lanePath(positions.slice(0, 8).map((p, i) => (i === 6 ? { ...p, y: -200 } : p)), outline)).toEqual([]);
+  });
+
+  it('finds the car at a click: the nearest dot within 12px, or none', () => {
+    const dots = [
+      { driver: 1, x: 100, y: 100 },
+      { driver: 44, x: 108, y: 100 },
+    ];
+    expect(dotAt(dots, { x: 105, y: 101 })).toBe(44);
+    expect(dotAt(dots, { x: 101, y: 99 })).toBe(1);
+    expect(dotAt(dots, { x: 140, y: 100 })).toBeNull();
   });
 
   it('adds a clicked car to the chosen and drops one added, leaves the props\' drivers chosen, and stops at six', () => {

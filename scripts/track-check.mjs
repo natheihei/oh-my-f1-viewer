@@ -8,7 +8,7 @@
 // Run `npm run build:electron` first in a fresh checkout.
 // Usage: node scripts/track-check.mjs <screenshot-dir> [session key] [vite port] [cdp port]
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
@@ -52,6 +52,9 @@ const done = async (code = 0) => {
     execFileSync('pkill', ['-f', '--', `user-data-dir=${userData}`]);
   } catch {}
   await server.close();
+  // Its own user data, the cache and video included, which runs to gigabytes.
+  await new Promise((r) => setTimeout(r, 1000));
+  rmSync(userData, { recursive: true, force: true });
   process.exit(code);
 };
 
@@ -129,13 +132,24 @@ const measure = () =>
     }),
   );
 
-async function shoot(name, items, squeeze) {
-  await page.evaluate(async (items) => {
+/** The whole window, and the track tile alone, title bar and all, as `<name>.png` and `<name>-tile.png`. */
+async function capture(name) {
+  await page.screenshot({ path: path.join(outDir, `${name}.png`) });
+  const box = await page.evaluate(() => {
+    const r = document.querySelector('.chart-canvas')?.closest('.stage-host')?.getBoundingClientRect();
+    return r && { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
+  if (box) await page.screenshot({ path: path.join(outDir, `${name}-tile.png`), clip: box });
+}
+
+/** Puts `items` on screen beside the main feed, or with `alone` on their own, and squeezes the map to about `squeeze` pixels. */
+async function shoot(name, items, squeeze, alone = false) {
+  await page.evaluate(async ([items, alone]) => {
     const { host, read, tilesOf } = await import('/src/host/index.ts');
-    host.layout.remove({ keys: tilesOf(read().layout).filter((t) => t.component.type !== 'video' || !read().feeds.some((f) => f.id === t.component.props.feed && f.kind === 'main')).map((t) => t.component.key) });
+    host.layout.remove({ keys: tilesOf(read().layout).filter((t) => alone || t.component.type !== 'video' || !read().feeds.some((f) => f.id === t.component.props.feed && f.kind === 'main')).map((t) => t.component.key) });
     host.layout.add({ items });
     host.layout.autoLayout();
-  }, items);
+  }, [items, alone]);
   await page.waitForTimeout(2500);
   if (squeeze) {
     // By hand, to about this many pixels.
@@ -150,9 +164,8 @@ async function shoot(name, items, squeeze) {
     }, squeeze);
     await page.waitForTimeout(2500);
   }
-  const file = path.join(outDir, `${name}.png`);
-  await page.screenshot({ path: file });
-  console.log(`${name}: ${JSON.stringify(await measure())} -> ${file}`);
+  await capture(name);
+  console.log(`${name}: ${JSON.stringify(await measure())}`);
 }
 
 
@@ -180,6 +193,17 @@ console.log(`pack, lap ${JSON.stringify(await seekToMs(moments.pack))}`);
 await shoot('1-pack', [all]);
 console.log(`stops, lap ${JSON.stringify(await seekToMs(moments.stops))}`);
 await shoot('2-stops', [all]);
+// The pit lane the map draws: whose stop, how many positions, and how far off the line it runs at most and at its ends, in metres.
+console.log(`lane: ${JSON.stringify(await page.evaluate(async () => {
+  const { host, read } = await import('/src/host/index.ts');
+  const { STOP_SQL, LANE_SQL, lanePath } = await import('/src/components/charts/TrackMap.tsx');
+  const [stop] = (await host.data.sql({ sql: STOP_SQL })).rows;
+  if (!stop) return null;
+  const { rows } = await host.data.sql({ sql: LANE_SQL, params: [stop.driver_number, stop.date, stop.lane_duration * 1000] });
+  const lane = lanePath(rows, read().circuit.outline);
+  const m = (u) => Math.round(u / 10);
+  return { car: stop.driver_number, positions: rows.length, lane: lane.length, most: m(Math.max(...lane.map((p) => p.off))), ends: [m(lane[0]?.off), m(lane.at(-1)?.off)] };
+}))}`);
 const { rows: order } = await page.evaluate(async () => {
   const { host } = await import('/src/host/index.ts');
   return host.data.sql({ sql: 'SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number ORDER BY position' });
@@ -190,13 +214,13 @@ await shoot('3-chosen', [{ type: 'track_map', props: { drivers: [first, second] 
 const dot = await dotOf(third);
 await page.mouse.move(dot.x, dot.y);
 await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(outDir, '4-pointer.png') });
+await capture('4-pointer');
 await page.mouse.click(dot.x, dot.y);
 await page.waitForTimeout(1500);
 const added = await trackKey();
 await page.mouse.move(dot.x, dot.y + 1);
 await page.waitForTimeout(800);
-await page.screenshot({ path: path.join(outDir, '5-clicked.png') });
+await capture('5-clicked');
 await page.mouse.click(dot.x, dot.y + 1);
 await page.waitForTimeout(1500);
 const dropped = await trackKey();
@@ -205,9 +229,10 @@ console.log(`click on ${third}: the tile is ${added}, then ${dropped}`);
 const fixedDot = await dotOf(first);
 await page.mouse.click(fixedDot.x, fixedDot.y);
 await page.waitForTimeout(1500);
-await page.screenshot({ path: path.join(outDir, '5b-fixed.png') });
+await capture('5b-fixed');
 await page.mouse.move(5, 5);
-await shoot('6-fit', [all], [560, 420]);
+// On its own, so the tile can grow to its fit without another tile in the way.
+await shoot('6-fit', [all], null, true);
 await shoot('7-least', [all], [360, 260]);
 await shoot('8-squeezed', [all], [300, 200]);
 // A click changes the map's own state, not the tile: its key stays the one it was added with.
