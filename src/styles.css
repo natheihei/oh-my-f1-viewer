@@ -19,6 +19,8 @@
   /* Charts draw with faint, so it stays; the chrome uses it only for non-text marks. */
   --color-faint: #4a4a4a;
   --color-line: #2c2c2c;
+  /* Rules between the rows of a dense table, like the timing tower: quieter than a line. */
+  --color-quiet: #1b1b1b;
   /* A brighter hairline: what floats over tiles is framed with it. */
   --color-rule: #5a5a5a;
   /* What shows where there's no tile. */
@@ -352,9 +354,16 @@
   @apply text-accent;
 }
 
-/* Charts draw on a canvas that fills the tile. */
+/*
+ * Charts draw on a canvas that fills the tile, or runs past its bottom or right edge when the chart has
+ * stopped shrinking: the box doesn't clip, so the host's frame sees the overflow and marks it.
+ */
+.chart-box {
+  @apply absolute inset-0;
+}
+
 .chart-canvas {
-  @apply absolute inset-0 block h-full w-full;
+  @apply absolute top-0 left-0 block h-full w-full;
 }
 
 .chart-message {

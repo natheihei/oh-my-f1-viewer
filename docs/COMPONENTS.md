@@ -82,9 +82,11 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   see past it, so the cut goes unmarked.
 - **A canvas of rows shrinks to a floor, then stops.** Rows get smaller with the tile down to the smallest size that still reads, 16px
   for a row of text. Below that the component stops shrinking and lets its rows run past the bottom of the tile, where the host marks
-  the cut. It doesn't drop rows quietly, and it doesn't shrink type until it can't be read. (2026-11-12, **not built yet**: a chart's
-  canvas always matches its tile today, so the host can't see what a chart leaves out. Comes with the timing tower's polish. Pit stops
-  draws its own "N earlier" note and moves to this then.)
+  the cut. It doesn't drop rows quietly, and it doesn't shrink type until it can't be read. A chart says how large it draws in a given
+  tile with `ChartCanvas`'s `extent`, and the canvas runs past the tile by that much. (2026-11-12; built 2026-11-13 with the timing
+  tower. Pit stops still draws its own "N earlier" note, and moves to this when it's polished.)
+- **Columns aren't dropped to fit either.** A table too wide for its tile keeps every column and runs past the right edge, where the
+  host marks it "more ▸". A column that vanishes as the tile narrows reads as data that isn't there. (2026-11-13)
 
 ### Colour
 
@@ -110,6 +112,27 @@ Components drawn on a canvas with the kit, `src/components/charts/kit`.
 
 Per-chart decisions go under a heading for that chart as each one is polished.
 
+### Timing tower
+
+Polished 2026-11-13.
+
+- **Who you're watching is lifted.** A car whose onboard is in a tile gets a raised row and a bold code, so the tower and the videos
+  read as one screen.
+- **A car within range of the one ahead is marked.** An interval under the season's DRS or Overtake line (`spec.chaseAid`) is ink
+  and bold, the rest dim. A lapped interval is never in range.
+- **Type doesn't go below 11px**, the app's smallest, and is 12px only where the tile is tall enough for a 21px row and wide enough for
+  every column at that size. Rows run from 16 to 22px.
+- **Every column, always.** Position, team bar, code, places gained (a race with a grid only), gap, interval, last lap and tyre.
+  Below its least size the tower runs past the tile instead. Only the thumbnail in the suggestion strip, under 150px high, leaves the
+  interval, last lap and places out, and fits its box.
+- **Quieter chrome, stronger data.** Column heads are the hint grey (`mute`), not `faint`; row rules are `quiet`, under `line`;
+  position is in ink, since it's read first.
+- **Missing data is drawn as missing.** An interval the feed hasn't sent is a faint dash. A compound it hasn't named is left blank,
+  not "?".
+- **Size.** Least 315 by 376: a full grid of 22 at 16px rows and 11px type with every column. Fit 396 by 508: 22px rows, 12px
+  type, the widest spacing. The shape asked for is that fit's, 0.78. Both are computed from the draw constants, so they move with
+  them, and `scripts/tower-check.mjs` shows it at both and below in the real app.
+
 ## Where it lives
 
 | Piece | File |
@@ -122,4 +145,6 @@ Per-chart decisions go under a heading for that chart as each one is polished.
 | Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
+| A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
+| The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Colour and size tokens | `src/styles.css` |
