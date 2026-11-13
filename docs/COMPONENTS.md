@@ -95,6 +95,8 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 
 Components drawn on a canvas with the kit, `src/components/charts/kit`.
 
+- **Every chart is for races to start with: `sessions: ['race', 'sprint']`.** The agent is only offered what fits the open session,
+  so a chart reaches qualifying or practice once it's been made to make sense there. (2026-11-12)
 - **A chart that needs car telemetry sets `replayOnly`.** The feed has no telemetry while a session is live. (2026-11-12)
 - **Missing data is drawn as missing.** A value the feed hasn't sent is a gap or a dash, never a guess.
 

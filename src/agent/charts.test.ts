@@ -8,11 +8,12 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 
 // A file of its own, so the stand-in charts registered here don't leak into other tests.
 const { runTool, toolDefinitions } = await import('./tools');
-const { describeAppState, describeCharts } = await import('./bridge');
+const { askAgent, describeAppState, describeCharts } = await import('./bridge');
 const { driversOf, resolveDriver } = await import('./matching');
 const { defineComponent, host, read } = await import('../host');
 const { useSession } = await import('../data/session');
 const { useSessionData } = await import('../data/sessionData');
+const { useBuild } = await import('../host/build');
 const { layout } = await import('../layout/store');
 const { components } = await import('../components/registry');
 const Type = (await import('typebox')).default;
@@ -143,7 +144,7 @@ describe('the chart list', () => {
 
 describe('suggesting charts', () => {
   const race = { contentId: 1, title: 'Race', status: 'replay', type: 'race' } as SessionInfo;
-  const ready = { state: 'ready', drivers: roster } as unknown as SessionDataView;
+  const ready = { state: 'ready', drivers: roster, tables: [] } as unknown as SessionDataView;
   const props = () => read().suggestions.items.map((i) => ({ type: i.type, props: i.props }));
 
   beforeEach(() => {
@@ -160,7 +161,7 @@ describe('suggesting charts', () => {
   });
 
   it('lists a replay-only chart as such, and refuses it in a live session', async () => {
-    expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, exactly 1 driver, any session, replays only: ');
+    expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, exactly 1 driver, race/sprint, replays only: ');
     useSession.setState({ session: { ...race, status: 'live' }, channels });
     await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).rejects.toThrow(
       'car_telemetry works in replays only, and this session is live: leave it out. Nothing was suggested.',
@@ -218,6 +219,43 @@ describe('suggesting charts', () => {
     // One for any session is fine.
     await runTool('suggest_tiles', { charts: [{ chart: 'test_pit', drivers: ['HAM'] }] });
     expect(props()).toHaveLength(1);
+  });
+
+  it('offers the viewing agent only the charts that fit the open session, and the build agent every one', async () => {
+    const send = vi.spyOn(host.agent, 'send').mockResolvedValue();
+    const offered = () => send.mock.lastCall![3].split('\n').filter((l) => l.startsWith('test_') || l.startsWith('car_telemetry,')).map((l) => l.split(',')[0]).sort();
+    const enumOf = () =>
+      (toolDefinitions().find((t) => t.name === 'suggest_tiles')?.parameters as { properties: { charts: { items: { properties: { chart: { enum: string[] } } } } } })
+        .properties.charts.items.properties.chart.enum;
+    try {
+      await askAgent('charts?');
+      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
+
+      // A race chart isn't offered in qualifying, in the list or the tool.
+      useSession.setState({ session: { ...race, type: 'qualifying' } });
+      await askAgent('charts?');
+      expect(offered()).toEqual(['test_field', 'test_pit', 'test_weather']);
+      expect(enumOf()).toEqual(['test_pit', 'test_field', 'test_weather']);
+
+      // A replay-only chart isn't offered while a race is live.
+      useSession.setState({ session: { ...race, status: 'live' } });
+      await askAgent('charts?');
+      expect(offered()).toEqual(['test_field', 'test_gap', 'test_pit', 'test_weather']);
+
+      // With no session open, nothing is ruled out.
+      useSession.setState({ session: null });
+      await askAgent('charts?');
+      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
+
+      // The build agent writes and edits charts, so it sees them all.
+      useSession.setState({ session: { ...race, type: 'qualifying' } });
+      useBuild.setState({ active: true, changes: [], enteredAtSec: 0 });
+      await askAgent('charts?');
+      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
+    } finally {
+      useBuild.setState({ active: false, changes: [], enteredAtSec: null });
+      send.mockRestore();
+    }
   });
 
   it('refuses an unknown chart, and video', async () => {

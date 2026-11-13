@@ -730,25 +730,21 @@ describe('the registry', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
     expect(byName.gap_evolution.sessions).toEqual(['race', 'sprint']);
     expect(byName.tyre_strategy.sessions).toEqual(['race', 'sprint']);
-    expect(byName.timing_tower.sessions).toBeUndefined();
     expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap 44 · 1' });
     expect(byName.tyre_strategy.spec({})).toEqual({ key: 'tyre_strategy:all', label: 'Tyres' });
     expect(byName.timing_tower.spec({})).toEqual({ key: 'timing_tower', label: 'Timing' });
     for (const name of ['race_trace', 'field_pace']) expect(byName[name].sessions).toEqual(['race', 'sprint']);
-    expect(byName.lap_time_compare.sessions).toBeUndefined();
     expect(byName.race_trace.spec({})).toEqual({ key: 'race_trace:all', label: 'Race trace' });
     expect(byName.lap_time_compare.spec({ drivers: [44, 1] })).toEqual({ key: 'lap_time_compare:44-1', label: 'Lap times 44 · 1' });
     expect(byName.lap_time_compare.spec({})).toEqual({ key: 'lap_time_compare:top', label: 'Lap times' });
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
     expect(byName.pit_stops.sessions).toEqual(['race', 'sprint']);
-    for (const name of ['sector_delta', 'race_control', 'weather']) expect(byName[name].sessions).toBeUndefined();
     expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
     for (const name of ['track_map', 'speed_trace', 'car_telemetry']) {
-      expect(byName[name].sessions).toBeUndefined();
       expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
     }
@@ -757,6 +753,8 @@ describe('the registry', () => {
     expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(15);
+    // Every chart is for races only, to start with; video is for any session.
+    for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
 });
 
