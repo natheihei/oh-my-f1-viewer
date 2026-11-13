@@ -63,17 +63,12 @@ const allGroups = {
     { type: 'gap_evolution', props: { drivers: pair } },
     { type: 'tyre_strategy', props: {} },
   ],
-  race: [
-    { type: 'race_trace', props: {} },
-    { type: 'race_trace', props: { drivers: pair } },
-  ],
   pace: [
     { type: 'lap_time_compare', props: { drivers: pair } },
     { type: 'field_pace', props: {} },
   ],
   tyres: [
     { type: 'lap_time_compare', props: { drivers: [pair[0]] } },
-    { type: 'race_trace', props: { drivers: pair } },
   ],
   small: [
     { type: 'sector_delta', props: { drivers: pair } },
@@ -244,9 +239,9 @@ const timings = await page.evaluate(
   async ({ key, pair }) => {
     const { read } = await import('/src/host/index.ts');
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
-    const [tower, gap, tyres, trace, compare, pace, pit, sectors, stops, control, weather] = await Promise.all(
+    const [tower, gap, tyres, compare, pace, pit, sectors, stops, control, weather] = await Promise.all(
       [
-        'TimingTower', 'GapEvolution', 'TyreStrategy', 'RaceTrace', 'LapTimeCompare', 'FieldPace', 'PitWindow',
+        'TimingTower', 'GapEvolution', 'TyreStrategy', 'LapTimeCompare', 'FieldPace', 'PitWindow',
         'SectorDelta', 'PitStops', 'RaceControl', 'Weather',
       ].map((name) => import(`/src/components/charts/${name}.tsx`)),
     );
@@ -265,7 +260,6 @@ const timings = await page.evaluate(
       timing_tower: await time(tower.SQL, []),
       gap_evolution: await time(gap.SQL, pair),
       tyre_strategy: await time(tyres.sqlFor(0), []),
-      race_trace: await time(trace.SQL, []),
       lap_time_compare: await time(compare.sqlFor(2), pair),
       field_pace: await time(pace.SQL, []),
       pit_window: await time(pit.SQL, []),

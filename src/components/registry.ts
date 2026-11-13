@@ -6,7 +6,6 @@ import PitStops from './charts/PitStops';
 import PitWindow from './charts/PitWindow';
 import PitWindows from './charts/PitWindows';
 import RaceControl from './charts/RaceControl';
-import RaceTrace from './charts/RaceTrace';
 import SectorDelta from './charts/SectorDelta';
 import SpeedRibbon from './charts/SpeedRibbon';
 import SpeedTrace from './charts/SpeedTrace';
@@ -22,7 +21,6 @@ import VideoTile from './VideoTile';
 export const components: ComponentDefinition[] = [
   VideoTile,
   TimingTower,
-  RaceTrace,
   GapEvolution,
   LapTimeCompare,
   TyreStrategy,
