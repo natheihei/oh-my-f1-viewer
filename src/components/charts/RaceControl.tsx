@@ -260,7 +260,7 @@ export default defineComponent({
   name: 'race_control',
   title: 'Race control',
   description:
-    "Race control's messages as they were issued, newest first: flags, safety cars, red flags, the stewards' cases and their outcomes, penalties and deleted laps, with what is in force now on top. Suggest it when the user asks what a flag was for, or what happened.",
+    "Race control's messages as they were issued, newest first: flags, safety cars, red flags, the stewards' cases and their outcomes, penalties and deleted laps, with what is in force now on top. Suggest it when the user asks what a flag was for, or what happened; race_status for where things stand now.",
   args: Type.Object({
     blue_flags: Type.Optional(Type.Boolean({ description: 'Show each blue flag on its own line. Left out, runs of them are counted on one line.' })),
   }),

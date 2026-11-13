@@ -16,6 +16,7 @@ const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, markOf, lineText } = await import('./RaceControl');
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
+const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
 const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
@@ -713,6 +714,131 @@ describe('race_control', () => {
   });
 });
 
+describe('race_status', () => {
+  // Real messages from the 2026 São Paulo and Mexico City races.
+  const rc = (lap: number, category: string, flag: string | null, message: string, more: Record<string, unknown> = {}) => ({
+    lap_number: lap,
+    category,
+    flag,
+    message,
+    driver_number: null,
+    scope: null,
+    sector: null,
+    ...more,
+  });
+  const sector = (lap: number, flag: string, n: number) => rc(lap, 'Flag', flag, `${flag} IN TRACK SECTOR ${n}`, { scope: 'Sector', sector: n });
+  const options: { styles: Parameters<typeof boardModel>[1]['styles']; marshalSectors: number | null; aidLabel: string } = { styles: new Map(), marshalSectors: 16, aidLabel: 'Overtake' };
+  const board = (rows: Array<Record<string, unknown>>, o: Partial<typeof options> = {}) => boardModel(rows, { ...options, ...o });
+
+  it('holds the red flag from the lap it was shown, with the restart order and time, until the session starts', () => {
+    const rows = [
+      rc(44, 'SafetyCar', null, 'SAFETY CAR DEPLOYED'),
+      rc(45, 'Other', null, 'RED FLAG - RACE SUSPENDED'),
+      rc(46, 'Flag', 'CLEAR', 'TRACK CLEAR', { scope: 'Track' }),
+      rc(46, 'Other', null, 'RESUMPTION ORDER: 3, 16, 12, 44'),
+      rc(46, 'Other', null, 'REVISED RESUMPTION ORDER: 3, 16, 44, 12'),
+      rc(46, 'Other', null, 'RACE WILL RESUME AT 15:45'),
+    ];
+    expect(board(rows.slice(0, 1))).toMatchObject({ track: 'sc', since: 44, restart: null });
+    expect(board(rows)).toMatchObject({ track: 'red', since: 45, restart: { order: [3, 16, 44, 12], at: '15:45' } });
+    expect(board([...rows, rc(46, 'SessionStatus', null, 'SESSION STARTED')])).toMatchObject({ track: 'green', since: null, restart: null });
+  });
+
+  it('keeps a VSC to the lap it began on while it ends', () => {
+    const rows = [rc(7, 'SafetyCar', null, 'VSC DEPLOYED'), rc(8, 'SafetyCar', null, 'VSC ENDING')];
+    expect(board(rows)).toMatchObject({ track: 'vscEnd', since: 7 });
+    expect(board([...rows, rc(8, 'Flag', 'CLEAR', 'TRACK CLEAR', { scope: 'Track' })])).toMatchObject({ track: 'green', since: null });
+  });
+
+  it('leaves grip and the aid unsaid until race control says them', () => {
+    const quiet = board([rc(1, 'SessionStatus', null, 'SESSION STARTED')]);
+    expect(quiet.grip).toBeNull();
+    expect(quiet.aid).toBeNull();
+    expect(board([rc(1, 'Other', null, 'OVERTAKE DISABLED'), rc(1, 'Other', null, 'LOW GRIP CONDITIONS')])).toMatchObject({
+      grip: 'low',
+      aid: { label: 'Overtake', on: false },
+    });
+  });
+
+  it("strips the circuit's marshal sectors, or as many as have been flagged", () => {
+    const rows = [sector(63, 'DOUBLE YELLOW', 14), sector(63, 'DOUBLE YELLOW', 15), sector(63, 'CLEAR', 14)];
+    expect(board(rows).sectorCount).toBe(16);
+    expect([...board(rows).sectors]).toEqual([[15, 'double']]);
+    expect(board(rows, { marshalSectors: null }).sectorCount).toBe(15);
+  });
+
+  it('keeps owed penalties and open cases, and lets a decision go three laps after it', () => {
+    const rows = [
+      rc(36, 'Other', null, 'TURN 6 INCIDENT INVOLVING CARS 87 (BEA) AND 55 (SAI) NOTED (14:44:23)'),
+      rc(37, 'Other', null, 'TURN 1 INCIDENT INVOLVING CARS 23 (ALB) AND 10 (GAS) NOTED (14:50:05)'),
+      rc(38, 'Other', null, 'FIA STEWARDS: TURN 6 INCIDENT INVOLVING CARS 87 (BEA) AND 55 (SAI) REVIEWED NO FURTHER INVESTIGATION (14:44:23)'),
+      rc(40, 'Other', null, 'FIA STEWARDS: TURN 1 INCIDENT INVOLVING CARS 23 (ALB) AND 10 (GAS) UNDER INVESTIGATION (14:50:05)'),
+      rc(42, 'Other', null, 'FIA STEWARDS: 5 SECOND TIME PENALTY FOR CAR 23 (ALB) - REJOINING UNSAFELY (14:50:05)'),
+    ];
+    expect(board(rows.slice(0, 4)).cases.map((c) => [c.cars, c.stage])).toEqual([
+      [[23, 10], 'investigating'],
+      [[87, 55], 'no action'],
+    ]);
+    // Decided on lap 38, so gone after lap 38 + KEEP_DECIDED; the penalty stays until served.
+    expect(KEEP_DECIDED).toBe(3);
+    const at42 = board(rows).cases;
+    expect(at42.map((c) => c.stage)).toEqual(['penalty']);
+    expect(at42[0]).toMatchObject({ cars: [23, 10], penalised: [23], penalty: '5s', reason: 'REJOINING UNSAFELY' });
+    const served = [...rows, rc(46, 'Other', null, 'FIA STEWARDS: PENALTY SERVED - 5 SECOND TIME PENALTY FOR CAR 23 (ALB) (14:50:05)')];
+    expect(board(served).cases.map((c) => c.stage)).toEqual(['served']);
+    expect(board([...served, rc(50, 'Other', null, 'PIT EXIT CLOSED')]).cases).toEqual([]);
+  });
+
+  it('puts the cases left for after the race for one reason on one line', () => {
+    const later = (n: number, code: string, time: string) =>
+      rc(1, 'Other', null, `FIA STEWARDS: INCIDENT INVOLVING CAR ${n} (${code}) WILL BE INVESTIGATED AFTER THE RACE - FAILING TO FOLLOW RACE DIRECTORS INSTRUCTIONS – PRACTICE START INFRINGEMENT (${time})`);
+    const rows = [
+      later(27, 'HUL', '13:20:45'),
+      later(11, 'PER', '13:21:07'),
+      later(6, 'HAD', '13:24:09'),
+      rc(71, 'Other', null, 'FIA STEWARDS: TURN 12 INCIDENT INVOLVING CARS 16 (LEC) AND 30 (LAW) WILL BE INVESTIGATED AFTER THE RACE - CAUSING A COLLISION (15:36:34)'),
+    ];
+    expect(board(rows).cases.map((c) => [c.cars, c.reason])).toEqual([
+      [[16, 30], 'CAUSING A COLLISION'],
+      [[27, 11, 6], 'PRACTICE START INFRINGEMENT'],
+    ]);
+  });
+
+  it('counts laps deleted per car, with the black and white flag', () => {
+    const del = (lap: number, n: number, code: string) => rc(lap, 'Other', null, `CAR ${n} (${code}) TIME 1:32.243 DELETED - TRACK LIMITS AT TURN 1 LAP ${lap - 1} 14:28:00`);
+    const rows = [
+      del(16, 51, 'CAM'),
+      rc(16, 'Other', null, 'CAR 51 (CAM) LAP DELETED - TRACK LIMITS AT TURN 1 LAP 15 14:24:39 (PIT)'),
+      del(21, 12, 'ANT'),
+      del(24, 51, 'CAM'),
+      rc(58, 'Flag', 'BLACK AND WHITE', 'BLACK AND WHITE FLAG FOR CAR 51 (CAM) - TRACK LIMITS', { scope: 'Driver', driver_number: 51 }),
+    ];
+    expect(board(rows).deleted).toEqual([
+      { car: 51, laps: 3, blackWhite: true },
+      { car: 12, laps: 1, blackWhite: false },
+    ]);
+  });
+
+  it('draws taller than a short tile once its cases need it, and only the top of the board as a thumbnail', () => {
+    const calls: string[] = [];
+    const ctx = new Proxy(
+      { measureText: (s: string) => ({ width: s.length * 6.6 }) },
+      {
+        get: (t, k) => (k in t ? t[k as keyof typeof t] : () => calls.push(String(k))),
+        set: () => true,
+      },
+    ) as unknown as CanvasRenderingContext2D;
+    const rows = [
+      rc(45, 'Other', null, 'RED FLAG - RACE SUSPENDED'),
+      rc(46, 'Other', null, 'RESUMPTION ORDER: 3, 16, 12, 44, 1, 63, 41, 81, 43, 27, 87, 5, 10, 6, 30, 55, 50, 23, 11'),
+      rc(46, 'Other', null, 'INCIDENT INVOLVING CAR 11 (PER) NOTED - SPEEDING IN THE PIT LANE (15:04:43)'),
+    ];
+    const tall = drawBoard(ctx, board(rows), { width: 300, height: 180 });
+    expect(tall).toBeGreaterThan(180);
+    expect(drawBoard(ctx, board(rows), { width: 300, height: 100 })).toBeLessThan(100);
+  });
+});
+
 describe('weather', () => {
   const w = (date: number, track: number, rainfall = 0) => ({
     date,
@@ -1036,6 +1162,7 @@ describe('the registry', () => {
     expect(byName.sector_delta.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_delta:44-1', label: 'Sectors 44 · 1' });
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
+    expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
     for (const name of ['track_map', 'speed_trace', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
       expect(byName[name].replayOnly).toBe(true);
@@ -1049,7 +1176,7 @@ describe('the registry', () => {
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
     for (const gone of ['race_trace', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(17);
+    expect(components).toHaveLength(18);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -1106,6 +1233,7 @@ describe('sizes', () => {
       ['video', 'pit_window', 'field_pace', 'sector_delta'],
       ['video', 'timing_tower', 'pit_windows'],
       ['video', 'pit_windows', 'pit_stops', 'race_control'],
+      ['video', 'timing_tower', 'race_status', 'race_control'],
       ['timing_tower', 'gap_evolution', 'lap_time_compare'],
     ];
     for (const names of arrangements) expect(short(arrange(names)), names.join(', ')).toEqual([]);

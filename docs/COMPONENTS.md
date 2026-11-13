@@ -309,6 +309,38 @@ Removed 2026-11-13.
   drivers is `gap_evolution`'s question.
 - A saved layout with a `race_trace` tile draws nothing in it, as for a mod's component that is gone.
 
+### Race status
+
+Added 2026-11-13, from direction A of the race control proposals.
+
+- **Its question: what race control has in force now, and who has what against them.** `race_control` is what was said and
+  when; this gives up the order and the wording for where things stand. Each description points at the other.
+- **The same reading as the log.** It extends `standing()` in `raceControlMessages.ts` rather than reading the messages again,
+  so the two never disagree about a red flag, a case or a deleted lap.
+- **A red flag, safety car or VSC takes the top of the board:** a band across the tile in the flag's toned colour (`brake` for
+  red, `flagYellow` for yellow) with black text, "RED FLAG · since lap 45". The lap is the one it began on; a safety car's end
+  keeps it, and a red flag after a safety car starts its own. An ending ("VSC ending", "Safety car in this lap") is a quiet
+  band with a half yellow, half green flag.
+- **Under a red flag, the restart order and time:** the latest resumption order as numbered codes, and "resumes 15:45" in the
+  band, from race control's text. Both leave when the session starts again.
+- **Grip and the aid on one line,** in ink and bold only when not normal, and a dash until race control has said them: Mexico
+  City 2026 never announced grip.
+- **The marshal sectors only while a yellow is out.** Otherwise the line says "Yellows none". A sector is numbered only when
+  flagged, with the first and last for scale. The strip has the circuit's marshal sectors, as MultiViewer lists them (16 at
+  Interlagos), or as many as have been flagged in a copy cached before they were read.
+- **The stewards' cases still worth reading.** A penalty owed and a case noted or under investigation stay. A decision with no
+  action and a penalty served leave three laps after (`KEEP_DECIDED`). Owed penalties come first, then cases being looked at, then
+  fresh decisions, then those left for after the race. In a penalty case the car not given it is dim.
+- **Cases left for after the race for one reason share a line,** "HUL PER HAD BOT STR · Practice start infringement".
+- **Laps deleted, a tick each, and the black and white flag,** per car, most first. They stay all race.
+- **Left out, from the proposals:** one row per driver, the cars shown blue, two columns in a wide tile, and the last message,
+  which is the log's.
+- **Type is 11px,** headings in the hint grey.
+- **Size.** Least 300 by 180: the band, the conditions, the strip and three cases. Fit 440 wide, past which only the strip's
+  cells and the reasons grow. Its height follows what's in force, so below that it runs past the tile for the host's mark. Under
+  150 high, as in the suggestion strip, it draws only the band, the conditions and the strip, to fit. `scripts/status-check.mjs`
+  shows it in the real app at moments picked by race control's own messages.
+
 ## Where it lives
 
 | Piece | File |
@@ -325,6 +357,7 @@ Removed 2026-11-13.
 | The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Reading race control's messages | `src/components/charts/raceControlMessages.ts` |
+| The race status board in the real app, at chosen messages, at its least size and squeezed | `scripts/status-check.mjs` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
 | Pit windows in the real app, fitted and squeezed | `scripts/pit-windows-check.mjs` |
