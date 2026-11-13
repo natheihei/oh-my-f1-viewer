@@ -83,7 +83,6 @@ const allGroups = {
   ],
   telemetry: [
     { type: 'track_map', props: { drivers: pair } },
-    { type: 'speed_trace', props: { drivers: pair } },
     { type: 'car_telemetry', props: { drivers: [pair[0]] } },
   ],
 };
@@ -184,11 +183,10 @@ async function shoot(moment) {
     }
     if (name === 'telemetry') {
       // Cars in order round the lap from the timing line, by the outline point nearest each, beside the
-      // tower, to check by hand; and the laps the speed trace picked.
-      const check = await page.evaluate(async (pair) => {
+      // tower, to check by hand.
+      const check = await page.evaluate(async () => {
         const { host, read } = await import('/src/host/index.ts');
         const map = await import('/src/components/charts/TrackMap.tsx');
-        const speed = await import('/src/components/charts/SpeedTrace.tsx');
         const tower = await import('/src/components/charts/TimingTower.tsx');
         const { playheadMs } = read().sessionData;
         const circuit = read().circuit;
@@ -200,12 +198,9 @@ async function shoot(moment) {
           return { driver: car.driver, at: Math.round((best / x.length) * 1000) / 10, off: Math.round(Math.hypot(x[best] - car.x, y[best] - car.y)) };
         };
         const road = cars.map(along).sort((a, b) => b.at - a.at);
-        const picks = speed.pickLaps((await host.data.sql({ sql: speed.LAPS_SQL, params: pair })).rows, pair);
-        const trace = speed.speedModel(picks, (await host.data.sql({ sql: speed.SPEED_SQL, params: speed.speedParams(picks, pair) })).rows, circuit);
-        const laps = trace.laps.map((l) => l && { driver: l.driver, lap: l.lap, timed: (l.end - l.start) / 1000, byPositions: Math.round(l.lapTime * 1000) / 1000, samples: l.speed.length });
         const gaps = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).map((r) => `${r.position}:${r.driver} ${r.gap}`);
-        return { road: road.map((c) => `${c.driver}@${c.at}%${c.off > 150 ? ` off ${c.off}` : ''}`).join(' '), tower: gaps.join(' | '), laps, deltaAtLine: trace.delta.at(-1)?.delta };
-      }, pair);
+        return { road: road.map((c) => `${c.driver}@${c.at}%${c.off > 150 ? ` off ${c.off}` : ''}`).join(' '), tower: gaps.join(' | ') };
+      });
       console.log(`telemetry: ${JSON.stringify(check)}`);
     }
     await page.evaluate(async () => {
@@ -268,12 +263,9 @@ const timings = await page.evaluate(
       race_control: await time(control.SQL, []),
       weather: await time(weather.SQL, []),
       ...(await (async () => {
-        const [map, speed, live] = await Promise.all(['TrackMap', 'SpeedTrace', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));
-        const picks = speed.pickLaps((await window.f1a.data.sql(key, playhead, speed.LAPS_SQL, pair)).rows, pair);
+        const [map, live] = await Promise.all(['TrackMap', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));
         return {
           track_map: await time(map.SQL, [playhead], playhead),
-          speed_trace_laps: await time(speed.LAPS_SQL, pair, playhead),
-          speed_trace_speed: await time(speed.SPEED_SQL, speed.speedParams(picks, pair), playhead),
           car_telemetry: await time(live.SQL, [pair[0], playhead], playhead),
         };
       })()),

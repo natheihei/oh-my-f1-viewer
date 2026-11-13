@@ -220,8 +220,7 @@ Polished 2026-11-13.
 Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 
 - **Its question: is he driving every lap the same, and where did this one differ.** One car, a row per lap, the lap in progress on
-  top and six in all. `car_telemetry` is the numbers right now and `speed_trace` two drivers' speed on one lap; this gives up both for
-  the comparison between laps.
+  top and six in all. `car_telemetry` is the numbers right now; this gives that up for the comparison between laps.
 - **x is distance from the line,** from the car's positions projected onto the circuit's outline, so each turn sits in one column
   on every lap, whatever the lap's time. By time, a slow corner pushed everything after it right. A lap without positions is placed
   by time instead, scaled to the last completed lap's. The turn numbers along the top are the circuit's corners, at their own
@@ -272,8 +271,7 @@ Added 2026-11-13, from direction B of the pit window proposals.
 Added 2026-11-13, from direction B of the `car_telemetry` proposals.
 
 - **Its question: where on the track one driver is fast, and where they brake.** Its neighbours answer others: `track_map` where
-  every car is, `speed_trace` how two drivers' laps compare against distance, `car_telemetry` one car's pedals and revs over time,
-  `pedal_barcode` whether every lap is driven the same.
+  every car is, `car_telemetry` one car's pedals and revs over time, `pedal_barcode` whether every lap is driven the same.
 - **One lap, on the circuit.** The car's positions over a window as long as its latest lap time, kept within 60 and 120 seconds,
   drawn on the faint outline turned by the circuit's `rotation`, as the track map is. Each position takes the speed and pedals of the
   latest `car_data` sample at or before it. Positions more than 2 s apart break the ribbon.
@@ -340,6 +338,17 @@ Added 2026-11-13, from direction A of the race control proposals.
   cells and the reasons grow. Its height follows what's in force, so below that it runs past the tile for the host's mark. Under
   150 high, as in the suggestion strip, it draws only the band, the conditions and the strip, to fit. `scripts/status-check.mjs`
   shows it in the real app at moments picked by race control's own messages.
+
+### Speed trace
+
+Removed 2026-11-13.
+
+- **Two drivers' speed against distance on one lap, with the time between them, isn't a question a viewer asks during a race.**
+  Polishing it was proposed (the same lap for both, braking strips, corner guides, a readout under the pointer), and so were a
+  corner-by-corner table, the gap drawn on the circuit and a sentence. None was attractive or informative enough while watching, so
+  `speed_trace` left the catalog, and the kit's helpers only it used went with it: a lap's line crossings, distance and time along
+  it, and the delta between two laps.
+- A saved layout with a `speed_trace` tile draws nothing in it, as for a mod's component that is gone.
 
 ## Where it lives
 
