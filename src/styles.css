@@ -47,6 +47,12 @@
   --color-brake: #d0625b;
 }
 
+/* Flags, toned down like the pedals so they read as data: not the red that warns, nor build mode's yellow. Green and red are the pedals' own. */
+@theme static {
+  --color-flag-yellow: #d9b84a;
+  --color-flag-blue: #5b8fd0;
+}
+
 :root {
   --row: 22px;
   --text-s: 11px;
@@ -375,6 +381,108 @@
 .chart-message {
   @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
   font-size: var(--text-s);
+}
+
+/* Race control: what is in force on top, then the messages, newest first, in a list that scrolls. */
+.rc {
+  @apply absolute inset-0 flex flex-col text-dim;
+  font-size: var(--text-s);
+  line-height: 15px;
+}
+.rc-now {
+  @apply flex flex-wrap items-center border-b border-line px-2 py-1;
+  gap: 2px 12px;
+}
+.rc-now > span {
+  @apply flex items-center whitespace-nowrap;
+}
+.rc-on {
+  @apply font-semibold text-ink;
+}
+.rc-list {
+  @apply flex-1 overflow-y-auto px-2 pb-2;
+  min-height: 0;
+}
+.rc-lap {
+  @apply mt-1 flex items-center gap-2 uppercase text-mute;
+  height: 18px;
+  letter-spacing: 0.04em;
+}
+.rc-lap::after {
+  @apply h-px flex-1 bg-quiet;
+  content: '';
+}
+.rc-item {
+  @apply flex items-start py-0.5;
+  overflow-wrap: anywhere;
+}
+.rc-first {
+  @apply font-medium text-ink;
+}
+.rc-loud {
+  @apply font-bold text-ink;
+}
+.rc-quiet {
+  @apply whitespace-nowrap text-faint;
+}
+.rc-quiet .rc-text {
+  @apply overflow-hidden text-ellipsis;
+}
+.rc-text {
+  @apply min-w-0 flex-1;
+}
+.rc-steps {
+  @apply font-normal text-mute;
+}
+.rc-step-now {
+  @apply text-dim;
+}
+.rc-first .rc-step-now {
+  @apply font-medium text-ink;
+}
+/* A small flag, drawn as the flag is. */
+.rc-flag {
+  @apply mr-1.5 shrink-0;
+  width: 10px;
+  height: 8px;
+  margin-top: 3.5px;
+}
+.rc-now .rc-flag {
+  margin-top: 0;
+}
+.rc-flag-none {
+  visibility: hidden;
+}
+.rc-flag-green {
+  background: var(--color-throttle);
+}
+.rc-flag-red {
+  background: var(--color-brake);
+}
+.rc-flag-yellow,
+.rc-flag-sc,
+.rc-flag-vsc {
+  background: var(--color-flag-yellow);
+}
+.rc-flag-double {
+  background: linear-gradient(var(--color-flag-yellow) 0 3.5px, black 3.5px 4.5px, var(--color-flag-yellow) 4.5px);
+}
+.rc-flag-cleared {
+  background: linear-gradient(to right, var(--color-flag-yellow) 0 50%, var(--color-throttle) 50%);
+}
+.rc-flag-blue {
+  background: var(--color-flag-blue);
+}
+.rc-flag-blackwhite {
+  @apply border border-dim;
+  background: linear-gradient(to bottom right, black 0 50%, var(--color-ink) 50%);
+}
+.rc-flag-black {
+  @apply border border-dim bg-black;
+}
+.rc-flag-chequered {
+  @apply border border-dim;
+  background: repeating-conic-gradient(var(--color-ink) 0 25%, black 0 50%) 0 0 / 4px 4px;
 }
 
 /* The palette: opaque, framed by the brighter hairline with a black ring, so it stands off whatever it covers. */
