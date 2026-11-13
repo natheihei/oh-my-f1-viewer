@@ -122,9 +122,10 @@ Components drawn on a canvas with the kit, `src/components/charts/kit`.
 - **A crowded chart labels what answers its question, and names the rest under the pointer.** Codes that land on each other read as
   none. A mark without a label is named, with its value, when the pointer is on it: `ChartCanvas` passes the pointer to the chart
   with `onPointer`, the chart keeps it in what it draws from, and its `draw` names the mark under it. (2026-11-13, with the pit window.)
-- **A click on a car can choose it.** A chart whose `drivers` prop picks who stands out can let the viewer click a car to add or
-  drop it, as the chart's own state on top of the props: `ChartCanvas` passes the click with `onClick`. The props' drivers are
-  always chosen, and a click doesn't drop them. The name under the pointer says what a click will do. (2026-11-13, with the track map.)
+- **A click on a car can pin it.** A chart whose `drivers` prop picks who stands out can let the viewer click a car to pin or
+  unpin it, as the chart's own state on top of the props: `ChartCanvas` passes the click with `onClick`. The props' drivers are
+  pinned for good, and a click doesn't unpin them. The name under the pointer says what a click will do: "click to pin", "click to
+  unpin", or "pinned" for one from the props. (2026-11-13, with the track map.)
 
 Per-chart decisions go under a heading for that chart as each one is polished.
 
@@ -494,18 +495,18 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
   more than 4 m off the racing line, carried on to where it was within 1.5 m, so it leaves and joins the track where the real lane
   does, on the real lane's side. Its gap closes in where the lane is within 15 m of the track. A car more than 4 m off the line is
   drawn on it, where it reads as in the lane, not as racing beside it.
-- **Codes at 11px,** a chosen driver's in bold ink. (They were 9px, and 10px chosen.)
-- **Only chosen drivers are labelled.** With nobody chosen, from the props or by click, no car has a label: twenty codes on a
-  circuit land on each other at the start and in the stops. Choosing drivers also makes the rest recede, smaller and three quarters
-  opaque, so the chosen are what reads. A car without a label is named under the pointer, with its position, and whether it's in
+- **Codes at 11px,** a pinned driver's in bold ink. (They were 9px, and 10px for a named driver.)
+- **Only pinned drivers are labelled.** With nobody pinned, from the props or by click, no car has a label: twenty codes on a
+  circuit land on each other at the start and in the stops. Pinning drivers also makes the rest recede, smaller and three quarters
+  opaque, so the pinned are what reads. A car without a label is named under the pointer, with its position, and whether it's in
   the pit lane.
-- **Click a car to choose it, or to drop it,** up to six chosen in all. The `drivers` prop's are always chosen and a click leaves them;
-  the cars clicked are the map's own state, added on top, so the tile and its title stay as they are.
+- **Click a car to pin it, or to unpin it,** up to six pinned in all. The `drivers` prop's are pinned for good and a click leaves
+  them; the cars pinned by click are the map's own state, on top, so the tile and its title stay as they are.
 - **Turn numbers as the speed ribbon draws them:** just outside the track, 9px in the hint grey, stepped out until clear, and the
   first to give way to a car's label. (They were 8px in faint, and hidden in a tile less than 260px on its short side.)
 - **Size.** 16px of padding round the circuit (it was 30). Least 360 by 250, where the codes still sit beside their dots. Fit 560 by
   400, as the speed ribbon, where a circuit stops gaining detail. A label with no clear place is kept inside the tile, not cut at its
-  edge. `scripts/track-check.mjs` shows it in the real app: the pack on lap 2, the stops, chosen drivers, the pointer and a click.
+  edge. `scripts/track-check.mjs` shows it in the real app: the pack on lap 2, the stops, pinned drivers, the pointer and a click.
 
 ## Where it lives
 
@@ -532,5 +533,5 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
 | The sector table in the real app, at chosen laps and squeezed | `scripts/sector-check.mjs` |
 | Tyre strategy in the real app, at chosen laps, fitted, at its least size and squeezed | `scripts/tyre-check.mjs` |
 | Tyre deg in the real app, at chosen laps, beside onboards, at its least size and squeezed | `scripts/deg-check.mjs` |
-| The track map in the real app: the pack, the stops, choosing by click, fitted and squeezed | `scripts/track-check.mjs` |
+| The track map in the real app: the pack, the stops, pinning by click, fitted and squeezed | `scripts/track-check.mjs` |
 | Colour and size tokens | `src/styles.css` |

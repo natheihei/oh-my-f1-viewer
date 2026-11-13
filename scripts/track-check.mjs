@@ -1,6 +1,6 @@
 // Checks the track map in the real app over a real replay race, muted: the pack on lap 2, the busiest moment of the
-// pit stops with nobody chosen and with two drivers chosen, the name under the pointer, a click that chooses a car and
-// one that drops it, and the map at its fit, its least size and squeezed below it. Prints each tile's size, the size
+// pit stops with nobody pinned and with two drivers pinned, the name under the pointer, a click that pins a car and
+// one that unpins it, and the map at its fit, its least size and squeezed below it. Prints each tile's size, the size
 // the chart draws at and the host's mark, and saves a screenshot of each.
 //
 // The app is launched through Hyprland on workspace 3, floating and without focus, with its own user data
@@ -209,7 +209,7 @@ const { rows: order } = await page.evaluate(async () => {
   return host.data.sql({ sql: 'SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number ORDER BY position' });
 });
 const [first, second, third] = order.map((r) => r.driver_number);
-await shoot('3-chosen', [{ type: 'track_map', props: { drivers: [first, second] } }]);
+await shoot('3-pinned', [{ type: 'track_map', props: { drivers: [first, second] } }]);
 // The name under the pointer, then a click that chooses that car, and another that drops it.
 const dot = await dotOf(third);
 await page.mouse.move(dot.x, dot.y);
@@ -225,7 +225,7 @@ await page.mouse.click(dot.x, dot.y + 1);
 await page.waitForTimeout(1500);
 const dropped = await trackKey();
 console.log(`click on ${third}: the tile is ${added}, then ${dropped}`);
-// A driver from the props is always chosen: a click on one leaves it, and its name offers no click.
+// A driver from the props is pinned for good: a click on one leaves it, and its name says it's pinned.
 const fixedDot = await dotOf(first);
 await page.mouse.click(fixedDot.x, fixedDot.y);
 await page.waitForTimeout(1500);
