@@ -260,6 +260,7 @@ export default defineComponent({
     'Every running car as a dot on the circuit, where it is right now. Retired cars are left off. Suggest it when the user asks where cars are on track, or wants to see traffic.',
   replayOnly: true,
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
+  sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 10 / 7, min: { width: 380, height: 260 } },
   spec: ({ drivers }) => ({

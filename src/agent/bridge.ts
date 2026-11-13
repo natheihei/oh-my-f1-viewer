@@ -2,7 +2,7 @@
 import type { AgentMode, AgentToolCall } from '../../shared/api';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
-import { driverCount, formatClock, readsPastPlayhead, runTool, toolDefinitions } from './tools';
+import { driverCount, formatClock, offeredCharts, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
 /** A stream by its label, a chart by its label and chart name. */
 const describeTile = (c: ComponentSpec) => (c.type === 'video' ? c.label : `${c.label} (${c.type} chart)`);
@@ -108,8 +108,9 @@ export function describeEvents(index: EventIndex): string {
 }
 
 /**
- * Every chart `suggest_tiles` can offer, for the system prompt: one line each, or nothing when there
- * are none. Only what each chart is for, never what it shows.
+ * The charts `suggest_tiles` can offer, for the system prompt: one line each, or nothing when there
+ * are none. Only what each chart is for, never what it shows. The viewing agent gets only those that
+ * fit the open session; the build agent gets every one, since it writes and edits them.
  */
 export function describeCharts(components: ComponentInfo[]): string {
   const charts = components.filter((c) => c.name !== 'video');
@@ -171,7 +172,7 @@ export function askAgent(text: string): Promise<void> {
   turnMode = 'view';
   const fromBuild = buildNote ? `build mode: the user left it having saved this. ${buildNote}` : null;
   buildNote = null;
-  // Least likely to change last: opening a session only changes what follows the charts.
-  const reference = [describeEvents(events), describeCharts(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
+  // Least likely to change last: opening a session only changes what follows the events.
+  const reference = [describeEvents(events), describeCharts(offeredCharts()), describeTables(sessionData)].filter(Boolean).join('\n\n');
   return host.agent.send(text, describeAppState(note, fromBuild), toolDefinitions(), reference);
 }

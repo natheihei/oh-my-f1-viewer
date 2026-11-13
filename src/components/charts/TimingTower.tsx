@@ -233,6 +233,7 @@ export default defineComponent({
   description:
     'The running order: position, places gained or lost since the grid in a race, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview, whenever the user asks where someone is, or who has gained or lost places.',
   args: Type.Object({}),
+  sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 0.75, min: { width: 330, height: 376 } },
   fit: { width: WIDEST, height: TALLEST },

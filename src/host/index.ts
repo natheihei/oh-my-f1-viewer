@@ -28,7 +28,7 @@ export {
   type BackgroundParams,
   type BackgroundView,
 } from './backgrounds';
-export { defineComponent, type ComponentDefinition, type ComponentInfo } from './components';
+export { defineComponent, fitting, misfit, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
 export { ComponentView, Grid } from './Grid';
 export { startMods } from './mods';
 export { startBuild, type BuildView } from './build';

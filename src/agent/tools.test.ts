@@ -129,7 +129,7 @@ host.components.register({ components });
 const video = (feed: string) => ({ type: 'video', props: { feed } });
 
 describe('suggested tiles', () => {
-  const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
+  const open = { contentId: 1, title: 'x', type: 'race', status: 'replay' } as SessionInfo;
   const keys = () => read().suggestions.items.map((i) => i.label);
 
   beforeEach(() => {
@@ -222,7 +222,7 @@ describe('components', () => {
     needs: ['timing'],
     View: () => null,
   });
-  const open = { contentId: 1, title: 'x', status: 'replay' } as SessionInfo;
+  const open = { contentId: 1, title: 'x', type: 'race', status: 'replay' } as SessionInfo;
   const labels = () => read().suggestions.items.map((i) => i.label);
 
   beforeEach(() => {
@@ -402,7 +402,7 @@ const { useSessionData } = await import('../data/sessionData');
 const { askAgent, describeAppState } = await import('./bridge');
 
 describe('seeking to a moment', () => {
-  const open = { contentId: 1, title: 'Race', status: 'replay' } as SessionInfo;
+  const open = { contentId: 1, title: 'Race', type: 'race', status: 'replay' } as SessionInfo;
   const PLAYHEAD = 1_700_000_000_000;
   const driver = (name_acronym: string, driver_number: number) => ({ driver_number, name_acronym }) as DriverEntry;
   const ready = (playheadMs: number | null): SessionDataView => ({
@@ -590,7 +590,7 @@ describe('seeking to a moment', () => {
 });
 
 describe('the master volume', () => {
-  const open = { contentId: 1, title: 'Race', status: 'replay' } as SessionInfo;
+  const open = { contentId: 1, title: 'Race', type: 'race', status: 'replay' } as SessionInfo;
   let setAudio: MockInstance<typeof sessionControl.setAudio>;
 
   beforeEach(() => {

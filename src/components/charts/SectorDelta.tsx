@@ -189,6 +189,7 @@ export default defineComponent({
   description:
     'Which part of the lap one driver is gaining on another in: the difference in each of the three sectors over the last ten laps. Suggest it when the user asks in which sector or part of the lap a driver is quicker.',
   args: Type.Object({ drivers: Drivers }),
+  sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 1.6, min: { width: 380, height: 190 } },
   spec: ({ drivers }) => ({ key: `sector_delta:${drivers.join('-')}`, label: `Sectors ${drivers.map(codeOf).join(' · ')}` }),

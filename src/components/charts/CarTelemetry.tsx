@@ -201,6 +201,7 @@ export default defineComponent({
     "One car's speed, gear, revs, throttle, brake and DRS, as the driver is driving. Suggest it next to that driver's onboard.",
   replayOnly: true,
   args: Type.Object({ drivers: Drivers }),
+  sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 1.6, min: { width: 300, height: 150 } },
   spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: `Telemetry ${codeOf(drivers[0])}` }),
