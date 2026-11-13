@@ -12,6 +12,7 @@ import {
   findTile,
   measure,
   removeTile,
+  replaceComponent,
   setMain,
   swap,
   ungroup,
@@ -39,6 +40,8 @@ export const layout = {
     if (tile) set(removeTile(get(), tile.component.key));
     return tile != null;
   },
+  /** Puts a new spec in a tile, in its place, by the tile's id. */
+  replace: (id: string, component: ComponentSpec) => set(replaceComponent(get(), id, component)),
   has: (key: string) => findTile(get(), key) != null,
   group(components: ComponentSpec[], title?: string): string {
     const { state, groupId } = createGroup(get(), components, title);
