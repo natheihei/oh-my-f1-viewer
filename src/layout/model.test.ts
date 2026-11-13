@@ -16,6 +16,7 @@ import {
   measure,
   minCells,
   removeTile,
+  replaceComponent,
   setMain,
   swap,
   ungroup,
@@ -354,6 +355,32 @@ describe('mouse edits', () => {
     const tile = findTile(state, 'A')!.tile;
     const s = applyMouseEdit(state, tile.id, { ...tile, w: 3 });
     expect(findTile(s, 'A')!.tile.w).toBe(3);
+  });
+});
+
+describe('replaceComponent', () => {
+  it('puts a new spec in a tile, keeping its id and place, and the main place follows it', () => {
+    const s = build('main', 'A');
+    const a = findTile(s, 'A')!.tile;
+    const next = replaceComponent(s, a.id, spec('B'));
+    expect(findTile(next, 'A')).toBeNull();
+    expect(findTile(next, 'B')!.tile).toMatchObject({ id: a.id, x: a.x, y: a.y, w: a.w, h: a.h });
+    const main = findTile(s, 'main')!.tile;
+    expect(replaceComponent(s, main.id, spec('main2')).main).toBe('main2');
+  });
+
+  it('changes a member of a group in place', () => {
+    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
+    const a = findTile(state, 'A')!.tile;
+    const next = replaceComponent(state, a.id, spec('C'));
+    expect(findTile(next, 'C')).toMatchObject({ tile: { id: a.id }, group: { kind: 'group' } });
+  });
+
+  it('does nothing when another tile has the new key, or no tile has the id', () => {
+    const s = build('main', 'A', 'B');
+    const a = findTile(s, 'A')!.tile;
+    expect(replaceComponent(s, a.id, spec('B'))).toBe(s);
+    expect(replaceComponent(s, 'nope', spec('C'))).toBe(s);
   });
 });
 

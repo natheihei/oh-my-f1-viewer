@@ -446,6 +446,20 @@ export function setMain(state: LayoutState, key: string | null): LayoutState {
   return state.manual ? next : autoLayout(next);
 }
 
+/**
+ * Puts `component` in the tile with id `id`, in its place, as when a tile's props change. Ignored when no
+ * tile has that id or another tile already has the new key. The main place follows the tile.
+ */
+export function replaceComponent(state: LayoutState, id: string, component: ComponentSpec): LayoutState {
+  const tile = allTiles(state).find((t) => t.id === id);
+  if (!tile) return state;
+  const other = findTile(state, component.key);
+  if (other && other.tile.id !== id) return state;
+  const swapIn = (t: TileNode): TileNode => (t.id === id ? { ...t, component } : t);
+  const nodes = state.nodes.map((n) => (n.kind === 'tile' ? swapIn(n) : { ...n, children: n.children.map(swapIn) }));
+  return { ...state, nodes, main: state.main === tile.component.key ? component.key : state.main };
+}
+
 /** Removes a tile. A group left with one member dissolves into a plain tile. The main tile takes its place with it: no other is promoted. */
 export function removeTile(state: LayoutState, key: string): LayoutState {
   if (!findTile(state, key)) return state;
