@@ -33,6 +33,9 @@ export type Draw<M> = (ctx: Ctx, model: M, box: Box) => void;
  */
 export type Extent<M> = (model: M, box: Box) => { width: number; height: number };
 
+/** Where the pointer is over the chart, in the CSS pixels it draws in, or null once it leaves. */
+export type Pointer = { x: number; y: number } | null;
+
 interface Size {
   width: number;
   height: number;
@@ -55,9 +58,20 @@ function useFontsReady(): boolean {
 
 /**
  * Draws `model` with `draw`, a function that doesn't change. Keep the model's reference until its data changes.
- * `extent`, also a function that doesn't change, lets the canvas be larger than the tile.
+ * `extent`, also a function that doesn't change, lets the canvas be larger than the tile. `onPointer` hears
+ * where the pointer is: a chart that names what's under it keeps the point in its model, and draws from it.
  */
-export function ChartCanvas<M>({ model, draw, extent }: { model: M; draw: Draw<M>; extent?: Extent<M> }) {
+export function ChartCanvas<M>({
+  model,
+  draw,
+  extent,
+  onPointer,
+}: {
+  model: M;
+  draw: Draw<M>;
+  extent?: Extent<M>;
+  onPointer?: (point: Pointer) => void;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLCanvasElement>(null);
   const [drawn, setDrawn] = useState<{ width: number; height: number } | null>(null);
@@ -97,7 +111,19 @@ export function ChartCanvas<M>({ model, draw, extent }: { model: M; draw: Draw<M
   // The box is the tile, and the canvas is laid out at the size it draws: past the box when the chart asks.
   return (
     <div ref={box} className="chart-box">
-      <canvas ref={ref} className="chart-canvas" style={drawn ? { width: drawn.width, height: drawn.height } : undefined} />
+      <canvas
+        ref={ref}
+        className="chart-canvas"
+        style={drawn ? { width: drawn.width, height: drawn.height } : undefined}
+        onPointerMove={
+          onPointer &&
+          ((e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onPointer({ x: e.clientX - r.left, y: e.clientY - r.top });
+          })
+        }
+        onPointerLeave={onPointer && (() => onPointer(null))}
+      />
     </div>
   );
 }

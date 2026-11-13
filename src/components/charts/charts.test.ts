@@ -10,7 +10,7 @@ const { towerModel, towerExtent } = await import('./TimingTower');
 const { traceModel } = await import('./RaceTrace');
 const { compareModel, fitLine, formatSlope } = await import('./LapTimeCompare');
 const { paceModel } = await import('./FieldPace');
-const { pitWindowModel, CLEAR_AIR } = await import('./PitWindow');
+const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = await import('./PitWindow');
 const { sectorModel, spanOf } = await import('./SectorDelta');
 const { stopsModel } = await import('./PitStops');
 const { messagesModel, signalOf, wrap } = await import('./RaceControl');
@@ -470,6 +470,40 @@ describe('pit_window', () => {
     const stopped = pitWindowModel(field(), 99, 20);
     expect(stopped.me).toBeNull();
     expect(stopped.out).toBeNull();
+  });
+
+  it('gives the margin either side: seconds short of the place ahead, and seconds spare before losing one', () => {
+    const out = pitWindowModel(field(), 44, 20).out!;
+    expect(out.short).toBeCloseTo(2.5);
+    expect(out.spare).toBeCloseTo(5);
+    expect(pitWindowModel(field(), 1, 8).out!.short).toBeCloseTo(3);
+    expect(pitWindowModel(field(), 1, 3).out).toMatchObject({ position: 1, short: null });
+  });
+
+  it('says whether each car either side is racing them, laps down, or a lap up', () => {
+    expect(pitWindowModel(field(), 44, 20).out).toMatchObject({ behind: { driver: 4, laps: 0 }, aheadOf: { driver: 81, laps: 0 } });
+    // The leader's lapped car, 1 s up the road from where the leader would come out.
+    expect(pitWindowModel(field(), 1, 8).out!.behind).toMatchObject({ driver: 63, laps: 1 });
+    // 77 coming out a lap down: the leader 4 s up the road, and 44 1 s behind, about to lap it.
+    const lappedOut = pitWindowModel(field(), 77, 9).out!;
+    expect(lappedOut.behind).toMatchObject({ driver: 1, laps: -1 });
+    expect(lappedOut.aheadOf).toMatchObject({ driver: 44, laps: -1 });
+  });
+
+  it('plays the same stop out under a safety car and a virtual one', () => {
+    const m = pitWindowModel(field(), 44, 20, { safetyCar: 12, virtualSafetyCar: 14 });
+    expect(m.safetyCar).toMatchObject({ gap: 17, position: 2 });
+    expect(m.virtualSafetyCar).toMatchObject({ gap: 19, position: 3 });
+    expect(pitWindowModel(field(), 44, 20).safetyCar).toBeNull();
+  });
+
+  it('runs past a tile below its least size, except as a thumbnail', () => {
+    const m = { ...pitWindowModel(field(), 44, 20), styles: new Map(), pointer: null };
+    expect(pitWindowExtent(m, { width: 267, height: 195, compact: true })).toEqual(PIT_WINDOW_LEAST);
+    expect(pitWindowExtent(m, { width: 400, height: 846, compact: false })).toEqual({ width: 400, height: 846 });
+    expect(pitWindowExtent(m, { width: 280, height: 120, compact: true })).toEqual({ width: 280, height: 120 });
+    // Wide enough for the panel beside the ring: it only needs the ring's height.
+    expect(pitWindowExtent(m, { width: 600, height: 250, compact: false })).toEqual({ width: 600, height: 280 });
   });
 
   it('has no ring before there is a clean lap', () => {
