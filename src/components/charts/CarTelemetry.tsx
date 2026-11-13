@@ -194,23 +194,22 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const right = barsLeft - (compact ? 6 : 14);
   const labelRow = compact ? 0 : 14;
 
-  // Throttle and brake, as bars filling from the bottom; a dash while the feed has no reading.
+  // Throttle and brake, as stacks of segments lit from the bottom; a dash while the feed has no reading.
   const barTop = pad;
   const barBottom = height - pad - labelRow;
+  const [segment, segmentGap] = compact ? [3, 1] : [4, 2];
+  const segments = Math.max(1, Math.floor((barBottom - barTop + segmentGap) / (segment + segmentGap)));
   ([
     ['THR', m.throttle, c.throttle],
     ['BRK', m.brake, c.brake],
   ] as const).forEach(([label, value, colour], i) => {
     const x = barsLeft + i * (barW + barGap);
-    ctx.fillStyle = SHADE;
-    ctx.fillRect(x, barTop, barW, barBottom - barTop);
-    if (value === null) {
-      if (!compact) text(ctx, '—', x + barW / 2, (barTop + barBottom) / 2, { align: 'center', color: c.faint });
-    } else if (value > 0) {
-      const h = ((barBottom - barTop) * value) / 100;
-      ctx.fillStyle = colour;
-      ctx.fillRect(x, barBottom - h, barW, h);
+    const lit = value === null ? 0 : Math.round((segments * value) / 100);
+    for (let k = 0; k < segments; k++) {
+      ctx.fillStyle = k < lit ? colour : SHADE;
+      ctx.fillRect(x, barBottom - k * (segment + segmentGap) - segment, barW, segment);
     }
+    if (value === null && !compact) text(ctx, '—', x + barW / 2, (barTop + barBottom) / 2, { align: 'center', color: c.faint });
     if (!compact) text(ctx, label, x + barW / 2, height - pad - 4, { align: 'center', color: value === null ? c.faint : c.dim });
   });
 
