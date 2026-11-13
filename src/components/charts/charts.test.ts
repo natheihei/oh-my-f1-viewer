@@ -17,7 +17,6 @@ const { messagesModel, signalOf, markOf, lineText } = await import('./RaceContro
 const { sentenceCase, shorten, stageLabel, standing } = await import('./raceControlMessages');
 type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
-const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
@@ -838,46 +837,6 @@ describe('race_status', () => {
   });
 });
 
-describe('weather', () => {
-  const w = (date: number, track: number, rainfall = 0) => ({
-    date,
-    track_temperature: track,
-    air_temperature: 26.9,
-    wind_speed: 3.1,
-    humidity: 42.3,
-    rainfall,
-  });
-
-  it('draws each measure on its own scale, at least its span wide, with the latest value', () => {
-    const m = weatherModel([w(0, 38.3), w(60, 37), w(120, 34.1)]);
-    expect(m.from).toBe(0);
-    expect(m.to).toBe(120);
-    const [track, air] = m.series;
-    expect(track.current).toBe(34.1);
-    expect(track.range[0]).toBeCloseTo(34.1);
-    expect(track.range[1]).toBeCloseTo(38.3);
-    expect(air.range).toEqual([25.9, 27.9]);
-    expect(m.raining).toBe(false);
-    expect(m.rain).toEqual([]);
-  });
-
-  it('leaves out a temperature of exactly 0, which the feed sends between real readings', () => {
-    const [track] = weatherModel([w(0, 36), w(60, 0), w(120, 37)]).series;
-    expect(track.points.map((p) => p.v)).toEqual([36, 37]);
-    expect(track.range).toEqual([34.5, 38.5]);
-  });
-
-  it('fills the rain strip while rainfall is reported, until the next reading', () => {
-    const m = weatherModel([w(0, 30), w(60, 30, 1), w(120, 30, 1), w(180, 30), w(240, 30, 1)]);
-    expect(m.rain).toEqual([
-      [60, 180],
-      [240, 240],
-    ]);
-    expect(m.raining).toBe(true);
-    expect(weatherModel([]).raining).toBeNull();
-  });
-});
-
 describe('track_map', () => {
   it("keeps each car's latest position, and leaves out the feed's (0, 0) placeholder", () => {
     const rows = [
@@ -1101,7 +1060,6 @@ describe('the registry', () => {
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
-    expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
     for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
       expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
@@ -1113,7 +1071,7 @@ describe('the registry', () => {
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
     for (const gone of ['race_trace', 'speed_trace', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(17);
+    expect(components).toHaveLength(16);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -1166,7 +1124,7 @@ describe('sizes', () => {
       ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'speed_ribbon', 'car_telemetry'],
       ['video', 'video', 'speed_ribbon', 'timing_tower'],
-      ['video', 'race_control', 'pit_stops', 'weather'],
+      ['video', 'race_control', 'pit_stops', 'race_status'],
       ['video', 'pit_window', 'field_pace', 'sector_delta'],
       ['video', 'timing_tower', 'pit_windows'],
       ['video', 'pit_windows', 'pit_stops', 'race_control'],
