@@ -184,6 +184,27 @@ Polished 2026-11-13.
 - **Pit loss is still MultiViewer's.** In São Paulo 2026 the race's own green-flag stops cost about 25 s against its 21.8 s, so the
   rejoin reads optimistic there. Measuring it from the race was proposed and not taken for now.
 
+### Pedal barcode
+
+Added 2026-11-13, from direction A of the `car_telemetry` proposals.
+
+- **Its question: is he driving every lap the same, and where did this one differ.** One car, a row per lap, the lap in progress on
+  top and six in all. `car_telemetry` is the numbers right now and `speed_trace` two drivers' speed on one lap; this gives up both for
+  the comparison between laps.
+- **x is time from the line, scaled to the last completed lap's time,** so the rows line up at each corner, and a slower lap runs
+  past the right edge rather than squeezing the others. Turn numbers along the top are the circuit's corners, placed where the car
+  passed nearest each on that lap, and left out where they'd crowd or the car never came within 60 m.
+- **Violet is braking, green is throttle, darker for less,** in the pedal colours. The feed sends the brake only as on or off, so
+  it's one flat colour. The throttle runs from 15% of its colour with the pedal up to full, so coasting still differs from no reading.
+- **104 is no reading.** The feed sends 104 for throttle or brake, nearly always both, when it has none, while the revs freeze. That
+  cell is drawn `quiet`, like a gap of more than 2 s, never as full throttle or full brake.
+- **The playhead is a mark in the team's colour** on the lap in progress. Lap numbers and times at the left, the current lap in ink.
+- **With no driver named, the leader at the playhead,** whose code is drawn at the top left in the team's colour, since the title bar
+  then says only "Pedals".
+- **Size.** Least 300 by 150: six 16px rows, the turn row and the 92px label column. Fit 640 by 200: 26px rows, and about two pixels a
+  sample across a 75 s lap; wider only stretches the cells. Below the least size it's compact: the cells alone, which shrink to fit.
+- **Queries.** The completed laps are read once per lap, keyed on their starts; only the lap in progress follows the playhead.
+
 ## Where it lives
 
 | Piece | File |
@@ -200,4 +221,5 @@ Polished 2026-11-13.
 | The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
+| The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
 | Colour and size tokens | `src/styles.css` |

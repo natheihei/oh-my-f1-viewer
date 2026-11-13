@@ -10,6 +10,7 @@ import SectorDelta from './charts/SectorDelta';
 import SpeedTrace from './charts/SpeedTrace';
 import FieldPace from './charts/FieldPace';
 import CarTelemetry from './charts/CarTelemetry';
+import PedalBarcode from './charts/PedalBarcode';
 import TimingTower from './charts/TimingTower';
 import TrackMap from './charts/TrackMap';
 import TyreStrategy from './charts/TyreStrategy';
@@ -32,4 +33,5 @@ export const components: ComponentDefinition[] = [
   TrackMap,
   SpeedTrace,
   CarTelemetry,
+  PedalBarcode,
 ];
