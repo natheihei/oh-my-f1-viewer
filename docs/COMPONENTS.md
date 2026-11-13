@@ -101,6 +101,10 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Flag colours are for flags, toned down the same way.** A flag is drawn as a small flag, never as the colour of text or a bar:
   green and red take the pedals' `throttle` and `brake`, and yellow and blue their own toned `flag-yellow` and `flag-blue`, so
   none reads as an alert, build mode or a tyre. (2026-11-13, with race control.)
+- **Faster is green and slower yellow, wherever one time is compared with another.** `gain` and `loss` are the pedals' green and
+  the flags' toned yellow, named for what they mean there. They always sit beside a − or
+  + sign, so neither is read by colour alone. (2026-11-13, with the sector table. Before, each comparison chart picked its own,
+  and sector delta used the two drivers' colours.)
 
 ### Spoilers
 
@@ -350,6 +354,30 @@ Removed 2026-11-13.
   it, and the delta between two laps.
 - A saved layout with a `speed_trace` tile draws nothing in it, as for a mod's component that is gone.
 
+### Sector table
+
+Added 2026-11-13, replacing `sector_delta`, from direction D of its proposals.
+
+- **Its question: in which sector one driver gains on another, and by how much.** A row per lap, newest on top, each sector's
+  difference written out, and the lap's total. The bars it replaces showed where at a glance but not how
+  much; the bar behind each number keeps some of that shape.
+- **The first driver against the second:** −0.26 in the gain colour where the first is faster, +0.10 in the loss colour where
+  slower, "even" under 0.02. Under 0.05 is at half strength and from 0.20 bold, so a big swing stands out of a column of small
+  ones. The bar behind a number is full at 0.5 s.
+- **Laps that count.** A lap counts when both finished it clean: not in or out of the pits, not under a safety car, a VSC or a red
+  flag, and not lap 1's standing start. Each lap that doesn't says why in its row, "PIT · NOR in" or "VSC · not counted".
+- **Back to ten laps that count, or to the last stop.** The table ends at the pit laps of either driver's last stop, so its average
+  is never old tyres against new. Showing the laps before it, faded, was proposed and not picked.
+- **The average sits under the laps it counts,** above the stop that began them, with how many in the line on top: "avg 3 laps
+  since pit". Pinning it under the header was proposed and not picked.
+- **The lap in progress is on top and lifted,** its sectors filling in as both set them, "…" until then. A sector the feed never
+  sent is a dash.
+- **Size.** Columns at their own width, 44px for the lap and 60px a number, so 300 wide: wider tiles leave room empty. Least 300 by
+  266: ten laps that count, the lap in progress, the average and a stop's two pit laps at 16px rows. Fit 300 by 322 at 20px rows.
+  Below its least size it runs past the tile for the host's mark; under 150 high, in the suggestion strip, it fits its box at
+  9px type. `scripts/sector-check.mjs` shows it in the real app.
+- A saved layout with a `sector_delta` tile draws nothing in it, as for a mod's component that is gone.
+
 ## Where it lives
 
 | Piece | File |
@@ -371,4 +399,5 @@ Removed 2026-11-13.
 | The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
 | Pit windows in the real app, fitted and squeezed | `scripts/pit-windows-check.mjs` |
 | The speed ribbon in the real app, fitted and squeezed | `scripts/ribbon-check.mjs` |
+| The sector table in the real app, at chosen laps and squeezed | `scripts/sector-check.mjs` |
 | Colour and size tokens | `src/styles.css` |

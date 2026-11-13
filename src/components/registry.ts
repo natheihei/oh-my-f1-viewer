@@ -7,7 +7,7 @@ import PitWindow from './charts/PitWindow';
 import PitWindows from './charts/PitWindows';
 import RaceControl from './charts/RaceControl';
 import RaceStatus from './charts/RaceStatus';
-import SectorDelta from './charts/SectorDelta';
+import SectorTable from './charts/SectorTable';
 import SpeedRibbon from './charts/SpeedRibbon';
 import FieldPace from './charts/FieldPace';
 import CarTelemetry from './charts/CarTelemetry';
@@ -26,7 +26,7 @@ export const components: ComponentDefinition[] = [
   FieldPace,
   PitWindow,
   PitWindows,
-  SectorDelta,
+  SectorTable,
   PitStops,
   RaceControl,
   RaceStatus,

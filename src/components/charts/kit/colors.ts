@@ -27,6 +27,12 @@ const TOKENS = {
   /** Flags, toned down as the pedals are: data, not the yellow of build mode. Green and red flags take `throttle` and `brake`. */
   flagYellow: '#d9b84a',
   flagBlue: '#5b8fd0',
+  /**
+   * Faster and slower, wherever one time is compared with another: green gains, yellow loses. The same values as `throttle` and
+   * `flagYellow`, named for what they mean here. Always beside a − or + sign, so neither is read by colour alone.
+   */
+  gain: '#5fb57c',
+  loss: '#d9b84a',
 };
 
 export type Theme = typeof TOKENS;
