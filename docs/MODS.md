@@ -68,7 +68,7 @@ A mod may import:
 | Module | What it is |
 | --- | --- |
 | `f1a` | The host, the same `src/host` the app's components use: `useLive`, `read`, `useSql`, `host`, `defineComponent`, `Video` and the rest. [HOST.md](HOST.md) lists it |
-| `f1a/kit` | The kit the app's charts are drawn with, and optional for a mod: `ChartFrame`, `ChartCanvas`, `colors`, `tyreColour`, `useDriverStyles`, scales and drawing helpers |
+| `f1a/kit` | The kit the app's charts are drawn with, and optional for a mod: `ChartFrame`, `ChartCanvas`, `colors`, `tyreColour`, `useDriverStyles`, `drawCode` and `drawParts` for driver codes, scales and drawing helpers |
 | `react`, `react/jsx-runtime` | The app's own React |
 | `typebox` | The app's own TypeBox, for `args` |
 | `./anything` | Other files in the mod's folder |

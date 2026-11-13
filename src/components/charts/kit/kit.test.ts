@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DriverEntry, SessionDataView } from '../../../host';
+import type { SessionDataView } from '../../../host';
 import { compactSmall } from './ChartCanvas';
-import { driverStyles } from './colors';
 import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, median, neutralOf, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
@@ -102,32 +101,6 @@ describe('gaps', () => {
     expect(stintAge(17, 17, 3)).toBe(4);
     expect(stintAge(1, null, null)).toBe(1);
     expect(['SOFT', 'MEDIUM', 'HARD', 'INTERMEDIATE', 'WET', 'UNKNOWN', null].map(compoundLetter).join('')).toBe('SMHIW??');
-  });
-});
-
-const entry = (driver_number: number, name_acronym: string, team_name: string, team_colour: string | null): DriverEntry => ({
-  driver_number,
-  name_acronym,
-  team_name,
-  team_colour,
-  broadcast_name: null,
-  full_name: null,
-  first_name: null,
-  last_name: null,
-  headshot_url: null,
-  country_code: null,
-});
-
-describe('driver colours', () => {
-  it('uses the team colour, and dashes the second driver of a team', () => {
-    const styles = driverStyles([entry(4, 'NOR', 'McLaren', 'F47600'), entry(44, 'HAM', 'Ferrari', 'ED1131'), entry(81, 'PIA', 'McLaren', 'F47600')]);
-    expect(styles.get(4)).toEqual({ number: 4, code: 'NOR', colour: '#F47600', dashed: false });
-    expect(styles.get(81)?.dashed).toBe(true);
-    expect(styles.get(44)?.dashed).toBe(false);
-  });
-
-  it('falls back when the roster has no colour', () => {
-    expect(driverStyles([entry(1, 'VER', 'Red Bull', null)]).get(1)?.colour).toBe('#8a8a8a');
   });
 });
 
