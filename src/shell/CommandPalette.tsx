@@ -13,15 +13,15 @@ import { leaveBuild } from './buildMode';
 import { matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
+import { MentionParts, renderMention, sayMention } from './mentionKinds';
+import { promptText, type PromptPart } from './mentions';
 import { palette, usePalette, type EntryRole } from './palette';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
+import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
 
 /** While the agent is still working, a second Esc this soon after the first stops it. */
 const ESC_AGAIN_MS = 2000;
-
-/** The input grows with a long prompt up to this many lines, then scrolls. */
-const INPUT_MAX_LINES = 6;
 
 /** The mark before each line of the history. It hangs in its own column, so wrapped text stays clear of it. */
 const ROLE_MARK: Record<EntryRole, string> = {
@@ -31,12 +31,24 @@ const ROLE_MARK: Record<EntryRole, string> = {
   error: '!',
 };
 
+/** The prompt without the spaces around it, as `text.trim()` leaves its text. */
+function trimParts(parts: PromptPart[]): PromptPart[] {
+  const out = [...parts];
+  if (typeof out[0] === 'string') out[0] = out[0].trimStart();
+  const last = out.length - 1;
+  if (typeof out[last] === 'string') out[last] = (out[last] as string).trimEnd();
+  return out.filter((p) => p !== '');
+}
+
 export function CommandPalette() {
   const { open, busy, entries, panel } = usePalette();
   const blank = useLive((s) => s.session == null);
-  const [value, setValue] = useState('');
+  /** The prompt, with its mentions, and as text: a mention as the agent reads it. */
+  const [parts, setParts] = useState<PromptPart[]>([]);
+  const value = promptText(parts, sayMention);
+  const [picker, setPicker] = useState<Picker | null>(null);
   const [selected, setSelected] = useState(0);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<PromptInputHandle | null>(null);
   const historyRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<SuggestionStripHandle | null>(null);
   const promptRef = useRef<LookAheadPromptHandle | null>(null);
@@ -108,15 +120,6 @@ export function CommandPalette() {
     disarm();
     inputRef.current?.focus();
   };
-
-  // The input wraps a long prompt and grows to fit it, up to INPUT_MAX_LINES.
-  useLayoutEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.style.height = 'auto';
-    const line = parseFloat(getComputedStyle(input).lineHeight);
-    input.style.height = `${Math.min(input.scrollHeight, line * INPUT_MAX_LINES)}px`;
-  }, [value, showing, panel]);
 
   useLayoutEffect(() => {
     const box = historyRef.current;
@@ -199,7 +202,8 @@ export function CommandPalette() {
   const submit = () => {
     const text = value.trim();
     if (!text) return;
-    setValue('');
+    const said = trimParts(parts);
+    inputRef.current?.setText('');
     setSelected(0);
     if (text.startsWith('/')) {
       const { name, rest } = parseCommand(text);
@@ -213,7 +217,7 @@ export function CommandPalette() {
       }
       return;
     }
-    void sendToAgent(text);
+    void sendToAgent(text, { parts: said });
   };
 
   return (
@@ -252,7 +256,7 @@ export function CommandPalette() {
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
               <span className="palette-mark">{ROLE_MARK[entry.role]}</span>
               <span className="palette-text">
-                {entry.text}
+                {entry.parts ? <MentionParts parts={entry.parts} /> : entry.text}
                 {entry.action ? (
                   <>
                     {' '}
@@ -279,7 +283,25 @@ export function CommandPalette() {
           </div>
         </>
       ) : null}
-      {suggestions.length > 0 ? (
+      {picker ? (
+        <div className="palette-suggestions palette-mentions" data-testid="mention-picker">
+          {picker.options.map((option, i) => (
+            <div
+              key={`${option.kind}:${option.id}`}
+              className={`palette-suggestion palette-mention ${i === picker.selected ? 'palette-suggestion-active' : ''}`}
+              data-testid="mention-option"
+              ref={i === picker.selected ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                inputRef.current?.pick(i);
+              }}
+            >
+              <span>{renderMention(option, { variant: 'bar' })}</span>
+              <span className="palette-suggestion-desc">{option.detail}</span>
+            </div>
+          ))}
+        </div>
+      ) : suggestions.length > 0 ? (
         <div className="palette-suggestions" data-testid="palette-suggestions">
           {suggestions.map((command, i) => (
             <div
@@ -287,7 +309,7 @@ export function CommandPalette() {
               className={`palette-suggestion ${i === selected ? 'palette-suggestion-active' : ''}`}
               onMouseDown={(e) => {
                 e.preventDefault();
-                setValue(command.name);
+                inputRef.current?.setText(command.name);
                 inputRef.current?.focus();
               }}
             >
@@ -306,20 +328,15 @@ export function CommandPalette() {
       ) : null}
       <div className="palette-input-row">
         <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
-        <textarea
+        <PromptInput
           ref={inputRef}
-          data-testid="palette-input"
-          className="palette-input"
-          rows={1}
-          value={value}
-          spellCheck={false}
-          autoComplete="off"
           placeholder={building ? 'ask for a mod, or a change to one' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'}
-          onChange={(e) => {
-            setValue(e.target.value);
+          onChange={(next) => {
+            setParts(next);
             setSelected(0);
             palette.keepOpen();
           }}
+          onPicker={setPicker}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
@@ -332,12 +349,12 @@ export function CommandPalette() {
               submit();
             } else if (e.key === 'Escape') {
               e.preventDefault();
-              if (value) setValue('');
+              if (value) inputRef.current?.setText('');
               else if (hasTiles) escapeTiles();
               else if (!blank && !building) palette.hide();
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
-              setValue(suggestions[selected].name);
+              inputRef.current?.setText(suggestions[selected].name);
             } else if (e.key === 'ArrowDown' && suggestions.length > 0) {
               e.preventDefault();
               setSelected((selected + 1) % suggestions.length);
