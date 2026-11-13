@@ -495,8 +495,10 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
   does, on the real lane's side. Its gap closes in where the lane is within 15 m of the track. A car more than 4 m off the line is
   drawn on it, where it reads as in the lane, not as racing beside it.
 - **Codes at 11px,** a chosen driver's in bold ink. (They were 9px, and 10px chosen.)
-- **Choosing drivers makes the rest recede:** smaller, three quarters opaque and unlabelled, so the chosen are what reads. Without a
-  choice every car is labelled. A car without a label is named under the pointer, with its position, and whether it's in the pit lane.
+- **Only chosen drivers are labelled.** With nobody chosen, from the props or by click, no car has a label: twenty codes on a
+  circuit land on each other at the start and in the stops. Choosing drivers also makes the rest recede, smaller and three quarters
+  opaque, so the chosen are what reads. A car without a label is named under the pointer, with its position, and whether it's in
+  the pit lane.
 - **Click a car to choose it, or to drop it,** up to six chosen in all. The `drivers` prop's are always chosen and a click leaves them;
   the cars clicked are the map's own state, added on top, so the tile and its title stay as they are.
 - **Turn numbers as the speed ribbon draws them:** just outside the track, 9px in the hint grey, stepped out until clear, and the
