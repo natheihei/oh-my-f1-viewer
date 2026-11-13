@@ -34,12 +34,16 @@ describe('parseCircuit', () => {
       ],
       rotation: 0,
       pitLoss: { normal: 20.81, safetyCar: 13.5, virtualSafetyCar: 14.34 },
+      marshalSectors: null,
     });
   });
 
   it('makes do without the parts it can', () => {
     const c = parseCircuit({ x: [1, 2], y: [3, 4], pitLoss: { normal: 'n/a', sc: -1, vsc: 12 }, rotation: 'x', corners: 'none' }, 9, 1);
     expect(c).toMatchObject({ name: 'Circuit 9', corners: [], rotation: 0, pitLoss: { normal: null, safetyCar: null, virtualSafetyCar: 12 } });
+    // Interlagos lists 16, numbered as race control's sector flags are.
+    const sectors = Array.from({ length: 16 }, (_, i) => ({ number: i + 1, angle: 0, length: 0, trackPosition: { x: 0, y: 0 } }));
+    expect(parseCircuit({ x: [1, 2], y: [3, 4], marshalSectors: sectors }, 14, 1)?.marshalSectors).toBe(16);
     expect(parseCircuit({ x: [1, 2], y: [3, 4] }, 9, 1)?.pitLoss).toEqual({ normal: null, safetyCar: null, virtualSafetyCar: null });
   });
 

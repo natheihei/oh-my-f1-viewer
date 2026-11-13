@@ -99,6 +99,11 @@ export interface Circuit {
   rotation: number;
   /** Seconds lost to a stop, under green, a safety car and a virtual one. Null where missing or unreadable. */
   pitLoss: { normal: number | null; safetyCar: number | null; virtualSafetyCar: number | null };
+  /**
+   * How many marshal sectors the track is cut into, numbered from 1 as race control's sector flags are.
+   * Null where MultiViewer doesn't list them, or in a copy cached before this was read.
+   */
+  marshalSectors?: number | null;
 }
 
 /**
