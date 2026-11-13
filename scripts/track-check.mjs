@@ -201,6 +201,11 @@ await page.mouse.click(dot.x, dot.y + 1);
 await page.waitForTimeout(1500);
 const dropped = await trackKey();
 console.log(`click on ${third}: the tile is ${added}, then ${dropped}`);
+// A driver from the props is always chosen: a click on one leaves it, and its name offers no click.
+const fixedDot = await dotOf(first);
+await page.mouse.click(fixedDot.x, fixedDot.y);
+await page.waitForTimeout(1500);
+await page.screenshot({ path: path.join(outDir, '5b-fixed.png') });
 await page.mouse.move(5, 5);
 await shoot('6-fit', [all], [560, 420]);
 await shoot('7-least', [all], [360, 260]);
