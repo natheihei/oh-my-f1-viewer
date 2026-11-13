@@ -147,7 +147,7 @@ Polished 2026-11-13.
   the interval beside it. A lapped car or the leader has no interval, and no chip. A DRS channel, in earlier seasons, is shown
   as before.
 - **One lap of speed, with a scale.** The trace is as long as the car's last lap time, between 60 and 120 seconds, so each corner
-  is in it once. Rules at 100, 200 and 300 km/h are labelled at the left. A dot marks where the line is now, and each corner's
+  is in it once, drawn 2px wide. Rules at 100, 200 and 300 km/h are labelled at the left. A dot marks where the line is now, and each corner's
   low point has its speed and gear.
 - **Pedals as segments.** Throttle and brake are stacks of 4px segments lit from the bottom, in the pedal colours, so a part
   throttle reads as a count. The feed sends brake as off or on, so its stack is all lit or none.
