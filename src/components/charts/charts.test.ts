@@ -20,6 +20,7 @@ const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
+const { ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
 type ComponentSpec = import('../../layout/model').ComponentSpec;
@@ -830,6 +831,41 @@ describe('speed_trace', () => {
   });
 });
 
+describe('speed_ribbon', () => {
+  const at = (date: number, x: number, y: number) => ({ date, x, y, speed: null, n_gear: null, brake: null });
+  const car = (date: number, speed: number, brake = 0, n_gear = 7) => ({ date, x: null, y: null, speed, n_gear, brake });
+
+  it('gives each position the speed and brake of the latest sample at or before it', () => {
+    const m = ribbonModel([car(0, 300), at(100, 1, 1), car(200, 280, 100), at(300, 2, 2), at(450, 3, 3), car(500, 250, 100, 5)]);
+    expect(m.path).toEqual([
+      { x: 1, y: 1, speed: 300, braking: false },
+      { x: 2, y: 2, speed: 280, braking: true },
+      { x: 3, y: 3, speed: 280, braking: true },
+    ]);
+    expect(m).toMatchObject({ now: { x: 3, y: 3 }, speed: 250, gear: 5 });
+  });
+
+  it('reads a brake of 104 as no reading, not braking', () => {
+    // São Paulo 2026, car 3, lap 38: brake goes to 104 mid-corner.
+    expect(ribbonModel([car(0, 93, 104), at(100, 1, 1)]).path).toEqual([{ x: 1, y: 1, speed: 93, braking: false }]);
+  });
+
+  it('breaks at a gap, and leaves out the placeholder position', () => {
+    const m = ribbonModel([at(0, 1, 1), at(250, 0, 0), at(3000, 2, 2), car(3100, 200)]);
+    expect(m.path).toEqual([{ x: 1, y: 1, speed: null, braking: false }, null, { x: 2, y: 2, speed: null, braking: false }]);
+    expect(ribbonModel([])).toEqual({ path: [], now: null, speed: null, gear: null });
+  });
+
+  it('is one lap long, within a minute and two, and wider the faster', () => {
+    expect(windowSeconds([])).toBe(60);
+    expect(windowSeconds([{ lap_duration: 75.067 }])).toBe(75);
+    expect(windowSeconds([{ lap_duration: 181.2 }])).toBe(120);
+    expect(ribbonWidth(60)).toBe(1);
+    expect(ribbonWidth(340)).toBe(6);
+    expect(ribbonWidth(200)).toBeGreaterThan(ribbonWidth(100));
+  });
+});
+
 describe('car_telemetry', () => {
   const sample = (date: number, more: Record<string, unknown> = {}) => ({ date, speed: 300, rpm: 11420, n_gear: 8, throttle: 100, brake: 0, drs: null, ...more });
 
@@ -975,7 +1011,7 @@ describe('the registry', () => {
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
-    for (const name of ['track_map', 'speed_trace', 'car_telemetry', 'pedal_barcode']) {
+    for (const name of ['track_map', 'speed_trace', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
       expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
     }
@@ -984,6 +1020,8 @@ describe('the registry', () => {
     expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
     expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals 44' });
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
+    expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
+    expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(17);
     // Every chart is for races only, to start with; video is for any session.
@@ -1036,6 +1074,8 @@ describe('sizes', () => {
       ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'lap_time_compare', 'race_trace'],
       ['video', 'track_map', 'car_telemetry', 'speed_trace'],
       ['video', 'car_telemetry', 'pedal_barcode'],
+      ['video', 'speed_ribbon', 'car_telemetry'],
+      ['video', 'video', 'speed_ribbon', 'timing_tower'],
       ['video', 'race_control', 'pit_stops', 'weather'],
       ['video', 'pit_window', 'field_pace', 'sector_delta'],
       ['video', 'timing_tower', 'pit_windows'],
