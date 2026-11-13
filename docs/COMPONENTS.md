@@ -194,7 +194,7 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 - **x is time from the line, scaled to the last completed lap's time,** so the rows line up at each corner, and a slower lap runs
   past the right edge rather than squeezing the others. Turn numbers along the top are the circuit's corners, placed where the car
   passed nearest each on that lap, and left out where they'd crowd or the car never came within 60 m.
-- **Violet is braking, green is throttle, darker for less,** in the pedal colours. The feed sends the brake only as on or off, so
+- **Red is braking, green is throttle, darker for less,** in the pedal colours. The feed sends the brake only as on or off, so
   it's one flat colour. The throttle runs from 15% of its colour with the pedal up to full, so coasting still differs from no reading.
 - **104 is no reading.** The feed sends 104 for throttle or brake, nearly always both, when it has none, while the revs freeze. That
   cell is drawn `quiet`, like a gap of more than 2 s, never as full throttle or full brake.
