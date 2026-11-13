@@ -1,5 +1,6 @@
 /** Command palette state: what's in the history box, and whether it is showing. */
 import { create } from 'zustand';
+import type { PromptPart } from './mentions';
 
 export type EntryRole = 'user' | 'agent' | 'system' | 'error';
 
@@ -7,6 +8,8 @@ export interface PaletteEntry {
   id: number;
   role: EntryRole;
   text: string;
+  /** A prompt with mentions in it, drawn with their tags. `text` is the same as the agent read it. */
+  parts?: PromptPart[];
   /** Something the viewer can do about this line, once: a button after its text. */
   action?: { label: string; run(): void };
 }
@@ -32,9 +35,9 @@ function cancelHide(): void {
 }
 
 export const palette = {
-  push(role: EntryRole, text: string, action?: PaletteEntry['action']): number {
+  push(role: EntryRole, text: string, action?: PaletteEntry['action'], parts?: PromptPart[]): number {
     const id = nextEntry++;
-    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...(action ? { action } : {}) }] }));
+    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...(action ? { action } : {}), ...(parts ? { parts } : {}) }] }));
     return id;
   },
   /** Runs an entry's action, which then goes: it can only be taken once. */

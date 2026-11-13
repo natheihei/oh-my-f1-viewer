@@ -5,6 +5,7 @@ import { setSpoilerAsker } from '../agent/spoilerGate';
 import { host, read } from '../host';
 import { loadEvents } from './commands';
 import { askViewer, lookAhead } from './lookAhead';
+import type { PromptPart } from './mentions';
 import { palette, usePalette } from './palette';
 
 // Long enough to read the reply before the palette goes.
@@ -67,10 +68,12 @@ export function connectAgent(): () => void {
 
 /**
  * Sends what the user typed to the agent: the build agent while build mode is on, else the viewing one.
- * `echo: false` when the palette already shows the line, as it does for a `/` command.
+ * `echo: false` when the palette already shows the line, as it does for a `/` command. `parts` is the
+ * prompt with its mentions, for the history to draw as tags; `text` is it as the agent reads it.
  */
-export async function sendToAgent(text: string, { echo = true }: { echo?: boolean } = {}): Promise<void> {
-  if (echo) palette.push('user', text);
+export async function sendToAgent(text: string, { echo = true, parts }: { echo?: boolean; parts?: PromptPart[] } = {}): Promise<void> {
+  const tagged = parts?.some((p) => typeof p !== 'string');
+  if (echo) palette.push('user', text, undefined, tagged ? parts : undefined);
   const status = await host.agent.status();
   if (!status.ready) {
     palette.push('system', 'The agent needs setting up first: /settings-agent');

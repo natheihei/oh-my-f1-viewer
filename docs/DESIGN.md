@@ -135,6 +135,28 @@ strip.
 - A preview holds its stream quietly: it never becomes audible. Streams are ref-counted, one `<video>` per feed, so adding a previewed
   suggestion hands the same element to the tile rather than starting the stream again. That matters for DRM and the CDN alike. `/` commands stay a separate set for the user, and the two don't share entries.
 
+### Mentions
+
+Typing `@` in the palette's prompt opens a picker above the input, and picking a row puts a tag in the prompt: `▌HAM`, drawn as the
+driver code library draws a driver. A tag is that driver, not the text that found it, so nothing has to be guessed. Typing a name without
+`@` stays plain text, and the agent resolves it as before. (2026-11-13. Turning names into tags as they're typed was the first idea. It was
+dropped because bare numbers ("lap 44", "top 10"), codes that are words (PER, CAM) and "max speed" would each have needed a rule, and still
+misfired.)
+
+- The picker matches a car number (`@44`, `@#4`), a code (`@ham`), a first name, a surname or the full name (`@lewis ham`), each from its
+  start, ignoring case and accents. An exact number or code comes first, then names, then numbers or codes that start with the query, so
+  `@1` lists #1, then #10, #11... A bare `@` offers the roster by car number. Two drivers with the same name would both be rows; the viewer
+  picks one.
+- Keys: ↑ ↓ move, Enter or Tab picks, Esc closes the picker and leaves the text, which stays text until the `@` is edited again. Prose after
+  an `@` that matches nothing closes it too. Backspace just after a tag turns it back into the `@` text that found it, with the picker open.
+- The tag is the code alone: no name beside it and no tooltip. The history keeps the tags; the agent reads each as `HAM (#44)`, code and car
+  number, so it is never mistaken.
+- No session, no picker: there's no roster to pick from. `/` commands don't take mentions.
+- What can be mentioned is a list of kinds (`src/shell/mentionKinds.tsx`): each searches what it has, draws its tag and says it as text for
+  the agent. Drivers are the first; a team, a feed or a tile on screen would each be one more kind.
+- The input is a contenteditable box (`src/shell/PromptInput.tsx`) so a tag can be drawn as a code and stepped over as one piece. React
+  renders it once; the prompt is read back from the DOM. Pasted text comes in plain, on one line.
+
 ### Spoiler approval
 
 The gate belongs to the agent's tools, based on the session state and playhead they read from the host. It must run before any data reaches
