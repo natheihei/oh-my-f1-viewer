@@ -18,6 +18,7 @@ const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
 const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
+const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade } = await import('./PedalBarcode');
 const { components } = await import('../registry');
 const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../../layout/model');
 type ComponentSpec = import('../../layout/model').ComponentSpec;
@@ -823,6 +824,80 @@ describe('car_telemetry', () => {
   });
 });
 
+describe('pedal_barcode', () => {
+  const lapRow = (lap_number: number, date_start: number, lap_duration: number | null) => ({ driver_number: 1, lap_number, date_start, lap_duration });
+  const sample = (date: number, throttle: number, brake: number) => ({ date, throttle, brake, x: null, y: null });
+
+  it('reads 104 on either pedal as no reading, and the brake as on or off', () => {
+    expect(pedalOf(104, 104)).toBe('none');
+    expect(pedalOf(46, 104)).toBe('none');
+    expect(pedalOf(0, 100)).toBe('brake');
+    expect(pedalOf(37, 0)).toBe(37);
+    expect(pedalOf(null, 0)).toBe('none');
+  });
+
+  it('shades the throttle colour by the amount pressed, never to black', () => {
+    expect(throttleShade(100, '#4cd06a')).toBe('rgb(76,208,106)');
+    expect(throttleShade(0, '#4cd06a')).toBe('rgb(11,31,16)');
+  });
+
+  it('keeps the latest laps, and queries the completed ones only until the lap in progress', () => {
+    const rows = [lapRow(9, 90_000, null), lapRow(8, 80_000, 10), lapRow(7, 70_000, 10)];
+    const { driver, laps } = lapsOf(rows);
+    expect(driver).toBe(1);
+    expect(laps.map((l) => l.lap)).toEqual([7, 8, 9]);
+    expect(pastParams(1, laps)).toEqual([1, 70_000, 90_000, 80_000]);
+    // Before a lap is completed, there's nothing to query.
+    expect(pastParams(1, laps.slice(-1))).toEqual([1, 0, -1, 0]);
+    expect(lapsOf([]).driver).toBeNull();
+  });
+
+  it('draws a row per lap, newest first, scaled to the last completed lap, with each turn where the car passed it', () => {
+    const laps = lapsOf([lapRow(7, 70_000, 10), lapRow(8, 80_000, 9.5), lapRow(9, 89_500, null)]).laps;
+    const rows = [
+      sample(70_000, 100, 0),
+      sample(75_000, 0, 100),
+      sample(80_000, 100, 0),
+      sample(81_500, 104, 104),
+      sample(83_000, 30, 0),
+      sample(84_000, 100, 0),
+      // A gap of more than 2 s is left empty.
+      sample(86_500, 100, 0),
+      sample(89_500, 100, 0),
+      sample(91_000, 0, 100),
+      { date: 80_000, throttle: null, brake: null, x: 0, y: 10 },
+      { date: 84_000, throttle: null, brake: null, x: 400, y: 0 },
+      { date: 88_000, throttle: null, brake: null, x: 5000, y: 5000 },
+    ];
+    const corners = [
+      { number: 1, x: 400, y: 100, angle: 0, distance: 0 },
+      { number: 2, x: -9000, y: 0, angle: 0, distance: 0 },
+    ];
+    const m = pedalModel(laps, rows, 92_000, corners);
+    expect(m.laps.map((l) => [l.lap, l.done])).toEqual([
+      [9, false],
+      [8, true],
+      [7, true],
+    ]);
+    expect(m.span).toBe(9500);
+    expect(m.now).toBe(2500);
+    // Turn 2 is too far from anywhere the car went to place.
+    expect(m.corners).toEqual([{ number: 1, t: 4000 }]);
+    expect(m.laps[1].cells).toEqual([
+      { t0: 0, t1: 1500, pedal: 100 },
+      { t0: 1500, t1: 3000, pedal: 'none' },
+      { t0: 3000, t1: 4000, pedal: 30 },
+      { t0: 4000, t1: 6000, pedal: 100 },
+      { t0: 6500, t1: 8500, pedal: 100 },
+    ]);
+    // The lap in progress runs to the playhead.
+    expect(m.laps[0].cells).toEqual([
+      { t0: 0, t1: 1500, pedal: 100 },
+      { t0: 1500, t1: 2500, pedal: 'brake' },
+    ]);
+  });
+});
+
 describe('the registry', () => {
   it('declares the charts the agent can suggest', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
@@ -842,15 +917,17 @@ describe('the registry', () => {
     expect(byName.pit_stops.spec({})).toEqual({ key: 'pit_stops:all', label: 'Pit stops' });
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
-    for (const name of ['track_map', 'speed_trace', 'car_telemetry']) {
+    for (const name of ['track_map', 'speed_trace', 'car_telemetry', 'pedal_barcode']) {
       expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
     expect(byName.speed_trace.spec({ drivers: [44, 1] })).toEqual({ key: 'speed_trace:44-1', label: 'Speed 44 · 1' });
     expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
+    expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals 44' });
+    expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
     for (const gone of ['position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(15);
+    expect(components).toHaveLength(16);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -900,6 +977,7 @@ describe('sizes', () => {
       ['video', 'video', 'video', 'timing_tower', 'gap_evolution'],
       ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'lap_time_compare', 'race_trace'],
       ['video', 'track_map', 'car_telemetry', 'speed_trace'],
+      ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'race_control', 'pit_stops', 'weather'],
       ['video', 'pit_window', 'field_pace', 'sector_delta'],
       ['timing_tower', 'gap_evolution', 'lap_time_compare'],
