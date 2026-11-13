@@ -173,7 +173,7 @@ export function placeLabels(
 interface Drawn {
   cars: Car[];
   highlight: number[];
-  /** The chosen from the props: always chosen, so a click doesn't drop them. */
+  /** The pinned from the props: pinned for good, so a click doesn't unpin them. */
   fixed: number[];
   /** Cars off the racing line: drawn as rings. */
   lane: Set<number>;
@@ -197,7 +197,7 @@ const TURN_TYPE = 9;
 const TURN_STEPS = [3, 8, 14];
 /** How near the pointer has to be to a dot, in pixels, to name it. */
 const HIT = 12;
-/** How opaque the cars nobody chose are, once someone is chosen. */
+/** How opaque the cars nobody pinned are, once someone is pinned. */
 const RECEDE = 0.75;
 /** How far beside the track the pit lane is drawn, in pixels: fixed, since at a tile's scale its 20 m would be 3 or 4. */
 const LANE_GAP = 7;
@@ -272,7 +272,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   ctx.stroke();
 
   const lit = new Set(m.highlight);
-  // Only the chosen are labelled; the rest are named under the pointer. Once someone is chosen, the rest also recede: smaller and dimmer.
+  // Only the pinned are labelled; the rest are named under the pointer. Once someone is pinned, the rest also recede: smaller and dimmer.
   const recede = lit.size > 0;
   const radius = (d: number) => (lit.has(d) ? (compact ? 4 : 6) : compact ? 2.5 : recede ? 3 : 4);
   // A car off the line by more than the lane's own threshold sits on the lane as it's drawn, not on the track.
@@ -396,7 +396,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   ctx.stroke();
   const position = m.positions.get(car.driver);
   const name = `${style.code} P${position ?? '–'}${m.lane.has(car.driver) ? ' · pit lane' : ''}`;
-  const hint = m.fixed.includes(car.driver) ? '' : lit.has(car.driver) ? ' · click to drop' : lit.size < MAX_CHOSEN ? ' · click to choose' : '';
+  // A car from the props is pinned for good; any other says what a click does, unless six are pinned already.
+  const hint = m.fixed.includes(car.driver) ? ' · pinned' : lit.has(car.driver) ? ' · click to unpin' : lit.size < MAX_PINNED ? ' · click to pin' : '';
   const w = textWidth(ctx, name, TYPE) + textWidth(ctx, hint, TYPE) + 12;
   const bx = Math.min(Math.max(4, x - w / 2), width - w - 4);
   const by = y < 34 ? y + 12 : y - 32;
@@ -420,29 +421,29 @@ export function dotAt(dots: ReadonlyArray<{ driver: number; x: number; y: number
   return best?.driver ?? null;
 }
 
-/** The most drivers the map draws chosen. */
-const MAX_CHOSEN = 6;
+/** The most drivers the map pins. */
+const MAX_PINNED = 6;
 
 const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
   minItems: 1,
-  maxItems: MAX_CHOSEN,
+  maxItems: MAX_PINNED,
   description:
-    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and unlabelled. These are always chosen; the viewer can click other cars to add or drop them on the map itself, which leaves these props as they are.',
+    'Drivers to draw larger and labelled, as car numbers: the rest are drawn smaller and unlabelled, named under the pointer. Left out, every car is the same and unlabelled. These are pinned for good; the viewer can click other cars to pin or unpin them on the map itself, which leaves these props as they are.',
 });
 
 /**
- * The cars added by click, after a click on `driver`: added, or dropped if it was added. A car in `fixed`, the
- * props' drivers, is always chosen and a click leaves it. Nothing is added past six chosen in all.
+ * The cars pinned by click, after a click on `driver`: pinned, or unpinned if it was. A car in `fixed`, the
+ * props' drivers, is pinned for good and a click leaves it. Nothing is pinned past six in all.
  */
 export function toggleDriver(added: readonly number[], fixed: readonly number[], driver: number): number[] {
   if (fixed.includes(driver)) return [...added];
   if (added.includes(driver)) return added.filter((d) => d !== driver);
-  return chosenOf(fixed, added).length < MAX_CHOSEN ? [...added, driver] : [...added];
+  return pinnedOf(fixed, added).length < MAX_PINNED ? [...added, driver] : [...added];
 }
 
-/** Everyone chosen: the props' drivers, then those added by click, six at most. */
-export function chosenOf(fixed: readonly number[], added: readonly number[]): number[] {
-  return [...fixed, ...added.filter((d) => !fixed.includes(d))].slice(0, MAX_CHOSEN);
+/** Everyone pinned: the props' drivers, then those pinned by click, six at most. */
+export function pinnedOf(fixed: readonly number[], added: readonly number[]): number[] {
+  return [...fixed, ...added.filter((d) => !fixed.includes(d))].slice(0, MAX_PINNED);
 }
 
 const NO_PLAYHEAD = 0;
@@ -453,11 +454,11 @@ const MIN = { width: 360, height: 250 };
 const FIT = { width: 560, height: 400 };
 
 function TrackMap({ props }: { props: { drivers?: number[] } }) {
-  // The props' drivers are always chosen. A click adds or drops another car: the map's own state, on top of them.
+  // The props' drivers are pinned for good. A click pins or unpins another car: the map's own state, on top of them.
   const key = props.drivers?.join(',') ?? '';
   const [added, setAdded] = useState<number[]>([]);
   const fixed = useMemo(() => (key ? key.split(',').map(Number) : []), [key]);
-  const highlight = useMemo(() => chosenOf(fixed, added), [fixed, added]);
+  const highlight = useMemo(() => pinnedOf(fixed, added), [fixed, added]);
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const view = useSql(SQL, [playhead ?? NO_PLAYHEAD]);
   // Without timing there are no laps, so no one is out: the map still draws.
