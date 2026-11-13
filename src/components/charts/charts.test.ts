@@ -837,8 +837,8 @@ describe('pedal_barcode', () => {
   });
 
   it('shades the throttle colour by the amount pressed, never to black', () => {
-    expect(throttleShade(100, '#4cd06a')).toBe('rgb(76,208,106)');
-    expect(throttleShade(0, '#4cd06a')).toBe('rgb(11,31,16)');
+    expect(throttleShade(100, '#5fb57c')).toBe('rgb(95,181,124)');
+    expect(throttleShade(0, '#5fb57c')).toBe('rgb(14,27,19)');
   });
 
   it('keeps the latest laps, and queries the completed ones only until the lap in progress', () => {
