@@ -8,7 +8,7 @@
 // screenshot was taken, and the script keeps serving it until the app is closed.
 // Usage: node scripts/pedal-check.mjs <screenshot-dir> [lap] [race, by name: the latest replay race if none] [car] [--keep]
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
@@ -59,6 +59,8 @@ const done = async (code = 0) => {
     execFileSync('pkill', ['-f', '--', `user-data-dir=${userData}`]);
   } catch {}
   await server.close();
+  // Its own copy of the logins and caches: nearly 200 MB a run.
+  rmSync(userData, { recursive: true, force: true });
   process.exit(code);
 };
 
