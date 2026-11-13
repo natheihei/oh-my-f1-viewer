@@ -7,7 +7,7 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 const { gapModel } = await import('./GapEvolution');
 const { tyreModel, tyreExtent } = await import('./TyreStrategy');
 const { towerModel, towerExtent } = await import('./TimingTower');
-const { paceModel } = await import('./FieldPace');
+const { degModel, degExtent, shadeOf } = await import('./TyreDeg');
 const { pitWindowModel, pitWindowExtent, CLEAR_AIR, LEAST: PIT_WINDOW_LEAST } = await import('./PitWindow');
 const { pitWindowsModel, lossNow } = await import('./PitWindows');
 const { sectorTable } = await import('./SectorTable');
@@ -311,35 +311,60 @@ const ls = (driver_number: number, lap_number: number, more: Record<string, unkn
   ...more,
 });
 
-describe('field_pace', () => {
-  it('ranks medians of the last five clean laps, with too few clean laps last', () => {
-    const laps = (driver: number, times: number[], more: Record<string, unknown> = {}) => times.map((t, i) => ls(driver, i + 2, { lap_duration: t, ...more }));
+describe('tyre_deg', () => {
+  const laps = (driver: number, times: Array<number | null>, more: Record<string, unknown> = {}) =>
+    times.map((t, i) => ls(driver, i + 2, { lap_duration: t, tyre_age: i + 1, position: 1, ...more }));
+
+  it("lays each car's current set out by tyre age, against its own median there", () => {
     const rows = [
-      ...laps(44, [99, 91, 91.2, 91.1, 91.3, 91.4]),
-      ...laps(1, [90.9, 90.8, 95, 90.7, 90.9, 90.8]),
-      ...laps(16, [91, 91, 91, 91, 91, 91], { track_status: 'Yellow' }),
-      ls(16, 8, { lap_duration: null, compound: 'HARD', tyre_age: 3 }),
+      ...laps(1, [90, 91, 92]),
+      ls(1, 5, { lap_duration: 99, stint_number: 2, compound: 'HARD', tyre_age: 1, is_pit_out_lap: 1 }),
+      ls(1, 6, { lap_duration: 91, stint_number: 2, compound: 'HARD', tyre_age: 2 }),
+      ls(1, 7, { lap_duration: 91.5, stint_number: 2, compound: 'HARD', tyre_age: 3 }),
+      ls(1, 8, { lap_duration: 92, stint_number: 2, compound: 'HARD', tyre_age: 4 }),
+      ls(1, 9, { lap_duration: null, stint_number: 2, compound: 'HARD', tyre_age: 5 }),
     ];
-    const m = paceModel(rows);
-    expect(m.map((r) => r.driver)).toEqual([1, 44, 16]);
-    expect(m[0].pace).toBeCloseTo(90.8);
-    expect(m[1].pace).toBeCloseTo(91.2);
-    expect(m[2]).toEqual({ driver: 16, pace: null, compound: 'HARD', age: 2 });
+    const m = degModel(rows);
+    expect(m.ages).toBe(4);
+    const [row] = m.rows;
+    expect(row).toMatchObject({ driver: 1, compound: 'HARD', age: 4 });
+    // The out-lap isn't counted; the rest sit either side of the 91.5 median.
+    expect(row.cells.map((c) => (c?.kind === 'lap' ? c.delta : c?.kind))).toEqual(['skip', -0.5, 0, 0.5]);
   });
 
-  it('stops ranking a car whose clean laps are long past', () => {
-    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ...Array.from({ length: 20 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
-    expect(paceModel(rows).find((r) => r.driver === 4)?.pace).toBeNull();
+  it('hatches a lap run under a yellow, and keeps it out of the median', () => {
+    const m = degModel(laps(1, [90, 95, 91]).map((r, i) => (i === 1 ? { ...r, track_status: 'Yellow' } : r)));
+    expect(m.rows[0].cells.map((c) => c?.kind)).toEqual(['lap', 'neutral', 'lap']);
+    expect(m.rows[0].cells[0]).toMatchObject({ delta: -0.5 });
   });
 
-  it('gives a car that has retired a dash, even with recent clean laps', () => {
-    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ls(4, 6, { lap_duration: null, is_out: 1 }), ...Array.from({ length: 7 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
-    expect(paceModel(rows).map((r) => [r.driver, r.pace])).toEqual([[1, 91], [4, null]]);
+  it('puts the field in race order and names retired cars apart, by the lap they went out on', () => {
+    const rows = [
+      ...laps(44, [91, 91], { position: 2 }),
+      ...laps(1, [91, 91], { position: 1 }),
+      ...laps(16, [91], { position: 3 }),
+      ls(16, 3, { lap_duration: null, is_out: 1, tyre_age: 2 }),
+    ];
+    const m = degModel(rows);
+    expect(m.rows.map((r) => r.driver)).toEqual([1, 44]);
+    expect(m.out).toEqual([{ driver: 16, lap: 3 }]);
   });
 
-  it('keeps ranking a car that is laps down but still running', () => {
-    const rows = [...[2, 3, 4, 5].map((n) => ls(4, n, { lap_duration: 90 })), ...Array.from({ length: 7 }, (_, i) => ls(1, i + 2, { lap_duration: 91 }))];
-    expect(paceModel(rows).map((r) => [r.driver, r.pace])).toEqual([[4, 90], [1, 91]]);
+  it("shades a car's median mid grey, quicker lighter and slower darker", () => {
+    const v = (d: number) => Number(shadeOf(d).slice(4).split(',')[0]);
+    expect(v(-0.5)).toBeGreaterThan(v(0));
+    expect(v(0)).toBeGreaterThan(v(1));
+    expect(v(5)).toBe(v(1));
+  });
+
+  it('runs past the tile once rows and cells stop shrinking', () => {
+    const many = Array.from({ length: 22 }, (_, i) => laps(i + 1, Array.from({ length: 40 }, () => 91), { position: i + 1 })).flat();
+    const d = { model: degModel(many), styles: new Map(), watched: new Set<number>() };
+    const box = (width: number, height: number) => ({ width, height, compact: false });
+    expect(degExtent(d, box(700, 600))).toEqual({ width: 700, height: 600 });
+    const squeezed = degExtent(d, box(300, 250));
+    expect(squeezed.width).toBeGreaterThan(300);
+    expect(squeezed.height).toBeGreaterThan(250);
   });
 });
 
@@ -1014,7 +1039,7 @@ describe('the registry', () => {
     expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap 44 · 1' });
     expect(byName.tyre_strategy.spec({})).toEqual({ key: 'tyre_strategy:all', label: 'Tyres' });
     expect(byName.timing_tower.spec({})).toEqual({ key: 'timing_tower', label: 'Timing' });
-    expect(byName.field_pace.sessions).toEqual(['race', 'sprint']);
+    expect(byName.tyre_deg.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
     expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window 44' });
     expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
@@ -1031,7 +1056,7 @@ describe('the registry', () => {
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
-    for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
+    for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live', 'field_pace']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(14);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
@@ -1080,13 +1105,13 @@ describe('sizes', () => {
       ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy'],
       ['video', 'gap_evolution', 'tyre_strategy', 'timing_tower'],
       ['video', 'video', 'video', 'timing_tower', 'gap_evolution'],
-      ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'sector_table', 'field_pace'],
+      ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'sector_table', 'tyre_deg'],
       ['video', 'track_map', 'car_telemetry'],
       ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'speed_ribbon', 'car_telemetry'],
       ['video', 'video', 'speed_ribbon', 'timing_tower'],
       ['video', 'race_control', 'pit_windows', 'race_status'],
-      ['video', 'pit_window', 'field_pace', 'sector_table'],
+      ['video', 'pit_window', 'tyre_deg', 'sector_table'],
       ['video', 'timing_tower', 'pit_windows'],
       ['video', 'pit_windows', 'tyre_strategy', 'race_control'],
       ['video', 'timing_tower', 'race_status', 'race_control'],
