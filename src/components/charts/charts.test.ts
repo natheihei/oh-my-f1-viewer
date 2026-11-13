@@ -141,37 +141,33 @@ describe('gap_evolution', () => {
   });
 
   describe('marks', () => {
-    // Each driver named is 30px wide.
-    const width = (drivers: number[]) => 30 * drivers.length;
+    // Each label is 30px wide.
+    const width = () => 30;
 
-    it('labels marks far apart each right of its line', () => {
-      expect(layoutMarks([{ at: 100, driver: 4 }, { at: 10, driver: 81 }], width, 400, 'all')).toEqual([
-        { at: 10, drivers: [81], align: 'left' },
-        { at: 100, drivers: [4], align: 'left' },
+    it('labels marks far apart each right of its line, in the top row', () => {
+      expect(layoutMarks([{ at: 100, driver: 4 }, { at: 10, driver: 81 }], width, 400)).toEqual([
+        { at: 10, driver: 81, align: 'left', row: 0 },
+        { at: 100, driver: 4, align: 'left', row: 0 },
       ]);
     });
 
-    it('names stops a lap apart in one label at the first', () => {
-      // Mexico: PIA in on 44 and NOR on 45, a lap 20px wide.
-      expect(layoutMarks([{ at: 120, driver: 4 }, { at: 100, driver: 81 }], width, 400, 'all')).toEqual([{ at: 100, drivers: [81, 4], align: 'left' }]);
-      // Two in on the same lap.
-      expect(layoutMarks([{ at: 100, driver: 81 }, { at: 100, driver: 4 }], width, 400, 'all')).toEqual([{ at: 100, drivers: [81, 4], align: 'left' }]);
-    });
-
-    it('labels only the latest of passes close together', () => {
-      expect(layoutMarks([{ at: 100, driver: 81 }, { at: 115, driver: 4 }, { at: 130, driver: 81 }], width, 400, 'latest')).toEqual([
-        { at: 130, drivers: [81], align: 'left' },
+    it('stacks labels that would cover each other, each at its own line', () => {
+      // Mexico: PIA in on 45, NOR and PIA on 46, a lap 20px wide; NOR's stop on 40 is clear of them.
+      expect(layoutMarks([{ at: 0, driver: 1 }, { at: 100, driver: 81 }, { at: 120, driver: 1 }, { at: 120, driver: 81 }], width, 400)).toEqual([
+        { at: 0, driver: 1, align: 'left', row: 0 },
+        { at: 100, driver: 81, align: 'left', row: 0 },
+        { at: 120, driver: 1, align: 'left', row: 1 },
+        { at: 120, driver: 81, align: 'left', row: 2 },
       ]);
+      // A row freed further on is used again.
+      expect(layoutMarks([{ at: 100, driver: 1 }, { at: 120, driver: 81 }, { at: 140, driver: 1 }], width, 400).map((l) => l.row)).toEqual([0, 1, 0]);
     });
 
-    it('puts a label left of its line by the panel, and merges it where that runs over the one before', () => {
-      expect(layoutMarks([{ at: 390, driver: 4 }], width, 400, 'all')).toEqual([{ at: 390, drivers: [4], align: 'right' }]);
+    it('puts a label left of its line by the panel, and stacks it where that covers the one before', () => {
+      expect(layoutMarks([{ at: 390, driver: 4 }], width, 400)).toEqual([{ at: 390, driver: 4, align: 'right', row: 0 }]);
       // Right of 370 the label would reach 403, so it goes left: clear of a label at 300, over one at 340.
-      expect(layoutMarks([{ at: 300, driver: 81 }, { at: 370, driver: 4 }], width, 400, 'all')).toEqual([
-        { at: 300, drivers: [81], align: 'left' },
-        { at: 370, drivers: [4], align: 'right' },
-      ]);
-      expect(layoutMarks([{ at: 340, driver: 81 }, { at: 370, driver: 4 }], width, 400, 'all')).toEqual([{ at: 340, drivers: [81, 4], align: 'right' }]);
+      expect(layoutMarks([{ at: 300, driver: 81 }, { at: 370, driver: 4 }], width, 400).map((l) => [l.align, l.row])).toEqual([['left', 0], ['right', 0]]);
+      expect(layoutMarks([{ at: 340, driver: 81 }, { at: 370, driver: 4 }], width, 400).map((l) => [l.align, l.row])).toEqual([['left', 0], ['right', 1]]);
     });
   });
 });
