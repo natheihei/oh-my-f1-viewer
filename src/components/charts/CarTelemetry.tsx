@@ -260,7 +260,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     }
   }
   const at = (p: TracePoint) => [x(p.t), y(Math.min(TOP_SPEED, p.speed))] as const;
-  polyline(ctx, m.trace.map((p) => (p ? at(p) : null)), { color: m.style.colour, dashed: m.style.dashed, width: compact ? 1 : 1.4 });
+  polyline(ctx, m.trace.map((p) => (p ? at(p) : null)), { color: m.style.colour, dashed: m.style.dashed, width: compact ? 1.4 : 2 });
   const now = m.trace.at(-1);
   if (now) {
     const [nx, ny] = at(now);
