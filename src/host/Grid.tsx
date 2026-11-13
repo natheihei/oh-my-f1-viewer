@@ -1,5 +1,5 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
-import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { Component, createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Value from 'typebox/value';
 import { GridSurface, type TileState } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
@@ -85,12 +85,28 @@ function ViewFrame({ children }: { children: ReactNode }) {
   );
 }
 
+const Tile = createContext<string | null>(null);
+
+/** The id of the tile this component draws in, for `host.layout.setProps`, or null where it isn't in a tile, as in a preview. */
+export const useTile = (): string | null => useContext(Tile);
+
 /**
  * Draws a spec with its registered component, or `fallback` if none is registered under its type.
  * `scope` names the tile or preview it draws in, which is what a look-ahead approval belongs to. A
  * component that declares `looksAhead` isn't drawn there until the viewer allows it.
  */
-export function ComponentView({ spec, scope = null, fallback = null }: { spec: ComponentSpec; scope?: string | null; fallback?: ReactNode }) {
+export function ComponentView({
+  spec,
+  scope = null,
+  tile = null,
+  fallback = null,
+}: {
+  spec: ComponentSpec;
+  scope?: string | null;
+  /** The tile it draws in, which `useTile()` gives the component: null for a preview. */
+  tile?: string | null;
+  fallback?: ReactNode;
+}) {
   // Re-renders when a mod's component is replaced, wherever this is drawn.
   useComponents((s) => s.list);
   const definition = componentOf(spec.type);
@@ -107,7 +123,9 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
   return (
     <ViewFrame>
       <TileBoundary type={spec.type} version={View}>
-        <View props={props} label={spec.label} />
+        <Tile.Provider value={tile}>
+          <View props={props} label={spec.label} />
+        </Tile.Provider>
       </TileBoundary>
     </ViewFrame>
   );
@@ -147,7 +165,7 @@ const wrappers = new Map<string, TileComponent>();
 function wrapperOf(name: string): TileComponent {
   let wrapper = wrappers.get(name);
   if (!wrapper) {
-    wrapper = ({ spec, tileId }) => <ComponentView spec={spec} scope={tileId} />;
+    wrapper = ({ spec, tileId }) => <ComponentView spec={spec} scope={tileId} tile={tileId} />;
     wrappers.set(name, wrapper);
   }
   return wrapper;
