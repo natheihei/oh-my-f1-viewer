@@ -272,7 +272,7 @@ const NO_GRID: StartingGridEntry[] = [];
 const NO_ONE: ReadonlySet<number> = new Set();
 
 /** The car numbers of the onboards on screen, as a string so the selector's result compares by value. */
-function watchedKey(live: Live): string {
+export function watchedKey(live: Live): string {
   const feeds = new Set(tilesOf(live.layout).flatMap((t) => (t.component.type === 'video' && typeof t.component.props.feed === 'string' ? [t.component.props.feed] : [])));
   return live.feeds
     .filter((f) => f.kind === 'onboard' && f.number != null && feeds.has(f.id))
