@@ -4,8 +4,8 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from '../../host';
-import { ChartFrame, num, styleOf, useDriverStyles, type DriverStyle } from './kit';
+import { defineComponent, Parts, useSql, type CodeLook, type Part } from '../../host';
+import { ChartFrame, num, useDriverStyles, type DriverStyle } from './kit';
 import {
   caseText,
   parseCase,
@@ -122,20 +122,26 @@ export function markOf(line: Line): Signal | 'cleared' {
 const NEUTRAL = new Set<string>(['red', 'sc', 'vsc', 'scEnd', 'vscEnd']);
 
 interface Words {
-  codeOf: (n: number) => string;
-  isCode: (word: string) => boolean;
+  /** The car a roster code stands for, for a code F1 writes on its own. */
+  driverOf: (word: string) => number | null;
 }
 
-/** A line's text, in sentence case. */
-export function lineText(line: Line, w: Words): string {
-  const say = (s: string) => sentenceCase(s, w.isCode);
-  if (line.kind === 'blue') return `${say(`BLUE ×${line.count}`)}  ${line.drivers.map(w.codeOf).join(' ')}`.trimEnd();
-  if (line.kind === 'case') return say(caseText(line, w.codeOf));
+/** A line's codes: in the line's own colour, so a quiet line stays quiet, and bold. */
+const LOOK: CodeLook = { strong: true, tone: 'inherit' };
+
+/** A line's text, in sentence case, with its cars as drivers. */
+export function lineText(line: Line, w: Words): Part[] {
+  if (line.kind === 'blue') {
+    // "Blue ×3  PER BOT": two spaces after the count, one between the cars.
+    const cars = line.drivers.flatMap((d, i): Part[] => [i ? ' ' : '  ', { driver: d }]);
+    return [...sentenceCase([`BLUE ×${line.count}`]), ...cars];
+  }
+  if (line.kind === 'case') return sentenceCase(caseText(line));
   if (line.kind === 'flags') {
     const parts = line.parts.map((p) => `${p.flag === 'double' ? 'DOUBLE YELLOW' : 'YELLOW'} S${p.sector}`);
-    return say([...parts, ...(line.live.length === 0 ? ['CLEARED'] : [])].join(' · '));
+    return sentenceCase([[...parts, ...(line.live.length === 0 ? ['CLEARED'] : [])].join(' · ')]);
   }
-  return say(shorten(line.message, w.codeOf));
+  return sentenceCase(shorten(line.message, w.driverOf));
 }
 
 /** The messages a line stands for, as sent, for the pointer. */
@@ -198,7 +204,7 @@ function Item({ line, first, words }: { line: Line; first: boolean; words: Words
     <div className={`rc-item ${tone}`} title={rawOf(line)}>
       <Flag mark={mark} />
       <div className="rc-text">
-        {lineText(line, words)}
+        <Parts parts={lineText(line, words)} look={LOOK} />
         {line.kind === 'case' ? (
           <div className="rc-steps">
             {line.steps.map((s, i) => (
@@ -218,10 +224,9 @@ function List({ rows, styles, blue }: { rows: ReadonlyArray<Record<string, unkno
   const lines = useMemo(() => messagesModel(rows, blue), [rows, blue]);
   const now = useMemo(() => standing(rows), [rows]);
   const words = useMemo<Words>(() => {
-    const codes = new Set([...styles.values()].map((s) => s.code));
-    for (const r of rows) for (const m of (typeof r.message === 'string' ? r.message : '').matchAll(/CARS? \d+ \((\w{3})\)|AND \d+ \((\w{3})\)/g)) codes.add(m[1] ?? m[2]);
-    return { codeOf: (n) => styleOf(styles, n).code, isCode: (w) => codes.has(w) };
-  }, [rows, styles]);
+    const byCode = new Map([...styles.values()].map((s) => [s.code, s.number]));
+    return { driverOf: (w) => byCode.get(w) ?? null };
+  }, [styles]);
   let lap: number | null = null;
   return (
     <div className="rc">

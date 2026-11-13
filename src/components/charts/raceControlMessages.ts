@@ -3,8 +3,9 @@
  * yellow has `scope` and `sector`, a blue or black and white flag has `driver_number`, a safety car has
  * `category` SafetyCar. Deleted laps, the stewards' cases, penalties, the red flag and the restart order
  * come as plain text, so what they say is read from F1's wording here. A message no pattern knows is
- * shown as sent, with only car numbers and clock times taken out.
+ * shown as sent, with only clock times taken out and its cars drawn as drivers.
  */
+import type { Part } from '../../host';
 import { num } from './kit';
 
 /** What a message's flag mark shows. `double` is a double yellow; `scEnd` and `vscEnd` a safety car or VSC ending. */
@@ -101,49 +102,74 @@ export const sameCase = (a: { time: string; cars: number[] }, b: { time: string;
 export const stageLabel = (stage: Stage, penalty: string | null): string =>
   stage === 'penalty' ? `${penalty} penalty` : stage === 'served' ? `${penalty} served` : stage;
 
+/** Cars in a list, as drivers between `sep`: "ALB & GAS". */
+const joined = (cars: readonly number[], sep: string): Part[] => cars.flatMap((car, i): Part[] => (i ? [sep, { driver: car }] : [{ driver: car }]));
+
+/** Empty strings left out, so a line's first part is what it starts with. */
+const tidy = (parts: Part[]): Part[] => parts.filter((p) => p !== '');
+
 /**
- * A message in fewer words: "ALB LAP 34 DELETED · T1 LIMITS" for "CAR 23 (ALB) TIME 1:18.737 DELETED -
- * TRACK LIMITS AT TURN 1 LAP 34 14:50:00". Still in capitals; `sentenceCase` lowers it. `codeOf` names a
- * car in a list of numbers, as the restart order gives them.
+ * Text with each car F1 names in it as a driver: "CAR 23 (ALB)", "CARS 23 (ALB) AND 10 (GAS)". A word
+ * `driverOf` knows as a roster code, standing alone, is one too.
  */
-export function shorten(message: string, codeOf: (n: number) => string): string {
+export function withCars(s: string, driverOf: (word: string) => number | null = () => null): Part[] {
+  const out: Part[] = [];
+  let at = 0;
+  for (const m of s.matchAll(/(?:\bCARS? )?\b(\d+) \(\w+\)|\b[A-Z]{3}\b/g)) {
+    const driver = m[1] !== undefined ? Number(m[1]) : driverOf(m[0]);
+    if (driver === null) continue;
+    out.push(s.slice(at, m.index), { driver });
+    at = m.index + m[0].length;
+  }
+  out.push(s.slice(at));
+  return tidy(out);
+}
+
+/**
+ * A message in fewer words, with its cars as drivers: "ALB LAP 34 DELETED · T1 LIMITS" for "CAR 23 (ALB)
+ * TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00". Still in capitals; `sentenceCase`
+ * lowers it. A list of numbers, as the restart order gives them, is a list of cars.
+ */
+export function shorten(message: string, driverOf?: (word: string) => number | null): Part[] {
   const s = stewards(message);
   let m: RegExpMatchArray | null;
-  if ((m = s.match(/^CAR \d+ \((\w+)\) (?:TIME [\d:.]+ )?(?:LAP )?DELETED - TRACK LIMITS AT TURN (\d+) LAP (\d+)/)))
-    return `${m[1]} LAP ${m[3]} DELETED · T${m[2]} LIMITS`;
-  if ((m = s.match(/^WAVED BLUE FLAG FOR CAR \d+ \((\w+)\)/))) return `BLUE FLAG ${m[1]}`;
-  if ((m = s.match(/^BLACK AND WHITE FLAG FOR CAR \d+ \((\w+)\) - (.+)/))) return `${m[1]} BLACK AND WHITE FLAG · ${m[2]}`;
-  if ((m = s.match(/^(DOUBLE YELLOW|YELLOW|CLEAR) IN TRACK SECTOR (\d+)$/))) return `${m[1]} S${m[2]}`;
+  if ((m = s.match(/^CAR (\d+) \(\w+\) (?:TIME [\d:.]+ )?(?:LAP )?DELETED - TRACK LIMITS AT TURN (\d+) LAP (\d+)/)))
+    return [{ driver: Number(m[1]) }, ` LAP ${m[3]} DELETED · T${m[2]} LIMITS`];
+  if ((m = s.match(/^WAVED BLUE FLAG FOR CAR (\d+) \(\w+\)/))) return ['BLUE FLAG ', { driver: Number(m[1]) }];
+  if ((m = s.match(/^BLACK AND WHITE FLAG FOR CAR (\d+) \(\w+\) - (.+)/))) return [{ driver: Number(m[1]) }, ` BLACK AND WHITE FLAG · ${m[2]}`];
+  if ((m = s.match(/^(DOUBLE YELLOW|YELLOW|CLEAR) IN TRACK SECTOR (\d+)$/))) return [`${m[1]} S${m[2]}`];
   const step = parseCase(message);
   if (step) {
-    const who = step.cars.map(codeOf).join(' & ');
-    if (step.penalty) return `${who} ${step.penalty.toUpperCase()} PENALTY ${step.stage === 'served' ? 'SERVED' : `· ${step.reason}`}`;
-    return `${step.turn ? `T${step.turn} ` : ''}${who} ${step.stage.toUpperCase()}${step.reason ? ` · ${step.reason}` : ''}`;
+    const who = joined(step.cars, ' & ');
+    if (step.penalty) return [...who, ` ${step.penalty.toUpperCase()} PENALTY ${step.stage === 'served' ? 'SERVED' : `· ${step.reason}`}`];
+    return tidy([step.turn ? `T${step.turn} ` : '', ...who, ` ${step.stage.toUpperCase()}${step.reason ? ` · ${step.reason}` : ''}`]);
   }
-  return s
-    .replace(/ORDER: ([\d, ]+)$/, (_, list: string) => `ORDER: ${list.split(/,\s*/).map((n) => codeOf(Number(n))).join(' ')}`)
-    .replace(/CARS? (\d+) \((\w+)\)/g, '$2')
+  const rest = s
     .replace(/ TIMED AT \d\d:\d\d:\d\d/, '')
     .replace(/ \(\d\d:\d\d:\d\d\)$/, '')
     .replace(/^GREEN LIGHT - /, '');
+  if ((m = rest.match(/^(.*ORDER: )([\d, ]+)$/)))
+    return [...withCars(m[1], driverOf), ...joined(m[2].split(/,\s*/).map(Number), ' ')];
+  return withCars(rest, driverOf);
 }
 
 /** The case's own line: "T6 BEA & SAI · CAUSING A COLLISION". */
-export function caseText(c: { turn: number | null; cars: number[]; reason: string }, codeOf: (n: number) => string): string {
-  return `${c.turn ? `T${c.turn} ` : ''}${c.cars.map(codeOf).join(' & ')}${c.reason ? ` · ${c.reason}` : ''}`;
+export function caseText(c: { turn: number | null; cars: number[]; reason: string }): Part[] {
+  return tidy([c.turn ? `T${c.turn} ` : '', ...joined(c.cars, ' & '), c.reason ? ` · ${c.reason}` : '']);
 }
 
-/** Capitals kept only for driver codes, turns, sectors and the like, so those stand out. */
-export function sentenceCase(s: string, isCode: (word: string) => boolean): string {
-  const out = s
-    .split(' ')
-    .map((w) => {
-      const core = w.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-      return isCode(core) || /^(FIA|F1|DRS|VSC|SC|T\d+|S\d+|L\d+)$/.test(core) ? w.toUpperCase() : w.toLowerCase();
-    })
-    .join(' ');
-  const i = out.search(/[a-z]/);
-  return i === 0 ? out[0].toUpperCase() + out.slice(1) : out;
+/** Capitals kept only for turns, sectors and the like, so those stand out; drivers are drawn as codes. */
+export function sentenceCase(parts: readonly Part[]): Part[] {
+  const out = parts.map((p) =>
+    typeof p === 'string'
+      ? p
+          .split(' ')
+          .map((w) => (/^(FIA|F1|DRS|VSC|SC|T\d+|S\d+|L\d+)$/.test(w.replace(/[^A-Za-z0-9]/g, '').toUpperCase()) ? w.toUpperCase() : w.toLowerCase()))
+          .join(' ')
+      : p,
+  );
+  const first = out[0];
+  return typeof first === 'string' && /^[a-z]/.test(first) ? [first[0].toUpperCase() + first.slice(1), ...out.slice(1)] : out;
 }
 
 /** A stewards' case as it stands: its cars, why, and its latest stage. */

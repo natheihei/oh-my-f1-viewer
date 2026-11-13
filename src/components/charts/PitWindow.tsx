@@ -4,19 +4,21 @@
  */
 import { useMemo, useState } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+import { defineComponent, useLive, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
-  codeOf,
   colors,
   compoundLetter,
+  drawCode,
+  drawParts,
   fitText,
   isCleanLap,
   median,
   num,
   parseGap,
+  partsWidth,
   styleOf,
   text,
   textWidth,
@@ -289,7 +291,8 @@ export function pitWindowExtent(_m: Drawn, { width, height }: Box): { width: num
 interface PanelRow {
   key: string;
   value: string;
-  color?: string;
+  /** A car the value is about, drawn as its code before the value. */
+  driver?: number;
   tyre?: string | null;
 }
 
@@ -298,9 +301,8 @@ function panelRows(m: Drawn): PanelRow[] {
   const out = m.out;
   const neighbour = (key: string, n: Neighbour | null, ahead: boolean): PanelRow => {
     if (!n) return { key, value: '—' };
-    const style = styleOf(m.styles, n.driver);
     const tag = n.laps > 0 ? ' · lapped' : n.laps < 0 ? (ahead ? ' · a lap up' : ' · lapping') : '';
-    return { key, value: `${style.code} ${n.by.toFixed(1)} s${tag}`, color: style.colour };
+    return { key, driver: n.driver, value: ` ${n.by.toFixed(1)} s${tag}` };
   };
   const rows: PanelRow[] = [
     { key: 'PIT LOSS', value: m.pitLoss === null ? '—' : `${m.pitLoss.toFixed(1)} s` },
@@ -331,7 +333,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   const cy = small || side ? areaH / 2 : Math.min(areaH, ringBox(r)) / 2;
   const panelTop = side ? 0 : cy * 2;
 
-  const centre = (line: string) => text(ctx, line, cx, cy, { align: 'center', color: c.dim, size: small ? 8 : TYPE });
+  const centre = (line: string | Part[]) =>
+    drawParts(ctx, typeof line === 'string' ? [line] : line, m.styles, cx, cy, { align: 'center', color: c.dim, size: small ? 8 : TYPE });
   if (m.lapTime === null) {
     if (!small) centre('Waiting for lap times');
     return;
@@ -405,7 +408,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
     previous = car.ring;
     const a = angle(car.ring);
     const [lx, ly] = at(car.ring, r + 15 + Math.abs(Math.cos(a)) * TYPE + level * (TYPE + 2));
-    text(ctx, style.code, lx, ly, { align: 'center', color: mine ? c.ink : style.colour, size: TYPE, weight: mine ? 700 : 400 });
+    // The dot is the team mark, so the code is plain: in ink, and bold for the driver.
+    drawCode(ctx, style, lx, ly, { variant: 'plain', align: 'center', size: TYPE, strong: mine });
   }
   if (m.me) {
     const [x, y] = at(m.me.ring);
@@ -432,10 +436,10 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   if (small) return;
 
   // The answer, in the middle.
-  if (!m.me) centre(`No gap for ${me.code} yet`);
+  if (!m.me) centre(['No gap for ', { driver: m.driver }, ' yet']);
   else if (m.pitLoss === null) centre('No pit loss for this circuit');
   else if (m.out) {
-    text(ctx, `if ${me.code} pits now`, cx, cy - BIG * 0.95, { align: 'center', size: TYPE });
+    drawParts(ctx, ['if ', { driver: m.driver }, ' pits now'], m.styles, cx, cy - BIG * 0.95, { align: 'center', size: TYPE });
     text(ctx, `P${m.out.position}`, cx, cy, { align: 'center', color: c.ink, size: BIG, weight: 700 });
     const air = m.out.clearAir ? 'clear air' : 'traffic';
     text(ctx, m.from !== null ? `from P${m.from} · ${air}` : air, cx, cy + BIG * 0.9, { align: 'center', size: TYPE });
@@ -461,7 +465,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
       text(ctx, compoundLetter(row.tyre), x, vy, { color: tyreColour(row.tyre), size: TYPE, weight: 700 });
       vx += textWidth(ctx, 'M ', TYPE, 700);
     }
-    text(ctx, fitText(ctx, row.value, colW - (vx - x) - 10, TYPE), vx, vy, { color: row.color ?? c.ink, size: TYPE });
+    if (row.driver !== undefined) vx += drawCode(ctx, styleOf(m.styles, row.driver), vx, vy, { size: TYPE });
+    text(ctx, fitText(ctx, row.value, colW - (vx - x) - 10, TYPE), vx, vy, { color: c.ink, size: TYPE });
   });
   if (side) text(ctx, "leader at 12 o'clock", areaW + 4, height - 8, { color: c.mute, size: TYPE });
 
@@ -473,24 +478,21 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   }, null);
   if (hit) {
     const { car, x, y } = hit.d;
-    const style = styleOf(m.styles, car.driver);
     ctx.strokeStyle = c.ink;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(x, y, (car.driver === m.driver ? MY_DOT : DOT) + 3, 0, Math.PI * 2);
     ctx.stroke();
     const gap = car.driver === m.leader ? 'leader' : `+${car.gap.toFixed(1)} s${car.lapped ? ' lapped' : ''}`;
-    const line = `${style.code} P${car.position ?? '–'} · ${gap}`;
-    const w = textWidth(ctx, line, TYPE) + 12;
+    const line: Part[] = [{ driver: car.driver }, ` P${car.position ?? '–'} · ${gap}`];
+    const w = partsWidth(ctx, line, m.styles, { size: TYPE }) + 12;
     const bx = Math.min(Math.max(4, x - w / 2), width - w - 4);
     const by = y < 34 ? y + 12 : y - 32;
     ctx.fillStyle = c.select;
     ctx.fillRect(bx, by, w, 20);
     ctx.strokeStyle = c.line;
     ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 19);
-    ctx.fillStyle = style.colour;
-    ctx.fillRect(bx, by, 2, 20);
-    text(ctx, line, bx + 7, by + 10.5, { color: c.ink, size: TYPE });
+    drawParts(ctx, line, m.styles, bx + 6, by + 10.5, { color: c.ink, size: TYPE });
   }
 }
 
@@ -545,6 +547,6 @@ export default defineComponent({
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   // A wide tile puts the panel beside the ring, so it can use the wide form's width.
   fit: { width: MOST_WIDE.width, height: MOST.height },
-  spec: ({ drivers }) => ({ key: `pit_window:${drivers[0]}`, label: `Pit window ${codeOf(drivers[0])}` }),
+  spec: ({ drivers }) => ({ key: `pit_window:${drivers[0]}`, label: 'Pit window', drivers: [drivers[0]] }),
   View: PitWindow,
 });

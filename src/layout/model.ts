@@ -17,7 +17,13 @@ export interface ComponentSpec {
   type: string;
   /** Unique within the layout: a second request for the same key is ignored. */
   key: string;
+  /** What the tile is called, as text: its name, then its drivers' codes. */
   label: string;
+  /**
+   * The label's parts, when it names drivers: the title bar draws each as a driver code, from the roster.
+   * Without it, the title bar shows `label`.
+   */
+  title?: { name: string; drivers: number[] };
   props: Record<string, unknown>;
   /**
    * The component's size hint, when it has one. Auto-layout puts it where its shape suits and keeps it

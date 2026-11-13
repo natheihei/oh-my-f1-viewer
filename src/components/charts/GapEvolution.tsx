@@ -4,14 +4,15 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
+import { defineComponent, useLive, useSql, type ChaseAid, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
-  codeOf,
   colors,
   compoundLetter,
   dot,
+  drawCode,
+  drawParts,
   formatLapTime,
   gapSeconds,
   gapTrend,
@@ -19,6 +20,7 @@ import {
   linear,
   niceCeil,
   num,
+  partsWidth,
   polyline,
   styleOf,
   text,
@@ -302,7 +304,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const bottom = height - (compact ? 6 : AXIS);
   const drawn = m.points.filter((p) => p !== null);
   const within = m.aid.within;
-  const codeOfDriver = (driver: number) => (driver === m.sides[0].driver ? m.first.code : m.second.code);
+  const styles = new Map([m.first, m.second].map((s) => [s.number, s]));
   // The scale fits the laps since the last stop, so the stop itself runs off the top.
   const lastPit = m.pits.length ? Math.max(...m.pits.map((p) => p.lap)) : null;
   const since = lastPit === null ? [] : drawn.filter((p) => p.x > lastPit + 0.3);
@@ -328,18 +330,18 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
 
   if (!compact) {
     // A mark's label sits right of its line, or left of it where it would run into the panel.
-    const mark = (label: string, at: number, y: number, style: { color?: string; weight?: number }) => {
-      const room = right - at - 3 >= textWidth(ctx, label, TYPE, style.weight);
-      text(ctx, label, room ? at + 3 : at - 3, y, { ...style, size: TYPE, align: room ? 'left' : 'right' });
+    const mark = (label: Part[], at: number, y: number, style: { color?: string; weight?: number }) => {
+      const room = right - at - 3 >= partsWidth(ctx, label, styles, { ...style, size: TYPE });
+      drawParts(ctx, label, styles, room ? at + 3 : at - 3, y, { ...style, size: TYPE, align: room ? 'left' : 'right' });
     };
     for (const p of m.pits) {
       if (p.lap < m.from) continue;
       vline(ctx, x(p.lap), top, bottom, c.faint, [2, 3]);
-      mark(`PIT ${codeOfDriver(p.driver)}`, x(p.lap), top + 6, {});
+      mark(['PIT ', { driver: p.driver }], x(p.lap), top + 6, {});
     }
     for (const p of m.passes) {
       vline(ctx, x(p.x), top, bottom, c.dim);
-      mark(`${codeOfDriver(p.ahead)} AHEAD`, x(p.x), top + (m.pits.length ? 18 : 6), { color: c.ink, weight: 600 });
+      mark([{ driver: p.ahead }, ' AHEAD'], x(p.x), top + (m.pits.length ? 18 : 6), { color: c.ink, weight: 600 });
     }
   }
 
@@ -389,7 +391,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const secondAhead = m.current !== null && m.current < 0;
   if (m.current !== null) {
     const [behind, ahead] = secondAhead ? [m.first, m.second] : [m.second, m.first];
-    text(ctx, `${behind.code} to ${ahead.code}`, vx, top + big + 8, { align: 'right', size: TYPE });
+    drawParts(ctx, [{ driver: behind.number }, ' to ', { driver: ahead.number }], styles, vx, top + big + 8, { align: 'right', size: TYPE });
   }
   const place = panel(m);
   if (place.trendAt !== null && m.trend !== null) {
@@ -404,7 +406,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
     const s = m.sides[i];
     const style = i === 0 ? m.first : m.second;
     hline(ctx, vx - SIDE + 12, vx, at - 9);
-    text(ctx, style.code, vx - SIDE + 12, at, { color: c.ink, size: TYPE, weight: 600 });
+    drawCode(ctx, style, vx - SIDE + 12, at, { size: TYPE, strong: true });
     if (s.compound) {
       const age = s.age === null ? '' : ` ${s.age}`;
       text(ctx, age, vx, at, { align: 'right', color: c.ink, size: TYPE });
@@ -454,6 +456,6 @@ export default defineComponent({
   needs: NEEDS,
   size: { aspect: 16 / 9, min: LEAST },
   fit: FIT,
-  spec: ({ drivers }) => ({ key: `gap_evolution:${drivers.join('-')}`, label: `Gap ${drivers.map(codeOf).join(' · ')}` }),
+  spec: ({ drivers }) => ({ key: `gap_evolution:${drivers.join('-')}`, label: 'Gap', drivers }),
   View: GapEvolution,
 });

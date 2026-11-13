@@ -7,6 +7,7 @@ import {
   ChartFrame,
   colors,
   compoundLetter,
+  drawCode,
   formatGap,
   formatLapTime,
   hline,
@@ -97,7 +98,7 @@ export function towerModel(
   });
 }
 
-type Key = 'position' | 'bar' | 'code' | 'gain' | 'gap' | 'interval' | 'last' | 'tyre';
+type Key = 'position' | 'driver' | 'gain' | 'gap' | 'interval' | 'last' | 'tyre';
 
 /**
  * Width in characters. Every column is always drawn: a tile too narrow for them lets the tower run past
@@ -105,8 +106,8 @@ type Key = 'position' | 'bar' | 'code' | 'gain' | 'gap' | 'interval' | 'last' | 
  */
 const COLUMNS: Array<{ key: Key; head: string; chars: number; thumbnail: boolean }> = [
   { key: 'position', head: 'P', chars: 2, thumbnail: true },
-  { key: 'bar', head: '', chars: 0.5, thumbnail: true },
-  { key: 'code', head: '', chars: 3, thumbnail: true },
+  // The team bar and the code, drawn as one by drawCode: 3 for the code, and a little over one for the bar and its gap.
+  { key: 'driver', head: '', chars: 4.1, thumbnail: true },
   { key: 'gain', head: '+/−', chars: 3, thumbnail: false },
   { key: 'gap', head: 'GAP', chars: 9, thumbnail: true },
   { key: 'interval', head: 'INT', chars: 7, thumbnail: false },
@@ -134,7 +135,7 @@ const ADVANCE = 0.6;
 
 /** The width the columns take at a text size and spacing, with the padding either side. */
 function widthAt(columns: typeof COLUMNS, size: number, spacing: number): number {
-  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'bar' || col.key === 'code' ? ADVANCE : spacing), 0);
+  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? ADVANCE : spacing), 0);
   return chars * size * ADVANCE + PAD * 2;
 }
 
@@ -190,12 +191,12 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 
   const room = width - pad * 2;
   const chars = columns.reduce((s, col) => s + col.chars, 0);
-  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - 2 * ADVANCE * ch) / Math.max(1, columns.length - 3)));
+  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - ADVANCE * ch) / Math.max(1, columns.length - 2)));
   const edges = new Map<Key, { x0: number; x1: number }>();
   let at = pad;
   for (const col of columns) {
-    // The bar sits tight against the code.
-    const gap = col.key === 'code' || col.key === 'bar' ? ch * ADVANCE : spacing;
+    // The driver sits tight against the position.
+    const gap = col.key === 'driver' ? ch * ADVANCE : spacing;
     if (at > pad) at += gap;
     edges.set(col.key, { x0: at, x1: at + col.chars * ch });
     at += col.chars * ch;
@@ -228,12 +229,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
         case 'position':
           text(ctx, row.position === null ? '' : String(row.position), x1, y, { align: 'right', color: ink, size });
           break;
-        case 'bar':
-          ctx.fillStyle = style.colour;
-          ctx.fillRect(x0, top + pitch * 0.22, Math.max(2, x1 - x0), pitch * 0.56);
-          break;
-        case 'code':
-          text(ctx, style.code, x0, y, { color: ink, size, weight: watched ? 700 : 500 });
+        case 'driver':
+          drawCode(ctx, style, x0, y, { size, tone: row.out ? 'dim' : 'ink', strong: watched, barHeight: pitch * 0.56 });
           break;
         case 'gain':
           if (row.gained === null) break;
