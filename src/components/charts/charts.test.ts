@@ -19,7 +19,6 @@ type Line = import('./RaceControl').Line;
 const { boardModel, drawBoard, KEEP_DECIDED } = await import('./RaceStatus');
 const { weatherModel } = await import('./Weather');
 const { trackModel, placeLabels } = await import('./TrackMap');
-const { pickLaps, speedParams, speedModel } = await import('./SpeedTrace');
 const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./CarTelemetry');
 const { lapsOf, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./PedalBarcode');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./SpeedRibbon');
@@ -915,67 +914,6 @@ describe('track_map', () => {
   });
 });
 
-describe('speed_trace', () => {
-  const lap = (driver_number: number, lap_number: number, date_start: number, more: Record<string, unknown> = {}) => ({
-    driver_number,
-    lap_number,
-    date_start,
-    lap_duration: 10,
-    is_pit_in_lap: 0,
-    is_pit_out_lap: 0,
-    track_status: 'AllClear',
-    ...more,
-  });
-
-  it("takes each driver's last completed lap, or the latest clean one when that isn't", () => {
-    const rows = [lap(1, 4, 30_000), lap(1, 5, 40_000), lap(44, 4, 31_000), lap(44, 5, 41_000, { is_pit_in_lap: 1 }), lap(16, 1, 0)];
-    expect(pickLaps(rows, [1, 44])).toEqual([
-      { driver: 1, lap: 5, start: 40_000, end: 50_000, latest: true },
-      { driver: 44, lap: 4, start: 31_000, end: 41_000, latest: false },
-    ]);
-    expect(pickLaps(rows, [16, 1])[0]).toBeNull();
-    expect(speedParams(pickLaps(rows, [16, 1]), [16, 1])).toEqual([16, 0, -1, 1, 37_000, 53_000]);
-  });
-
-  it('runs each lap between its own crossings of the line, scaled to the outline, and compares them at the same distance', () => {
-    // A 1,000-unit square, 100 m round. Car 1 does 10 m/s, car 44 8 m/s; both cross the line 0.3 s before the timing says.
-    const outline = { x: [0, 250, 250, 0], y: [0, 0, 250, 250] };
-    const corners = [{ number: 1, x: 250, y: 0, angle: 0, distance: 250 }];
-    const at = (u: number) => {
-      const s = ((u % 1000) + 1000) % 1000;
-      if (s < 250) return { x: s, y: 0 };
-      if (s < 500) return { x: 250, y: s - 250 };
-      if (s < 750) return { x: 750 - s, y: 250 };
-      return { x: 0, y: 1000 - s };
-    };
-    const rows: Array<Record<string, unknown>> = [];
-    for (const [driver, v, start] of [
-      [1, 100, 10_000],
-      [44, 80, 10_000],
-    ]) {
-      for (let date = start - 2000; date <= start + 1000 * (1000 / v) + 2000; date += 250) {
-        const u = ((date - start) / 1000) * v;
-        rows.push({ driver_number: driver, date, ...at(u), speed: null });
-        rows.push({ driver_number: driver, date: date + 100, x: null, y: null, speed: v * 0.36 });
-      }
-    }
-    const picks = pickLaps([lap(1, 5, 10_300), lap(44, 5, 10_300, { lap_duration: 12.5 })], [1, 44]);
-    const m = speedModel(picks, rows, { outline, corners });
-    expect(m.length).toBe(100);
-    expect(m.corners).toEqual([{ number: 1, d: 25 }]);
-    const [a, b] = m.laps;
-    expect(a!.lapTime).toBeCloseTo(10);
-    expect(b!.lapTime).toBeCloseTo(12.5);
-    expect(a!.speed[0].d).toBe(0);
-    expect(a!.speed.at(-1)!.d).toBeCloseTo(100);
-    expect(a!.speed.every((p) => p.speed === 36)).toBe(true);
-    expect(m.delta.at(-1)!.delta).toBeCloseTo(2.5);
-    expect(m.delta[200].delta).toBeCloseTo(1.25);
-    // Without positions round a whole lap, nothing to draw for that driver.
-    expect(speedModel(picks, rows.filter((r) => r.driver_number === 1), { outline, corners }).laps[1]).toBeNull();
-  });
-});
-
 describe('speed_ribbon', () => {
   const at = (date: number, x: number, y: number) => ({ date, x, y, speed: null, n_gear: null, throttle: null, brake: null });
   const car = (date: number, speed: number, brake = 0, throttle = 100, n_gear = 7) => ({ date, x: null, y: null, speed, n_gear, throttle, brake });
@@ -1164,19 +1102,18 @@ describe('the registry', () => {
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     expect(byName.weather.spec({})).toEqual({ key: 'weather', label: 'Weather' });
-    for (const name of ['track_map', 'speed_trace', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
+    for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
       expect(byName[name].replayOnly).toBe(true);
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
-    expect(byName.speed_trace.spec({ drivers: [44, 1] })).toEqual({ key: 'speed_trace:44-1', label: 'Speed 44 · 1' });
     expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry 44' });
     expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals 44' });
     expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
     expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon 44' });
     expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
-    for (const gone of ['race_trace', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(18);
+    for (const gone of ['race_trace', 'speed_trace', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live']) expect(byName[gone]).toBeUndefined();
+    expect(components).toHaveLength(17);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
@@ -1225,7 +1162,7 @@ describe('sizes', () => {
       ['video', 'gap_evolution', 'tyre_strategy', 'timing_tower'],
       ['video', 'video', 'video', 'timing_tower', 'gap_evolution'],
       ['video', 'timing_tower', 'gap_evolution', 'tyre_strategy', 'lap_time_compare', 'field_pace'],
-      ['video', 'track_map', 'car_telemetry', 'speed_trace'],
+      ['video', 'track_map', 'car_telemetry'],
       ['video', 'car_telemetry', 'pedal_barcode'],
       ['video', 'speed_ribbon', 'car_telemetry'],
       ['video', 'video', 'speed_ribbon', 'timing_tower'],

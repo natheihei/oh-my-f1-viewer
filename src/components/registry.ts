@@ -9,7 +9,6 @@ import RaceControl from './charts/RaceControl';
 import RaceStatus from './charts/RaceStatus';
 import SectorDelta from './charts/SectorDelta';
 import SpeedRibbon from './charts/SpeedRibbon';
-import SpeedTrace from './charts/SpeedTrace';
 import FieldPace from './charts/FieldPace';
 import CarTelemetry from './charts/CarTelemetry';
 import PedalBarcode from './charts/PedalBarcode';
@@ -34,7 +33,6 @@ export const components: ComponentDefinition[] = [
   RaceStatus,
   Weather,
   TrackMap,
-  SpeedTrace,
   CarTelemetry,
   PedalBarcode,
   SpeedRibbon,

@@ -334,7 +334,7 @@ export default defineComponent({
   name: 'pedal_barcode',
   title: 'Pedals',
   description:
-    "Is a driver driving every lap the same, and where did this one differ: one car's brake and throttle as a row per lap over the last six, lined up from the line with the turns marked, so a lift, an early brake or a mistake stands out against the laps before. Suggest it for consistency, a driver under pressure or one losing time; pick car_telemetry for the numbers right now, and speed_trace to compare two drivers' speed.",
+    "Is a driver driving every lap the same, and where did this one differ: one car's brake and throttle as a row per lap over the last six, lined up from the line with the turns marked, so a lift, an early brake or a mistake stands out against the laps before. Suggest it for consistency, a driver under pressure or one losing time; pick car_telemetry for the numbers right now.",
   replayOnly: true,
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
