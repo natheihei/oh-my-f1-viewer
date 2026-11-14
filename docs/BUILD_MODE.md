@@ -86,7 +86,7 @@ only happens when a mod's args change while its tile is on screen, such as a mod
   shows what it has then, and the viewer can attach it again.
 - In view mode, the viewing agent fixes props with `edit_tile`. A render error is in the code, which it can't change, so it calls
   `offer_build` with the tiles and a note of what it found. That returns at once, and the palette shows the offer where the spoiler
-  check would be: "Fix gap_ahead in build mode?", with `/build`'s red "! spoiler the build agent looks ahead without asking", since
+  check would be: "Fix in build mode?", with `/build`'s red "! spoiler the build agent looks ahead without asking", since
   entering build mode is that consent. **Switch to build** is in build mode's yellow, beside **Stay in view mode**. The offer goes once
   it's answered, or when the viewer sends another message.
 - Switching enters build mode the way `/build` does, then sends the build agent its first message without the viewer typing: an
