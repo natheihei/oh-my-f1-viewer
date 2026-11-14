@@ -1,5 +1,5 @@
 // Checks tyre deg in the real app over a real replay race, muted: beside the main feed at its fit, with two
-// onboards on screen so their rows are lifted, among other tiles, at its least size, and squeezed below it,
+// onboards on screen and their rows lifted by its drivers prop, among other tiles, at its least size, and squeezed below it,
 // where rows and cells stop shrinking and the grid runs past the tile for the host to mark. Prints each tile's
 // size, the size the chart draws at and the host's mark, and saves a screenshot of each.
 //
@@ -140,12 +140,14 @@ async function shoot(name, items, squeeze) {
 }
 
 const deg = { type: 'tyre_deg', props: {} };
+// Its lifted rows are the props' drivers, here the cars whose onboards sit beside it.
+const lifted = { type: 'tyre_deg', props: { drivers: [3, 44] } };
 const onboard = (n) => opened.feeds.find((f) => f.kind === 'onboard' && f.number === n);
 const watched = [3, 44].map(onboard).filter(Boolean).map((f) => ({ type: 'video', props: { feed: f.id } }));
 console.log(`onboards on screen: ${watched.map((w) => w.props.feed).join(', ') || 'none found'}`);
 
 await shoot(`L${targetLap}-1-beside-video`, [deg]);
-await shoot(`L${targetLap}-2-with-onboards`, [deg, ...watched]);
+await shoot(`L${targetLap}-2-with-onboards`, [lifted, ...watched]);
 await shoot(`L${targetLap}-3-crowded`, [deg, { type: 'timing_tower', props: {} }, { type: 'tyre_strategy', props: {} }]);
 // At its least size, then below it: narrow, and short.
 await shoot(`L${targetLap}-4-least`, [deg], [343, 394]);

@@ -89,14 +89,16 @@ host still supports them, so they can come back.
 
 ### Charts
 
-Every registered component but video is a chart. Each message carries a list of them at the end of the system prompt: name, title, how many
-drivers it takes, session types and description. The agent picks one by its description and suggests it next to the onboards it's about.
+Every registered component but video is a chart. Each message carries a list of them at the end of the system prompt: name, title,
+session types, description and props. The agent picks one by its description, fills in its props and suggests it next to the onboards
+it's about.
 Suggesting a chart shows the agent no race data, so it needs no approval gate of its own. Its SQL tool is separate, and has the gate
 described below:
 
-- Props carry only the drivers the user named, as car numbers. A chart given none picks its own from the data at the playhead.
+- A chart declares the props it needs, and the agent fills them in: only the drivers the user named, as car numbers. A chart never
+  picks a driver itself, so one about a driver needs one (#77). The agent changes them on screen with `edit_tile`.
 - A refusal never depends on how the session is going. It may say no session is open, the chart is for another session type, the session
-  has no data, the name is unknown, or the driver count is wrong.
+  has no data, the name is unknown, or the props are missing or don't fit.
 - The agent has not seen what a chart shows, so it never describes it.
 
 Once session data is ready, the tables `query_session` can read follow the charts, from `sessionData.tables`. The tool's own description

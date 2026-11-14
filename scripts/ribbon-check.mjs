@@ -139,7 +139,7 @@ async function shoot(name, items, squeeze) {
   console.log(`${name}: ${JSON.stringify(await measure())} -> ${file}`);
 }
 
-const ribbon = { type: 'speed_ribbon', props: { drivers: [CAR] } };
+const ribbon = { type: 'speed_ribbon', props: { driver: CAR } };
 console.log(`lap ${moment.lap}: ${JSON.stringify(await seekToMs(moment.at))}`);
 await shoot('1-alone', [ribbon]);
 await shoot('2-leader', [{ type: 'speed_ribbon', props: {} }]);

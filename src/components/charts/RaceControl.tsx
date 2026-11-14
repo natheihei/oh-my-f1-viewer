@@ -47,10 +47,10 @@ export type Line =
 
 /**
  * The rows of `SQL`, oldest first, as lines, newest first. A case's messages fold into one line, and so
- * does a run of yellows with their clears; each moves up to where it last changed. Unless `blue` is set,
- * each run of blue flags between other lines is counted on one.
+ * does a run of yellows with their clears; each moves up to where it last changed. Each run of blue flags
+ * between other lines is counted on one.
  */
-export function messagesModel(rows: ReadonlyArray<Record<string, unknown>>, blue = false): Line[] {
+export function messagesModel(rows: ReadonlyArray<Record<string, unknown>>): Line[] {
   const lines: Array<Line | { kind: 'blueRow'; lap: number | null; driver: number | null }> = [];
   const moveUp = (line: Line) => {
     lines.splice(lines.indexOf(line), 1);
@@ -92,7 +92,7 @@ export function messagesModel(rows: ReadonlyArray<Record<string, unknown>>, blue
       else lines.push(line);
       continue;
     }
-    if (signal === 'blue' && !blue) lines.push({ kind: 'blueRow', lap, driver: num(r.driver_number) });
+    if (signal === 'blue') lines.push({ kind: 'blueRow', lap, driver: num(r.driver_number) });
     else lines.push({ kind: 'message', lap, signal, message });
   }
   const out: Line[] = [];
@@ -220,8 +220,8 @@ function Item({ line, first, words }: { line: Line; first: boolean; words: Words
   );
 }
 
-function List({ rows, styles, blue }: { rows: ReadonlyArray<Record<string, unknown>>; styles: Map<number, DriverStyle>; blue: boolean }) {
-  const lines = useMemo(() => messagesModel(rows, blue), [rows, blue]);
+function List({ rows, styles }: { rows: ReadonlyArray<Record<string, unknown>>; styles: Map<number, DriverStyle> }) {
+  const lines = useMemo(() => messagesModel(rows), [rows]);
   const now = useMemo(() => standing(rows), [rows]);
   const words = useMemo<Words>(() => {
     const byCode = new Map([...styles.values()].map((s) => [s.code, s.number]));
@@ -247,12 +247,12 @@ function List({ rows, styles, blue }: { rows: ReadonlyArray<Record<string, unkno
   );
 }
 
-function RaceControl({ props }: { props: { blue_flags?: boolean } }) {
+function RaceControl() {
   const view = useSql(SQL);
   const styles = useDriverStyles();
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
-      {() => view.state === 'ready' && <List rows={view.rows} styles={styles} blue={props.blue_flags ?? false} />}
+      {() => view.state === 'ready' && <List rows={view.rows} styles={styles} />}
     </ChartFrame>
   );
 }
@@ -266,13 +266,11 @@ export default defineComponent({
   title: 'Race control',
   description:
     "Race control's messages as they were issued, newest first: flags, safety cars, red flags, the stewards' cases and their outcomes, penalties and deleted laps, with what is in force now on top. Suggest it when the user asks what a flag was for, or what happened; race_status for where things stand now.",
-  args: Type.Object({
-    blue_flags: Type.Optional(Type.Boolean({ description: 'Show each blue flag on its own line. Left out, runs of them are counted on one line.' })),
-  }),
+  args: Type.Object({}),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 0.8, min: LEAST },
   fit: FIT,
-  spec: ({ blue_flags }) => ({ key: blue_flags ? 'race_control:blue' : 'race_control', label: 'Race control' }),
+  spec: () => ({ key: 'race_control', label: 'Race control' }),
   View: RaceControl,
 });

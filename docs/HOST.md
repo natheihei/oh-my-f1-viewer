@@ -185,6 +185,7 @@ A *target* is a tile key, a group id or a group title. A video tile's key is its
 | --- | --- | --- |
 | `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. One whose key is already on screen is skipped |
 | `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group. Returns the labels of those that were on screen |
+| `setProps` | `key: string`, `props` | Gives the tile with that key new props, in place of its old ones, checked against its component's `args`. It keeps its id, place and group, and its key and label follow the props. Throws if another tile already has the new key. Returns `{ key, label }`, or null if the key isn't on screen |
 | `close` | `tile: string` | Takes one tile off screen. Returns whether a tile matched |
 | `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
 | `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
@@ -230,7 +231,7 @@ Build mode's snapshot of the mods folder, which the main process keeps. See [BUI
 
 Suggested tiles wait in a strip for the user to add, drag onto the grid or dismiss. Suggestions belong to one turn: the user's next
 message clears them, and so does opening or closing a session. Build mode's drafts are the exception: the strip holds a preview with
-no props for each mod the build added or changed that has no tile on screen, and they stay from turn to turn. A *key* is a suggestion's component key, which for a video is its
+the props the agent suggested it with, or none, for each mod the build added or changed that has no tile on screen, and they stay from turn to turn. A *key* is a suggestion's component key, which for a video is its
 feed id.
 
 | Function | Arguments | Effect |
@@ -281,6 +282,10 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   driver as a code after it, and the tile's text label, which the agent and the strip read, is `labelText` of the two ("Gap NOR ·
   PIA"). `sessions` lists the session types it applies to, `needs` the datasets it reads, and `size` is its
   shape (`aspect`, width over height) and the least room its content reads in (`min`, in pixels). The layout arranges tiles by it, and the strip shapes its preview by it. See [COMPONENTS.md](COMPONENTS.md). `View` receives the tile's `props` and `label`, and may only use the host.
+- Driver props are named for what they hold, so the agent can fill them in: `driver`, `driver_a` and `driver_b`, `drivers` (those to
+  highlight) and `drivers_to_display` (those to draw), or any name starting `driver_` or `drivers_`. `Driver(description)`,
+  `DriverList(description, max?)`, `Highlighted(max?)` and `Displayed()` are their schemas, `isDriverProp(name)` and
+  `isDriverList(name)` tell them by name, and `keyPart(value)` writes one for a key. See [COMPONENTS.md](COMPONENTS.md).
 
 ### Driver codes
 
@@ -306,16 +311,17 @@ matching and gates (spoiler approval among them). The host doesn't know about an
 
 The agent can't put a feed on screen itself: it suggests tiles, and the user adds them. `src/agent/bridge.ts` sends it the event
 index (`live.events`) with every message, so it can work out which weekend the user means without a tool. It also sends what
-`host.suggestions.newTurn` reports, and the tiles on screen, a chart by its label and component name.
+`host.suggestions.newTurn` reports, and the tiles on screen, a chart by its label, component name and props.
 
 Every registered component but `video` is a chart. The bridge lists them at the end of the system prompt, one line each: name, title,
-how many drivers it takes, session types and description. With none registered, the list is left out. Once session data is ready, the
+session types, description and props, each marked required or optional. With none registered, the list is left out. Once session data is ready, the
 tables `query_session` can read follow, from `sessionData.tables`: one line each with its columns, and `about` where a table has one.
 Before that the list is left out, and the tool refuses anyway. `suggest_tiles` takes charts
-by name, each with the drivers it's about, which the agent matches to car numbers through the session's roster, or the onboard feeds
-without one. A chart's props carry only those numbers, and a chart given none picks its own. The agent never sees what a chart shows,
-and a refusal only ever depends on the session type, missing data, an unknown name or the driver count, never on how the session is
-going. The tools today:
+by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
+`drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
+without one. A required prop left out is refused, with a note to ask the user whose; a chart never picks its own. `edit_tile` changes
+the props of one chart on screen in place, only those it names, null taking one away. The agent never sees what a chart shows, and a
+refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:
 
 | Tool | Host function |
 | --- | --- |
@@ -323,6 +329,7 @@ going. The tools today:
 | `load_session`, `list_streams` | `host.session.open`, `.feeds` |
 | `suggest_tiles` | `host.suggestions.offer`, for streams and charts |
 | `remove_tiles` | `host.layout.remove`, for streams and charts |
+| `edit_tile` | `host.layout.setProps`, for one chart |
 | `set_audio` | `host.audio.set` |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |

@@ -33,6 +33,21 @@ export const layoutOps = {
       return removed;
     },
   ),
+  setProps: write(
+    {
+      description:
+        "Give a tile on screen new props, in place of its old ones: it keeps its place, and its key and label follow the new props. Returns its new key and label, or null if the key isn't on screen.",
+      args: Type.Object({ key: Type.String({ description: "A tile key: a video tile's is its feed id" }), props: Item.properties.props }),
+    },
+    ({ key, props }) => {
+      const found = findTile(useLayout.getState(), key);
+      if (!found) return null;
+      const spec = specOf({ type: found.tile.component.type, props });
+      if (spec.key !== key && findTile(useLayout.getState(), spec.key)) throw new Error(`Already on screen: ${spec.label}`);
+      layout.replace(key, spec);
+      return { key: spec.key, label: spec.label };
+    },
+  ),
   close: write(
     { description: 'Take one tile off screen by its tile id. Returns whether it matched.', args: Type.Object({ tile: Type.String() }) },
     ({ tile }) => layout.close(tile),

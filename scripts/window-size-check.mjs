@@ -64,7 +64,7 @@ await page.evaluate(
         { type: 'video', props: { feed: onboards[0].id } },
         { type: 'video', props: { feed: onboards[1].id } },
         { type: 'timing_tower', props: {} },
-        { type: 'gap_evolution', props: { drivers } },
+        { type: 'gap_evolution', props: { driver_a: drivers[0], driver_b: drivers[1] } },
       ],
     });
     host.suggestions.offer({
