@@ -107,7 +107,9 @@ The prompt in `shared/tools.ts` covers what code can't:
 - **Mods.** A mod can read the whole session, with `useSql` or `host.data.sql` and `asOf: 'session'`, and show the result. Nothing
   gates that. A component that declares `looksAhead` asks the viewer once per tile, but declaring it is up to the author. See [MODS.md](MODS.md).
 - **Build mode.** Its agent reads the whole session with no check: entering build mode is the viewer's consent, said in red beside
-  `/build`: "! spoiler the agent looks ahead without asking". Its conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
+  `/build`: "! spoiler the agent looks ahead without asking". The viewing agent can offer build mode, to fix a tile's code
+  (`offer_build`), and the offer says the same in red beside **Switch to build**, so switching from it is the same consent. What the
+  viewing agent hands over is a note of its own and the tiles' errors. The build agent's conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
   says to the viewer while building depends on its prompt. See [BUILD_MODE.md](BUILD_MODE.md).
 - **Commentary captions.** Not in the app yet. They contain the race, so reading them ahead has to go through the check. See [CAPTIONS.md](CAPTIONS.md).
 

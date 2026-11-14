@@ -18,6 +18,7 @@ import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
 import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, MAX_SUGGESTED_STREAMS, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
+import { formatClock } from '../../shared/clock';
 
 export interface AgentTool extends AgentToolDefinition {
   run(args: Record<string, unknown>): Promise<string>;
@@ -97,12 +98,7 @@ function playheadMs(): number | null {
 }
 
 /** h:mm:ss on the session clock. */
-export function formatClock(t: number): string {
-  const s = Math.max(0, Math.floor(t));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-}
+export { formatClock };
 
 // Session SQL
 
@@ -506,6 +502,25 @@ export const AGENT_TOOLS: AgentTool[] = [
     ],
     result: (out) => (out ? `Changed: ${out.label}.` : 'That chart is no longer on screen.'),
     hints: [[/Already on screen/, 'A chart with those props is already on screen: leave this one as it is, or remove it.']],
+  }),
+  expose(host.build.offer, {
+    name: 'offer_build',
+    description:
+      "Offer the user build mode, to fix tiles in their component's code, such as a render error in an <error> block. Only when other props wouldn't fix it: those you change with edit_tile. The user answers in the palette. If they switch, the build agent gets the tiles' errors and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
+    args: Type.Object(
+      {
+        tiles: Type.Array(TileId, { minItems: 1, description: 'The tiles to fix' }),
+        note: Type.String({ description: 'What you found, for the build agent, which sees nothing else of this conversation. One or two sentences.' }),
+      },
+      { additionalProperties: false },
+    ),
+    gate: [
+      (_, { tiles }) => {
+        const gone = tiles.filter((t) => !tileOnScreen(t));
+        if (gone.length) throw new Error(`No tile ${gone.join(', ')} is on screen. ${ID_HINT}`);
+      },
+    ],
+    result: () => 'Offered. The user answers in the palette.',
   }),
   expose(host.audio.set, {
     name: 'set_audio',

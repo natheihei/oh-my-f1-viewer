@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { describePlace, list, notDrawing, problemKey, renderCheckText, type PlaceHealth } from '../shared/health';
+import { describePlace, errorBlock, list, notDrawing, problemKey, renderCheckText, type PlaceHealth } from '../shared/health';
 
-const place = (over: Partial<PlaceHealth> = {}): PlaceHealth => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, ...over });
+const place = (over: Partial<PlaceHealth> = {}): PlaceHealth => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, since: null, ...over });
 const draft = place({ scope: 'preview:pace', where: 'strip', state: 'needs_props', missing: ['driver'], message: 'Needs driver' });
 const stale = place({ state: 'needs_props', missing: ['driver'], dropped: ['drivers'], message: 'Needs driver' });
 const threw = place({ scope: 'tile-2', type: 'lap_controller', label: 'Lap controller', state: 'error', message: "Cannot read properties of undefined (reading 'lap')" });
@@ -46,5 +46,49 @@ describe('what is not drawing', () => {
     expect(problemKey(draft)).not.toBe(problemKey(threw));
     expect(problemKey(threw)).not.toBe(problemKey({ ...threw, message: 'another' }));
     expect(problemKey(draft)).not.toBe(problemKey({ ...draft, missing: ['driver_a'] }));
+  });
+});
+
+describe('a tile attached to a message', () => {
+  const since = { clockSec: 4360, playheadMs: 1761512880000 };
+
+  it('is a block of JSON the agent reads: the place, when it first threw, its props and its log', () => {
+    expect(errorBlock({ place: { ...threw, since }, props: { drivers: [4] }, log: 'lap_controller/mod.log' })).toBe(
+      `<error>
+{
+  "tile": "tile-2",
+  "label": "Lap controller",
+  "type": "lap_controller",
+  "state": "error",
+  "message": "Cannot read properties of undefined (reading 'lap')",
+  "first_threw": {
+    "clock": "1:12:40",
+    "playhead": 1761512880000
+  },
+  "props": {
+    "drivers": [
+      4
+    ]
+  },
+  "log": "lap_controller/mod.log"
+}
+</error>`,
+    );
+  });
+
+  it('says what a tile needs, and since when, and leaves out what it has none of', () => {
+    const fields = JSON.parse(errorBlock({ place: { ...stale, since }, props: { drivers: [44] }, log: null }).slice('<error>'.length, -'</error>'.length));
+    expect(fields).toEqual({
+      tile: 'tile-1',
+      label: 'Pace HAM',
+      type: 'pace',
+      state: 'needs_props',
+      message: 'Needs driver',
+      missing: ['driver'],
+      dropped: ['drivers'],
+      since: { clock: '1:12:40', playhead: 1761512880000 },
+      props: { drivers: [44] },
+    });
+    expect(JSON.parse(errorBlock({ place: threw, props: {}, log: null }).slice(7, -8))).not.toHaveProperty('first_threw');
   });
 });

@@ -14,8 +14,8 @@ There are three kinds of things:
 | Kind | How | Changes anything? |
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
-| Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.askFix`, `host.health.takeFix`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
+| Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.health.errors`, `host.data.sql`, `useSql` | No |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.attach`, `host.health.detach`, `host.health.takeAttached`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -46,10 +46,10 @@ A selector must return a value or an existing reference. Building a new object o
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
-| `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
-| `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it |
-| `fixRequests` | `FixRequest[]` | What the viewer asked the agent to fix from a tile's button, oldest first, until something takes each to the agent: `id`, `scope` (the place, from `health`) and `text` (the request in the viewer's words) |
-| `agentBusy` | `boolean` | Whether the agent is working on a message: from when one is sent until its turn ends or is stopped. A message sent while it's busy stops that turn |
+| `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) `enteredAtSec` (the session clock on entry, or null with no session) and `offer` (build mode offered to the viewer from view mode and not yet answered: `tiles` and the offering agent's `note`, or null). See [BUILD_MODE.md](BUILD_MODE.md) |
+| `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it. A place that isn't drawing has `since`, the moment it first stood this way (`clockSec`, and `playheadMs` in UTC ms), kept while it fails the same way. It's null otherwise, and with no session open |
+| `attached` | `Attachment[]` | Tiles' errors the viewer attached to their next message from a tile's button, in the order attached, until a message takes them: `scope` (the tile) and `report`, an `ErrorReport` of how it stood then: `place` (from `health`), the tile's `props`, and `log`, its mod's log relative to the mods folder, or null for the app's own components. A tile that closes goes from it |
+| `agentBusy` | `boolean` | Whether the agent is working on a message: from when one is sent until its turn ends or is stopped. A message sent while it's busy stops that turn and starts one with it |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -119,6 +119,7 @@ Queries read things that aren't part of the live state. They return promises, ex
 | `host.catalog.upcoming()` | none | Formula 1 sessions that haven't started, soonest first |
 | `host.session.feeds()` | none | The open session's feeds (the same as `live.feeds`) |
 | `host.health.settled()` | none | `live.health`, once every place has drawn with its component's latest code, or after a second |
+| `host.health.errors({ tiles })` | `tiles: string[]` | An `ErrorReport` for each of those tiles that isn't drawing now, as `live.attached` holds one |
 | `host.data.sql({ sql, params?, asOf? })` | `sql: string`, `params?: (string \| number \| null)[]`, `asOf?: 'playhead' \| 'session'` | The rows from a read-only query on the open session |
 
 ### Session SQL
@@ -232,20 +233,26 @@ Build mode's snapshot of the mods folder, which the main process keeps. See [BUI
 | `build.begin` | none | Takes the snapshot and turns build mode on. Does nothing new if it's already on |
 | `build.save` | none | Drops the snapshot, keeping every change. Resolves to what changed in the app's words, like "Built lap_stepper.", or null |
 | `build.undo` | none | Puts the mods folder back as it stood on entry. Resolves to how many mods that undid |
+| `build.offer` | `tiles: string[]`, `note: string` | Offers the viewer build mode, to fix those tiles in their component's code: it waits in `live.build.offer`, replacing any offer before it. Throws while build mode is on, and for a tile that isn't on screen. Whoever takes it up enters build mode and gives the build agent the tiles' errors and the note: the shell does, from the palette |
+| `build.dismissOffer` | none | Withdraws the offer, if there is one. `build.begin` withdraws it too |
 
 ### `host.health`
 
-Whether what's on screen is drawing. The report itself is `live.health`, and its type, `PlaceHealth`, is in
-[shared/health.ts](../shared/health.ts) with the wording the build agent reads it in.
+Whether what's on screen is drawing, and attaching what isn't to the viewer's next message. The report itself is `live.health`, and
+its type, `PlaceHealth`, is in [shared/health.ts](../shared/health.ts) with the wording the build agent reads it in, and `errorBlock`,
+how an agent reads an `ErrorReport`.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `health.settled` | none | A query. Resolves to `live.health` once every place has drawn with its component's latest code, or after a second: a mod that just loaded takes a moment to draw |
-| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as the viewer: the request joins `live.fixRequests`. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode. Nothing is asked while `live.agentBusy` is set or another request waits, since a new message would stop the turn in progress. The tile's button is disabled then, and reads "Agent is busy" |
-| `health.takeFix` | `id: string` | Takes a request off `live.fixRequests`, to send it to the agent. Returns it, or null if something else took it first |
+| `health.errors` | `tiles: string[]` | A query. An `ErrorReport` for each of those tiles that isn't drawing now |
+| `health.attach` | `scope: string` | Attaches a tile's error to the viewer's next message: it joins `live.attached` as the tile stands now, replacing what was attached for it before, in its place. Returns whether it was attached: only a tile that isn't drawing can be, a preview never. It works whatever the agent is doing. It's what a tile's "Attach error to agent" does |
+| `health.detach` | `scope: string` | Takes a tile off `live.attached`. Returns whether it was there |
+| `health.takeAttached` | none | Takes everything on `live.attached`, oldest first, to send with a message, and leaves it empty |
 
-The host doesn't send a request anywhere itself. The shell watches `live.fixRequests`, takes each one, opens the palette and sends
-its text as a line of the viewer's (`useFixRequests` in `src/shell/agentFeed.ts`). Anything else that speaks to an agent can do the same.
+The host doesn't send anything itself. The shell's palette shows `live.attached` as a tray above its input, and the viewer's next
+message takes them (`sendToAgent` in `src/shell/agentFeed.ts`): each is an `<error>` block of JSON (`errorBlock`) after `app_state` and
+before the viewer's words, which may be none. Anything else that speaks to an agent can do the same.
 
 ### `host.suggestions`
 
@@ -356,6 +363,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `suggest_tiles` | `host.suggestions.offer`, for streams and charts |
 | `remove_tiles` | `host.layout.remove`, for streams and charts |
 | `edit_tile` | `host.layout.setProps`, for one chart |
+| `offer_build` | `host.build.offer`. The viewing agent's only: for a tile whose fix is in its component's code |
 | `set_audio` | `host.audio.set` |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
