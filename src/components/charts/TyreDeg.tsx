@@ -4,12 +4,13 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type Part } from '../../host';
+import { defineComponent, Displayed, Highlighted, keyPart, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   colors,
   compoundLetter,
+  displayed,
   drawCode,
   drawParts,
   isCleanLap,
@@ -20,12 +21,12 @@ import {
   textWidth,
   tyreAgeNow,
   tyreColour,
+  useDriverSet,
   useDriverStyles,
   type Box,
   type Ctx,
   type DriverStyle,
 } from './kit';
-import { watchedKey } from './TimingTower';
 
 const NEEDS = ['timing' as const];
 
@@ -134,8 +135,8 @@ const LABEL_CHARS = 13;
 interface Drawn {
   model: DegModel;
   styles: Map<number, DriverStyle>;
-  /** Cars whose onboard is on screen: their rows are lifted. */
-  watched: ReadonlySet<number>;
+  /** The props' drivers: their rows are lifted. */
+  highlighted: ReadonlySet<number>;
 }
 
 const labelWidth = (ch: number): number => PAD + LABEL_CHARS * ch;
@@ -214,13 +215,13 @@ function draw(ctx: Ctx, d: Drawn, { width, height }: Box): void {
     const top = HEAD + i * pitch;
     const y = top + pitch / 2 + 0.5;
     const style = styleOf(d.styles, row.driver);
-    const watched = d.watched.has(row.driver);
-    if (watched) {
+    const lifted = d.highlighted.has(row.driver);
+    if (lifted) {
       ctx.fillStyle = c.select;
       ctx.fillRect(0, top, width, pitch);
     }
     if (row.position !== null) text(ctx, String(row.position), PAD + 2 * ch, y, { align: 'right', color: c.dim, size: SIZE });
-    drawCode(ctx, style, PAD + 3 * ch, y, { size: SIZE, strong: watched, barHeight: pitch * 0.56 });
+    drawCode(ctx, style, PAD + 3 * ch, y, { size: SIZE, strong: lifted, barHeight: pitch * 0.56 });
     // A compound the feed hasn't named is left blank, age and all.
     const letter = compoundLetter(row.compound);
     if (row.compound && letter !== '?') {
@@ -263,14 +264,17 @@ function draw(ctx: Ctx, d: Drawn, { width, height }: Box): void {
   text(ctx, 'yellow', x + 14, y, { color: c.mute, size: 9 });
 }
 
-const NO_ONE: ReadonlySet<number> = new Set();
-
-function TyreDeg() {
+function TyreDeg({ props }: { props: { drivers?: number[]; drivers_to_display?: number[] } }) {
   const view = useSql(SQL);
   const styles = useDriverStyles();
-  const watchedList = useLive(watchedKey);
-  const watched = useMemo(() => (watchedList ? new Set(watchedList.split(',').map(Number)) : NO_ONE), [watchedList]);
-  const model = useMemo(() => (view.state === 'ready' ? { model: degModel(view.rows), styles, watched } : null), [view, styles, watched]);
+  const highlighted = useDriverSet(props.drivers);
+  const shown = props.drivers_to_display;
+  const model = useMemo(() => {
+    if (view.state !== 'ready') return null;
+    const m = degModel(view.rows);
+    const out = shown?.length ? m.out.filter((o) => shown.includes(o.driver)) : m.out;
+    return { model: { ...m, rows: displayed(m.rows, shown), out }, styles, highlighted };
+  }, [view, styles, highlighted, shown]);
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} extent={degExtent} />}
@@ -282,12 +286,16 @@ export default defineComponent({
   name: 'tyre_deg',
   title: 'Tyre deg',
   description:
-    "How fast each car's tyre is fading: every lap on the set it's on, by tyre age, shaded against the car's own median on that set, darker as it falls off. In race order, no drivers needed. Suggest it when the user asks about tyre wear, degradation or who is struggling on their tyres; tyre_strategy is for which tyres and when they stopped.",
-  args: Type.Object({}),
+    "How fast each car's tyre is fading: every lap on the set it's on, by tyre age, shaded against the car's own median on that set, darker as it falls off. In race order. Suggest it when the user asks about tyre wear, degradation or who is struggling on their tyres; tyre_strategy is for which tyres and when they stopped.",
+  args: Type.Object({ drivers_to_display: Displayed(), drivers: Highlighted() }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   fit: MOST,
-  spec: () => ({ key: 'tyre_deg', label: 'Tyre deg' }),
+  spec: ({ drivers_to_display, drivers }) => ({
+    key: drivers_to_display || drivers ? `tyre_deg:${keyPart(drivers_to_display)}:${keyPart(drivers, 'none')}` : 'tyre_deg',
+    label: 'Tyre deg',
+    drivers: drivers_to_display ?? drivers,
+  }),
   View: TyreDeg,
 });

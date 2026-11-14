@@ -1,5 +1,5 @@
 // Checks the pit windows table in the real app over a real replay race, muted: beside the main feed, with
-// two onboards on screen so their rows are lifted, beside the timing tower, and squeezed below its least size,
+// two onboards on screen and their rows lifted by its drivers prop, beside the timing tower, and squeezed below its least size,
 // where it keeps every column and lets its rows and columns run past the tile for the host to mark. Prints
 // each tile's size, the size the table draws at and the host's mark, and saves a screenshot of each.
 //
@@ -144,15 +144,17 @@ async function shoot(name, items, squeeze) {
 }
 
 const windows = { type: 'pit_windows', props: {} };
+// Its lifted rows are the props' drivers, here the cars whose onboards sit beside it.
+const lifted = { type: 'pit_windows', props: { drivers: [44, 1] } };
 const onboard = (n) => opened.feeds.find((f) => f.kind === 'onboard' && f.number === n);
 const watched = [44, 1].map(onboard).filter(Boolean).map((f) => ({ type: 'video', props: { feed: f.id } }));
 console.log(`onboards on screen: ${watched.map((w) => w.props.feed).join(', ') || 'none found'}`);
 
 await shoot('1-beside-video', [windows]);
-await shoot('2-with-onboards', [windows, ...watched]);
+await shoot('2-with-onboards', [lifted, ...watched]);
 await shoot('3-with-tower', [windows, { type: 'timing_tower', props: {} }]);
 // Below its least size.
-await shoot('4-squeezed', [windows, ...watched], [260, 280]);
+await shoot('4-squeezed', [lifted, ...watched], [260, 280]);
 
 if (keep) {
   console.log(`left open: user data in ${userData}. Serving it until the app is closed.`);

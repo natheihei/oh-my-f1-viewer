@@ -1,13 +1,12 @@
 /** One car's last lap traced on the circuit as a ribbon: thicker where it's faster, in the pedal colours, green on throttle, darker on a lift and red on the brake, with each corner's slowest speed. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type CircuitView } from '../../host';
+import { defineComponent, Driver, useLive, useSql, type CircuitView } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
   colors,
-  drawCode,
   fitOutline,
   num,
   styleOf,
@@ -30,9 +29,6 @@ const NO_READING = 104;
 
 /** The car's latest lap time, which sets how far back the ribbon goes. */
 export const LAP_SQL = `SELECT lap_duration FROM laps WHERE driver_number = ?1 AND lap_duration IS NOT NULL ORDER BY lap_number DESC LIMIT 1`;
-
-/** The car leading as of the playhead: who is drawn when no driver is named. */
-export const LEADER_SQL = `SELECT driver_number FROM position WHERE position = 1 ORDER BY date DESC LIMIT 1`;
 
 /**
  * The car's positions and samples over the window (`?3`, in ms). Each half is bounded both ways by `date`, the
@@ -182,8 +178,6 @@ const toward = (hex: string, k: number) => {
 interface Drawn extends RibbonModel {
   circuit: Extract<CircuitView, { state: 'ready' }>;
   style: DriverStyle;
-  /** Whether the driver was picked here, not named: then the title bar doesn't say who it is, so the readout does. */
-  picked: boolean;
 }
 
 const BACKGROUND = '#000';
@@ -291,12 +285,9 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   }
   if (compact) return;
 
-  // Speed, gear and the pedals now, and who, when the title bar doesn't say.
+  // Speed, gear and the pedals now. The title bar says whose.
   const row = READOUT / 2;
   let x = 10;
-  if (m.picked) {
-    x += drawCode(ctx, m.style, x, row, { size: 11, strong: true }) + 10;
-  }
   // Numbers get a slot as wide as their widest value, right-aligned, so what follows them doesn't move.
   const speed = m.speed === null ? '—' : String(Math.round(m.speed));
   const slot = textWidth(ctx, '000', 18, 700);
@@ -373,24 +364,13 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   }
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 1,
-  maxItems: 1,
-  description: 'The driver, as a car number. Left out, the leader.',
-});
-
 const NO_PLAYHEAD = 0;
-/** A car number no car has, for the queries while no driver is known yet. */
-const NO_CAR = -1;
 /** Least room: the readout's row over a circuit wide enough for its turn numbers to sit apart. Fit: where a circuit stops gaining detail. */
 const MIN = { width: 300, height: 220 };
 const FIT = { width: 560, height: 400 };
 
-function SpeedRibbon({ props }: { props: { drivers?: number[] } }) {
-  const named = props.drivers?.[0];
-  const leaderView = useSql(LEADER_SQL);
-  const leader = leaderView.state === 'ready' ? num(leaderView.rows[0]?.driver_number) : null;
-  const driver = named ?? leader ?? NO_CAR;
+function SpeedRibbon({ props }: { props: { driver: number } }) {
+  const { driver } = props;
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const lapView = useSql(LAP_SQL, [driver]);
   const seconds = windowSeconds(lapView.state === 'ready' ? lapView.rows : []);
@@ -398,12 +378,11 @@ function SpeedRibbon({ props }: { props: { drivers?: number[] } }) {
   const styles = useDriverStyles();
   const circuit = useLive((s) => s.circuit);
   const model = useMemo(() => {
-    if (view.state !== 'ready' || circuit.state !== 'ready' || driver === NO_CAR) return null;
-    return { ...ribbonModel(view.rows), circuit, style: styleOf(styles, driver), picked: named === undefined };
-  }, [view, circuit, styles, driver, named]);
-  const waiting = named === undefined && leaderView.state === 'ready' && leader === null ? 'Waiting for the running order' : null;
+    if (view.state !== 'ready' || circuit.state !== 'ready') return null;
+    return { ...ribbonModel(view.rows), circuit, style: styleOf(styles, driver) };
+  }, [view, circuit, styles, driver]);
   return (
-    <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit), waiting]} views={named === undefined ? [leaderView, view] : [view]}>
+    <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit)]} views={[view]}>
       {() => model && <ChartCanvas model={model} draw={draw} />}
     </ChartFrame>
   );
@@ -413,17 +392,13 @@ export default defineComponent({
   name: 'speed_ribbon',
   title: 'Speed ribbon',
   description:
-    "Where on the track one driver is fast and where they brake: their last lap traced on the circuit, wider where faster, green on throttle and red on the brake, with their speed and gear now. The leader when no driver is named. Suggest it when the user asks how a driver takes the circuit. For where every car is, use track_map; for one car's pedals and revs over time, car_telemetry; for whether every lap is driven the same, pedal_barcode.",
+    "Where on the track one driver is fast and where they brake: their last lap traced on the circuit, wider where faster, green on throttle and red on the brake, with their speed and gear now. Suggest it when the user asks how a driver takes the circuit. For where every car is, use track_map; for one car's pedals and revs over time, car_telemetry; for whether every lap is driven the same, pedal_barcode.",
   replayOnly: true,
-  args: Type.Object({ drivers: Type.Optional(Drivers) }),
+  args: Type.Object({ driver: Driver('The driver') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: Math.round((FIT.width / FIT.height) * 100) / 100, min: MIN },
   fit: FIT,
-  spec: ({ drivers }) => ({
-    key: `speed_ribbon:${drivers?.[0] ?? 'leader'}`,
-    label: 'Speed ribbon',
-    drivers: drivers?.slice(0, 1),
-  }),
+  spec: ({ driver }) => ({ key: `speed_ribbon:${driver}`, label: 'Speed ribbon', drivers: [driver] }),
   View: SpeedRibbon,
 });

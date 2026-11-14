@@ -4,7 +4,7 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type ChaseAid, type Part } from '../../host';
+import { defineComponent, Driver, useLive, useSql, type ChaseAid, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -460,14 +460,8 @@ const LEAST = { width: 330, height: 162 };
 /** Past this a battle's 15 laps gain nothing. */
 const FIT = { width: 640, height: 340 };
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 2,
-  maxItems: 2,
-  description: 'The two drivers, as car numbers',
-});
-
-function GapEvolution({ props }: { props: { drivers: number[] } }) {
-  const [a, b] = props.drivers;
+function GapEvolution({ props }: { props: { driver_a: number; driver_b: number } }) {
+  const { driver_a: a, driver_b: b } = props;
   const view = useSql(SQL, [a, b]);
   const styles = useDriverStyles();
   const aid = useLive((s) => s.spec.chaseAid);
@@ -487,11 +481,15 @@ export default defineComponent({
   title: 'Gap evolution',
   description:
 "Two drivers' battle: the gap between them over the last laps and whether it is closing, the line where DRS opens (Overtake from 2026) and whether the car behind is inside it, and each one's tyre and last lap. The one chart for a battle or a chase, next to both drivers' onboards.",
-  args: Type.Object({ drivers: Drivers }),
+  args: Type.Object({ driver_a: Driver('One of the two drivers'), driver_b: Driver('The other') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 16 / 9, min: LEAST },
   fit: FIT,
-  spec: ({ drivers }) => ({ key: `gap_evolution:${drivers.join('-')}`, label: 'Gap', drivers }),
+  // Which is a and which is b only sets the colours, so either way round is the same tile.
+  spec: ({ driver_a, driver_b }) => {
+    if (driver_a === driver_b) throw new Error('gap_evolution needs two different drivers');
+    return { key: `gap_evolution:${[driver_a, driver_b].sort((x, y) => x - y).join('-')}`, label: 'Gap', drivers: [driver_a, driver_b] };
+  },
   View: GapEvolution,
 });

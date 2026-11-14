@@ -1,13 +1,12 @@
 /** One car's throttle and brake, lap over lap: a row per lap, from the line, with the turns marked. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type Circuit } from '../../host';
+import { defineComponent, Driver, useLive, useSql, type Circuit } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
   colors,
-  drawCode,
   formatLapTime,
   linear,
   neutralOf,
@@ -43,16 +42,8 @@ const LAP_COLUMNS = 'driver_number, lap_number, date_start, lap_duration, is_pit
 /** Laps queried: those shown and the one before, to tell a restart by the red flag before it. */
 const LAPS_READ = LAPS_SHOWN + 1;
 
-/**
- * The driver's latest laps, the one in progress first, and one more. With none named, the car in the
- * lead at the playhead, which the query picks itself.
- */
-export const lapsSql = (named: boolean) =>
-  named
-    ? `SELECT ${LAP_COLUMNS} FROM lap_summary WHERE driver_number = ?1 AND date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_READ}`
-    : `WITH pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
-lead AS (SELECT driver_number FROM pos WHERE position IS NOT NULL ORDER BY position LIMIT 1)
-SELECT ${LAP_COLUMNS} FROM lap_summary JOIN lead USING (driver_number) WHERE date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_READ}`;
+/** The driver's latest laps, the one in progress first, and one more. */
+export const LAPS_SQL = `SELECT ${LAP_COLUMNS} FROM lap_summary WHERE driver_number = ?1 AND date_start IS NOT NULL ORDER BY lap_number DESC LIMIT ${LAPS_READ}`;
 
 /**
  * The completed laps' pedals and positions. Bounded by `date` both ways, from the oldest lap's start to the
@@ -257,8 +248,6 @@ export const ROW = { min: 16, max: 26 };
 
 interface Drawn extends PedalModel {
   style: DriverStyle;
-  /** The driver was picked, not named: the title bar doesn't say who, so the chart does. */
-  picked: boolean;
 }
 
 /** The turn guides: a dark hairline cut through the cells, so it reads on green and red alike. */
@@ -292,10 +281,9 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const x = linear([0, m.length || 1], [left, right]);
   const top0 = compact ? pad : head;
 
-  // Whose laps, if the title bar doesn't say; then the turn numbers, where they don't crowd each other.
+  // The turn numbers, where they don't crowd each other. The title bar says whose laps these are.
   if (!compact) {
-    if (m.picked) drawCode(ctx, m.style, pad, head / 2, { size: 10, strong: true });
-    else if (m.corners.length) text(ctx, 'TURN', pad, head / 2, { color: c.faint, size: 9 });
+    if (m.corners.length) text(ctx, 'TURN', pad, head / 2, { color: c.faint, size: 9 });
     let lastX = -Infinity;
     for (const corner of m.corners) {
       const cx = x(corner.d);
@@ -343,18 +331,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   });
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 1,
-  maxItems: 1,
-  description: 'The driver, as a car number. Left out, the leader at the time.',
-});
-
 const NO_ROWS: Array<Record<string, unknown>> = [];
 const NO_PLAYHEAD = 0;
 
-function PedalBarcode({ props }: { props: { drivers?: number[] } }) {
-  const named = props.drivers?.[0] ?? null;
-  const lapsView = useSql(lapsSql(named !== null), named !== null ? [named] : []);
+function PedalBarcode({ props }: { props: { driver: number } }) {
+  const lapsView = useSql(LAPS_SQL, [props.driver]);
   const { driver, laps } = useMemo(() => lapsOf(lapsView.state === 'ready' ? lapsView.rows : NO_ROWS), [lapsView]);
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null)) ?? NO_PLAYHEAD;
   const current = laps.at(-1);
@@ -365,8 +346,8 @@ function PedalBarcode({ props }: { props: { drivers?: number[] } }) {
   const circuit = useLive((s) => s.circuit);
   const model = useMemo(() => {
     if (driver === null || pastView.state !== 'ready' || nowView.state !== 'ready' || circuit.state !== 'ready') return null;
-    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit), style: styleOf(styles, driver), picked: named === null };
-  }, [driver, named, laps, pastView, nowView, playhead, circuit, styles]);
+    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit), style: styleOf(styles, driver) };
+  }, [driver, laps, pastView, nowView, playhead, circuit, styles]);
   const waiting = lapsView.state === 'ready' && laps.length === 0 ? 'Waiting for a lap' : null;
   return (
     <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit), waiting]} views={[lapsView, pastView, nowView]}>
@@ -381,15 +362,11 @@ export default defineComponent({
   description:
     "Is a driver driving every lap the same, and where did this one differ: one car's brake and throttle as a row per lap over the last six, lined up from the line with the turns marked, so a lift, an early brake or a mistake stands out against the laps before. Suggest it for consistency, a driver under pressure or one losing time; pick car_telemetry for the numbers right now.",
   replayOnly: true,
-  args: Type.Object({ drivers: Type.Optional(Drivers) }),
+  args: Type.Object({ driver: Driver('The driver') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: 2.4, min: { width: 300, height: 150 } },
   fit: { width: 640, height: 200 },
-  spec: ({ drivers }) => ({
-    key: `pedal_barcode:${drivers?.[0] ?? 'lead'}`,
-    label: 'Pedals',
-    drivers: drivers?.slice(0, 1),
-  }),
+  spec: ({ driver }) => ({ key: `pedal_barcode:${driver}`, label: 'Pedals', drivers: [driver] }),
   View: PedalBarcode,
 });

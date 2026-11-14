@@ -15,7 +15,7 @@
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
-import { FIRST_SEASON, fitting, host, MAX_SUGGESTED_STREAMS, misfit, read, tilesOf, type ComponentInfo, type Op } from '../host';
+import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, MAX_SUGGESTED_STREAMS, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 
@@ -170,28 +170,29 @@ const chartsOf = (): ComponentInfo[] => read().components.filter((c) => c.name !
 /** The charts the viewing agent is offered: those that fit the open session. */
 export const offeredCharts = (): ComponentInfo[] => fitting(chartsOf(), read().session);
 
-/** How many drivers a chart takes, from its `drivers` property, and that count in words. */
-export function driverCount(chart: ComponentInfo): { fits(n: number): boolean; text: string } {
-  const properties = (chart.args.properties ?? {}) as Record<string, { minItems?: number; maxItems?: number }>;
-  const drivers = properties.drivers;
-  if (!drivers) return { fits: (n) => n === 0, text: 'no drivers' };
-  const optional = !(Array.isArray(chart.args.required) && chart.args.required.includes('drivers'));
-  const min = drivers.minItems ?? 0;
-  const max = drivers.maxItems ?? Infinity;
-  const lo = optional && min <= 1 ? 0 : min;
-  const range = lo === max ? `exactly ${lo}` : max === Infinity ? `${lo} or more` : `${lo} to ${max}`;
-  const text = `${optional && min > 1 ? `none, or ${range}` : range} driver${max === 1 ? '' : 's'}`;
-  return { fits: (n) => (optional && n === 0) || (n >= min && n <= max), text };
+type PropSchema = { type?: string; description?: string; minItems?: number; maxItems?: number };
+const propsOf = (chart: ComponentInfo) => (chart.args.properties ?? {}) as Record<string, PropSchema>;
+const requiredOf = (chart: ComponentInfo) => new Set((chart.args.required ?? []) as string[]);
+
+/** A chart's props for the chart list: each with whether it's required and what it is, or "no props". */
+export function propsText(chart: ComponentInfo): string {
+  const required = requiredOf(chart);
+  const parts = Object.entries(propsOf(chart)).map(([name, p]) => {
+    const most = p.type === 'array' && p.maxItems != null ? `, at most ${p.maxItems}` : '';
+    return `${name} (${required.has(name) ? 'required' : 'optional'}${most})${p.description ? `: ${p.description}` : ''}`;
+  });
+  return parts.length ? `props ${parts.join('; ')}` : 'no props';
 }
 
-const DriverRefs = Type.Array(Type.String(), {
-  description: 'The drivers the chart is about: a driver code (HAM), surname (Hamilton) or car number (44). Leave out for a chart that picks its own.',
+const ChartProps = Type.Record(Type.String(), Type.Unknown(), {
+  description:
+    "The chart's props, from its line in the chart list. Give every required one. A driver prop takes a driver code (HAM), surname (Hamilton) or car number (44): one for a prop named driver…, a list for drivers….",
 });
 
 const ChartRef = Type.Object(
   {
     chart: Type.String({ description: 'A chart name from the chart list' }),
-    drivers: Type.Optional(DriverRefs),
+    props: Type.Optional(ChartProps),
   },
   { additionalProperties: false },
 );
@@ -199,7 +200,7 @@ const ChartRef = Type.Object(
 const SuggestArgs = Type.Object(
   {
     streams: Type.Optional(StreamRefs),
-    charts: Type.Optional(Type.Array(ChartRef, { description: 'Charts, each with the drivers it is about' })),
+    charts: Type.Optional(Type.Array(ChartRef, { description: 'Charts, each with its props' })),
   },
   { additionalProperties: false },
 );
@@ -215,16 +216,70 @@ function suggestArgs(): typeof SuggestArgs {
 
 type Item = { type: string; props: Record<string, unknown> };
 
+const rosterNow = () => {
+  const { sessionData, feeds } = read();
+  return driversOf(sessionData.state === 'ready' ? sessionData.drivers : [], feeds);
+};
+
+/**
+ * The props the model gave a chart, with drivers as car numbers, and what's wrong with them. Each driver
+ * prop takes codes, names or numbers, one or a list by its name. `given` replaces what's in `base`, and a
+ * null takes a prop away. Props the chart doesn't declare are refused, so a typo isn't silently dropped.
+ */
+export function resolveProps(chart: ComponentInfo, given: Record<string, unknown>, base: Record<string, unknown> = {}): { props: Record<string, unknown>; problems: string[] } {
+  const declared = propsOf(chart);
+  const roster = rosterNow();
+  const props: Record<string, unknown> = { ...base };
+  const problems: string[] = [];
+  const unknown: string[] = [];
+  for (const [name, value] of Object.entries(given)) {
+    if (!(name in declared)) {
+      problems.push(`${chart.name} has no prop "${name}": it takes ${Object.keys(declared).join(', ') || 'none'}.`);
+      continue;
+    }
+    if (value === null) {
+      delete props[name];
+      continue;
+    }
+    if (!isDriverProp(name)) {
+      props[name] = value;
+      continue;
+    }
+    const refs = (Array.isArray(value) ? value : [value]).map(String);
+    const numbers: number[] = [];
+    for (const ref of refs) {
+      const hit = resolveDriver(roster, ref);
+      if (!hit) unknown.push(ref);
+      else if (!numbers.includes(hit.number)) numbers.push(hit.number);
+    }
+    if (isDriverList(name)) props[name] = numbers;
+    else if (numbers.length === 1) props[name] = numbers[0];
+    else if (refs.length > 1) problems.push(`${chart.name}'s ${name} is one driver, and ${refs.length} were given.`);
+  }
+  if (unknown.length) problems.push(`No driver matches ${unknown.map((u) => `"${u}"`).join(', ')} in this session: ask the user who they mean.`);
+  if (problems.length) return { props, problems };
+  const missing = [...requiredOf(chart)].filter((name) => !(name in props));
+  if (missing.length) {
+    const drivers = missing.some(isDriverProp) ? ': ask the user which driver, unless the conversation already says' : '';
+    return { props, problems: [`${chart.name} needs ${missing.join(' and ')}, and none was given${drivers}.`] };
+  }
+  try {
+    specOf({ type: chart.name, props });
+  } catch (e) {
+    problems.push(`${chart.name}: ${(e as Error).message.replace(/^Invalid props for [^:]+: /, '')}.`);
+  }
+  return { props, problems };
+}
+
 /**
  * Turns the charts the model named into items, with drivers as car numbers. A problem never depends on
- * how the session is going: only on the session's type and whether it is live, missing data, an unknown name or the driver count.
+ * how the session is going: only on the session's type and whether it is live, missing data, an unknown name or the props.
  */
 function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problems: string[] } {
-  const { session, sessionData, feeds } = read();
-  const roster = driversOf(sessionData.state === 'ready' ? sessionData.drivers : [], feeds);
+  const { session, sessionData } = read();
   const items: Item[] = [];
   const problems: string[] = [];
-  for (const { chart, drivers: refs = [] } of charts) {
+  for (const { chart, props: given = {} } of charts) {
     const info = chartsOf().find((c) => c.name === chart || normalize(c.title) === normalize(chart));
     if (!info) {
       problems.push(`There is no chart "${chart}": pick a name from the chart list.`);
@@ -239,38 +294,28 @@ function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problem
       problems.push(`${info.name} has no data for this session: ${sessionData.reason}`);
       continue;
     }
-    const numbers: number[] = [];
-    const unknown: string[] = [];
-    for (const ref of refs) {
-      const hit = resolveDriver(roster, ref);
-      if (!hit) unknown.push(ref);
-      else if (!numbers.includes(hit.number)) numbers.push(hit.number);
-    }
-    if (unknown.length) {
-      problems.push(`No driver matches ${unknown.map((u) => `"${u}"`).join(', ')} in this session: ask the user who they mean.`);
-      continue;
-    }
-    const count = driverCount(info);
-    if (!count.fits(numbers.length)) {
-      const got = numbers.length === 0 ? 'none were given: ask the user which' : `${numbers.length} ${numbers.length === 1 ? 'was' : 'were'} given`;
-      problems.push(`${info.name} takes ${count.text}, and ${got}.`);
-      continue;
-    }
-    items.push({ type: info.name, props: numbers.length ? { drivers: numbers } : {} });
+    const resolved = resolveProps(info, given);
+    if (resolved.problems.length) problems.push(...resolved.problems);
+    else items.push({ type: info.name, props: resolved.props });
   }
   return { items, problems };
 }
 
 const chartNamed = (needle: string) => chartsOf().find((c) => normalize(c.name) === needle || normalize(c.title) === needle);
 
+/** The chart tiles on screen a reference names: by label, or else every one of a chart by its name or title. */
+function chartTilesNamed(ref: string) {
+  const charts = tilesOf(read().layout).filter((t) => t.component.type !== VIDEO);
+  const needle = normalize(ref);
+  const byLabel = charts.filter((t) => normalize(t.component.label) === needle);
+  return byLabel.length ? byLabel : charts.filter((t) => t.component.type === chartNamed(needle)?.name);
+}
+
 /** The keys of what `remove_tiles` names: chart tiles by label, then by chart name or title, then streams. */
 function tileKeys(refs: string[]): string[] {
-  const charts = tilesOf(read().layout).filter((t) => t.component.type !== VIDEO);
   const keys = new Set<string>();
   for (const ref of refs) {
-    const needle = normalize(ref);
-    const byLabel = charts.filter((t) => normalize(t.component.label) === needle);
-    const hits = byLabel.length ? byLabel : charts.filter((t) => t.component.type === chartNamed(needle)?.name);
+    const hits = chartTilesNamed(ref);
     if (hits.length) hits.forEach((t) => keys.add(t.component.key));
     else {
       const feed = resolveChannel(read().feeds, ref);
@@ -287,7 +332,7 @@ function tileKeys(refs: string[]): string[] {
 const suggestTiles = (args: typeof SuggestArgs | (() => typeof SuggestArgs)): AgentTool =>
   expose(host.suggestions.offer, {
     name: 'suggest_tiles',
-    description: `Suggest streams and charts as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time. Charts come from the chart list, each with the drivers it is about.`,
+    description: `Suggest streams and charts as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time. Charts come from the chart list, each with its props filled in.`,
     args,
     adapt: ({ streams = [], charts = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planCharts(charts).items] }),
     gate: [
@@ -465,6 +510,36 @@ export const AGENT_TOOLS: AgentTool[] = [
       return `Removed: ${removed.join(', ') || 'nothing'}.${missing.length ? ` Not found: ${missing.join(', ')}.` : ''}`;
     },
   }),
+  expose(host.layout.setProps, {
+    name: 'edit_tile',
+    description:
+      'Change the props of one chart on screen, in place: who it is about, who it highlights or who it draws. It keeps its place. Only the props named change; null takes one away. To show the same chart for someone else as well, suggest another with suggest_tiles instead.',
+    args: Type.Object(
+      {
+        tile: Type.String({ description: 'One chart on screen, by its tile label, chart name or title, as app_state lists it' }),
+        props: ChartProps,
+      },
+      { additionalProperties: false },
+    ),
+    adapt: ({ tile, props }) => {
+      const [hit] = chartTilesNamed(tile);
+      const info = hit && chartsOf().find((c) => c.name === hit.component.type);
+      return { key: hit?.component.key ?? '', props: info ? resolveProps(info, props, hit.component.props).props : {} };
+    },
+    gate: [
+      sessionOpen,
+      (_, { tile, props }) => {
+        const hits = chartTilesNamed(tile);
+        if (hits.length === 0) throw new Error(`No chart on screen is called "${tile}".`);
+        if (hits.length > 1) throw new Error(`"${tile}" names ${hits.length} charts: ${hits.map((t) => t.component.label).join(', ')}. Name one by its label.`);
+        const info = chartsOf().find((c) => c.name === hits[0].component.type)!;
+        const { problems } = resolveProps(info, props, hits[0].component.props);
+        if (problems.length) throw new Error(`${problems.join(' ')} Nothing was changed.`);
+      },
+    ],
+    result: (out) => (out ? `Changed: ${out.label}.` : 'That chart is no longer on screen.'),
+    hints: [[/Already on screen/, 'A chart with those props is already on screen: leave this one as it is, or remove it.']],
+  }),
   expose(host.audio.set, {
     name: 'set_audio',
     description: 'Choose which single stream is audible, or mute everything with "none".',
@@ -525,7 +600,7 @@ export const AGENT_TOOLS: AgentTool[] = [
  * to look at the data, show a draft with props, and try a control. None of it asks the spoiler gate.
  * See docs/BUILD_MODE.md.
  */
-const BUILD_VIEW_TOOLS = ['list_streams', 'remove_tiles', 'play', 'pause'];
+const BUILD_VIEW_TOOLS = ['list_streams', 'remove_tiles', 'edit_tile', 'play', 'pause'];
 export const BUILD_TOOLS: AgentTool[] = [
   ...AGENT_TOOLS.filter((t) => BUILD_VIEW_TOOLS.includes(t.name)),
   suggestTiles(SuggestArgs),

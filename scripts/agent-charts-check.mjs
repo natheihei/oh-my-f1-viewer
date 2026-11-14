@@ -87,7 +87,13 @@ async function say(text, shot) {
   if (end.type === 'error') console.log(`  ERROR: ${end.message}`);
   for (const call of calls) console.log(`  tool: ${call.name}(${JSON.stringify(call.args)})`);
   for (const e of ends) if (!e.ok) console.log(`  tool failed: ${e.name}: ${String(e.content ?? e.message ?? '').slice(0, 200)}`);
-  const strip = await page.evaluate(() => window.read().suggestions.items.map((i) => ({ type: i.type, label: i.label, key: i.key, drivers: i.props?.drivers ?? null })));
+  // Every driver the chart's props name, whichever props they are in: driver, driver_a, drivers and the like.
+  const strip = await page.evaluate(() =>
+    window.read().suggestions.items.map((i) => {
+      const named = Object.entries(i.props ?? {}).filter(([k]) => /^drivers?(_|$)/.test(k)).flatMap(([, v]) => (Array.isArray(v) ? v : [v]));
+      return { type: i.type, label: i.label, key: i.key, drivers: named.length ? named : null };
+    }),
+  );
   console.log(`  strip: ${strip.map((s) => `${s.type}:${s.label}${s.drivers ? `[${s.drivers}]` : ''}`).join(', ') || 'empty'}`);
   console.log(`  reply: ${reply}`);
   console.log(`  time: ${Math.round(end.at - start)}ms`);

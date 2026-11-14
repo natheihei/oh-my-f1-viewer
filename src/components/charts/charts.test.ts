@@ -217,6 +217,7 @@ describe('tyre_strategy', () => {
     const grid = (laps: number, total: number | null = 71) => ({
       ...tyreModel(Array.from({ length: 22 }, (_, i) => stint(i + 1, 1, 1, laps, 'SOFT', 0, i + 1))),
       styles: new Map(),
+      highlighted: new Set<number>(),
       total,
     });
     const box = (width: number, height: number, compact = false) => ({ width, height, compact });
@@ -295,7 +296,7 @@ describe('timing_tower', () => {
 
   describe('extent', () => {
     const tower = components.find((c) => c.name === 'timing_tower')!;
-    const grid = (gains: boolean) => ({ rows: towerModel(Array.from({ length: 22 }, (_, i) => row(i + 1, i + 1, i, 1))), gains, styles: new Map(), watched: new Set<number>(), within: 1 });
+    const grid = (gains: boolean) => ({ rows: towerModel(Array.from({ length: 22 }, (_, i) => row(i + 1, i + 1, i, 1))), gains, styles: new Map(), highlighted: new Set<number>(), within: 1 });
     const box = (width: number, height: number) => ({ width, height, compact: false });
 
     it('fits the tile while it has room', () => {
@@ -390,7 +391,7 @@ describe('tyre_deg', () => {
 
   it('runs past the tile once rows and cells stop shrinking', () => {
     const many = Array.from({ length: 22 }, (_, i) => laps(i + 1, Array.from({ length: 40 }, () => 91), { position: i + 1 })).flat();
-    const d = { model: degModel(many), styles: new Map(), watched: new Set<number>() };
+    const d = { model: degModel(many), styles: new Map(), highlighted: new Set<number>() };
     const box = (width: number, height: number) => ({ width, height, compact: false });
     expect(degExtent(d, box(700, 600))).toEqual({ width: 700, height: 600 });
     const squeezed = degExtent(d, box(300, 250));
@@ -708,14 +709,13 @@ describe('race_control', () => {
     expect(textOf(lineText(lines[1], words))).toBe('Blue ×1  PER');
   });
 
-  it('collapses each run of blue flags into one line unless asked for each', () => {
+  it('collapses each run of blue flags into one line', () => {
     const rows = [blue(27, 43, 'COL'), rc(28, 'Other', null, 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12'), blue(29, 11, 'PER'), blue(30, 87, 'BEA'), blue(30, 11, 'PER')];
     expect(messagesModel(rows)).toEqual([
       { kind: 'blue', lap: 30, count: 3, drivers: [11, 87] },
       { kind: 'message', lap: 28, signal: 'note', message: 'TRACK SURFACE SLIPPERY IN TRACK SECTOR 12' },
       { kind: 'blue', lap: 27, count: 1, drivers: [43] },
     ]);
-    expect(messagesModel(rows, true)).toHaveLength(5);
   });
 
   it('knows what is in force: a red flag until the session starts again, yellows until cleared, open cases', () => {
@@ -1161,14 +1161,27 @@ describe('the registry', () => {
     const byName = Object.fromEntries(components.map((c) => [c.name, c]));
     expect(byName.gap_evolution.sessions).toEqual(['race', 'sprint']);
     expect(byName.tyre_strategy.sessions).toEqual(['race', 'sprint']);
-    expect(byName.gap_evolution.spec({ drivers: [44, 1] })).toEqual({ key: 'gap_evolution:44-1', label: 'Gap', drivers: [44, 1] });
+    expect(byName.gap_evolution.spec({ driver_a: 44, driver_b: 1 })).toEqual({ key: 'gap_evolution:1-44', label: 'Gap', drivers: [44, 1] });
+    // Which is a only sets the colours, so either way round is the same tile.
+    expect(byName.gap_evolution.spec({ driver_a: 1, driver_b: 44 }).key).toBe('gap_evolution:1-44');
+    expect(() => byName.gap_evolution.spec({ driver_a: 44, driver_b: 44 })).toThrow(/two different drivers/);
     expect(byName.tyre_strategy.spec({})).toEqual({ key: 'tyre_strategy:all', label: 'Tyres' });
+    expect(byName.tyre_strategy.spec({ drivers_to_display: [44, 1] })).toEqual({ key: 'tyre_strategy:44-1', label: 'Tyres', drivers: [44, 1] });
+    expect(byName.tyre_strategy.spec({ drivers: [44] })).toEqual({ key: 'tyre_strategy:all:44', label: 'Tyres', drivers: [44] });
     expect(byName.timing_tower.spec({})).toEqual({ key: 'timing_tower', label: 'Timing' });
+    expect(byName.timing_tower.spec({ drivers: [44, 1] })).toEqual({ key: 'timing_tower:44-1', label: 'Timing', drivers: [44, 1] });
     expect(byName.tyre_deg.sessions).toEqual(['race', 'sprint']);
+    expect(byName.tyre_deg.spec({})).toEqual({ key: 'tyre_deg', label: 'Tyre deg' });
+    // Who is drawn and who is highlighted are both in the key, so two tiles that differ in either are two tiles.
+    expect(byName.tyre_deg.spec({ drivers_to_display: [44, 1], drivers: [44] }).key).toBe('tyre_deg:44-1:44');
+    expect(byName.tyre_deg.spec({ drivers_to_display: [44, 1] }).key).toBe('tyre_deg:44-1:none');
     expect(byName.pit_window.sessions).toEqual(['race', 'sprint']);
-    expect(byName.pit_window.spec({ drivers: [44] })).toEqual({ key: 'pit_window:44', label: 'Pit window', drivers: [44] });
+    expect(byName.pit_window.spec({ driver: 44 })).toEqual({ key: 'pit_window:44', label: 'Pit window', drivers: [44] });
     expect(byName.pit_windows.spec({})).toEqual({ key: 'pit_windows', label: 'Pit windows' });
-    expect(byName.sector_table.spec({ drivers: [44, 1] })).toEqual({ key: 'sector_table:44-1', label: 'Sectors', drivers: [44, 1] });
+    expect(byName.pit_windows.spec({ drivers: [44] })).toEqual({ key: 'pit_windows:all:44', label: 'Pit windows', drivers: [44] });
+    expect(byName.sector_table.spec({ driver_a: 44, driver_b: 1 })).toEqual({ key: 'sector_table:44-1', label: 'Sectors', drivers: [44, 1] });
+    // Here which is a matters: the differences are a's against b's.
+    expect(byName.sector_table.spec({ driver_a: 1, driver_b: 44 }).key).toBe('sector_table:1-44');
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
@@ -1176,15 +1189,33 @@ describe('the registry', () => {
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });
-    expect(byName.car_telemetry.spec({ drivers: [44] })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry', drivers: [44] });
-    expect(byName.pedal_barcode.spec({ drivers: [44] })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals', drivers: [44] });
-    expect(byName.pedal_barcode.spec({})).toEqual({ key: 'pedal_barcode:lead', label: 'Pedals' });
-    expect(byName.speed_ribbon.spec({ drivers: [44] })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon', drivers: [44] });
-    expect(byName.speed_ribbon.spec({})).toEqual({ key: 'speed_ribbon:leader', label: 'Speed ribbon' });
+    expect(byName.car_telemetry.spec({ driver: 44 })).toEqual({ key: 'car_telemetry:44', label: 'Telemetry', drivers: [44] });
+    expect(byName.pedal_barcode.spec({ driver: 44 })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals', drivers: [44] });
+    expect(byName.speed_ribbon.spec({ driver: 44 })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon', drivers: [44] });
     for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live', 'field_pace']) expect(byName[gone]).toBeUndefined();
     expect(components).toHaveLength(14);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
+  });
+});
+
+describe('driver props', () => {
+  const required = (name: string) => (components.find((c) => c.name === name)!.args.required ?? []) as string[];
+  const props = (name: string) => Object.keys(components.find((c) => c.name === name)!.args.properties ?? {}).sort();
+
+  it('names each prop for what the agent fills in, and requires the drivers a chart is about', () => {
+    for (const name of ['car_telemetry', 'pit_window', 'speed_ribbon', 'pedal_barcode']) {
+      expect(props(name), name).toEqual(['driver']);
+      expect(required(name), name).toEqual(['driver']);
+    }
+    for (const name of ['gap_evolution', 'sector_table']) {
+      expect(props(name), name).toEqual(['driver_a', 'driver_b']);
+      expect(required(name).sort(), name).toEqual(['driver_a', 'driver_b']);
+    }
+    for (const name of ['track_map', 'timing_tower']) expect(props(name), name).toEqual(['drivers']);
+    for (const name of ['tyre_strategy', 'tyre_deg', 'pit_windows']) expect(props(name), name).toEqual(['drivers', 'drivers_to_display']);
+    for (const name of ['track_map', 'timing_tower', 'tyre_strategy', 'tyre_deg', 'pit_windows', 'race_control', 'race_status']) expect(required(name), name).toEqual([]);
+    expect(props('race_control')).toEqual([]);
   });
 });
 

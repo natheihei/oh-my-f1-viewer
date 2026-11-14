@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type Part } from '../../host';
+import { defineComponent, Driver, useLive, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -506,14 +506,8 @@ function dotOn(ctx: Ctx, x: number, y: number, radius: number, color: string): v
   ctx.stroke();
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 1,
-  maxItems: 1,
-  description: 'The driver whose stop to play out, as a car number',
-});
-
-function PitWindow({ props }: { props: { drivers: number[] } }) {
-  const [driver] = props.drivers;
+function PitWindow({ props }: { props: { driver: number } }) {
+  const { driver } = props;
   const view = useSql(SQL);
   const styles = useDriverStyles();
   const circuit = useLive((s) => circuitMessage(s.circuit));
@@ -540,13 +534,13 @@ export default defineComponent({
   title: 'Pit window',
   description:
     "The field as a ring, with one driver's pit stop played out: where they would rejoin if they stopped now, who they would come out behind and ahead of, and whether that is clear air. Suggest it for one driver's strategy or pit window.",
-  args: Type.Object({ drivers: Drivers }),
+  args: Type.Object({ driver: Driver('The driver whose stop to play out') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   // Its shape is the one it reads best at, its largest with the panel under the ring.
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   // A wide tile puts the panel beside the ring, so it can use the wide form's width.
   fit: { width: MOST_WIDE.width, height: MOST.height },
-  spec: ({ drivers }) => ({ key: `pit_window:${drivers[0]}`, label: 'Pit window', drivers: [drivers[0]] }),
+  spec: ({ driver }) => ({ key: `pit_window:${driver}`, label: 'Pit window', drivers: [driver] }),
   View: PitWindow,
 });

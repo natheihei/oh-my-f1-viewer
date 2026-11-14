@@ -56,11 +56,12 @@ This keeps the rule that the agent suggests tiles and the viewer adds them.
 
 ### Props for a draft
 
-- A draft previews with no props, `{}`. What a component shows then is up to it, as with the app's charts: a battle component can pick
-  the closest pair at the playhead, or any pair. A mod built here must render with no props.
-- When the viewer named drivers ("a duel for Hamilton and Norris"), the agent passes them through `suggest_tiles`, and the draft
-  previews with them for the rest of the build. A mod takes drivers as car numbers in an arg named `drivers`, which is what
-  `suggest_tiles` fills in.
+- A draft previews with the props the agent suggested it with, or with none, `{}`. A mod declares the props it needs, as the app's
+  charts do (see [COMPONENTS.md](COMPONENTS.md)), and never picks a driver itself, so one that needs a driver has no preview until the
+  agent suggests it with one. (Before #77 every mod had to draw with `{}`, and one about a pair picked "the closest pair at the
+  playhead".)
+- When the viewer named drivers ("a duel for Hamilton and Norris"), the agent passes them through `suggest_tiles` in the mod's props,
+  `driver_a` and `driver_b` here, and the draft previews with them for the rest of the build. When they didn't, it asks whose.
 - A tile that's on screen keeps its props across an edit. If the mod's new `args` no longer accept them, it falls back to `{}`.
 
 ### Trying it

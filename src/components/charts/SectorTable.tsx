@@ -4,7 +4,7 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql, type Part } from '../../host';
+import { defineComponent, Driver, useSql, type Part } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -238,14 +238,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   if (m.averageAt >= m.rows.length && m.rows.length && (!small || y + pitch <= height)) average();
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 2,
-  maxItems: 2,
-  description: 'The two drivers, as car numbers. Each difference is the first driver against the second: negative is the first faster.',
-});
-
-function SectorTableView({ props }: { props: { drivers: number[] } }) {
-  const [a, b] = props.drivers;
+function SectorTableView({ props }: { props: { driver_a: number; driver_b: number } }) {
+  const { driver_a: a, driver_b: b } = props;
   const view = useSql(SQL, [a, b]);
   const styles = useDriverStyles();
   const model = useMemo(
@@ -264,11 +258,17 @@ export default defineComponent({
   title: 'Sector table',
   description:
     'Where on the lap one driver gains on another, lap by lap: a row per lap with the time each of the three sectors gained or lost, the lap total, and the average since either driver last stopped. Suggest it when the user asks in which sector or part of the lap one driver is quicker than another, or by how much; gap_evolution is for the gap between them on the road.',
-  args: Type.Object({ drivers: Drivers }),
+  args: Type.Object({
+    driver_a: Driver('The driver each difference is for: negative is driver_a faster'),
+    driver_b: Driver('The driver compared against'),
+  }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   fit: MOST,
-  spec: ({ drivers }) => ({ key: `sector_table:${drivers.join('-')}`, label: 'Sectors', drivers }),
+  spec: ({ driver_a, driver_b }) => {
+    if (driver_a === driver_b) throw new Error('sector_table needs two different drivers');
+    return { key: `sector_table:${driver_a}-${driver_b}`, label: 'Sectors', drivers: [driver_a, driver_b] };
+  },
   View: SectorTableView,
 });

@@ -173,16 +173,16 @@ async function shoot(name, items, squeeze) {
   console.log(`${name}: ${JSON.stringify(await measure())} -> ${file}`);
 }
 
-const pedals = (drivers) => ({ type: 'pedal_barcode', props: drivers ? { drivers } : {} });
+const pedals = (driver) => ({ type: 'pedal_barcode', props: { driver } });
 const onboard = opened.feeds.find((f) => f.kind === 'onboard' && f.number === car);
 const watched = onboard ? [{ type: 'video', props: { feed: onboard.id } }] : [];
 console.log(`onboard on screen: ${onboard?.id ?? 'none found'}`);
 
-await shoot('1-fit', [pedals([car]), ...watched]);
-await shoot('2-leader', [pedals(), { type: 'car_telemetry', props: { drivers: [car] } }, { type: 'timing_tower', props: {} }]);
+await shoot('1-fit', [pedals(car), ...watched]);
+await shoot('2-with-telemetry', [pedals(car), { type: 'car_telemetry', props: { driver: car } }, { type: 'timing_tower', props: { drivers: [car] } }]);
 // The grid rounds to its cells: these land at the least size, 300 by 150, or just over it.
-await shoot('3-least', [pedals([car]), ...watched], [300, 175]);
-await shoot('4-squeezed', [pedals([car]), ...watched], [220, 100]);
+await shoot('3-least', [pedals(car), ...watched], [300, 175]);
+await shoot('4-squeezed', [pedals(car), ...watched], [220, 100]);
 
 if (keep) {
   console.log(`left open: user data in ${userData}. Serving it until the app is closed.`);

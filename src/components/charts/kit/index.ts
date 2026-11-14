@@ -4,6 +4,7 @@ export { ChartFrame } from './ChartFrame';
 export { codeOf, useDriverStyles } from '../../../host';
 export * from './codes';
 export { colors, DASH, tyreColour } from './colors';
+export { displayed, useDriverSet } from './drivers';
 export { driverStyles, styleOf, type DriverStyle } from '../../../host';
 export * from './draw';
 export * from './laps';

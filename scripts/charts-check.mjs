@@ -58,22 +58,22 @@ const tower = { type: 'timing_tower', props: {} };
 // A front-runner for the pit window: whoever runs second at the first moment shot, kept after that.
 let front = null;
 const allGroups = {
-  pit: () => [{ type: 'pit_window', props: { drivers: [front] } }],
+  pit: () => [{ type: 'pit_window', props: { driver: front } }],
   basics: [
-    { type: 'gap_evolution', props: { drivers: pair } },
+    { type: 'gap_evolution', props: { driver_a: pair[0], driver_b: pair[1] } },
     { type: 'tyre_strategy', props: {} },
   ],
   deg: [
     { type: 'tyre_deg', props: {} },
   ],
   small: [
-    { type: 'sector_table', props: { drivers: pair } },
+    { type: 'sector_table', props: { driver_a: pair[0], driver_b: pair[1] } },
     { type: 'race_control', props: {} },
     { type: 'race_status', props: {} },
   ],
   telemetry: [
     { type: 'track_map', props: { drivers: pair } },
-    { type: 'car_telemetry', props: { drivers: [pair[0]] } },
+    { type: 'car_telemetry', props: { driver: pair[0] } },
   ],
 };
 const groups = Object.fromEntries(Object.entries(allGroups).filter(([name]) => !only || only.includes(name)));
