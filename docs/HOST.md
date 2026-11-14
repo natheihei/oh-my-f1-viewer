@@ -15,7 +15,7 @@ There are three kinds of things:
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
 | Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.askFix`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.askFix`, `host.health.takeFix`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -48,6 +48,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
 | `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it |
+| `fixRequests` | `FixRequest[]` | What the viewer asked the agent to fix from a tile's button, oldest first, until something takes each to the agent: `id`, `scope` (the place, from `health`) and `text` (the request in the viewer's words) |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -237,7 +238,11 @@ Whether what's on screen is drawing. The report itself is `live.health`, and its
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `health.settled` | none | A query. Resolves to `live.health` once every place has drawn with its component's latest code, or after a second: a mod that just loaded takes a moment to draw |
-| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as a line of the viewer's in the palette. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode |
+| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as the viewer: the request joins `live.fixRequests`. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode. A place with a request waiting isn't asked about again |
+| `health.takeFix` | `id: string` | Takes a request off `live.fixRequests`, to send it to the agent. Returns it, or null if something else took it first |
+
+The host doesn't send a request anywhere itself. The shell watches `live.fixRequests`, takes each one, opens the palette and sends
+its text as a line of the viewer's (`useFixRequests` in `src/shell/agentFeed.ts`). Anything else that speaks to an agent can do the same.
 
 ### `host.suggestions`
 
@@ -270,8 +275,6 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   the app's own components.
 - `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`
   calls it once.
-- `setFixAsker(fn)`: how `host.health.askFix` reaches the agent. The shell registers it, so the request goes through the palette as a
-  line of the viewer's.
 
 ## Primitives
 

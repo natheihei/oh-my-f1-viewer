@@ -10,7 +10,7 @@ import { useLayout } from '../layout/store';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
 import { useBuild, type BuildView } from './build';
 import { useComponents, type ComponentInfo } from './components';
-import { useHealth, type PlaceHealth } from './health';
+import { useHealth, type FixRequest, type PlaceHealth } from './health';
 import { useMods } from './mods';
 import type { ModStatus } from '../../shared/mods';
 import { useSuggestions, type SuggestionsView } from './suggestions';
@@ -51,6 +51,8 @@ export interface Live {
   build: BuildView;
   /** Each place a component shows, a tile or a preview in the strip, and whether it's drawing. */
   health: PlaceHealth[];
+  /** What the viewer asked the agent to fix, from a tile's button, until it's taken to the agent. */
+  fixRequests: FixRequest[];
 }
 
 export function read(): Live {
@@ -76,6 +78,7 @@ export function read(): Live {
     mods: useMods.getState().list,
     build: useBuild.getState(),
     health: useHealth.getState().places,
+    fixRequests: useHealth.getState().asked,
   };
 }
 

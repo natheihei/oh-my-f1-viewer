@@ -7,7 +7,7 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { useBuild } = await import('./build');
 const { componentOf, componentOps, defineComponent, specOf } = await import('./components');
-const { fitProps, fixable, fixRequest, health, healthOps, list, setFixAsker, useHealth } = await import('./health');
+const { fitProps, fixable, fixRequest, health, healthOps, list, useHealth } = await import('./health');
 const { read } = await import('./live');
 const { layout } = await import('../layout/store');
 const { allTiles } = await import('../layout/model');
@@ -84,18 +84,15 @@ describe('the report', () => {
 });
 
 describe('asking the agent to fix', () => {
-  let asked: string[];
-  let off: () => void;
-  beforeEach(() => {
-    asked = [];
-    off = setFixAsker((text) => asked.push(text));
+  const asked = () => read().fixRequests.map((r) => r.text);
+  afterEach(() => {
+    for (const r of read().fixRequests) healthOps.takeFix({ id: r.id });
   });
-  afterEach(() => off());
 
-  it('asks for a tile that needs props, in or out of build mode', () => {
+  it('leaves the request in live state for a tile that needs props, in or out of build mode', () => {
     health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-    expect(asked).toEqual(['The Pace HAM tile needs driver.']);
+    expect(read().fixRequests).toMatchObject([{ scope: 'tile-1', text: 'The Pace HAM tile needs driver.' }]);
   });
 
   it('asks about a tile that threw only in build mode, where the code can be fixed', () => {
@@ -103,7 +100,7 @@ describe('asking the agent to fix', () => {
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
     useBuild.setState({ active: true });
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-    expect(asked).toEqual(['The Pace HAM tile stopped with an error: boom. Fix it.']);
+    expect(asked()).toEqual(['The Pace HAM tile stopped with an error: boom. Fix it.']);
   });
 
   it('never asks for a preview in the strip, a tile that draws, or one that waits', () => {
@@ -112,12 +109,33 @@ describe('asking the agent to fix', () => {
     expect(fixable({ state: 'waiting', where: 'tile' }, true)).toBe(false);
     expect(fixRequest(place())).toBeNull();
     expect(healthOps.askFix({ scope: 'nowhere' })).toBe(false);
+    expect(asked()).toEqual([]);
   });
 
-  it('says so when no one is listening', () => {
-    off();
+  it('asks about a place once until the request is taken', () => {
     health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
+    expect(asked()).toHaveLength(1);
+    const [{ id }] = read().fixRequests;
+    expect(healthOps.takeFix({ id })).toMatchObject({ id, scope: 'tile-1' });
+    expect(read().fixRequests).toEqual([]);
+    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
+  });
+
+  it('hands a request to whoever takes it first, and nobody after', () => {
+    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    healthOps.askFix({ scope: 'tile-1' });
+    const [{ id }] = read().fixRequests;
+    expect(healthOps.takeFix({ id })).not.toBeNull();
+    expect(healthOps.takeFix({ id })).toBeNull();
+    expect(healthOps.takeFix({ id: 'no-such' })).toBeNull();
+  });
+
+  it('keeps live.fixRequests the same object while nothing is asked', () => {
+    const before = read().fixRequests;
+    health.report(place(), null);
+    expect(read().fixRequests).toBe(before);
   });
 });
 
