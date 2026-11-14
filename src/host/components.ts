@@ -175,10 +175,10 @@ export const componentOps = {
     ({ names }) => {
       const gone = names.filter((name) => definitions.delete(name));
       if (!gone.length) return gone;
-      const keys = allTiles(useLayout.getState())
+      const ids = allTiles(useLayout.getState())
         .filter((t) => gone.includes(t.component.type))
-        .map((t) => t.component.key);
-      for (const key of keys) layout.remove(key);
+        .map((t) => t.id);
+      for (const id of ids) layout.remove(id);
       useComponents.setState({ list: [...definitions.values()].map(infoOf) });
       return gone;
     },

@@ -35,9 +35,9 @@ export async function openViewingSession(session: SessionInfo, options: { fromSt
   const channels = await openSession(session, options);
   const main = mainChannel(channels);
   if (main) {
-    layout.add(specOf({ type: 'video', props: { feed: main.id } }));
+    const tile = layout.add(specOf({ type: 'video', props: { feed: main.id } }));
     // The one tile that is given the main place: nothing else is, unless something asks for it.
-    layout.setMain(main.id);
+    layout.setMain(tile);
   }
   return channels;
 }

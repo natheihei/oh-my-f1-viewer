@@ -10,14 +10,14 @@ const waiting = place({ scope: 'tile-3', state: 'waiting' });
 describe('saying how a place stands', () => {
   it('says how to fix each kind', () => {
     expect(describePlace(draft)).toBe('Draft pace in the strip: needs driver. Call suggest_tiles with it and its props, or ask the user whose.');
-    expect(describePlace(stale)).toBe('Tile "Pace HAM" (pace): needs driver. It no longer accepts drivers. Call edit_tile with them, or ask the user whose.');
-    expect(describePlace(threw)).toBe(`Tile "Lap controller" (lap_controller): render error: Cannot read properties of undefined (reading 'lap'). Fix the code.`);
+    expect(describePlace(stale)).toBe('Tile tile-1 "Pace HAM" (pace): needs driver. It no longer accepts drivers. Call edit_tile on it with them, or ask the user whose.');
+    expect(describePlace(threw)).toBe(`Tile tile-2 "Lap controller" (lap_controller): render error: Cannot read properties of undefined (reading 'lap'). Fix the code.`);
   });
 
   it('says what draws, and what waits for the viewer', () => {
-    expect(describePlace(place())).toBe('Tile "Pace HAM" (pace): drawn.');
-    expect(describePlace(place({ dropped: ['laps'] }))).toBe('Tile "Pace HAM" (pace): drawn, without laps, which it no longer accepts.');
-    expect(describePlace(waiting)).toBe('Tile "Pace HAM" (pace): waiting for the user to allow it to look ahead.');
+    expect(describePlace(place())).toBe('Tile tile-1 "Pace HAM" (pace): drawn.');
+    expect(describePlace(place({ dropped: ['laps'] }))).toBe('Tile tile-1 "Pace HAM" (pace): drawn, without laps, which it no longer accepts.');
+    expect(describePlace(waiting)).toBe('Tile tile-3 "Pace HAM" (pace): waiting for the user to allow it to look ahead.');
   });
 
   it('lists names in words', () => {

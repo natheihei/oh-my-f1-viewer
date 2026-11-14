@@ -37,7 +37,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `audio` | `string \| null` | The audible feed, or null if everything is muted |
 | `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
-| `layout` | `LayoutState` | `nodes` (tiles and groups with grid rects, in the order they were added), `manual` (whether the mouse has moved something), `main` (the key of the tile with the main place in auto-layout, or null) |
+| `layout` | `LayoutState` | `tiles` (each tile's `id`, `component` spec and grid rect, in the order they were added), `manual` (whether the mouse has moved something), `main` (the id of the tile with the main place in auto-layout, or null) |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
@@ -54,7 +54,13 @@ A selector must return a value or an existing reference. Building a new object o
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
 
-`tilesOf(layout)` flattens `layout.nodes` into its tiles, including those inside groups.
+`tilesOf(layout)` is `layout.tiles`.
+
+A component on screen is a *tile*, and a tile is named by its *id*, such as `tile-3`. The id stays the same through moves, resizes, a
+re-tile, new props and a mod reload, until the tile is taken off screen. A component added again after that gets a new tile and a new
+id. Ids are only unique while the app runs: they start again at `tile-1` on every load, so nothing should save one. A component's
+*key*, made from its type and props, only keeps the same thing from going on screen twice. It changes with the props, so it never
+names a tile. `live.health` and look-ahead approvals name tiles by id too.
 
 ### `sessionData`
 
@@ -183,23 +189,19 @@ All of these act on every stream at once.
 
 ### `host.layout`
 
-A *target* is a tile key, a group id or a group title. A video tile's key is its feed id, and its label is the feed's label.
+Every function that acts on a tile on screen takes its id. A video tile's label is its feed's label.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. One whose key is already on screen is skipped |
-| `remove` | `keys: string[]` | Takes the tiles with those keys off screen, whether they stand alone or are inside a group. Returns the labels of those that were on screen |
-| `setProps` | `key: string`, `props` | Gives the tile with that key new props, in place of its old ones, checked against its component's `args`. It keeps its id, place and group, and its key and label follow the props. Throws if another tile already has the new key. Returns `{ key, label }`, or null if the key isn't on screen |
-| `close` | `tile: string` | Takes one tile off screen. Returns whether a tile matched |
-| `group` | `feeds: string[]`, `title?: string` | Shows the feeds side by side as one group. Returns the group id |
-| `closeGroup` | `group: target` | Closes a group and its tiles. Returns their labels, or `null` if nothing matched |
-| `ungroup` | `group: target` | Breaks up a group but keeps its tiles. Returns whether a group matched |
+| `add` | `items: { type, props }[]` | Puts the components on screen as separate tiles. Returns the id of the tile showing each, in order. One whose key is already on screen isn't added again, and the id of the tile showing it is returned |
+| `remove` | `tiles: string[]` | Takes those tiles off screen. Returns the labels of those that were on screen |
+| `setProps` | `tile: string`, `props` | Gives the tile new props, in place of its old ones, checked against its component's `args`. It keeps its id, its place and the main place, and its label follows the props. Throws if another tile already shows the same component with those props. Returns `{ label }`, or null if the tile isn't on screen |
 | `autoLayout` | none | Re-tiles the grid in the order tiles were added, discarding any moves and resizes. `/auto-layout` runs it |
-| `setMain` | `key: string \| null` | Gives a tile the main place in auto-layout, top left and as large as the others allow, or with `null` takes it away. Returns whether the key is on screen. `layout.main` holds the key. Opening a session gives it to the main feed, and nothing else assigns it |
-| `move` | `tile: string`, `rect: { x, y, w, h }` | Moves or resizes a tile or group, in grid cells (24 × 24) |
-| `swap` | `a: string`, `b: string` | Swaps the places of two tiles or groups |
+| `setMain` | `tile: string \| null` | Gives a tile the main place in auto-layout, top left and as large as the others allow, or with `null` takes it away. Returns whether the tile is on screen. `layout.main` holds its id. Opening a session gives it to the main feed's tile, and nothing else assigns it |
+| `move` | `tile: string`, `rect: { x, y, w, h }` | Moves or resizes a tile, in grid cells (24 × 24) |
+| `swap` | `a: string`, `b: string` | Swaps the places of two tiles |
 
-`<Grid>` sends mouse moves, swaps and closes through `move`, `swap` and `close`, the same functions any other caller uses.
+`<Grid>` sends mouse moves, swaps and closes through `move`, `swap` and `remove`, the same functions any other caller uses.
 
 ### `host.components`
 
@@ -342,7 +344,9 @@ Before that the list is left out, and the tool refuses anyway. `suggest_tiles` t
 by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
 `drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
 without one. A required prop left out is refused, with a note to ask the user whose; a chart never picks its own. `edit_tile` changes
-the props of one chart on screen in place, only those it names, null taking one away. The agent never sees what a chart shows, and a
+the props of one chart on screen in place, only those it names, null taking one away. `remove_tiles` and `edit_tile` name tiles by the
+ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream); tile-4 Pit 44 (pit_window chart, props {"driver":44})`, and refuse
+anything else, labels included. The agent never sees what a chart shows, and a
 refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:
 
 | Tool | Host function |
@@ -359,7 +363,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
 `app_state` also carries the master volume next to the audible feed, so the agent never calls a feed audible at volume 0. It carries the
-playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, groups, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
+playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 
 While build mode is on, messages go to a second agent with its own prompt (`shared/buildPrompt.ts`) and conversation. From this list it

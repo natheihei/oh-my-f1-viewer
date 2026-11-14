@@ -5,10 +5,7 @@ import {
   allTiles,
   applyMouseEdit,
   autoLayout,
-  closeGroup,
-  createGroup,
   EMPTY_LAYOUT,
-  findTile,
   freeRectAt,
   GRID_COLUMNS,
   GRID_ROWS,
@@ -16,9 +13,10 @@ import {
   measure,
   minCells,
   removeTile,
+  replaceComponent,
   setMain,
   swap,
-  ungroup,
+  tileWithKey,
   type ComponentSpec,
   type LayoutState,
   type Rect,
@@ -26,8 +24,13 @@ import {
 
 /** A video: the picture keeps its shape, which is what makes the first one the main tile. */
 const spec = (key: string): ComponentSpec => ({ type: 'video', key, label: key, props: {}, fit: { aspect: 16 / 9 } });
+/** The tile showing the component with this key. */
+const byKey = (s: LayoutState, key: string) => tileWithKey(s, key)!;
+const idOf = (s: LayoutState, key: string) => byKey(s, key).id;
+/** Gives the main place to the tile showing `key`. */
+const mainTo = (s: LayoutState, key: string) => setMain(s, idOf(s, key));
 /** Videos added in order, the first one given the main place, as opening a session does. */
-const build = (...keys: string[]) => keys.slice(1).reduce<LayoutState>((s, k) => addTile(s, spec(k)), setMain(addTile(EMPTY_LAYOUT, spec(keys[0])), keys[0]));
+const build = (...keys: string[]) => keys.slice(1).reduce<LayoutState>((s, k) => addTile(s, spec(k)), mainTo(addTile(EMPTY_LAYOUT, spec(keys[0])), keys[0]));
 
 function area(r: Rect): number {
   return r.w * r.h;
@@ -64,23 +67,23 @@ const tower: ComponentSpec = { ...chart('tower', 0.75, 330, 376), fit: { width: 
 const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
 const add = (state: LayoutState, ...specs: ComponentSpec[]) => specs.reduce(addTile, state);
 /** A measured grid with the main feed on it, in the main place. */
-const opened = setMain(addTile(sized, video('main')), 'main');
+const opened = mainTo(addTile(sized, video('main')), 'main');
 
 describe('auto-layout', () => {
   for (let tiles = 1; tiles <= 12; tiles += 1) {
     it(`places ${tiles} tile(s) without overlap, the first one largest`, () => {
       const s = build(...Array.from({ length: tiles }, (_, i) => `t${i}`));
-      expect(s.nodes).toHaveLength(tiles);
-      assertNoOverlap(s.nodes);
-      for (const n of s.nodes.slice(1)) expect(area(s.nodes[0])).toBeGreaterThanOrEqual(area(n));
+      expect(s.tiles).toHaveLength(tiles);
+      assertNoOverlap(s.tiles);
+      for (const n of s.tiles.slice(1)) expect(area(s.tiles[0])).toBeGreaterThanOrEqual(area(n));
     });
   }
 
   it('fills the grid with one tile, and with the main tile and a rail', () => {
-    expect(build('main').nodes[0]).toMatchObject({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
+    expect(build('main').tiles[0]).toMatchObject({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
     const two = build('main', 'side');
-    expect(area(two.nodes[0]) + area(two.nodes[1])).toBe(GRID_COLUMNS * GRID_ROWS);
-    expect(two.nodes[1].x).toBe(two.nodes[0].w);
+    expect(area(two.tiles[0]) + area(two.tiles[1])).toBe(GRID_COLUMNS * GRID_ROWS);
+    expect(two.tiles[1].x).toBe(two.tiles[0].w);
   });
 
   it('puts a tall tile beside the main one and a wide one below it, whatever order they were added in', () => {
@@ -97,7 +100,7 @@ describe('auto-layout', () => {
 
   it('gives the main place only to the tile it is assigned to, whatever was added first', () => {
     const three = add(sized, tower, chart('gap', 16 / 9, 330, 180), video('feed'));
-    const assigned = rects(setMain(three, 'feed'));
+    const assigned = rects(mainTo(three, 'feed'));
     expect(assigned.feed).toMatchObject({ x: 0, y: 0 });
     for (const other of [assigned.gap, assigned.tower]) expect(assigned.feed.w * assigned.feed.h).toBeGreaterThan(other.w * other.h);
     // A video that wasn't assigned it is laid out by its own size, like any other tile.
@@ -108,12 +111,12 @@ describe('auto-layout', () => {
 
   it('keeps the main place with its tile, and promotes no other when that tile goes', () => {
     const s = add(opened, video('onboard'), tower);
-    expect(s.main).toBe('main');
+    expect(s.main).toBe(idOf(s, 'main'));
     expect(setMain(s, 'nothing')).toBe(s);
-    const gone = removeTile(s, 'main');
+    const gone = removeTile(s, idOf(s, 'main'));
     expect(gone.main).toBeNull();
     expect(rects(gone)).toEqual(rects(autoLayout({ ...gone, main: null })));
-    expect(removeTile(s, 'onboard').main).toBe('main');
+    expect(removeTile(s, idOf(s, 'onboard')).main).toBe(idOf(s, 'main'));
   });
 
   it('takes the main place away with null, and leaves a hand-arranged layout where it is', () => {
@@ -121,17 +124,17 @@ describe('auto-layout', () => {
     const none = setMain(s, null);
     expect(none.main).toBeNull();
     expect(rects(none)).not.toEqual(rects(s));
-    const manual = applyMouseEdit(s, s.nodes[1].id, { x: 20, y: 0, w: 4, h: 6 });
-    const reassigned = setMain(manual, 'gap');
-    expect(reassigned.main).toBe('gap');
-    expect(reassigned.nodes).toBe(manual.nodes);
+    const manual = applyMouseEdit(s, s.tiles[1].id, { x: 20, y: 0, w: 4, h: 6 });
+    const reassigned = mainTo(manual, 'gap');
+    expect(reassigned.main).toBe(idOf(s, 'gap'));
+    expect(reassigned.tiles).toBe(manual.tiles);
   });
 
   it('shares the grid when no tile has the main place, tall ones at the right', () => {
     const four = ['gap', 'tyres', 'laps', 'trace'].map((key) => chart(key, 16 / 9, 400, 220));
     const even = autoLayout(add(sized, ...four));
-    assertTilesGrid(even.nodes);
-    expect(new Set(even.nodes.map(area)).size).toBe(1);
+    assertTilesGrid(even.tiles);
+    expect(new Set(even.tiles.map(area)).size).toBe(1);
     const r = rects(autoLayout(add(sized, tower, ...four.slice(0, 2))));
     expect(r.tower).toEqual({ x: 18, y: 0, w: 6, h: 16 });
     expect(r.gap.w * r.gap.h).toBe(r.tyres.w * r.tyres.h);
@@ -140,7 +143,7 @@ describe('auto-layout', () => {
   it('gives one chart the whole grid, and a video the main place once it is assigned', () => {
     const alone = autoLayout(add(sized, chart('gap', 16 / 9, 330, 180)));
     expect(rects(alone).gap).toEqual({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
-    const r = rects(setMain(add(alone, video('feed')), 'feed'));
+    const r = rects(mainTo(add(alone, video('feed')), 'feed'));
     expect(r.feed).toMatchObject({ x: 0, y: 0 });
     expect(r.feed.w * r.feed.h).toBeGreaterThan(r.gap.w * r.gap.h);
   });
@@ -150,25 +153,19 @@ describe('auto-layout', () => {
     const few = autoLayout(add(opened, ...charts.slice(0, 2)));
     const more = autoLayout(add(opened, ...charts));
     for (const s of [few, more]) {
-      assertNoOverlap(s.nodes);
+      assertNoOverlap(s.tiles);
       for (const t of allTiles(s)) {
         const [w, h] = minCells(t.component.size, CELL);
         if (t.component.size) expect(t.w >= w && t.h >= h, `${t.component.key} is ${t.w}x${t.h}, needs ${w}x${h}`).toBe(true);
       }
     }
-    expect(area(more.nodes[0])).toBeLessThan(area(few.nodes[0]));
+    expect(area(more.tiles[0])).toBeLessThan(area(few.tiles[0]));
   });
 
   it('shares the shortfall when nothing fits, with no overlap', () => {
     const many = add(opened, ...Array.from({ length: 10 }, (_, i) => chart(`c${i}`, 16 / 9, 440, 220)));
-    assertNoOverlap(many.nodes);
-    expect(many.nodes).toHaveLength(11);
-  });
-
-  it('gives a group room for its members side by side', () => {
-    const { state } = createGroup(opened, [video('a'), video('b')]);
-    const group = state.nodes[1];
-    expect(group.w * CELL.w).toBeGreaterThanOrEqual(640);
+    assertNoOverlap(many.tiles);
+    expect(many.tiles).toHaveLength(11);
   });
 });
 
@@ -216,79 +213,71 @@ describe('fitting content', () => {
     const next = addTile(withTower, chart('big', 16 / 9, 600, 300));
     const r = rects(next);
     expect(r.main).not.toEqual(rects(withTower).main);
-    const [w, h] = minCells(next.nodes[2].kind === 'tile' ? next.nodes[2].component.size : undefined, CELL);
+    const [w, h] = minCells(next.tiles[2].component.size, CELL);
     expect(r.big.w >= w && r.big.h >= h).toBe(true);
-    assertNoOverlap(next.nodes);
+    assertNoOverlap(next.tiles);
   });
 
   it('never puts a video into a gap', () => {
     const next = addTile(withTower, video('onboard'));
     expect(rects(next)).toEqual(rects(autoLayout(next)));
-    assertNoOverlap(next.nodes);
+    assertNoOverlap(next.tiles);
   });
 
   it('leaves tiles alone on a resize that changes nothing re-tiling would do', () => {
     const next = measure(withTower, { w: CELL.w, h: CELL.h - 0.05 });
-    expect(next.nodes).toBe(withTower.nodes);
+    expect(next.tiles).toBe(withTower.tiles);
     expect(next.cell).toEqual({ w: CELL.w, h: CELL.h - 0.05 });
   });
 
   it('re-tiles on a resize that does', () => {
     const narrow = measure(withTower, { w: 40, h: 40 });
     expect(rects(narrow)).not.toEqual(rects(withTower));
-    assertNoOverlap(narrow.nodes);
+    assertNoOverlap(narrow.tiles);
   });
 
   it('leaves a hand-arranged layout alone on a resize', () => {
-    const manual = applyMouseEdit(withTower, withTower.nodes[1].id, { x: 14, y: 0, w: 10, h: 24 });
-    expect(measure(manual, { w: 50, h: 40 }).nodes).toBe(manual.nodes);
+    const manual = applyMouseEdit(withTower, withTower.tiles[1].id, { x: 14, y: 0, w: 10, h: 24 });
+    expect(measure(manual, { w: 50, h: 40 }).tiles).toBe(manual.tiles);
   });
 });
 
 describe('the session journey', () => {
   it('starts with the main broadcast filling the screen', () => {
     const s = build('main');
-    expect(s.nodes[0]).toMatchObject({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
-  });
-
-  it('"Hamilton. Also battle between Norris and Leclerc", then closing that battle', () => {
-    let s = build('main', 'HAM');
-    const { state } = createGroup(s, [video('NOR'), video('LEC')]);
-    s = state;
-
-    expect(s.nodes.map((n) => n.kind)).toEqual(['tile', 'tile', 'group']);
-    const main = s.nodes[0];
-    for (const n of s.nodes.slice(1)) expect(area(main)).toBeGreaterThan(area(n));
-    const group = s.nodes[2];
-    if (group.kind !== 'group') throw new Error('expected a group');
-    expect(group.title).toBe('NOR / LEC');
-    expect(group.children.map((c) => c.component.key)).toEqual(['NOR', 'LEC']);
-    expect(group.children[0].y).toBe(group.children[1].y); // side by side
-
-    const closed = closeGroup(s, 'NOR');
-    expect(closed?.removed.map((c) => c.key)).toEqual(['NOR', 'LEC']);
-    expect(allTiles(closed!.state).map((t) => t.component.key)).toEqual(['main', 'HAM']);
+    expect(s.tiles[0]).toMatchObject({ x: 0, y: 0, w: GRID_COLUMNS, h: GRID_ROWS });
   });
 });
 
 describe('tile identity', () => {
-  it('survives moving into a group, so the component is never remounted', () => {
-    const s = build('main', 'HAM');
-    const before = findTile(s, 'HAM')!.tile.id;
-    const { state } = createGroup(s, [spec('HAM'), spec('VER')]);
-    expect(findTile(state, 'HAM')!.tile.id).toBe(before);
-    expect(findTile(state, 'HAM')!.group).not.toBeNull();
-  });
-
-  it('survives dissolving a group', () => {
-    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
-    const id = findTile(state, 'A')!.tile.id;
-    expect(findTile(ungroup(state, 'A')!, 'A')!.tile.id).toBe(id);
-  });
-
   it('survives re-tiling', () => {
     const s = build('main', 'A', 'B');
-    expect(autoLayout(s).nodes.map((n) => n.id).sort()).toEqual(s.nodes.map((n) => n.id).sort());
+    expect(autoLayout(s).tiles.map((n) => n.id).sort()).toEqual(s.tiles.map((n) => n.id).sort());
+  });
+
+  it('survives new props, which change its key, and keeps the main place', () => {
+    const s = build('main', 'A');
+    const id = idOf(s, 'main');
+    const next = replaceComponent(s, id, spec('other'))!;
+    expect(byKey(next, 'other').id).toBe(id);
+    expect(tileWithKey(next, 'main')).toBeNull();
+    expect(next.main).toBe(id);
+    expect(replaceComponent(s, 'nothing', spec('other'))).toBeNull();
+  });
+
+  it('survives a move, a resize and a swap', () => {
+    const s = build('main', 'A');
+    const [main, a] = [idOf(s, 'main'), idOf(s, 'A')];
+    const moved = swap(applyMouseEdit(s, a, { x: 0, y: 0, w: 4, h: 4 }), main, a);
+    expect([idOf(moved, 'main'), idOf(moved, 'A')]).toEqual([main, a]);
+  });
+
+  it('is new for a component added again after its tile was closed', () => {
+    const s = build('main', 'A');
+    const before = idOf(s, 'A');
+    const again = addTile(removeTile(s, before), spec('A'));
+    expect(idOf(again, 'A')).not.toBe(before);
+    expect(new Set(again.tiles.map((t) => t.id)).size).toBe(again.tiles.length);
   });
 });
 
@@ -298,87 +287,62 @@ describe('editing', () => {
     expect(addTile(s, spec('A'))).toBe(s);
   });
 
-  it('dissolves a group left with one member into a plain tile in its place', () => {
-    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
-    const s = removeTile(state, 'A');
-    expect(s.nodes.every((n) => n.kind === 'tile')).toBe(true);
-    expect(findTile(s, 'B')?.group).toBeNull();
+  it('removes a tile by its id, and nothing for one that is not on screen', () => {
+    const s = build('main', 'A');
+    expect(removeTile(s, 'A')).toBe(s);
+    expect(allTiles(removeTile(s, idOf(s, 'A'))).map((t) => t.component.key)).toEqual(['main']);
   });
-
-  it('pulls a group member into a new group, dissolving the old one', () => {
-    const first = createGroup(build('main'), [spec('A'), spec('B')]).state;
-    const second = createGroup(first, [spec('A'), spec('C')]).state;
-    expect(allTiles(second).map((t) => t.component.key).sort()).toEqual(['A', 'B', 'C', 'main']);
-    expect(findTile(second, 'B')?.group).toBeNull();
-    expect(findTile(second, 'A')?.group?.children).toHaveLength(2);
-  });
-
 });
 
 describe('mouse edits', () => {
   it('stay put when a tile is added, using free space', () => {
     let s = build('main');
-    s = applyMouseEdit(s, s.nodes[0].id, { x: 0, y: 0, w: 12, h: 24 });
+    s = applyMouseEdit(s, s.tiles[0].id, { x: 0, y: 0, w: 12, h: 24 });
     expect(s.manual).toBe(true);
     s = addTile(s, spec('A'));
-    expect(s.nodes[0]).toMatchObject({ w: 12, h: 24 });
-    expect(findTile(s, 'A')!.tile).toMatchObject({ x: 12, y: 0, w: 12, h: 24 });
+    expect(s.tiles[0]).toMatchObject({ w: 12, h: 24 });
+    expect(byKey(s, 'A')).toMatchObject({ x: 12, y: 0, w: 12, h: 24 });
   });
 
   it('give way to a re-tile when there is no room left', () => {
     let s = build('main');
-    s = applyMouseEdit(s, s.nodes[0].id, { x: 0, y: 0, w: 24, h: 23 });
+    s = applyMouseEdit(s, s.tiles[0].id, { x: 0, y: 0, w: 24, h: 23 });
     s = addTile(s, spec('A'));
     expect(s.manual).toBe(false);
-    expect(area(findTile(s, 'A')!.tile)).toBeGreaterThan(36);
+    expect(area(byKey(s, 'A'))).toBeGreaterThan(36);
   });
 
   it('are discarded by an auto layout, which puts tiles back in the order they were added', () => {
     let s = build('main', 'A');
-    s = applyMouseEdit(s, s.nodes[0].id, { x: 0, y: 0, w: 5, h: 5 });
-    s = swap(s, s.nodes[0].id, s.nodes[1].id);
+    s = applyMouseEdit(s, s.tiles[0].id, { x: 0, y: 0, w: 5, h: 5 });
+    s = swap(s, s.tiles[0].id, s.tiles[1].id);
     s = autoLayout(s);
     expect(s.manual).toBe(false);
-    expect(s.nodes[0].w).toBeGreaterThan(5);
-    expect(area(findTile(s, 'main')!.tile)).toBeGreaterThan(area(findTile(s, 'A')!.tile));
+    expect(s.tiles[0].w).toBeGreaterThan(5);
+    expect(area(byKey(s, 'main'))).toBeGreaterThan(area(byKey(s, 'A')));
   });
 
   it('do not count as an edit when nothing moved', () => {
     const s = build('main');
-    const { x, y, w, h } = s.nodes[0];
-    expect(applyMouseEdit(s, s.nodes[0].id, { x, y, w, h })).toBe(s);
-  });
-
-  it('can move a tile inside a group', () => {
-    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
-    const tile = findTile(state, 'A')!.tile;
-    const s = applyMouseEdit(state, tile.id, { ...tile, w: 3 });
-    expect(findTile(s, 'A')!.tile.w).toBe(3);
+    const { x, y, w, h } = s.tiles[0];
+    expect(applyMouseEdit(s, s.tiles[0].id, { x, y, w, h })).toBe(s);
   });
 });
 
 describe('swap', () => {
   it('exchanges two tiles and marks the layout as manual', () => {
     const s = build('main', 'A');
-    const [main, a] = s.nodes;
+    const [main, a] = s.tiles;
     const swapped = swap(s, main.id, a.id);
-    expect(findTile(swapped, 'main')!.tile).toMatchObject({ x: a.x, w: a.w });
-    expect(findTile(swapped, 'A')!.tile).toMatchObject({ x: main.x, w: main.w });
+    expect(byKey(swapped, 'main')).toMatchObject({ x: a.x, w: a.w });
+    expect(byKey(swapped, 'A')).toMatchObject({ x: main.x, w: main.w });
     expect(swapped.manual).toBe(true);
-    expect(findTile(swapped, 'main')!.tile.id).toBe(main.id);
+    expect(byKey(swapped, 'main').id).toBe(main.id);
   });
 
-  it('exchanges two members of a group', () => {
-    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
-    const [a, b] = [findTile(state, 'A')!.tile, findTile(state, 'B')!.tile];
-    const swapped = swap(state, a.id, b.id);
-    expect(findTile(swapped, 'A')!.tile.x).toBe(b.x);
-    expect(findTile(swapped, 'B')!.tile.x).toBe(a.x);
-  });
-
-  it('does nothing across levels', () => {
-    const { state } = createGroup(build('main'), [spec('A'), spec('B')]);
-    expect(swap(state, findTile(state, 'main')!.tile.id, findTile(state, 'A')!.tile.id)).toBe(state);
+  it('does nothing for an id that is not on screen', () => {
+    const s = build('main', 'A');
+    expect(swap(s, s.tiles[0].id, 'nothing')).toBe(s);
   });
 });
 
@@ -435,8 +399,8 @@ describe('dropping a tile', () => {
 
   it('fills the gap on empty space', () => {
     const state: LayoutState = { ...EMPTY_LAYOUT, manual: true };
-    const withMain = { ...state, nodes: [{ kind: 'tile' as const, id: 't', component: spec('main'), x: 0, y: 0, w: 12, h: 24 }] };
-    expect(freeRectAt(withMain.nodes, { x: 18, y: 3 })).toEqual({ x: 12, y: 0, w: 12, h: 24 });
+    const withMain = { ...state, tiles: [{ id: 't', component: spec('main'), x: 0, y: 0, w: 12, h: 24 }] };
+    expect(freeRectAt(withMain.tiles, { x: 18, y: 3 })).toEqual({ x: 12, y: 0, w: 12, h: 24 });
     const next = addTileAt(withMain, spec('ham'), { x: 18, y: 3 });
     expect(allTiles(next).find((t) => t.component.key === 'ham')).toMatchObject({ x: 12, y: 0, w: 12, h: 24 });
   });

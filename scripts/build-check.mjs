@@ -108,7 +108,7 @@ const where = () =>
     const { clock, sessionData } = window.read();
     return { t: clock.timeSec, playing: clock.playing, playhead: sessionData.state === 'ready' ? sessionData.playheadMs : null };
   });
-const tilesNow = () => live(() => window.read().layout.nodes.flatMap((n) => (n.kind === 'tile' ? [n] : n.children)).map((t) => ({ id: t.id, type: t.component.type, key: t.component.key, x: t.x, y: t.y, w: t.w, h: t.h })));
+const tilesNow = () => live(() => window.read().layout.tiles.map((t) => ({ id: t.id, type: t.component.type, key: t.component.key, x: t.x, y: t.y, w: t.w, h: t.h })));
 const modState = (name) => live((name) => window.read().mods.find((m) => m.name === name) ?? null, name);
 /** A screenshot. Playwright's capture sometimes never returns here while playback is paused, so it falls back to Electron's own. */
 const shot = async (file) => {
@@ -312,7 +312,7 @@ async function partSave() {
   check('6 the tile is marked a draft', (await tile(stepper).getAttribute('data-tile-mark')) === 'draft');
   await shot('build-05-added.png');
 
-  await live((id) => window.host.layout.close({ tile: id }), tileId);
+  await live((id) => window.host.layout.remove({ tiles: [id] }), tileId);
   await page.waitForTimeout(500);
   await live((type) => window.host.layout.add({ items: [{ type, props: {} }] }), stepper);
   await tile(stepper).waitFor({ state: 'visible', timeout: 10_000 });

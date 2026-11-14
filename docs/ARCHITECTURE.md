@@ -103,13 +103,14 @@ at low quality.
 
 ## Layout layer (`src/layout`)
 
-`model.ts` holds the tree and all changes to it as pure functions. It allows one level of nesting: the root holds tiles and
-groups, and groups hold tiles. Nothing offers groups at the moment, to the agent or the mouse, so every tile sits at the root.
+`model.ts` holds the layout and all changes to it as pure functions: a flat list of tiles, each with an id, a component and a grid
+rect. The id names the tile while it's on screen, through moves and new props. (Groups of tiles were taken out in #101: nothing used
+them.)
 
 Components don't live in the grid. `Stage.tsx` keeps a flat list of hosts, one per tile, under transparent GridStack placeholders,
-and each host follows its placeholder every frame. This is what makes GridStack safe: moving a node into a nested grid removes and
-re-adds it in the DOM, which would stop a `<video>`, but placeholders hold nothing, so `GridSurface.tsx` just rebuilds them when the
-tree changes.
+and each host follows its placeholder every frame. This is what makes GridStack safe: rebuilding its items removes and re-adds them
+in the DOM, which would stop a `<video>`, but placeholders hold nothing, so `GridSurface.tsx` just rebuilds them when the layout
+changes.
 
 - Auto-layout is broadcast-first: the main tile is top left, and the rest go in a rail beside it or a band below it. The main
   tile is assigned with `host.layout.setMain`, which opening a session does for the main feed. With none assigned, tiles share the grid. Which goes where follows each component's declared shape and least size, and `src/layout/solve.ts` picks the arrangement that

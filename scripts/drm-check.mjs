@@ -91,8 +91,7 @@ await page.evaluate((drivers) => {
   const { host } = window.modules.host;
   const channels = useSession.getState().channels;
   const pick = (code) => channels.find((c) => c.label === code);
-  host.layout.add({ items: [{ type: 'video', props: { feed: pick(drivers[0]).id } }] });
-  host.layout.group({ feeds: [pick(drivers[1]).id, pick(drivers[2]).id] });
+  host.layout.add({ items: drivers.slice(0, 3).map((d) => ({ type: 'video', props: { feed: pick(d).id } })) });
 }, DRIVERS);
 const addedAt = Date.now();
 await page.waitForTimeout(3000);
@@ -132,7 +131,8 @@ const beforeClose = s.clock.t;
 await page.evaluate(() => {
   const { useSession } = window.modules.session;
   const main = useSession.getState().channels.find((c) => c.kind === 'main');
-  window.modules.layout.layout.remove(main.id);
+  const { layout } = window.modules.layout;
+  layout.remove(layout.tiles().find((t) => t.component.key === main.id).id);
 });
 await page.waitForTimeout(5000);
 s = await sample();

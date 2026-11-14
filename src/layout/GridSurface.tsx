@@ -1,7 +1,7 @@
 /**
  * Draws the layout tree with GridStack as transparent placeholders, and reports mouse edits back.
- * Placeholders hold no state, so a change simply rebuilds them: GridStack re-parenting nodes when
- * nesting can't touch a video, because components live in the Stage underneath.
+ * Placeholders hold no state, so a change simply rebuilds them without touching a video, because
+ * components live in the Stage underneath.
  *
  * Only each tile's title bar and resize handles take the mouse. Everything else passes through to
  * the component underneath, so it can handle its own clicks.
@@ -9,12 +9,10 @@
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
 import { useEffect, useRef } from 'react';
-import { allTiles, GRID_COLUMNS, GRID_ROWS, GROUP_COLUMNS, GROUP_ROWS, TITLE_BAR_PX, type ComponentSpec, type LayoutNode, type Rect, type TileNode } from './model';
+import { GRID_COLUMNS, GRID_ROWS, type ComponentSpec, type Rect, type Tile } from './model';
 import { layout, useLayout } from './store';
 
-const GROUP_TITLE_PX = TITLE_BAR_PX;
-const TOP_GRIP = 'grip-top';
-const SUB_GRIP = 'grip-sub';
+const GRIP = 'tile-grip';
 
 /**
  * What a tile's header says about it besides its label, in fixed slots on the right: which tile
@@ -35,14 +33,8 @@ export interface TileState {
 
 const NO_STATES: Record<string, TileState> = {};
 
-function signature(nodes: LayoutNode[]): string {
-  return JSON.stringify(
-    nodes.map((n) =>
-      n.kind === 'tile'
-        ? [n.id, n.x, n.y, n.w, n.h, n.component.label]
-        : [n.id, n.x, n.y, n.w, n.h, n.title, n.children.map((c) => [c.id, c.x, c.y, c.w, c.h, c.component.label])],
-    ),
-  );
+function signature(tiles: Tile[]): string {
+  return JSON.stringify(tiles.map((t) => [t.id, t.x, t.y, t.w, t.h, t.component.label]));
 }
 
 /** Fills a header's state slots in place, so a change of audio or sync doesn't rebuild the grid. */
@@ -63,11 +55,11 @@ function applyState(bar: Element, state: TileState = {}): void {
 
 /**
  * A tile draws its seam on its right and bottom edges only, so neighbours share one hairline. One that
- * ends at its grid's last column or row draws none there: the frame around the grid is that edge.
+ * ends at the grid's last column or row draws none there: the frame around the grid is that edge.
  */
-function markEdges(item: Element, rect: Rect, columns: number, rows: number): void {
-  item.classList.toggle('tile-last-column', rect.x + rect.w >= columns);
-  item.classList.toggle('tile-last-row', rect.y + rect.h >= rows);
+function markEdges(item: Element, rect: Rect): void {
+  item.classList.toggle('tile-last-column', rect.x + rect.w >= GRID_COLUMNS);
+  item.classList.toggle('tile-last-row', rect.y + rect.h >= GRID_ROWS);
 }
 
 const baseOptions: GridStackOptions = {
@@ -85,11 +77,11 @@ const baseOptions: GridStackOptions = {
  * The tile's header: dragging it moves the tile, and its x closes it. One grammar for every tile:
  * label, state slots, close.
  */
-function addTitleBar(item: Element, className: string, tile: TileNode, onClose: (id: string) => void): void {
+function addTitleBar(item: Element, tile: Tile, onClose: (id: string) => void): void {
   const content = item.querySelector(':scope > .grid-stack-item-content');
   if (!content || content.querySelector(':scope > .tile-titlebar')) return;
   const bar = document.createElement('div');
-  bar.className = `tile-titlebar tile-grip ${className}`;
+  bar.className = `tile-titlebar ${GRIP}`;
   bar.dataset.tileId = tile.id;
   bar.dataset.kind = tile.component.type === 'video' ? 'video' : 'view';
   const title = document.createElement('span');
@@ -139,7 +131,7 @@ export function GridSurface({
   const gridRef = useRef<GridStack | null>(null);
   const renderedRef = useRef('');
   const rebuildingRef = useRef(false);
-  const nodes = useLayout((s) => s.nodes);
+  const tiles = useLayout((s) => s.tiles);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -147,7 +139,7 @@ export function GridSurface({
 
     const cellHeight = () => host.clientHeight / GRID_ROWS;
     const created = GridStack.init(
-      { ...baseOptions, column: GRID_COLUMNS, row: GRID_ROWS, cellHeight: cellHeight(), handle: `.${TOP_GRIP}` },
+      { ...baseOptions, column: GRID_COLUMNS, row: GRID_ROWS, cellHeight: cellHeight(), handle: `.${GRIP}` },
       host,
     );
     if (!created) return;
@@ -160,7 +152,7 @@ export function GridSurface({
         if (item.id == null) continue;
         onMove(String(item.id), { x: item.x ?? 0, y: item.y ?? 0, w: item.w ?? 1, h: item.h ?? 1 });
       }
-      renderedRef.current = signature(layout.snapshot().nodes);
+      renderedRef.current = signature(layout.snapshot().tiles);
     });
 
     // Dropped on another tile: swap them. Deferred because the swap rebuilds the placeholders, which
@@ -186,12 +178,6 @@ export function GridSurface({
     const applyCellHeights = () => {
       layout.measure({ w: host.clientWidth / GRID_COLUMNS, h: host.clientHeight / GRID_ROWS });
       grid.cellHeight(cellHeight());
-      for (const node of grid.engine.nodes) {
-        const el = node.el;
-        if (node.subGrid && el) {
-          node.subGrid.cellHeight((el.clientHeight - GROUP_TITLE_PX) / GROUP_ROWS);
-        }
-      }
     };
     const observer = new ResizeObserver(applyCellHeights);
     observer.observe(host);
@@ -208,7 +194,7 @@ export function GridSurface({
     const grid = gridRef.current;
     const host = hostRef.current;
     if (!grid || !host) return;
-    const sig = signature(nodes);
+    const sig = signature(tiles);
     if (sig === renderedRef.current) return;
     renderedRef.current = sig;
 
@@ -216,63 +202,32 @@ export function GridSurface({
     // The event flag must stay on: without it GridStack leaves the removed elements in the DOM.
     grid.removeAll(true, true);
     grid.batchUpdate();
-    const cell = host.clientHeight / GRID_ROWS;
-    for (const node of nodes) {
-      const rect = { id: node.id, x: node.x, y: node.y, w: node.w, h: node.h };
-      if (node.kind === 'tile') {
-        const el = grid.addWidget(rect);
-        if (el) {
-          markEdges(el, node, GRID_COLUMNS, GRID_ROWS);
-          addTitleBar(el, TOP_GRIP, node, onClose);
-        }
-      } else {
-        const el = grid.addWidget({
-          ...rect,
-          subGridOpts: {
-            ...baseOptions,
-            column: GROUP_COLUMNS,
-            row: GROUP_ROWS,
-            cellHeight: (node.h * cell - GROUP_TITLE_PX) / GROUP_ROWS,
-            handle: `.${SUB_GRIP}`,
-            class: 'tile-group-grid',
-            children: node.children.map((c) => ({ id: c.id, x: c.x, y: c.y, w: c.w, h: c.h })),
-          },
-        });
-        if (el) {
-          const title = document.createElement('div');
-          title.className = `group-title tile-grip ${TOP_GRIP}`;
-          title.textContent = node.title;
-          el.querySelector(':scope > .grid-stack-item-content')?.prepend(title);
-          el.classList.add('tile-group');
-          markEdges(el, node, GRID_COLUMNS, GRID_ROWS);
-          el.querySelectorAll('.grid-stack-nested > .grid-stack-item').forEach((child) => {
-            const tile = node.children.find((c) => c.id === child.getAttribute('gs-id'));
-            if (!tile) return;
-            markEdges(child, tile, GROUP_COLUMNS, GROUP_ROWS);
-            addTitleBar(child, SUB_GRIP, tile, onClose);
-          });
-        }
+    for (const tile of tiles) {
+      const el = grid.addWidget({ id: tile.id, x: tile.x, y: tile.y, w: tile.w, h: tile.h });
+      if (el) {
+        markEdges(el, tile);
+        addTitleBar(el, tile, onClose);
       }
     }
     grid.batchUpdate(false);
     rebuildingRef.current = false;
-  }, [nodes]);
+  }, [tiles]);
 
   // After any rebuild above, and whenever the drawer changes, such as when the roster loads.
   useEffect(() => {
     if (!drawTitle) return;
-    const tiles = new Map(allTiles({ nodes }).map((t) => [t.id, t.component]));
+    const components = new Map(tiles.map((t) => [t.id, t.component]));
     hostRef.current?.querySelectorAll<HTMLElement>('.tile-titlebar[data-tile-id]').forEach((bar) => {
-      const component = tiles.get(bar.dataset.tileId ?? '');
+      const component = components.get(bar.dataset.tileId ?? '');
       const title = bar.querySelector<HTMLElement>(':scope > .tile-title');
       if (component && title) drawTitle(title, component);
     });
-  }, [nodes, drawTitle]);
+  }, [tiles, drawTitle]);
 
   // Runs after any rebuild above, so fresh headers get their slots filled too.
   useEffect(() => {
     hostRef.current?.querySelectorAll<HTMLElement>('.tile-titlebar[data-tile-id]').forEach((bar) => applyState(bar, states[bar.dataset.tileId ?? '']));
-  }, [nodes, states]);
+  }, [tiles, states]);
 
   return <div ref={hostRef} className="grid-stack grid-surface" data-testid="grid-surface" />;
 }

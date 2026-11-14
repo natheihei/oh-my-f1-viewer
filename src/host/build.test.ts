@@ -55,10 +55,10 @@ describe('drafts in the strip', () => {
   });
 
   it('leaves out a mod with a tile on screen, and brings it back when the tile goes', () => {
-    layoutOps.add({ items: [{ type: 'form', props: { drivers: [44] } }] });
+    const [tile] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [44] } }] });
     building([{ name: 'form', change: 'edited' }]);
     expect(keys()).toEqual([]);
-    layoutOps.remove({ keys: ['form:44'] });
+    layoutOps.remove({ tiles: [tile] });
     expect(keys()).toEqual(['form']);
   });
 

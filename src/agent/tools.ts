@@ -302,29 +302,10 @@ function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problem
   return { items, problems };
 }
 
-const chartNamed = (needle: string) => chartsOf().find((c) => normalize(c.name) === needle || normalize(c.title) === needle);
-
-/** The chart tiles on screen a reference names: by label, or else every one of a chart by its name or title. */
-function chartTilesNamed(ref: string) {
-  const charts = tilesOf(read().layout).filter((t) => t.component.type !== VIDEO);
-  const needle = normalize(ref);
-  const byLabel = charts.filter((t) => normalize(t.component.label) === needle);
-  return byLabel.length ? byLabel : charts.filter((t) => t.component.type === chartNamed(needle)?.name);
-}
-
-/** The keys of what `remove_tiles` names: chart tiles by label, then by chart name or title, then streams. */
-function tileKeys(refs: string[]): string[] {
-  const keys = new Set<string>();
-  for (const ref of refs) {
-    const hits = chartTilesNamed(ref);
-    if (hits.length) hits.forEach((t) => keys.add(t.component.key));
-    else {
-      const feed = resolveChannel(read().feeds, ref);
-      if (feed) keys.add(feed.id);
-    }
-  }
-  return [...keys];
-}
+/** Tiles are named by their id, as app_state lists them. */
+const TileId = Type.String({ description: 'A tile id as app_state lists it, such as "tile-3"' });
+const ID_HINT = 'Name tiles by the ids app_state lists, such as tile-3.';
+const tileOnScreen = (id: string) => tilesOf(read().layout).find((t) => t.id === id) ?? null;
 
 /**
  * `suggest_tiles`. The viewing agent's lists the chart names registered when the message was sent. The
@@ -491,50 +472,35 @@ export const AGENT_TOOLS: AgentTool[] = [
   suggestTiles(suggestArgs),
   expose(host.layout.remove, {
     name: 'remove_tiles',
-    description: 'Take tiles off screen: streams, or charts.',
-    args: Type.Object(
-      {
-        tiles: Type.Array(Type.String(), {
-          description: 'Stream references as for suggest_tiles, or charts on screen by their tile label, chart name or title.',
-        }),
+    description: 'Take tiles off screen, streams or charts, by their tile ids.',
+    args: Type.Object({ tiles: Type.Array(TileId) }, { additionalProperties: false }),
+    gate: [
+      sessionOpen,
+      ({ tiles }) => {
+        const missing = tiles.filter((id) => !tileOnScreen(id));
+        if (missing.length) throw new Error(`Not on screen: ${missing.join(', ')}. Nothing was removed. ${ID_HINT}`);
       },
-      { additionalProperties: false },
-    ),
-    adapt: ({ tiles }) => ({ keys: tileKeys(tiles) }),
-    gate: [sessionOpen],
-    result: (removed, { tiles }) => {
-      // Worked out after the fact, so a chart is only missing if nothing by that name exists or was removed.
-      const missing = tiles.filter((ref) => {
-        const needle = normalize(ref);
-        return !removed.some((l) => normalize(l) === needle) && !chartNamed(needle) && !resolveChannel(read().feeds, ref);
-      });
-      return `Removed: ${removed.join(', ') || 'nothing'}.${missing.length ? ` Not found: ${missing.join(', ')}.` : ''}`;
-    },
+    ],
+    result: (removed) => `Removed: ${removed.join(', ') || 'nothing'}.`,
   }),
   expose(host.layout.setProps, {
     name: 'edit_tile',
     description:
-      'Change the props of one chart on screen, in place: who it is about, who it highlights or who it draws. It keeps its place. Only the props named change; null takes one away. To show the same chart for someone else as well, suggest another with suggest_tiles instead.',
-    args: Type.Object(
-      {
-        tile: Type.String({ description: 'One chart on screen, by its tile label, chart name or title, as app_state lists it' }),
-        props: ChartProps,
-      },
-      { additionalProperties: false },
-    ),
+      'Change the props of one chart on screen, in place: who it is about, who it highlights or who it draws. It keeps its id and place. Only the props named change; null takes one away. To show the same chart for someone else as well, suggest another with suggest_tiles instead.',
+    args: Type.Object({ tile: TileId, props: ChartProps }, { additionalProperties: false }),
     adapt: ({ tile, props }) => {
-      const [hit] = chartTilesNamed(tile);
+      const hit = tileOnScreen(tile);
       const info = hit && chartsOf().find((c) => c.name === hit.component.type);
-      return { key: hit?.component.key ?? '', props: info ? resolveProps(info, props, hit.component.props).props : {} };
+      return { tile, props: info ? resolveProps(info, props, hit.component.props).props : {} };
     },
     gate: [
       sessionOpen,
       (_, { tile, props }) => {
-        const hits = chartTilesNamed(tile);
-        if (hits.length === 0) throw new Error(`No chart on screen is called "${tile}".`);
-        if (hits.length > 1) throw new Error(`"${tile}" names ${hits.length} charts: ${hits.map((t) => t.component.label).join(', ')}. Name one by its label.`);
-        const info = chartsOf().find((c) => c.name === hits[0].component.type)!;
-        const { problems } = resolveProps(info, props, hits[0].component.props);
+        const hit = tileOnScreen(tile);
+        if (!hit) throw new Error(`No tile ${tile} is on screen. ${ID_HINT}`);
+        const info = chartsOf().find((c) => c.name === hit.component.type);
+        if (!info) throw new Error(`${tile} is a stream, not a chart: only a chart's props can be changed.`);
+        const { problems } = resolveProps(info, props, hit.component.props);
         if (problems.length) throw new Error(`${problems.join(' ')} Nothing was changed.`);
       },
     ],
