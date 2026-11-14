@@ -263,13 +263,13 @@ describe('components', () => {
     expect(() => host.layout.add({ items: [video('1:999')] })).toThrow(/Unknown feed/);
   });
 
-  it('give a tile the main place only when asked, by key', () => {
-    host.layout.add({ items: [video('1:44')] });
+  it('give a tile the main place only when asked, by its id', () => {
+    const [tile] = host.layout.add({ items: [video('1:44')] });
     expect(layout.snapshot().main).toBeNull();
-    expect(host.layout.setMain({ key: 'nothing' })).toBe(false);
-    expect(host.layout.setMain({ key: '1:44' })).toBe(true);
-    expect(layout.snapshot().main).toBe('1:44');
-    expect(host.layout.setMain({ key: null })).toBe(true);
+    expect(host.layout.setMain({ tile: 'nothing' })).toBe(false);
+    expect(host.layout.setMain({ tile })).toBe(true);
+    expect(layout.snapshot().main).toBe(tile);
+    expect(host.layout.setMain({ tile: null })).toBe(true);
     expect(layout.snapshot().main).toBeNull();
   });
 
@@ -290,9 +290,15 @@ describe('components', () => {
     expect(labels()).toEqual(['HAM', 'VER', 'NOR', 'LEC', 'Chart HAM']);
   });
 
-  it('come off screen by key', () => {
-    host.layout.add({ items: [video('1:44'), { type: 'test-chart', props: { driver: 'HAM' } }] });
-    host.layout.remove({ keys: ['test-chart:HAM'] });
+  it('return the id of the tile showing each, whether added now or already on screen', () => {
+    const [ham, chart] = host.layout.add({ items: [video('1:44'), { type: 'test-chart', props: { driver: 'HAM' } }] });
+    expect(layout.tiles().map((t) => t.id)).toEqual([ham, chart]);
+    expect(host.layout.add({ items: [video('1:1'), video('1:44')] })).toEqual([expect.not.stringMatching(new RegExp(`^(${ham}|${chart})$`)), ham]);
+  });
+
+  it('come off screen by tile id', () => {
+    const [, chart] = host.layout.add({ items: [video('1:44'), { type: 'test-chart', props: { driver: 'HAM' } }] });
+    expect(host.layout.remove({ tiles: [chart, 'nothing'] })).toEqual(['Chart HAM']);
     expect(layout.tiles().map((t) => t.component.label)).toEqual(['HAM']);
   });
 });

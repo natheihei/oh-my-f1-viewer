@@ -1,11 +1,11 @@
 /**
  * Where components actually live: a flat layer under the grid, one stable host per tile, keyed by
- * tile id. A tile moving anywhere, including into a group, only changes its host's position, so
+ * tile id. A tile moving anywhere only changes its host's position, so
  * its component is never remounted. Hosts follow their placeholders every animation frame, which
  * also covers mid-drag and mid-resize. A host sits below its tile's title bar, which the grid draws.
  */
-import { useEffect, useMemo, useRef, type ComponentType } from 'react';
-import { allTiles, TITLE_BAR_PX, type ComponentSpec } from './model';
+import { useEffect, useRef, type ComponentType } from 'react';
+import { TITLE_BAR_PX, type ComponentSpec } from './model';
 import { useLayout } from './store';
 
 export type TileComponent = ComponentType<{ spec: ComponentSpec; tileId: string }>;
@@ -27,8 +27,7 @@ export function Stage({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const hostsRef = useRef(new Map<string, HTMLDivElement>());
-  const nodes = useLayout((s) => s.nodes);
-  const tiles = useMemo(() => allTiles({ nodes }), [nodes]);
+  const tiles = useLayout((s) => s.tiles);
 
   useEffect(() => {
     let frame = 0;

@@ -42,8 +42,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   A name starting `driver_` or `drivers_` is a driver prop too, one driver or a list, so a component can add its own.
 - **Every prop is in the key,** so the same chart can be on screen twice when its props differ, one telemetry for HAM and one for VER,
   and the same props twice is one tile. Where the order of two drivers doesn't change what's drawn, the key sorts them.
-- **The agent can change the props of a chart on screen** with `edit_tile`, through `host.layout.setProps`: the tile keeps its place,
-  and its key and label follow.
+- **The key is not the tile's name.** It follows the props, so a tile is named by its id instead, which it keeps through new props.
+- **The agent can change the props of a chart on screen** with `edit_tile`, through `host.layout.setProps`: the tile keeps its id
+  and place, and its key and label follow.
 
 ### Size
 
@@ -63,7 +64,7 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 ### Where auto-layout puts it
 
 - **The main tile is assigned, never inferred.** `host.layout.setMain` gives one tile the main place, top left and as large as the
-  others allow, and `layout.main` holds its key. Nothing about a component makes it the main tile: not being a video, and not being
+  others allow, and `layout.main` holds its id. Nothing about a component makes it the main tile: not being a video, and not being
   added first. (2026-11-12)
 - **Opening a session assigns it to the main feed, and nothing else assigns it for now.** When that tile is closed no other is
   promoted.

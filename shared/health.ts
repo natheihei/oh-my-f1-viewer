@@ -34,7 +34,7 @@ export const notDrawing = (places: PlaceHealth[]): PlaceHealth[] => places.filte
 /** Tells one problem from another: the same place failing another way is a new one. */
 export const problemKey = (p: PlaceHealth): string => [p.scope, p.type, p.state, p.missing.join(','), p.message ?? ''].join('|');
 
-const named = (p: PlaceHealth) => (p.where === 'strip' ? `Draft ${p.type} in the strip` : `Tile "${p.label}" (${p.type})`);
+const named = (p: PlaceHealth) => (p.where === 'strip' ? `Draft ${p.type} in the strip` : `Tile ${p.scope} "${p.label}" (${p.type})`);
 
 /** One place, as a line for the build agent: what it is, how it stands, and what would fix it. */
 export function describePlace(p: PlaceHealth): string {
@@ -43,7 +43,7 @@ export function describePlace(p: PlaceHealth): string {
   if (p.state === 'error') return `${named(p)}: render error: ${p.message ?? 'unknown'}. Fix the code.`;
   const dropped = p.dropped.length ? ` It no longer accepts ${list(p.dropped)}.` : '';
   const why = p.missing.length ? `needs ${list(p.missing)}` : (p.message ?? "its props don't fit");
-  const fix = p.where === 'strip' ? 'Call suggest_tiles with it and its props, or ask the user whose.' : 'Call edit_tile with them, or ask the user whose.';
+  const fix = p.where === 'strip' ? 'Call suggest_tiles with it and its props, or ask the user whose.' : 'Call edit_tile on it with them, or ask the user whose.';
   return `${named(p)}: ${why}.${dropped} ${fix}`;
 }
 

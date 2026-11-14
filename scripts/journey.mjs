@@ -54,7 +54,7 @@ const state = () =>
     return {
       session: s.session?.title ?? null,
       contentId: s.session?.contentId ?? null,
-      nodes: l.nodes.map((n) => (n.kind === 'tile' ? n.component.label : { group: n.title, members: n.children.map((c) => c.component.label) })),
+      tiles: l.tiles.map((t) => t.component.label),
       statuses: Object.values(s.streams).map((v) => `${s.channels.find((c) => c.id === v.channelId)?.label}:${v.status}`),
       audio: s.channels.find((c) => c.id === s.audioChannelId)?.label ?? null,
       playing: s.clock.playing,
@@ -92,7 +92,7 @@ check('palette stays open while asking', await paletteVisible());
 r = await say('2025 Mexico');
 s = await state();
 check('loads the session', r.tools.includes('load_session') && /2025.*Mexico/i.test(s.session ?? ''), s.session ?? 'none');
-check('starts with just the main broadcast', s.nodes.length === 1, JSON.stringify(s.nodes));
+check('starts with just the main broadcast', s.tiles.length === 1, JSON.stringify(s.tiles));
 check('main broadcast plays', await allReady(), JSON.stringify((await state()).statuses));
 await page.screenshot({ path: path.join(outDir, 'journey-2-main.png') });
 
@@ -103,10 +103,9 @@ check('palette hides after acting', !(await paletteVisible()));
 // Multiple requests in a message.
 r = await say('Hamilton. Also battle between Noris and Lec.');
 s = await state();
-const group = s.nodes.find((n) => n.group);
 check('no tool call failed, even with the misspellings', !r.failed.length, r.failed.join());
-check('adds Hamilton as a tile', s.nodes.includes('HAM'), JSON.stringify(s.nodes));
-check('groups Norris and Leclerc', group && [...group.members].sort().join() === 'LEC,NOR', JSON.stringify(group));
+check('adds Hamilton as a tile', s.tiles.includes('HAM'), JSON.stringify(s.tiles));
+check('adds Norris and Leclerc', s.tiles.includes('NOR') && s.tiles.includes('LEC'), JSON.stringify(s.tiles));
 check('all streams become ready', await allReady(), JSON.stringify((await state()).statuses));
 await page.waitForTimeout(3000);
 await page.screenshot({ path: path.join(outDir, 'journey-3-battle.png') });
@@ -117,7 +116,7 @@ const drift = await page.evaluate(() => {
 });
 check('streams are in sync', drift < 0.2, `spread ${drift.toFixed(3)}s`);
 
-// Closing the group leaves the rest alone.
+// Closing the battle leaves the rest alone.
 const hamBefore = await page.evaluate(() => {
   const v = document.querySelector('video.stream-video[data-channel$=":1007"]') ?? [...document.querySelectorAll('video.stream-video')][1];
   v.dataset.marker = 'kept';
@@ -125,8 +124,8 @@ const hamBefore = await page.evaluate(() => {
 });
 r = await say('Done with Nor, Lec battle.');
 s = await state();
-check('closes the group', !s.nodes.some((n) => n.group), JSON.stringify(s.nodes));
-check('keeps the main feed and Hamilton', s.nodes.length === 2 && s.nodes.includes('HAM'), JSON.stringify(s.nodes));
+check('closes the battle', !s.tiles.includes('NOR') && !s.tiles.includes('LEC'), JSON.stringify(s.tiles));
+check('keeps the main feed and Hamilton', s.tiles.length === 2 && s.tiles.includes('HAM'), JSON.stringify(s.tiles));
 check('Hamilton kept the same video element', await page.evaluate((id) => document.querySelector(`video[data-channel="${id}"]`)?.dataset.marker === 'kept', hamBefore));
 await page.waitForTimeout(500);
 await page.screenshot({ path: path.join(outDir, 'journey-4-closed.png') });

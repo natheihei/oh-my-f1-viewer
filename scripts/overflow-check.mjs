@@ -189,7 +189,7 @@ await shot(key, 'both.png');
 key = await place(`${TABLE}-4x13`, { x: 6, y: 5, w: 18, h: 5 });
 check('the wide table in a tile wide enough is not marked', (await mark(key)) === '', `${await mark(key)}, tile ${await width(key)}px`);
 
-await page.evaluate((n) => window.host.layout.remove({ keys: ['4x5', '30x5', '4x13', '30x13'].map((id) => `${n}-${id}`) }), TABLE);
+await page.evaluate((n) => window.host.layout.remove({ tiles: window.layout.tiles().filter((t) => t.component.type === n).map((t) => t.id) }), TABLE);
 
 // The list scrolls its own rows, so however many it has, the host has nothing to mark.
 await page.evaluate((n) => window.host.layout.add({ items: [{ type: n, props: { rows: 40 } }] }), LIST);
@@ -200,7 +200,7 @@ await shot(key, 'list-scrolls.png');
 key = await place(`${LIST}-40`, { x: 0, y: 0, w: 6, h: 1 });
 const listHeight = await host(key).locator('[data-list]').evaluate((el) => el.clientHeight);
 check('nor when its scroll area is squeezed', (await mark(key)) === '', `list ${listHeight}px tall`);
-await page.evaluate((n) => window.host.layout.remove({ keys: [`${n}-40`] }), LIST);
+await page.evaluate((n) => window.host.layout.remove({ tiles: window.layout.tiles().filter((t) => t.component.type === n).map((t) => t.id) }), LIST);
 
 // The strip draws through the same frame.
 await page.evaluate((n) => window.host.suggestions.offer({ items: [{ type: n, props: { rows: 30, cols: 13 } }, { type: n, props: { rows: 1, cols: 2 } }] }), TABLE);
