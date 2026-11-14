@@ -41,13 +41,13 @@ describe('/ commands', () => {
     layout.clear();
     layout.add({ key: 'A', label: 'A', type: 'test', props: {} });
     layout.add({ key: 'B', label: 'B', type: 'test', props: {} });
-    const [a, b] = layout.snapshot().nodes;
+    const [a, b] = layout.snapshot().tiles;
     layout.swap(a.id, b.id);
     expect(layout.snapshot().manual).toBe(true);
     await SLASH_COMMANDS.find((c) => c.name === '/auto-layout')!.run('');
     const after = layout.snapshot();
     expect(after.manual).toBe(false);
-    expect(after.nodes[0]).toMatchObject({ x: a.x, y: a.y, w: a.w, h: a.h });
+    expect(after.tiles[0]).toMatchObject({ x: a.x, y: a.y, w: a.w, h: a.h });
     layout.clear();
   });
 });

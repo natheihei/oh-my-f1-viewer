@@ -1,23 +1,15 @@
-// Exercises the real grid surface in Electron, without needing any sign-in: rects line up with the
-// layout, hosts survive grouping, mouse edits reach the layout tree, and only title bars take the mouse.
+// Exercises the real grid surface in an f1a of its own (see isolated.mjs), without needing any sign-in:
+// rects line up with the layout, hosts survive re-tiling, mouse edits reach the layout by tile id, and only
+// title bars take the mouse.
 // Usage: node scripts/layout-check.mjs [screenshot-dir]
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'vite';
-import { _electron as electron } from 'playwright';
+import { startIsolatedApp } from './isolated.mjs';
 
-const outDir = process.argv[2] ?? tmpdir();
-const server = await createServer({ server: { port: 5199, strictPort: true }, logLevel: 'error' });
-await server.listen();
-
-const { CHROME_DESKTOP: _ignored, ...env } = process.env;
-const app = await electron.launch({
-  executablePath: path.resolve('node_modules/electron/dist/electron'),
-  args: ['.', `--user-data-dir=${mkdtempSync(path.join(tmpdir(), 'f1a-layout-'))}`],
-  env: { ...env, ELECTRON_START_URL: 'http://127.0.0.1:5199' },
-});
-const page = await app.firstWindow();
+const outDir = path.resolve(process.argv[2] ?? mkdtempSync(path.join(tmpdir(), 'f1a-layout-')));
+mkdirSync(outDir, { recursive: true });
+const { page, stop } = await startIsolatedApp(outDir, { name: 'layout', scale: 1 });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 
 let failures = 0;
@@ -47,8 +39,7 @@ const TITLE = 22;
 
 // Main fills the surface. It is given the main place, as opening a session does for the main feed.
 await page.evaluate(() => {
-  window.layoutStore.layout.add(window.spec('MAIN'));
-  window.layoutStore.layout.setMain('MAIN');
+  window.layoutStore.layout.setMain(window.layoutStore.layout.add(window.spec('MAIN')));
 });
 await settle();
 let rects = await hostRects();
@@ -62,39 +53,20 @@ check('the title bar shows the label and a close button', await page.evaluate(()
   return bar?.querySelector('.tile-title')?.textContent === 'MAIN' && bar.querySelector('.tile-close') != null;
 }));
 
-// Hamilton, then a group.
+// Hamilton, Norris and Leclerc.
 await page.evaluate(() => window.layoutStore.layout.add(window.spec('HAM')));
 await settle();
 await page.evaluate(() => {
   document.querySelector('[data-tile-key=HAM]').dataset.marker = 'same-element';
-  window.layoutStore.layout.group([window.spec('NOR'), window.spec('LEC')]);
+  for (const key of ['NOR', 'LEC']) window.layoutStore.layout.add(window.spec(key));
 });
 await settle();
 rects = await hostRects();
 check('main stays largest', rects.MAIN.w * rects.MAIN.h > rects.HAM.w * rects.HAM.h);
 check('all hosts positioned', Object.values(rects).every((r) => r.visible && r.w > 0 && r.h > 0), Object.keys(rects).join(','));
-check('group members side by side', rects.NOR.y === rects.LEC.y && rects.NOR.x + rects.NOR.w <= rects.LEC.x + 1, JSON.stringify([rects.NOR, rects.LEC]));
-check('members sit inside the group below its title', await page.evaluate(() => {
-  const group = document.querySelector('.tile-group').getBoundingClientRect();
-  const nor = document.querySelector('[data-tile-key=NOR]').getBoundingClientRect();
-  return nor.top >= group.top + 17 && nor.bottom <= group.bottom + 1 && nor.left >= group.left - 1 && nor.right <= group.right + 1;
-}));
-await page.screenshot({ path: path.join(outDir, 'layout-group.png') });
-
-// Moving an on-screen tile into a group keeps its host element.
-await page.evaluate(() => {
-  window.layoutStore.layout.closeGroup('NOR');
-  window.layoutStore.layout.group([window.spec('HAM'), window.spec('VER')]);
-});
-await settle();
-check('host survives moving into a group', await page.evaluate(() => document.querySelector('[data-tile-key=HAM]').dataset.marker === 'same-element'));
+check('host survives re-tiling', await page.evaluate(() => document.querySelector('[data-tile-key=HAM]').dataset.marker === 'same-element'));
 check('host is inside the flat stage, not the grid', await page.evaluate(() => document.querySelector('[data-tile-key=HAM]').parentElement.dataset.testid === 'stage'));
-rects = await hostRects();
-check('moved tile follows its new placeholder', rects.HAM.visible && rects.HAM.w < surface.w / 2, JSON.stringify(rects.HAM));
-
-await page.evaluate(() => window.layoutStore.layout.ungroup('HAM'));
-await settle();
-check('host survives ungrouping', await page.evaluate(() => document.querySelector('[data-tile-key=HAM]').dataset.marker === 'same-element'));
+await page.screenshot({ path: path.join(outDir, 'layout-four.png') });
 
 // Many tiles.
 await page.evaluate(() => {
@@ -117,7 +89,7 @@ await page.screenshot({ path: path.join(outDir, 'layout-many.png') });
 await page.evaluate(() => {
   const { layout } = window.layoutStore;
   layout.clear();
-  layout.add(window.spec('MAIN'));
+  layout.setMain(layout.add(window.spec('MAIN')));
   layout.add(window.spec('HAM'));
 });
 await settle();
@@ -170,7 +142,7 @@ check('a new tile uses free space and leaves mouse edits alone', placed.HAM.w ==
 
 // The close button removes just that tile.
 const closeBox = await page.evaluate(() => {
-  const id = window.layoutStore.layout.snapshot().nodes.find((n) => n.component?.key === 'NEW').id;
+  const id = window.layoutStore.layout.tiles().find((t) => t.component.key === 'NEW').id;
   const r = document.querySelector(`.grid-stack-item[gs-id="${id}"] .tile-close`).getBoundingClientRect();
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 });
@@ -193,7 +165,7 @@ check('/auto-layout gives the main tile the largest slot again', retiled.MAIN.x 
 await page.screenshot({ path: path.join(outDir, 'layout-auto.png') });
 
 // Window resize.
-await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 640));
+await page.setViewportSize({ width: 1000, height: 640 });
 await page.waitForTimeout(400);
 const small = await page.evaluate(() => {
   const r = document.querySelector('[data-testid=stage]').getBoundingClientRect();
@@ -214,7 +186,6 @@ await page.waitForTimeout(100);
 const openAfter = await page.locator('[data-testid=palette]').isVisible();
 check('Ctrl+Shift+P toggles the palette once a session is open', openBefore !== openAfter, `${openBefore} -> ${openAfter}`);
 
-await app.close();
-await server.close();
+await stop();
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

@@ -9,7 +9,7 @@
 import Type from 'typebox';
 import { create } from 'zustand';
 import { useSession } from '../data/session';
-import { allTiles, findTile, GRID_COLUMNS, GRID_ROWS, dropTarget, type Cell, type ComponentSpec, type Rect } from '../layout/model';
+import { allTiles, tileWithKey, GRID_COLUMNS, GRID_ROWS, dropTarget, type Cell, type ComponentSpec, type Rect } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
 import { useBuild } from './build';
 import { bareSpec, componentOf, Item, specOf, useComponents } from './components';
@@ -72,12 +72,12 @@ function cellAt(clientX: number, clientY: number): { cell: Cell; aspect: number 
 }
 
 const itemOf = (key: string) => useSuggestions.getState().items.find((s) => s.key === key);
-const onScreen = (key: string) => findTile(useLayout.getState(), key) != null;
+const onScreen = (key: string) => tileWithKey(useLayout.getState(), key) != null;
 
 /** A new tile took over from a preview in the strip: what the viewer allowed the preview, the tile keeps. */
 function carryApproval(key: string): void {
-  const found = findTile(useLayout.getState(), key);
-  if (found) tileLookAhead.move(previewScope(key), found.tile.id);
+  const found = tileWithKey(useLayout.getState(), key);
+  if (found) tileLookAhead.move(previewScope(key), found.id);
 }
 
 /**

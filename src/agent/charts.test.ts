@@ -323,9 +323,9 @@ describe('suggesting charts', () => {
     await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_weather' }] })).rejects.toThrow(/No session is open/);
   });
 
-  it('shows chart tiles in the app state by label, chart name and props', () => {
-    host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } }, { type: 'test_weather', props: {} }] });
-    expect(describeAppState()).toMatch(/^on screen: HAM; Gap 44 v 1 \(test_gap chart, props \{"driver_a":44,"driver_b":1\}\); Weather \(test_weather chart\)$/m);
+  it('shows tiles in the app state by id, then streams by label and charts by label, chart name and props', () => {
+    const [ham, gap, weather] = host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } }, { type: 'test_weather', props: {} }] });
+    expect(describeAppState()).toContain(`\non screen: ${ham} HAM (stream); ${gap} Gap 44 v 1 (test_gap chart, props {"driver_a":44,"driver_b":1}); ${weather} Weather (test_weather chart)\n`);
   });
 
   it('can have the same chart twice, for different drivers', async () => {
@@ -334,8 +334,9 @@ describe('suggesting charts', () => {
   });
 
   describe('edit_tile', () => {
+    let ids: string[] = [];
     beforeEach(() => {
-      host.layout.add({
+      ids = host.layout.add({
         items: [
           { type: 'video', props: { feed: '1:44' } },
           { type: 'test_field', props: { drivers: [44] } },
@@ -349,47 +350,48 @@ describe('suggesting charts', () => {
     it("drops props the tile holds that its chart doesn't declare any more", async () => {
       layout.clear();
       // As a tile stands after its mod swapped `drivers` for `driver`: the old prop is still in its spec.
-      host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44, drivers: [44] } }] });
-      expect(await runTool('edit_tile', { tile: 'test_pit', props: { driver: 'GAS' } })).toBe('Changed: Pit 10.');
+      const [pit] = host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44, drivers: [44] } }] });
+      expect(await runTool('edit_tile', { tile: pit, props: { driver: 'GAS' } })).toBe('Changed: Pit 10.');
       expect(tiles().map((t) => t.props)).toEqual([{ driver: 10 }]);
     });
 
-    it('changes only the props it names, in place', async () => {
+    it('changes only the props it names, in place, and the tile keeps its id', async () => {
       const before = tiles();
       const rects = () => layout.tiles().map((t) => [t.x, t.y, t.w, t.h]);
       const placed = rects();
-      expect(await runTool('edit_tile', { tile: 'test_field', props: { drivers_to_display: ['HAM', 'VER', 'GAS'] } })).toBe('Changed: Field 44-1-10/44.');
+      expect(await runTool('edit_tile', { tile: ids[1], props: { drivers_to_display: ['HAM', 'VER', 'GAS'] } })).toBe('Changed: Field 44-1-10/44.');
       const after = tiles();
       expect(after[1]).toEqual({ id: before[1].id, label: 'Field 44-1-10/44', props: { drivers: [44], drivers_to_display: [44, 1, 10] } });
       expect(rects()).toEqual(placed);
-      // Null takes a prop away.
-      await runTool('edit_tile', { tile: 'Field 44-1-10/44', props: { drivers: null } });
+      // Null takes a prop away, and the same id still names the tile.
+      await runTool('edit_tile', { tile: ids[1], props: { drivers: null } });
       expect(tiles()[1].props).toEqual({ drivers_to_display: [44, 1, 10] });
     });
 
-    it('changes who a one-driver chart is about, by its label', async () => {
-      expect(await runTool('edit_tile', { tile: 'pit 1', props: { driver: 'Gasly' } })).toBe('Changed: Pit 10.');
+    it('changes who a one-driver chart is about', async () => {
+      expect(await runTool('edit_tile', { tile: ids[3], props: { driver: 'Gasly' } })).toBe('Changed: Pit 10.');
       expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 10']);
     });
 
-    it('asks for one tile when a name fits several, and changes nothing', async () => {
-      await expect(runTool('edit_tile', { tile: 'test_pit', props: { driver: 'GAS' } })).rejects.toThrow('"test_pit" names 2 charts: Pit 44, Pit 1. Name one by its label.');
-      await expect(runTool('edit_tile', { tile: 'nothing', props: {} })).rejects.toThrow('No chart on screen is called "nothing".');
-      await expect(runTool('edit_tile', { tile: 'HAM', props: {} })).rejects.toThrow(/No chart on screen/);
+    it('refuses a tile that is not on screen, by label too, or a stream, and changes nothing', async () => {
+      await expect(runTool('edit_tile', { tile: 'nothing', props: {} })).rejects.toThrow('No tile nothing is on screen. Name tiles by the ids app_state lists, such as tile-3.');
+      await expect(runTool('edit_tile', { tile: 'Pit 44', props: { driver: 'GAS' } })).rejects.toThrow(/No tile Pit 44 is on screen/);
+      await expect(runTool('edit_tile', { tile: ids[0], props: {} })).rejects.toThrow(`${ids[0]} is a stream, not a chart`);
       expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1']);
     });
 
     it('refuses props that do not fit, or a chart that is already on screen', async () => {
-      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: null } })).rejects.toThrow(/test_pit needs driver/);
-      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: 'Senna' } })).rejects.toThrow(/No driver matches "Senna"/);
-      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: 'HAM' } })).rejects.toThrow(/already on screen/);
+      await expect(runTool('edit_tile', { tile: ids[3], props: { driver: null } })).rejects.toThrow(/test_pit needs driver/);
+      await expect(runTool('edit_tile', { tile: ids[3], props: { driver: 'Senna' } })).rejects.toThrow(/No driver matches "Senna"/);
+      await expect(runTool('edit_tile', { tile: ids[3], props: { driver: 'HAM' } })).rejects.toThrow(/already on screen/);
       expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1']);
     });
   });
 
   describe('remove_tiles', () => {
+    let ids: string[] = [];
     beforeEach(() => {
-      host.layout.add({
+      ids = host.layout.add({
         items: [
           { type: 'video', props: { feed: '1:44' } },
           { type: 'video', props: { feed: '1:1' } },
@@ -401,23 +403,14 @@ describe('suggesting charts', () => {
     });
     const labels = () => layout.tiles().map((t) => t.component.label);
 
-    it('takes off a stream', async () => {
-      expect(await runTool('remove_tiles', { tiles: ['Hamilton'] })).toBe('Removed: HAM.');
-      expect(labels()).toEqual(['VER', 'Gap 44 v 1', 'Pit 44', 'Pit 1']);
+    it('takes off streams and charts by their ids', async () => {
+      expect(await runTool('remove_tiles', { tiles: [ids[0], ids[3]] })).toBe('Removed: HAM, Pit 44.');
+      expect(labels()).toEqual(['VER', 'Gap 44 v 1', 'Pit 1']);
     });
 
-    it('takes off a chart by its label', async () => {
-      expect(await runTool('remove_tiles', { tiles: ['pit 44'] })).toBe('Removed: Pit 44.');
-      expect(labels()).toEqual(['HAM', 'VER', 'Gap 44 v 1', 'Pit 1']);
-    });
-
-    it('takes off every chart of a kind by its name or title', async () => {
-      expect(await runTool('remove_tiles', { tiles: ['test_pit', 'Test gap'] })).toBe('Removed: Pit 44, Pit 1, Gap 44 v 1.');
-      expect(labels()).toEqual(['HAM', 'VER']);
-    });
-
-    it('says what it could not find', async () => {
-      expect(await runTool('remove_tiles', { tiles: ['VER', 'nobody', 'test_field'] })).toBe('Removed: VER. Not found: nobody.');
+    it('refuses ids that are not on screen, and labels, and removes nothing', async () => {
+      await expect(runTool('remove_tiles', { tiles: [ids[1], 'tile-999', 'Pit 1'] })).rejects.toThrow('Not on screen: tile-999, Pit 1. Nothing was removed.');
+      expect(labels()).toEqual(['HAM', 'VER', 'Gap 44 v 1', 'Pit 44', 'Pit 1']);
     });
   });
 });

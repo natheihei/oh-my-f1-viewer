@@ -146,7 +146,7 @@ async function capture(name) {
 async function shoot(name, items, squeeze, alone = false) {
   await page.evaluate(async ([items, alone]) => {
     const { host, read, tilesOf } = await import('/src/host/index.ts');
-    host.layout.remove({ keys: tilesOf(read().layout).filter((t) => alone || t.component.type !== 'video' || !read().feeds.some((f) => f.id === t.component.props.feed && f.kind === 'main')).map((t) => t.component.key) });
+    host.layout.remove({ tiles: tilesOf(read().layout).filter((t) => alone || t.component.type !== 'video' || !read().feeds.some((f) => f.id === t.component.props.feed && f.kind === 'main')).map((t) => t.id) });
     host.layout.add({ items });
     host.layout.autoLayout();
   }, [items, alone]);

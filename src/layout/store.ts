@@ -6,8 +6,6 @@ import {
   allTiles,
   applyMouseEdit,
   autoLayout,
-  closeGroup,
-  createGroup,
   EMPTY_LAYOUT,
   findTile,
   measure,
@@ -15,7 +13,7 @@ import {
   replaceComponent,
   setMain,
   swap,
-  ungroup,
+  tileWithKey,
   type Cell,
   type CellPx,
   type ComponentSpec,
@@ -30,41 +28,30 @@ const get = () => useLayout.getState();
 
 export const layout = {
   clear: () => set(EMPTY_LAYOUT),
-  add: (component: ComponentSpec) => set(addTile(get(), component)),
-  /** Adds a tile where it was dropped on the grid. */
-  addAt: (component: ComponentSpec, cell: Cell, cellAspect?: number) => set(addTileAt(get(), component, cell, cellAspect)),
-  remove: (key: string) => set(removeTile(get(), key)),
-  /** Gives the tile with `key` another component in its place. Returns whether `key` was on screen. */
-  replace(key: string, component: ComponentSpec): boolean {
-    const next = replaceComponent(get(), key, component);
+  /** Returns the id of the tile showing it: a new one, or the one already showing its key. */
+  add(component: ComponentSpec): string {
+    set(addTile(get(), component));
+    return tileWithKey(get(), component.key)!.id;
+  },
+  /** Adds a tile where it was dropped on the grid. Returns its id, as `add` does. */
+  addAt(component: ComponentSpec, cell: Cell, cellAspect?: number): string {
+    set(addTileAt(get(), component, cell, cellAspect));
+    return tileWithKey(get(), component.key)!.id;
+  },
+  /** Removes a tile by its id. Returns whether it was on screen. */
+  remove(id: string): boolean {
+    const found = findTile(get(), id) != null;
+    if (found) set(removeTile(get(), id));
+    return found;
+  },
+  /** Gives the tile with `id` another component in its place. Returns whether it was on screen. */
+  replace(id: string, component: ComponentSpec): boolean {
+    const next = replaceComponent(get(), id, component);
     if (next) set(next);
     return next != null;
   },
-  /** Removes a tile by its id, as the close button on its title bar does. */
-  close(id: string): boolean {
-    const tile = allTiles(get()).find((t) => t.id === id);
-    if (tile) set(removeTile(get(), tile.component.key));
-    return tile != null;
-  },
-  has: (key: string) => findTile(get(), key) != null,
-  group(components: ComponentSpec[], title?: string): string {
-    const { state, groupId } = createGroup(get(), components, title);
-    set(state);
-    return groupId;
-  },
-  closeGroup(ref: string): ComponentSpec[] | null {
-    const result = closeGroup(get(), ref);
-    if (!result) return null;
-    set(result.state);
-    return result.removed;
-  },
-  ungroup(ref: string): boolean {
-    const next = ungroup(get(), ref);
-    if (next) set(next);
-    return next != null;
-  },
-  /** Gives a tile the main place by its key, or takes it away with null. */
-  setMain: (key: string | null) => set(setMain(get(), key)),
+  /** Gives a tile the main place by its id, or takes it away with null. */
+  setMain: (id: string | null) => set(setMain(get(), id)),
   /** Re-tiles the grid, discarding manual moves and resizes. */
   autoLayout: () => set(autoLayout(get())),
   /** The grid's cell size on screen changed, in pixels. */
