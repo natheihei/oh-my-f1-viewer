@@ -225,11 +225,12 @@ const rosterNow = () => {
  * The props the model gave a chart, with drivers as car numbers, and what's wrong with them. Each driver
  * prop takes codes, names or numbers, one or a list by its name. `given` replaces what's in `base`, and a
  * null takes a prop away. Props the chart doesn't declare are refused, so a typo isn't silently dropped.
+ * `base` loses any it doesn't declare: a tile from before an edit to its mod can hold props the mod no longer has.
  */
 export function resolveProps(chart: ComponentInfo, given: Record<string, unknown>, base: Record<string, unknown> = {}): { props: Record<string, unknown>; problems: string[] } {
   const declared = propsOf(chart);
   const roster = rosterNow();
-  const props: Record<string, unknown> = { ...base };
+  const props: Record<string, unknown> = Object.fromEntries(Object.entries(base).filter(([name]) => name in declared));
   const problems: string[] = [];
   const unknown: string[] = [];
   for (const [name, value] of Object.entries(given)) {
