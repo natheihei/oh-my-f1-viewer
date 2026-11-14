@@ -12,6 +12,14 @@ export interface PaletteEntry {
   parts?: PromptPart[];
   /** Something the viewer can do about this line, once: a button after its text. */
   action?: { label: string; run(): void };
+  /** Tiles whose errors went with this line, drawn as tags before its text, as they stood when sent. */
+  attached?: AttachedTag[];
+}
+
+/** A tile as an attachment's tag names it: its id, and its title-bar label. */
+export interface AttachedTag {
+  scope: string;
+  label: string;
 }
 
 /** A settings panel the palette shows in its place. */
@@ -35,16 +43,17 @@ function cancelHide(): void {
 }
 
 export const palette = {
-  push(role: EntryRole, text: string, action?: PaletteEntry['action'], parts?: PromptPart[]): number {
+  push(role: EntryRole, text: string, action?: PaletteEntry['action'], parts?: PromptPart[], attached?: AttachedTag[]): number {
     const id = nextEntry++;
-    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...(action ? { action } : {}), ...(parts ? { parts } : {}) }] }));
+    const extra = { ...(action ? { action } : {}), ...(parts ? { parts } : {}), ...(attached?.length ? { attached } : {}) };
+    usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...extra }] }));
     return id;
   },
   /** Runs an entry's action, which then goes: it can only be taken once. */
   act(id: number): void {
     const entry = usePalette.getState().entries.find((e) => e.id === id);
     if (!entry?.action) return;
-    usePalette.setState((s) => ({ entries: s.entries.map((e) => (e.id === id ? { id: e.id, role: e.role, text: e.text } : e)) }));
+    usePalette.setState((s) => ({ entries: s.entries.map((e) => (e.id === id ? { ...e, action: undefined } : e)) }));
     entry.action.run();
   },
   /** Appends to an entry being streamed. */

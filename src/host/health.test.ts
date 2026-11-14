@@ -8,14 +8,21 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 const { useAgentTurn } = await import('./agentTurn');
 const { useBuild } = await import('./build');
 const { componentOf, componentOps, defineComponent, specOf } = await import('./components');
-const { fitProps, fixable, fixRequest, health, healthOps, list, useHealth } = await import('./health');
+const { fitProps, health, healthOps, list, useHealth } = await import('./health');
 const { read } = await import('./live');
+const { useMods } = await import('./mods');
+const { useSession } = await import('../data/session');
+const { useSessionData } = await import('../data/sessionData');
 const { layout } = await import('../layout/store');
 const { allTiles } = await import('../layout/model');
 const { useLayout } = await import('../layout/store');
 
 type Place = Parameters<typeof health.report>[0];
 const place = (over: Partial<Place> = {}): Place => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, ...over });
+/** A place as the report holds it, with no session open to stamp it. */
+const held = (over: Partial<Place> = {}) => ({ ...place(over), since: null });
+const sessionBefore = useSession.getState();
+const dataBefore = useSessionData.getState();
 
 const pace = defineComponent({
   name: 'pace',
@@ -30,6 +37,10 @@ afterEach(() => {
   for (const p of useHealth.getState().places) health.forget(p.scope);
   useBuild.setState({ active: false, changes: [], enteredAtSec: null });
   useAgentTurn.setState({ busy: false });
+  useHealth.setState({ attached: [] });
+  useSession.setState(sessionBefore, true);
+  useSessionData.setState(dataBefore, true);
+  useMods.setState({ list: [] });
   layout.clear();
   componentOps.unregister({ names: ['pace'] });
   vi.useRealTimers();
@@ -68,7 +79,7 @@ describe('the report', () => {
     health.report(place(), null);
     health.report(place({ scope: 'preview:pace', where: 'strip' }), null);
     health.report(place({ state: 'error', message: 'boom' }), null);
-    expect(read().health).toEqual([place({ state: 'error', message: 'boom' }), place({ scope: 'preview:pace', where: 'strip' })]);
+    expect(read().health).toEqual([held({ state: 'error', message: 'boom' }), held({ scope: 'preview:pace', where: 'strip' })]);
   });
 
   it('changes nothing when a place reports the same again', () => {
@@ -85,71 +96,118 @@ describe('the report', () => {
   });
 });
 
-describe('asking the agent to fix', () => {
-  const asked = () => read().fixRequests.map((r) => r.text);
-  afterEach(() => {
-    for (const r of read().fixRequests) healthOps.takeFix({ id: r.id });
-  });
+describe('when a place stopped drawing', () => {
+  /** A session open with its clock at `clockSec`, and the playhead at `playheadMs`. */
+  const at = (clockSec: number, playheadMs: number) => {
+    useSession.setState({ session: { contentId: 1 } as never, clock: { ...sessionBefore.clock, timeSec: clockSec } });
+    useSessionData.setState({ state: 'ready', playheadMs } as never);
+  };
+  const since = () => read().health[0].since;
 
-  it('leaves the request in live state for a tile that needs props, in or out of build mode', () => {
-    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-    expect(read().fixRequests).toMatchObject([{ scope: 'tile-1', text: 'The Pace HAM tile needs driver.' }]);
-  });
-
-  it('asks about a tile that threw only in build mode, where the code can be fixed', () => {
+  it('stamps the moment it stops, and keeps it while it fails the same way', () => {
+    at(4360, 1761512880000);
     health.report(place({ state: 'error', message: 'boom' }), null);
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
-    useBuild.setState({ active: true });
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-    expect(asked()).toEqual(['The Pace HAM tile stopped with an error: boom. Fix it.']);
+    expect(since()).toEqual({ clockSec: 4360, playheadMs: 1761512880000 });
+    at(4400, 1761512920000);
+    health.report(place({ state: 'error', message: 'boom', label: 'Pace NOR' }), null);
+    expect(since()).toEqual({ clockSec: 4360, playheadMs: 1761512880000 });
   });
 
-  it('never asks for a preview in the strip, a tile that draws, or one that waits', () => {
-    expect(fixable({ state: 'needs_props', where: 'strip' }, true)).toBe(false);
-    expect(fixable({ state: 'drawn', where: 'tile' }, true)).toBe(false);
-    expect(fixable({ state: 'waiting', where: 'tile' }, true)).toBe(false);
-    expect(fixRequest(place())).toBeNull();
-    expect(healthOps.askFix({ scope: 'nowhere' })).toBe(false);
-    expect(asked()).toEqual([]);
-  });
-
-  it('asks nothing more while a request waits, for that place or another', () => {
-    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
-    health.report(place({ scope: 'tile-2', label: 'Pace NOR', state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
-    expect(healthOps.askFix({ scope: 'tile-2' })).toBe(false);
-    expect(asked()).toHaveLength(1);
-    const [{ id }] = read().fixRequests;
-    expect(healthOps.takeFix({ id })).toMatchObject({ id, scope: 'tile-1' });
-    expect(read().fixRequests).toEqual([]);
-    expect(healthOps.askFix({ scope: 'tile-2' })).toBe(true);
-  });
-
-  it('asks nothing while the agent is busy: a new message would stop its turn', () => {
-    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
-    useAgentTurn.setState({ busy: true });
-    expect(read().agentBusy).toBe(true);
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
-    expect(asked()).toEqual([]);
-    useAgentTurn.setState({ busy: false });
-    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
-  });
-
-  it('hands a request to whoever takes it first, and nobody after', () => {
-    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
-    healthOps.askFix({ scope: 'tile-1' });
-    const [{ id }] = read().fixRequests;
-    expect(healthOps.takeFix({ id })).not.toBeNull();
-    expect(healthOps.takeFix({ id })).toBeNull();
-    expect(healthOps.takeFix({ id: 'no-such' })).toBeNull();
-  });
-
-  it('keeps live.fixRequests the same object while nothing is asked', () => {
-    const before = read().fixRequests;
+  it('stamps again for a new problem, and forgets it once the place draws', () => {
+    at(4360, 1761512880000);
+    health.report(place({ state: 'error', message: 'boom' }), null);
+    at(4385, 1761512905000);
+    health.report(place({ state: 'error', message: 'another' }), null);
+    expect(since()).toEqual({ clockSec: 4385, playheadMs: 1761512905000 });
     health.report(place(), null);
-    expect(read().fixRequests).toBe(before);
+    expect(since()).toBeNull();
+  });
+
+  it('has no moment with no session open', () => {
+    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    expect(since()).toBeNull();
+  });
+});
+
+describe('attaching a tile\'s error to the next message', () => {
+  beforeEach(() => componentOps.register({ components: [pace] }));
+
+  /** A pace tile on screen, for `driver`, reported as `over`. */
+  const tileThat = (over: Partial<Place>, driver = 44) => {
+    const id = layout.add(specOf({ type: 'pace', props: { driver } }));
+    health.report(place({ scope: id, ...over }), null);
+    return id;
+  };
+  const threw = { state: 'error', message: "Cannot read properties of undefined (reading 'interval')" } as const;
+
+  it('puts the tile in live.attached as it stands, with its props, whatever the agent is doing', () => {
+    useAgentTurn.setState({ busy: true });
+    const id = tileThat(threw);
+    expect(healthOps.attach({ scope: id })).toBe(true);
+    expect(read().attached).toEqual([{ scope: id, report: { place: held({ scope: id, ...threw }), props: { driver: 44 }, log: null } }]);
+  });
+
+  it("points at a mod's log, where its stack is", () => {
+    useMods.setState({ list: [{ name: 'pace', state: 'ready', version: 1 }] as never });
+    const id = tileThat(threw);
+    healthOps.attach({ scope: id });
+    expect(read().attached[0].report.log).toBe('pace/mod.log');
+  });
+
+  it('replaces what was attached for a tile with how it stands now, in its place', () => {
+    const a = tileThat(threw, 44);
+    const b = tileThat({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }, 4);
+    healthOps.attach({ scope: a });
+    healthOps.attach({ scope: b });
+    health.report(place({ scope: a, state: 'error', message: 'another' }), null);
+    healthOps.attach({ scope: a });
+    expect(read().attached.map((x) => [x.scope, x.report.place.message])).toEqual([
+      [a, 'another'],
+      [b, 'Needs driver'],
+    ]);
+  });
+
+  it('attaches nothing for a tile that draws or waits, a preview, or a tile that is gone', () => {
+    const drawn = tileThat({});
+    const waiting = tileThat({ state: 'waiting' }, 4);
+    health.report(place({ scope: 'preview:pace', where: 'strip', state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    health.report(place({ scope: 'tile-99', ...threw }), null);
+    for (const scope of [drawn, waiting, 'preview:pace', 'tile-99', 'nowhere']) expect(healthOps.attach({ scope })).toBe(false);
+    expect(read().attached).toEqual([]);
+  });
+
+  it('takes one off, or all of them for a message', () => {
+    const a = tileThat(threw, 44);
+    const b = tileThat(threw, 4);
+    healthOps.attach({ scope: a });
+    healthOps.attach({ scope: b });
+    expect(healthOps.detach({ scope: a })).toBe(true);
+    expect(healthOps.detach({ scope: a })).toBe(false);
+    expect(healthOps.takeAttached().map((x) => x.scope)).toEqual([b]);
+    expect(read().attached).toEqual([]);
+    expect(healthOps.takeAttached()).toEqual([]);
+  });
+
+  it('keeps live.attached the same object while nothing changes it', () => {
+    const before = read().attached;
+    health.report(place(), null);
+    healthOps.takeAttached();
+    expect(read().attached).toBe(before);
+  });
+
+  it('lets a tile go when it closes', () => {
+    const a = tileThat(threw, 44);
+    const b = tileThat(threw, 4);
+    healthOps.attach({ scope: a });
+    healthOps.attach({ scope: b });
+    layout.remove(a);
+    expect(read().attached.map((x) => x.scope)).toEqual([b]);
+  });
+
+  it("reports the tiles asked about that aren't drawing now", () => {
+    const a = tileThat(threw, 44);
+    const b = tileThat({}, 4);
+    expect(healthOps.errors({ tiles: [a, b, 'nowhere'] }).map((r) => r.place.scope)).toEqual([a]);
   });
 });
 
@@ -169,7 +227,7 @@ describe('waiting for what is on screen to draw', () => {
     health.report(place({ scope: t.id }), componentOf('pace')!.View);
     const settled = healthOps.settled();
     await vi.advanceTimersByTimeAsync(60);
-    await expect(settled).resolves.toEqual([place({ scope: t.id })]);
+    await expect(settled).resolves.toEqual([held({ scope: t.id })]);
   });
 
   it('waits for a tile that has not reported, or reported with older code, then answers anyway after a second', async () => {
@@ -185,6 +243,6 @@ describe('waiting for what is on screen to draw', () => {
     await vi.advanceTimersByTimeAsync(300);
     expect(done).toBe(false);
     await vi.advanceTimersByTimeAsync(600);
-    await expect(settled).resolves.toEqual([place({ scope: t.id })]);
+    await expect(settled).resolves.toEqual([held({ scope: t.id })]);
   });
 });

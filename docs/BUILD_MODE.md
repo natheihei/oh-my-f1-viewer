@@ -63,12 +63,36 @@ This keeps the rule that the agent suggests tiles and the viewer adds them.
 - When the viewer named drivers ("a duel for Hamilton and Norris"), the agent passes them through `suggest_tiles` in the mod's props,
   `driver_a` and `driver_b` here, and the draft previews with them for the rest of the build. When they didn't, it asks whose.
 - A tile that's on screen keeps its props across an edit. If the mod's new `args` no longer accept some of them, it keeps the rest.
-  If a required one is then missing, the tile shows an error, "Needs driver", with an "Ask agent to fix" button, and the view isn't
-  drawn. The button leaves "The Pace tile needs driver." in `live.fixRequests`, which the shell sends as a line of the viewer's, and
-  the agent asks whose or fills it in. While the agent is working the button is disabled and reads "Agent is busy": a message sent
-  then would stop its turn. A tile
-  that threw, "This tile stopped", has the button only in build mode, where the agent can fix the code.
+  If a required one is then missing, the tile shows an error, "Needs driver", and the view isn't drawn.
 - `live.health` says how every tile and every preview in the strip stands. See [HOST.md](HOST.md).
+
+### Attaching a tile's error
+
+A tile that isn't drawing has a button, "Attach error to agent", in both modes. The case it's for is a render error: a mod saves and
+draws, then throws at a moment its code didn't expect, such as `gap_ahead` reading the interval of a car in the pit lane. The viewer
+watching is the only one who sees that happen. A tile needing props is rarer: a tile can't be added with props that don't fit, so it
+only happens when a mod's args change while its tile is on screen, such as a mod edited on disk outside the app.
+
+- The button only attaches: it never sends, and it's never disabled. The tile joins `live.attached` as it stands, replacing what was
+  attached for it before, and nothing on the tile changes. The palette opens with a tray above its input, a tag per tile (its id and
+  label, as its title bar names them, and "error at 1:12:40" or what it needs), and the viewer is put in the input. × takes one out.
+- Enter sends the tray with whatever was typed, or with nothing. While the agent is working, that stops its turn and starts one with
+  this message, as any message does. The viewer's line in the history draws each attachment as its tag, as it stood when sent.
+- The agent reads each attachment as an `<error>` block of JSON after `app_state`, then the viewer's words: the tile, its label and
+  component, its state and message, `missing` and `dropped` for props, `first_threw` (or `since`, for props) with the session clock
+  and the playhead in UTC ms, the tile's props, and `log`, the mod's `mod.log`, where the render error's stack is. `errorBlock` in
+  `shared/health.ts` writes it, next to `describePlace`.
+- The agent works on it on its own. It fixes the tile, or ends its turn with it still broken, the same way or a new one. The tile
+  shows what it has then, and the viewer can attach it again.
+- In view mode, the viewing agent fixes props with `edit_tile`. A render error is in the code, which it can't change, so it calls
+  `offer_build` with the tiles and a note of what it found. That returns at once, and the palette shows the offer where the spoiler
+  check would be: "Fix gap_ahead in build mode?", with `/build`'s red "! spoiler the build agent looks ahead without asking", since
+  entering build mode is that consent. **Switch to build** is in build mode's yellow, beside **Stay in view mode**. The offer goes once
+  it's answered, or when the viewer sends another message.
+- Switching enters build mode the way `/build` does, then sends the build agent its first message without the viewer typing: an
+  `<error>` block for each offered tile that still isn't drawing, read again from `live.health`, and the note in
+  `<from_viewing_agent>`. The build agent's conversation is its own, so that is all it knows of the viewing one. The tray stays for
+  the viewer's own next message.
 
 ### Trying it
 

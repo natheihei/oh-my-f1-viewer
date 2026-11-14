@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { useBuild } = await import('./build');
+const { buildOps, useBuild } = await import('./build');
 const { componentOps, defineComponent } = await import('./components');
 const { layoutOps } = await import('./layoutOps');
 const { previewScope, tileLookAhead, useTileLookAhead } = await import('./lookAhead');
@@ -34,7 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useBuild.setState({ active: false, changes: [], enteredAtSec: null });
+  useBuild.setState({ active: false, changes: [], enteredAtSec: null, offer: null });
   layout.clear();
   clearSuggestions();
   componentOps.unregister({ names: ['stepper', 'form', 'needy'] });
@@ -149,5 +149,29 @@ describe('look-ahead approval', () => {
     building([{ name: 'stepper', change: 'added' }]);
     suggestionOps.add({ key: 'stepper' });
     expect(approved()).toEqual([]);
+  });
+});
+
+describe('offering build mode', () => {
+  it('waits in live state with the tiles and the note, replacing an earlier offer', () => {
+    const [a, b] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }, { type: 'form', props: { drivers: [44] } }] });
+    buildOps.offer({ tiles: [a], note: 'first' });
+    buildOps.offer({ tiles: [a, b, a], note: 'It throws in the pit lane.' });
+    expect(useBuild.getState().offer).toEqual({ tiles: [a, b], note: 'It throws in the pit lane.' });
+  });
+
+  it('refuses a tile that is not on screen, and any offer while building', () => {
+    const [a] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }] });
+    expect(() => buildOps.offer({ tiles: [a, 'tile-99'], note: '' })).toThrow('Not on screen: tile-99.');
+    building([]);
+    expect(() => buildOps.offer({ tiles: [a], note: '' })).toThrow('Build mode is already on.');
+    expect(useBuild.getState().offer).toBeNull();
+  });
+
+  it('goes when it is withdrawn', () => {
+    const [a] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }] });
+    buildOps.offer({ tiles: [a], note: '' });
+    buildOps.dismissOffer();
+    expect(useBuild.getState().offer).toBeNull();
   });
 });

@@ -104,6 +104,15 @@ described below:
 Once session data is ready, the tables `query_session` can read follow the charts, from `sessionData.tables`. The tool's own description
 doesn't change, so opening a session only changes the end of the system prompt.
 
+### A tile that isn't drawing
+
+The viewer can attach a tile's error to their next message, from the tile's "Attach error to agent". The agent reads it as data, not
+as a sentence the app wrote for the viewer: an `<error>` block of JSON per tile after `app_state`, from `errorBlock` in
+`shared/health.ts`, then the viewer's words, which may be none. Attaching never sends, so it needs no busy state: the message goes
+when the viewer sends it. The viewing agent fixes props with `edit_tile`. For a fix in a component's code it calls `offer_build`, and
+the viewer decides whether to switch: build mode lets its agent look ahead, so the offer carries `/build`'s spoiler warning. Switching
+starts the build agent on the tiles at once, with the viewing agent's note. See [BUILD_MODE.md](BUILD_MODE.md).
+
 ### Finding a session
 
 The app supports seasons from 2023 on. At start it loads F1 TV's events for those seasons, one page per season, and every message to the

@@ -3,7 +3,7 @@
 // when nothing else is using it and the run needs the agent's login, its own Vite
 // and devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
 // the devtools protocol, since Playwright's own Electron launch would spawn the window where it pleases.
-import { copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, openSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -52,7 +52,7 @@ export function profileInUse(dir) {
 /**
  * Starts the app from the source, served by Vite, with its user data in `outDir`. The page gets 1600×900
  * CSS pixels, the room the charts are designed in, at `scale` device pixels each so a shot stays sharp.
- * Returns the page, `log`, and `stop`, which closes only this instance.
+ * Returns the page, `log`, `userData` (the user data dir it runs on), and `stop`, which closes only this instance.
  *
  * `mainProfile` runs on ~/.config/f1a itself instead, for the agent: its login (pi-agent/auth.json) is never
  * copied, since a copy refreshes the token on first use, and a refresh token that rotates would sign the
@@ -91,14 +91,16 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   const electronBin = path.join(root, 'node_modules/electron/dist/electron');
   const [width, height] = [1600 * scale, 900 * scale];
   const electronArgs = [root, `--user-data-dir=${userData}`, `--remote-debugging-port=${cdpPort}`, `--force-device-scale-factor=${scale}`];
+  // The main process's own output: why a renderer went, what the agent and mods did.
+  const mainLog = path.join(outDir, 'main.log');
   let child = null;
   if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
     // Through Hyprland so its rules apply: `exec` keeps electron as the spawned pid the rules match.
-    const command = `sh -c 'exec env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:${vitePort} ${[electronBin, ...electronArgs].join(' ')}'`;
+    const command = `sh -c 'exec env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:${vitePort} ${[electronBin, ...electronArgs].join(' ')} >>${mainLog} 2>&1'`;
     execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(command)}, { workspace = "3 silent", float = true, size = "${width} ${height}", no_initial_focus = true })`]);
   } else {
     const { CHROME_DESKTOP: _ignored, ...env } = process.env;
-    child = spawn(electronBin, electronArgs, { env: { ...env, ELECTRON_START_URL: `http://127.0.0.1:${vitePort}` }, stdio: 'ignore' });
+    child = spawn(electronBin, electronArgs, { env: { ...env, ELECTRON_START_URL: `http://127.0.0.1:${vitePort}` }, stdio: ['ignore', openSync(mainLog, 'a'), openSync(mainLog, 'a')] });
   }
 
   /** This instance's electron pids, found by its user data dir. */
@@ -115,6 +117,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
     browser.contexts().flatMap((c) => c.pages()).find((p) => p.url().startsWith(`http://127.0.0.1:${vitePort}`)),
   );
   page.on('pageerror', (e) => log('[pageerror]', e.message));
+  page.on('crash', () => log('[crash] the renderer went: see main.log'));
   await page.waitForSelector('[data-testid=palette]', { timeout: 60_000 });
 
   const stop = async () => {
@@ -143,7 +146,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   await page.addStyleTag({ content: '@keyframes isolated-tick{to{opacity:.99}}#isolated-tick{position:fixed;left:0;top:0;width:1px;height:1px;animation:isolated-tick 1s infinite alternate;pointer-events:none}' });
   await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div id="isolated-tick"></div>'));
 
-  return { page, log, stop };
+  return { page, log, stop, userData };
 }
 
 /**
