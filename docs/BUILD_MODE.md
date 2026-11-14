@@ -123,7 +123,7 @@ instructions, and a separate session keeps what the build read out of the viewin
   check of its own. `find` doesn't run fd: it walks the folder itself, so it can be checked the same way. `grep` is ours, with pi's
   parameters and output, so the app needs no ripgrep. It walks the folder like `find`, and pi's `find` resolves its path, so it
   reads paths the way the others do. Its pattern is a JavaScript regular expression. `bash` stays off.
-- **It keeps some viewing tools:** `list_streams`, `remove_tiles`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`. The
+- **It keeps some viewing tools:** `list_streams`, `remove_tiles`, `edit_tile`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`. The
   last two don't ask the spoiler gate. `suggest_tiles` takes any component name here, since the mod may have been written this turn.
 - **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` captures that part of the window.
   The viewing agent never sees what a chart shows. The build agent may, since it can already read the whole session.
