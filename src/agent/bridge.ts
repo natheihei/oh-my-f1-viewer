@@ -1,5 +1,6 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentMode, AgentToolCall } from '../../shared/api';
+import { describePlace, notDrawing } from '../../shared/health';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
 import { formatClock, offeredCharts, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
@@ -153,11 +154,13 @@ export function tellViewingAgent(summary: string): void {
 
 /** What the build has changed so far, and every mod there is, for the build agent. */
 function describeBuild(): string {
-  const { build, mods } = read();
+  const { build, mods, health } = read();
   const sign = { added: '+', edited: '~', deleted: '-' } as const;
   const changes = build.changes.map((c) => `${sign[c.change]}${c.name}`).join(', ') || 'none yet';
   const all = mods.map((m) => `${m.name} (${m.state})`).join(', ') || 'none';
-  return `build changes so far: ${changes}\nmods: ${all}`;
+  // What stopped drawing since the last turn, such as an error at a lap the code didn't expect.
+  const broken = notDrawing(health).map((p) => `\nnot drawing: ${describePlace(p)}`);
+  return `build changes so far: ${changes}\nmods: ${all}${broken.join('')}`;
 }
 
 /**

@@ -22,7 +22,7 @@ async function setup(status: (name: string, dir: string) => ModStatus | null = (
   const reports: [string, boolean, string | null][] = [];
   const tools = new Map<string, ToolDefinition>();
   await modFilesExtension(
-    () => ({ dir, settled, logs: () => [], picture: async () => null }),
+    () => ({ dir, settled, logs: () => [], picture: async () => null, health: async () => [] }),
     (name, ok, note) => reports.push([name, ok, note]),
   )({ registerTool: (tool: ToolDefinition) => tools.set(tool.name, tool) } as never);
   const call = async (name: string, args: Record<string, unknown>) => {
