@@ -1,55 +1,78 @@
 /**
  * Whether each place a component shows is drawing: every tile on the grid and every preview in the
- * strip. One that isn't says why: its props don't fit, or it threw. Tiles show it, and the agent reads it.
+ * strip. One that isn't says why: its props don't fit, or it threw. Tiles show it, the agent reads it,
+ * and the viewer can attach a tile's error to their next message.
  */
 import Type, { type TObject, type TSchema } from 'typebox';
 import Value from 'typebox/value';
 import { create } from 'zustand';
-import { list, type PlaceHealth } from '../../shared/health';
+import { list, notDrawing, problemKey, type ErrorReport, type Moment, type PlaceHealth } from '../../shared/health';
 import { modsLink } from '../data/mods';
+import { useSession } from '../data/session';
+import { useSessionData } from '../data/sessionData';
 import { allTiles } from '../layout/model';
 import { useLayout } from '../layout/store';
-import { useAgentTurn } from './agentTurn';
-import { useBuild } from './build';
 import { componentOf } from './components';
+import { useMods } from './mods';
 import { query, write } from './op';
 
-export { list, type PlaceHealth };
+export { list, type ErrorReport, type Moment, type PlaceHealth };
 
-/** The viewer asked the agent to fix a place that isn't drawing. It waits here until something takes it to the agent. */
-export interface FixRequest {
-  id: string;
-  /** The place it's about, from `live.health`. */
+/** A tile's error, attached to the viewer's next message. It waits here until that message takes it. */
+export interface Attachment {
+  /** The tile, from `live.health`. */
   scope: string;
-  /** The request in the viewer's words, such as "The Pace tile needs driver." */
-  text: string;
+  /** How the tile stood when it was attached. */
+  report: ErrorReport;
 }
 
 export interface HealthView {
   /** In no particular order. */
   places: PlaceHealth[];
-  /** Oldest first. */
-  asked: FixRequest[];
+  /** In the order they were attached. */
+  attached: Attachment[];
 }
 
-export const useHealth = create<HealthView>(() => ({ places: [], asked: [] }));
-
-let requests = 0;
+export const useHealth = create<HealthView>(() => ({ places: [], attached: [] }));
 
 /** The component code each place last reported with, to tell a report from before a reload. */
 const reportedWith = new Map<string, unknown>();
 
-const same = (a: PlaceHealth, b: PlaceHealth) =>
+const same = (a: Omit<PlaceHealth, 'since'>, b: Omit<PlaceHealth, 'since'>) =>
   a.where === b.where && a.type === b.type && a.label === b.label && a.state === b.state && a.message === b.message && a.missing.join() === b.missing.join() && a.dropped.join() === b.dropped.join();
+
+const broken = (p: Pick<PlaceHealth, 'state'>) => p.state === 'needs_props' || p.state === 'error';
+
+// A tile that closes goes from what's attached too: the next message would tell the agent of a tile that isn't there.
+useLayout.subscribe((layout) => {
+  const { attached } = useHealth.getState();
+  if (attached.length === 0) return;
+  const onScreen = new Set(allTiles(layout).map((t) => t.id));
+  if (attached.some((a) => !onScreen.has(a.scope))) useHealth.setState({ attached: attached.filter((a) => onScreen.has(a.scope)) });
+});
+
+/** Where the session stands now. Null with no session open. */
+function now(): Moment | null {
+  const { session, clock } = useSession.getState();
+  if (!session) return null;
+  const data = useSessionData.getState();
+  return { clockSec: clock.timeSec, playheadMs: data.state === 'ready' ? data.playheadMs : null };
+}
 
 /** What the places that draw components call: not part of the host's surface. */
 export const health = {
-  /** `view` is the component code it drew, or tried to. */
-  report(place: PlaceHealth, view: unknown): void {
-    reportedWith.set(place.scope, view);
+  /**
+   * `view` is the component code it drew, or tried to. A place that stops drawing is stamped with the
+   * moment it did, and keeps that stamp while it fails the same way.
+   */
+  report(report: Omit<PlaceHealth, 'since'>, view: unknown): void {
+    reportedWith.set(report.scope, view);
     const { places } = useHealth.getState();
-    const at = places.findIndex((p) => p.scope === place.scope);
-    if (at >= 0 && same(places[at], place)) return;
+    const at = places.findIndex((p) => p.scope === report.scope);
+    const before = at >= 0 ? places[at] : null;
+    if (before && same(before, report)) return;
+    const stillSo = before && broken(before) && problemKey(before) === problemKey({ ...report, since: null });
+    const place: PlaceHealth = { ...report, since: !broken(report) ? null : stillSo ? before.since : now() };
     useHealth.setState({ places: at >= 0 ? places.map((p, i) => (i === at ? place : p)) : [...places, place] });
   },
   forget(scope: string): void {
@@ -88,20 +111,14 @@ export function fitProps(args: TObject, props: Record<string, unknown>): Fit {
   return { props: kept, missing, dropped, message: `Its props don't fit: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}` };
 }
 
-/** Whether the agent could fix a place: props always, and code only while it's building. */
-export function fixable(place: Pick<PlaceHealth, 'state' | 'where'>, building: boolean): boolean {
-  if (place.where !== 'tile') return false;
-  return place.state === 'needs_props' || (place.state === 'error' && building);
+/** A tile that isn't drawing, as an agent is told of it. Null for a preview, a tile that draws, or one that's gone. */
+function reportOf(scope: string): ErrorReport | null {
+  const place = notDrawing(useHealth.getState().places).find((p) => p.scope === scope && p.where === 'tile');
+  const tile = place && allTiles(useLayout.getState()).find((t) => t.id === scope);
+  if (!place || !tile) return null;
+  const isMod = useMods.getState().list.some((m) => m.name === place.type);
+  return { place, props: tile.component.props, log: isMod ? `${place.type}/mod.log` : null };
 }
-
-/** What the viewer asks the agent, in their own words, for a place that isn't drawing. */
-export function fixRequest(place: PlaceHealth): string | null {
-  const what = `The ${place.label} tile`;
-  if (place.state === 'needs_props') return place.missing.length ? `${what} needs ${list(place.missing)}.` : `${what} has props that don't fit. ${place.message ?? ''}`.trim();
-  if (place.state === 'error') return `${what} stopped with an error: ${place.message ?? 'unknown'}. Fix it.`;
-  return null;
-}
-
 
 const SETTLE_MS = 1000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -127,32 +144,47 @@ export const healthOps = {
       return useHealth.getState().places;
     },
   ),
-  askFix: write(
+  errors: query(
+    {
+      description: "How each of these tiles stands, for those that aren't drawing now, as an agent is told of it: the place, its props, and its mod's log.",
+      args: Type.Object({ tiles: Type.Array(Type.String({ description: "A tile's id, from live.health" })) }),
+    },
+    ({ tiles }): ErrorReport[] => tiles.map(reportOf).filter((r) => r !== null),
+  ),
+  attach: write(
     {
       description:
-        "Ask the agent to fix a place that isn't drawing, as the viewer. The request joins live.fixRequests, for whatever speaks to the agent to take. Returns whether it was asked: only props can be fixed outside build mode, and nothing is asked while the agent is busy or another request waits, since a new message would stop the turn in progress.",
-      args: Type.Object({ scope: Type.String({ description: "A place's scope, from live.health" }) }),
+        "Attach a tile's error to the viewer's next message: it joins live.attached as the tile stands now, replacing what was attached for it before. Whatever sends that message takes it, busy agent or not. Returns whether it was attached: only a tile that isn't drawing can be.",
+      args: Type.Object({ scope: Type.String({ description: "A tile's id, from live.health" }) }),
     },
     ({ scope }): boolean => {
-      const place = useHealth.getState().places.find((p) => p.scope === scope);
-      const text = place && fixable(place, useBuild.getState().active) ? fixRequest(place) : null;
-      const { asked } = useHealth.getState();
-      if (!text || asked.length > 0 || useAgentTurn.getState().busy) return false;
-      requests += 1;
-      useHealth.setState({ asked: [...asked, { id: `fix-${requests}`, scope, text }] });
+      const report = reportOf(scope);
+      if (!report) return false;
+      const { attached } = useHealth.getState();
+      const at = attached.findIndex((a) => a.scope === scope);
+      const next = { scope, report };
+      useHealth.setState({ attached: at >= 0 ? attached.map((a, i) => (i === at ? next : a)) : [...attached, next] });
       return true;
     },
   ),
-  takeFix: write(
+  detach: write(
     {
-      description: 'Take a fix request off live.fixRequests, to send it to the agent. Returns it, or null if something else took it first.',
-      args: Type.Object({ id: Type.String({ description: "A request's id, from live.fixRequests" }) }),
+      description: "Take a tile's error off live.attached, so the next message goes without it. Returns whether it was there.",
+      args: Type.Object({ scope: Type.String({ description: "A tile's id, from live.attached" }) }),
     },
-    ({ id }): FixRequest | null => {
-      const { asked } = useHealth.getState();
-      const request = asked.find((r) => r.id === id) ?? null;
-      if (request) useHealth.setState({ asked: asked.filter((r) => r.id !== id) });
-      return request;
+    ({ scope }): boolean => {
+      const { attached } = useHealth.getState();
+      if (!attached.some((a) => a.scope === scope)) return false;
+      useHealth.setState({ attached: attached.filter((a) => a.scope !== scope) });
+      return true;
+    },
+  ),
+  takeAttached: write(
+    { description: 'Take everything on live.attached, to send with a message. Returns it, oldest first, and leaves live.attached empty.' },
+    (): Attachment[] => {
+      const { attached } = useHealth.getState();
+      if (attached.length) useHealth.setState({ attached: [] });
+      return attached;
     },
   ),
 };

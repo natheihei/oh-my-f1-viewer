@@ -1,13 +1,13 @@
 /** Connects the agent to the palette: what the user types goes to it, and what it says comes back. */
-import { useEffect } from 'react';
 import type { AgentEvent } from '../../shared/api';
 import { askAgent, connectTools } from '../agent/bridge';
 import { setSpoilerAsker } from '../agent/spoilerGate';
-import { host, read, useLive } from '../host';
+import { errorBlock } from '../../shared/health';
+import { host, read, type Attachment } from '../host';
 import { loadEvents } from './commands';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
-import { palette, usePalette } from './palette';
+import { palette, usePalette, type AttachedTag } from './palette';
 
 // Long enough to read the reply before the palette goes.
 const AUTO_HIDE_MS = 10_000;
@@ -67,30 +67,23 @@ export function connectAgent(): () => void {
   };
 }
 
-/**
- * A tile's "Ask agent to fix" leaves its request in `live.fixRequests`. This takes each one, opens the
- * palette, and sends it as a line of the viewer's.
- */
-export function useFixRequests(): void {
-  const requests = useLive((s) => s.fixRequests);
-  useEffect(() => {
-    for (const { id } of requests) {
-      const request = host.health.takeFix({ id });
-      if (!request) continue;
-      palette.show();
-      void sendToAgent(request.text);
-    }
-  }, [requests]);
-}
+/** The tag a tile's attachment is drawn with: its id, and the label in its title bar. */
+export const tagOf = ({ scope, report }: Attachment): AttachedTag => ({ scope, label: report.place.label });
 
 /**
  * Sends what the user typed to the agent: the build agent while build mode is on, else the viewing one.
  * `echo: false` when the palette already shows the line, as it does for a `/` command. `parts` is the
  * prompt with its mentions, for the history to draw as tags; `text` is it as the agent reads it.
+ *
+ * The viewer's message takes the tiles' errors they attached (`live.attached`), as `<error>` blocks before
+ * their words, which may be none. `attach: false` leaves them for the next one, for a message the app sends.
+ * The viewer's own message also withdraws an offer of build mode. While the agent is working, sending
+ * stops its turn and starts one with this.
  */
-export async function sendToAgent(text: string, { echo = true, parts }: { echo?: boolean; parts?: PromptPart[] } = {}): Promise<void> {
+export async function sendToAgent(text: string, { echo = true, parts, attach = true }: { echo?: boolean; parts?: PromptPart[]; attach?: boolean } = {}): Promise<void> {
   const tagged = parts?.some((p) => typeof p !== 'string');
-  if (echo) palette.push('user', text, undefined, tagged ? parts : undefined);
+  const attached = attach ? read().attached : [];
+  if (echo) palette.push('user', text, undefined, tagged ? parts : undefined, attached.map(tagOf));
   const status = await host.agent.status();
   if (!status.ready) {
     palette.push('system', 'The agent needs setting up first: /settings-agent');
@@ -105,8 +98,11 @@ export async function sendToAgent(text: string, { echo = true, parts }: { echo?:
     }
     if (!(await loadEvents())) return;
   }
+  if (attach) host.build.dismissOffer();
+  // Taken only now: a message that couldn't go leaves them in the tray for the next one.
+  const blocks = attach ? host.health.takeAttached().map((a) => errorBlock(a.report)) : [];
   if (usePalette.getState().busy) await host.agent.cancel();
-  await askAgent(text);
+  await askAgent([...blocks, text].filter(Boolean).join('\n\n'));
 }
 
 /** Stops the agent mid-turn. A stopped turn never reports its end, so the palette stops waiting here. */

@@ -333,6 +333,26 @@ describe('suggesting charts', () => {
     expect(layout.tiles().map((t) => t.component.label)).toEqual(['Pit 44', 'Pit 1']);
   });
 
+  describe('offer_build', () => {
+    afterEach(() => host.build.dismissOffer());
+
+    it('leaves the offer for the user to answer, and returns straight away', async () => {
+      const [pit] = host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44 } }] });
+      expect(await runTool('offer_build', { tiles: [pit], note: 'It throws in the pit lane.' })).toBe('Offered. The user answers in the palette.');
+      expect(read().build.offer).toEqual({ tiles: [pit], note: 'It throws in the pit lane.' });
+    });
+
+    it('names a tile that is not on screen by its id, and offers nothing', async () => {
+      await expect(runTool('offer_build', { tiles: ['tile-99'], note: '' })).rejects.toThrow('No tile tile-99 is on screen.');
+      expect(read().build.offer).toBeNull();
+    });
+
+    it('is the viewing agent\'s alone', async () => {
+      expect(toolDefinitions('build').map((t) => t.name)).not.toContain('offer_build');
+      expect(toolDefinitions('view').map((t) => t.name)).toContain('offer_build');
+    });
+  });
+
   describe('edit_tile', () => {
     let ids: string[] = [];
     beforeEach(() => {

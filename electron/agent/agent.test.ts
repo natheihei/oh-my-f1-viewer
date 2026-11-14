@@ -341,7 +341,7 @@ describe('build mode', () => {
     screen = [[]];
     asked = 0;
   });
-  const place = (over: Partial<PlaceHealth>): PlaceHealth => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, ...over });
+  const place = (over: Partial<PlaceHealth>): PlaceHealth => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, since: null, ...over });
   const needsDriver = place({ scope: 'preview:pace', where: 'strip', state: 'needs_props', missing: ['driver'], message: 'Needs driver' });
   const threw = place({ state: 'error', message: 'lap is undefined' });
 

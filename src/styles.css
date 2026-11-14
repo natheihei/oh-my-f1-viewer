@@ -1266,6 +1266,69 @@
   line-height: 18px;
 }
 
+/*
+ * A tile's error attached to a message: the tile named as its title bar names it, with the red square
+ * of a tile that isn't drawing. In the tray it says what's wrong and has an ×; in the history, as sent.
+ */
+.attach-tag {
+  @apply inline-flex items-center gap-1.5 border border-rule px-1.5 whitespace-nowrap text-ink uppercase;
+  font-size: var(--text-s);
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+
+.attach-tag::before {
+  @apply shrink-0 bg-accent;
+  width: 6px;
+  height: 6px;
+  content: '';
+}
+
+.attach-tag-id,
+.attach-tag-what {
+  @apply text-dim normal-case;
+  letter-spacing: 0;
+}
+
+.attach-tag-remove {
+  @apply cursor-pointer bg-transparent text-dim hover:text-ink;
+  line-height: 16px;
+}
+
+/* The tray: above the input, where the spoiler check and the suggestion strip sit. */
+.attach-tray {
+  @apply flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line py-1.5;
+  padding-inline: var(--pad);
+}
+
+.attach-tray-label {
+  @apply mr-1 text-dim uppercase;
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
+}
+
+/* An offer of build mode wears build mode's yellow, beside the spoiler check's red. */
+.build-offer-mode {
+  color: var(--color-medium);
+}
+
+.build-offer-why {
+  @apply text-dim;
+}
+
+.spoiler-answer.build-offer-switch {
+  border-color: var(--color-medium);
+  color: var(--color-medium);
+}
+
+.spoiler-answer.build-offer-switch:hover,
+.spoiler-answer.build-offer-switch:focus-visible {
+  border-color: var(--color-medium);
+  background: var(--color-medium);
+  color: #000;
+}
+
 /* Beside the input while building: what changed, and the two ways out. */
 .build-tag {
   @apply flex shrink-0 items-center gap-1.5 uppercase;
