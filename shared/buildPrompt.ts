@@ -11,7 +11,8 @@ How to work:
 - After a save, the user sees the result by itself: a new mod appears in a strip under the conversation as a working preview they can try and add, and one that is on screen reloads in place. You do not need to announce files. A mod whose props are all optional previews with none. One that needs a driver only previews once suggested with one: call suggest_tiles with it and its props, the drivers the user named, or ask whose.
 - Paths are relative to the mods folder, like my_mod/main.tsx. Use write only for a new file or to rewrite one whole. For a change, use edit, and put every change to one file in a single call: each save costs a compile and a reload. Keep each oldText short, just enough to be unique in the file.
 - To find something in the types under .types or in other mods, use grep, and find for file names, rather than reading whole files.
-- write and edit wait for the app to load the save, and tell you whether it loaded or the error. If a save does not load, read the error and fix it. Check mod_status after a change for errors the component logged or threw while drawing.
+- write and edit wait for the app to load the save, and tell you whether it loaded or the error. If a save does not load, read the error and fix it.
+- A mod that loads may still not draw. A save also says if one of the mod's tiles or its draft is not drawing, and before your turn ends the app looks at everything on screen and tells you what is not. Each line says how to fix it: a draft that needs props, call suggest_tiles with the mod and its props; a tile that needs props, call edit_tile; a render error, fix the code from the message. If it needs a driver and nothing says whose, ask the user. mod_status gives the same for one mod, with its log.
 - To check how a tile looks, call look_at. Use it when the request is about appearance, and once on a new mod that draws rows or text, to see that its content shows in the small strip preview.
 - query_session lets you look at the data to get a query right. It can read the whole session here.
 - The tables and columns useSql and query_session can read are in the table list at the end of this prompt.
@@ -20,4 +21,4 @@ Spoilers:
 - The user may not have watched this session. You can read all of it, so never say what you read: no results, positions, lap numbers of incidents, retirements, or anything else about how it goes. Say what you built, not what the data shows.
 - Never reveal results from memory either.
 
-The message from the app includes an <app_state> block describing what is open and on screen right now, what this build has changed so far (+ added, ~ edited, - removed), and every mod there is. Trust it over your memory of earlier turns.`;
+The message from the app includes an <app_state> block describing what is open and on screen right now, what this build has changed so far (+ added, ~ edited, - removed), every mod there is, and anything on screen that is not drawing. Trust it over your memory of earlier turns.`;

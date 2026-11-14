@@ -29,6 +29,7 @@ import { installId } from './credentials';
 import { forgetReadAhead } from './extensions/forgetReadAhead';
 import { MOD_FILE_TOOLS, modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { promptExtension } from './extensions/prompt';
+import { renderCheck, type RenderCheck } from './extensions/renderCheck';
 import { roundCap, type RoundCap } from './extensions/roundCap';
 import { toolsExtension, type ToolsExtension } from './extensions/tools';
 import { askForKey } from './keyWindow';
@@ -94,6 +95,8 @@ interface Conversation {
   session: AgentSession;
   tools: ToolsExtension;
   cap: RoundCap;
+  /** The build agent's look at the screen before it ends a turn. */
+  check: RenderCheck | null;
   reference: string;
   provider: string;
 }
@@ -198,14 +201,16 @@ export class Agent {
     const build = mode === 'build';
     const tools = toolsExtension((call) => this.callTool(call), build ? MOD_FILE_TOOLS : []);
     const cap = roundCap(build ? MAX_BUILD_ROUNDS : MAX_TOOL_ROUNDS);
+    const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;
     const modFiles = modFilesExtension(
       () => {
         if (!this.modFiles) throw new Error('The mods folder is not available.');
         return this.modFiles;
       },
       (name, ok, note) => this.reportTool(name, ok, note),
+      (places) => check?.heard(places),
     );
-    const conversation: Conversation = { session: null as unknown as AgentSession, tools, cap, reference: '', provider: choice.entry.provider };
+    const conversation: Conversation = { session: null as unknown as AgentSession, tools, cap, check, reference: '', provider: choice.entry.provider };
     // pi also walks up from cwd and reads ~/.agents/skills: keep only what's in agentDir.
     const inside = (p: string) => path.resolve(p).startsWith(agentDir + path.sep);
     const resourceLoader = new DefaultResourceLoader({
@@ -216,7 +221,7 @@ export class Agent {
       skillsOverride: (base) => ({ ...base, skills: base.skills.filter((s) => inside(s.filePath)) }),
       // The build agent reads the whole session by design, and nothing of its conversation reaches the viewing one.
       extensionFactories: build
-        ? [promptExtension(() => conversation.reference, BUILD_PROMPT), modFiles, tools.factory, cap.factory]
+        ? [promptExtension(() => conversation.reference, BUILD_PROMPT), modFiles, tools.factory, cap.factory, check!.factory]
         : [promptExtension(() => conversation.reference), tools.factory, cap.factory, forgetReadAhead],
     });
     await resourceLoader.reload();
@@ -495,13 +500,14 @@ export class Agent {
       if (turn.cancelled) return;
 
       const conversation = (turn.mode === 'build' ? this.building : this.conversation)!;
-      const { session, tools, cap } = conversation;
+      const { session, tools, cap, check } = conversation;
       // A model or thinking level chosen since the last message.
       if (session.model?.id !== choice.model.id) await session.setModel(choice.model);
       if (session.thinkingLevel !== choice.thinking) session.setThinkingLevel(choice.thinking);
       conversation.reference = reference;
       tools.register(definitions);
       cap.start();
+      check?.start();
       const unsubscribe = session.subscribe((event) => {
         if (turn.cancelled) return;
         if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {

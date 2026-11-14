@@ -393,6 +393,56 @@ async function partSave() {
     check('12 on the grid with those props, it draws something', !drawn.text.includes('This tile stopped') && (drawn.canvases > 0 || drawn.text.trim().length > 0), JSON.stringify(drawn).slice(0, 200));
     await shot('build-09-battle-on-grid.png');
   }
+  section('Not drawing');
+  const placesOf = async (type, where = 'tile') => (await live(() => window.host.health.settled())).filter((p) => p.type === type && p.where === where);
+  const heard = (text) => newest(sessionsDir('build')).includes(text);
+
+  // A mod about one driver, with nobody named: the save says its draft can't draw yet.
+  r = await say("build a new mod called solo: one driver's last five lap times, as a list. It takes the driver as a required prop named driver. I haven't decided whose yet, so don't pick one");
+  check('24 the agent heard that its draft needs a driver', heard('Draft solo in the strip: needs driver'), r.names.join(' '));
+  const soloCard = await draft('solo').innerText().catch(() => '');
+  check('24 the strip has a card for it that says so', plain(soloCard).includes('needs driver'), soloCard);
+  check('24 and the agent asked whose, without picking', /\?/.test(r.reply) && !r.names.includes('suggest_tiles'), r.reply);
+  await shot('build-09a-needs-driver.png');
+
+  // An edit that changes a mod's props under its tile: the agent hears before the turn ends, and fixes the tile.
+  if (battle) {
+    r = await say(`change ${battle} to be about one driver only, against the fastest lap so far: replace driver_a and driver_b with one required prop named driver. The tile on screen should be about Hamilton`);
+    check("25 the agent heard that the tile's props no longer fit", heard(`(${battle}): needs driver`), r.names.join(' '));
+    const [fixed] = await placesOf(battle);
+    check('25 and gave the tile its driver in the same turn', r.names.includes('edit_tile') && fixed?.state === 'drawn', `${r.names.join(' ')} ${JSON.stringify(fixed)}`);
+    await shot('build-09b-props-fixed.png');
+  }
+
+  // A render error that came up between turns: the next message's app state names it.
+  mkdirSync(path.join(modsDir, 'stopped'), { recursive: true });
+  writeFileSync(
+    path.join(modsDir, 'stopped', 'main.tsx'),
+    `import Type from 'typebox';
+import { defineComponent } from 'f1a';
+
+const lap = undefined as unknown as { number: number };
+
+export default defineComponent({
+  name: 'stopped',
+  title: 'Stopped',
+  description: 'Shows a lap number.',
+  args: Type.Object({}),
+  size: { aspect: 2, min: { width: 200, height: 100 } },
+  spec: () => ({ key: 'stopped', label: 'Stopped' }),
+  View: () => <div style={{ padding: 12 }}>lap {lap.number}</div>,
+});
+`,
+  );
+  await until('26 the mod loads', async () => (await modState('stopped'))?.state === 'ready');
+  await live(() => window.host.suggestions.dismiss() ?? window.host.layout.add({ items: [{ type: 'stopped', props: {} }] }));
+  await until('26 its tile stops', async () => (await placesOf('stopped'))[0]?.state === 'error');
+  await shot('build-09c-stopped.png');
+  r = await say('is everything on screen drawing? fix what is not');
+  check('26 the app state named the tile that stopped', heard('not drawing: Tile \\"Stopped\\" (stopped): render error'), r.names.join(' '));
+  check('26 and the agent fixed its code', (r.names.includes('edit') || r.names.includes('write')) && (await placesOf('stopped'))[0]?.state === 'drawn', `${r.names.join(' ')} ${JSON.stringify((await placesOf('stopped'))[0])}`);
+  await shot('build-09d-stopped-fixed.png');
+
   // The agent reads ahead when it needs to. If it never did, ask for something that needs it.
   if (readAheads === 0) r = await say(`check ${stepper}'s lap query against the whole session's data, and fix it if it's wrong. Don't tell me what the data shows`);
   check('19 the build read the whole session without a check', spoilerSeen === 0 && readAheads > 0, `${readAheads} turns read ahead, ${spoilerSeen} checks`);
