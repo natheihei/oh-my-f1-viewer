@@ -201,6 +201,111 @@ describe('the build agent\'s file tools', () => {
     expect((await call('find', { pattern: '*.d.ts', path: '.types' })).text).toBe('f1a.d.ts');
   });
 
+  describe('grep', () => {
+    const lines = (text: string) => text.split('\n');
+
+    it('skips node_modules', async () => {
+      const { call, file } = await setup();
+      file('lap_form/main.tsx', 'Lap');
+      file('lap_form/node_modules/dep/index.ts', 'Lap');
+      expect((await call('grep', { pattern: 'Lap' })).text).toBe('lap_form/main.tsx:1: Lap');
+    });
+
+    it('takes plain text with literal, and ignores case when asked', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'a.b\naxb\nA.B');
+      expect((await call('grep', { pattern: 'a.b' })).text).toBe('a/main.tsx:1: a.b\na/main.tsx:2: axb');
+      expect((await call('grep', { pattern: 'a.b', literal: true })).text).toBe('a/main.tsx:1: a.b');
+      expect((await call('grep', { pattern: 'a.b', literal: true, ignoreCase: true })).text).toBe('a/main.tsx:1: a.b\na/main.tsx:3: A.B');
+    });
+
+    it('filters files by glob, a name pattern at any depth', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'Lap');
+      file('a/util.ts', 'Lap');
+      file('.types/f1a.d.ts', 'Lap');
+      expect((await call('grep', { pattern: 'Lap', glob: '*.tsx' })).text).toBe('a/main.tsx:1: Lap');
+      expect((await call('grep', { pattern: 'Lap', glob: './.types/*.ts' })).text).toBe('.types/f1a.d.ts:1: Lap');
+      expect(lines((await call('grep', { pattern: 'Lap', glob: '!*.d.ts' })).text)).toEqual(['a/main.tsx:1: Lap', 'a/util.ts:1: Lap']);
+    });
+
+    it('shows lines around a match the way pi does', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'one\ntwo\nLap\nfour\nfive\nLap\r\n');
+      expect(lines((await call('grep', { pattern: 'Lap', context: 1 })).text)).toEqual([
+        'a/main.tsx-2- two',
+        'a/main.tsx:3: Lap',
+        'a/main.tsx-4- four',
+        'a/main.tsx-5- five',
+        'a/main.tsx:6: Lap',
+      ]);
+    });
+
+    it('searches one file, shown by its name', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'x\nLap');
+      file('a/other.tsx', 'Lap');
+      expect((await call('grep', { pattern: 'Lap', path: 'a/main.tsx' })).text).toBe('main.tsx:2: Lap');
+    });
+
+    it('stops at the limit, and says when it cut results off', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'Lap 1\nLap 2\nLap 3');
+      file('b/main.tsx', 'Lap 4');
+      expect((await call('grep', { pattern: 'Lap', limit: 2 })).text).toBe('a/main.tsx:1: Lap 1\na/main.tsx:2: Lap 2\n\n[2 matches limit reached. Use limit=4 for more, or refine pattern]');
+      expect((await call('grep', { pattern: 'Lap', limit: 3 })).text).toMatch(/Lap 3\n\n\[3 matches limit reached/);
+      expect((await call('grep', { pattern: 'Lap', limit: 4 })).text).toBe('a/main.tsx:1: Lap 1\na/main.tsx:2: Lap 2\na/main.tsx:3: Lap 3\nb/main.tsx:1: Lap 4');
+      expect((await call('grep', { pattern: 'nowhere' })).text).toBe('No matches found');
+    });
+
+    it('cuts long lines', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', `Lap${'x'.repeat(600)}`);
+      const { text } = await call('grep', { pattern: 'Lap' });
+      expect(text).toContain('... [truncated]');
+      expect(text).toContain('[Some lines truncated to 500 chars. Use read tool to see full lines]');
+    });
+
+    it('says plainly when the pattern isn\'t a regular expression', async () => {
+      const { call, file, reports } = await setup();
+      file('a/main.tsx', 'Lap(');
+      const result = await call('grep', { pattern: 'Lap(' });
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/^"Lap\(" isn't a valid JavaScript regular expression: .+\. Set literal to true/);
+      expect((await call('grep', { pattern: 'Lap(', literal: true })).text).toBe('a/main.tsx:1: Lap(');
+      expect(reports[0]).toEqual(['grep', false, null]);
+    });
+
+    it('skips binary and very large files', async () => {
+      const { call, file } = await setup();
+      file('a/main.tsx', 'Lap');
+      file('a/picture.png', 'Lap\0\x01');
+      file('a/huge.json', `Lap\n${'x'.repeat(1024 * 1024)}`);
+      expect((await call('grep', { pattern: 'Lap' })).text).toBe('a/main.tsx:1: Lap');
+    });
+
+    it('needs no ripgrep', async () => {
+      const { call, file } = await setup();
+      file('.types/f1a.d.ts', 'export type Lap = number;');
+      const saved = process.env.PATH;
+      process.env.PATH = '';
+      try {
+        expect((await call('grep', { pattern: 'Lap' })).text).toBe('.types/f1a.d.ts:1: export type Lap = number;');
+      } finally {
+        process.env.PATH = saved;
+      }
+    });
+
+    it('stops between files once the call is aborted', async () => {
+      const { tools, file } = await setup();
+      file('a/main.tsx', 'Lap');
+      const abort = new AbortController();
+      abort.abort();
+      const result = await tools.get('grep')!.execute('call', { pattern: 'Lap' } as never, abort.signal, undefined, undefined as never);
+      expect(result).toMatchObject({ isError: true, content: [{ text: 'Operation aborted' }] });
+    });
+  });
+
   describe('when pi answers with an error instead of throwing', () => {
     // pi's write and edit throw today. These stand-ins return an error result, to check nothing leans on that.
     afterEach(() => {

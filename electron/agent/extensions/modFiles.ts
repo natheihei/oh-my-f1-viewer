@@ -86,24 +86,150 @@ class Guard {
   }
 }
 
-/** Files under a folder whose path matches a glob, for find. A pattern without / matches names at any depth. */
-async function glob(root: string, pattern: string, limit: number): Promise<string[]> {
+/**
+ * Everything under a folder, in name order, for find and grep. Dot folders like .types are in. Links
+ * aren't followed, so the walk stays in the folder, and node_modules and .git are left out.
+ */
+async function* walk(root: string, rel = ''): AsyncGenerator<{ rel: string; folder: boolean; file: boolean }> {
+  const entries = await fsp.readdir(path.join(root, rel), { withFileTypes: true });
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const child = rel ? `${rel}/${entry.name}` : entry.name;
+    const folder = entry.isDirectory();
+    yield { rel: child, folder, file: entry.isFile() };
+    if (folder) yield* walk(root, child);
+  }
+}
+
+/** Whether a path matches a glob. A pattern without / matches names at any depth, as in pi. */
+function globMatcher(pattern: string): (rel: string, folder: boolean) => boolean {
   const options = { dot: true, matchBase: !pattern.includes('/') };
+  return (rel, folder) => minimatch(rel, pattern, options) || (folder && minimatch(`${rel}/`, pattern, options));
+}
+
+/** Files and folders under a folder whose path matches a glob, for find. */
+async function glob(root: string, pattern: string, limit: number): Promise<string[]> {
+  const matches = globMatcher(pattern);
   const out: string[] = [];
-  const walk = async (rel: string) => {
-    const entries = await fsp.readdir(path.join(root, rel), { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (out.length >= limit) return;
-      if (entry.name === 'node_modules' || entry.name === '.git') continue;
-      const child = rel ? `${rel}/${entry.name}` : entry.name;
-      // Links aren't followed, so the walk stays in the folder.
-      const folder = entry.isDirectory();
-      if (minimatch(child, pattern, options) || (folder && minimatch(`${child}/`, pattern, options))) out.push(folder ? `${child}/` : child);
-      if (folder) await walk(child);
-    }
-  };
-  await walk('');
+  for await (const entry of walk(root)) {
+    if (out.length >= limit) break;
+    if (matches(entry.rel, entry.folder)) out.push(entry.folder ? `${entry.rel}/` : entry.rel);
+  }
   return out;
+}
+
+export interface GrepArgs {
+  pattern: string;
+  path?: string;
+  glob?: string;
+  ignoreCase?: boolean;
+  literal?: boolean;
+  context?: number;
+  limit?: number;
+}
+
+const GREP_LIMIT = 100;
+const GREP_LINE = 500;
+/** Bigger files aren't searched. */
+const GREP_FILE_BYTES = 1024 * 1024;
+
+/** The pattern as a RegExp, or an error that says why it isn't one. */
+function grepRegex({ pattern, literal, ignoreCase }: GrepArgs): RegExp {
+  const source = literal ? pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : pattern;
+  const flags = ignoreCase ? 'i' : '';
+  try {
+    return new RegExp(source, `${flags}u`);
+  } catch {
+    try {
+      return new RegExp(source, flags);
+    } catch (e) {
+      throw new Error(`${JSON.stringify(pattern)} isn't a valid JavaScript regular expression: ${e instanceof Error ? e.message : String(e)}. Set literal to true to search for the text as written.`);
+    }
+  }
+}
+
+/**
+ * grep in JavaScript, so the build agent needs no ripgrep. It prints what pi's grep prints: "file:line: text"
+ * for a match and "file-line- text" around it, with pi's limits and notices. A file whose content has a NUL
+ * byte is taken for binary and skipped, like ripgrep does.
+ */
+async function grep(
+  pi: Pick<Pi, 'truncateHead' | 'truncateLine' | 'formatSize' | 'DEFAULT_MAX_BYTES'>,
+  target: string,
+  args: GrepArgs,
+  signal: AbortSignal | undefined,
+) {
+  const stat = await fsp.stat(target).catch(() => null);
+  if (!stat) throw new Error(`Path not found: ${target}`);
+  const regex = grepRegex(args);
+  const around = args.context && args.context > 0 ? Math.floor(args.context) : 0;
+  const limit = Math.max(1, Math.floor(args.limit ?? GREP_LIMIT));
+
+  // A folder's files are shown relative to it, and one file by its name.
+  const files: { file: string; shown: string }[] = [];
+  if (stat.isDirectory()) {
+    const filter = args.glob?.replace(/^(!?)(?:\.\/)+/, '$1');
+    const negated = !!filter?.startsWith('!');
+    const matches = filter ? globMatcher(negated ? filter.slice(1) : filter) : null;
+    for await (const entry of walk(target)) {
+      if (entry.file && (!matches || matches(entry.rel, false) !== negated)) files.push({ file: path.join(target, entry.rel), shown: entry.rel });
+    }
+  } else {
+    files.push({ file: target, shown: path.basename(target) });
+  }
+
+  const lines: string[] = [];
+  let count = 0;
+  let more = false;
+  let longLines = false;
+  for (const { file, shown } of files) {
+    if (signal?.aborted) throw new Error('Operation aborted');
+    if ((await fsp.stat(file)).size > GREP_FILE_BYTES) continue;
+    const content = await fsp.readFile(file).catch(() => null);
+    if (!content || content.includes(0)) continue;
+    const text = content.toString('utf8').split('\n');
+    if (text.at(-1) === '') text.pop();
+    const all = text.map((line) => line.replace(/\r$/, ''));
+    const hits = all.flatMap((line, i) => (regex.test(line) ? [i] : []));
+    if (!hits.length) continue;
+    // Past the limit, one more match only says the limit cut results off.
+    if (count >= limit) {
+      more = true;
+      break;
+    }
+    const kept = hits.slice(0, limit - count);
+    count += kept.length;
+    if (hits.length > kept.length) more = true;
+    const shownLines = new Set<number>();
+    for (const hit of kept) for (let i = Math.max(0, hit - around); i <= Math.min(all.length - 1, hit + around); i++) shownLines.add(i);
+    const isKept = new Set(kept);
+    for (const i of [...shownLines].sort((a, b) => a - b)) {
+      const { text: line, wasTruncated } = pi.truncateLine(all[i], GREP_LINE);
+      if (wasTruncated) longLines = true;
+      lines.push(isKept.has(i) ? `${shown}:${i + 1}: ${line}` : `${shown}-${i + 1}- ${line}`);
+    }
+    if (more) break;
+  }
+
+  if (count === 0) return { content: [{ type: 'text' as const, text: 'No matches found' }], details: undefined };
+  const truncation = pi.truncateHead(lines.join('\n'), { maxLines: Number.MAX_SAFE_INTEGER });
+  let output = truncation.content;
+  const details: Record<string, unknown> = {};
+  const notices: string[] = [];
+  if (more) {
+    notices.push(`${limit} matches limit reached. Use limit=${limit * 2} for more, or refine pattern`);
+    details.matchLimitReached = limit;
+  }
+  if (truncation.truncated) {
+    notices.push(`${pi.formatSize(pi.DEFAULT_MAX_BYTES)} limit reached`);
+    details.truncation = truncation;
+  }
+  if (longLines) {
+    notices.push(`Some lines truncated to ${GREP_LINE} chars. Use read tool to see full lines`);
+    details.linesTruncated = true;
+  }
+  if (notices.length) output += `\n\n[${notices.join('. ')}]`;
+  return { content: [{ type: 'text' as const, text: output }], details: Object.keys(details).length ? details : undefined };
 }
 
 function describeStatus(name: string, status: ModStatus | null): string {
@@ -175,6 +301,18 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
       },
     });
 
+    const piGrep = tools.createGrepToolDefinition('/') as ToolDefinition;
+    const grepParams = piGrep.parameters as unknown as { properties: Record<string, object> };
+    const grepShape: ToolDefinition = reworded(
+        piGrep,
+        `${FOLDER} Or one file.`,
+        `Search the contents of files under the mods folder for a JavaScript regular expression, or for plain text with literal. Returns matching lines as file:line: text, with paths relative to the folder searched. Includes dot folders like .types, and skips node_modules, binary files and files over 1 MB. Output is truncated to ${GREP_LIMIT} matches or ${tools.DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_LINE} chars.`,
+    );
+    grepShape.parameters = {
+      ...(grepShape.parameters as object),
+      properties: { ...(grepShape.parameters as unknown as { properties: object }).properties, pattern: { ...grepParams.properties.pattern, description: 'A JavaScript regular expression, or plain text when literal is true.' } },
+    } as unknown as Schema;
+
     const exists = (p: string) =>
       fsp.access(p).then(
         () => true,
@@ -233,9 +371,19 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
       ),
       wrapped(
         'grep',
-        // pi checks the folder here before ripgrep starts, so a refusal stops the search.
-        (dir, guard) => tools.createGrepToolDefinition(dir, { operations: { isDirectory: async (p) => (await fsp.stat(guard.read(p))).isDirectory() } }) as ToolDefinition,
-        (def) => reworded(def, `${FOLDER} Or one file.`, def.description.replace(' Respects .gitignore.', '')),
+        // Ours, not pi's, so no ripgrep is needed. pi's find resolves the path, so it's read the way the other tools read it.
+        (dir, guard) => ({
+          ...grepShape,
+          execute: async (id, args, signal, onUpdate, ctx) => {
+            const given = args as GrepArgs;
+            let resolved = '';
+            await tools
+              .createFindToolDefinition(dir, { operations: { exists: (p) => ((resolved = p), true), glob: () => [] } })
+              .execute(id, { pattern: '*', path: given.path }, undefined, onUpdate, ctx);
+            return grep(tools, guard.read(resolved), given, signal);
+          },
+        }),
+        (def) => def,
       ),
       wrapped(
         'find',
