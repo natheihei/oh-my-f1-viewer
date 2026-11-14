@@ -6,7 +6,7 @@ This page lists what it offers.
 
 The source is the reference: each write and query is defined in [src/host/index.ts](../src/host/index.ts),
 [src/host/layoutOps.ts](../src/host/layoutOps.ts), [src/host/suggestions.ts](../src/host/suggestions.ts),
-[src/host/components.ts](../src/host/components.ts) and [src/host/backgrounds.ts](../src/host/backgrounds.ts) with its own description and argument schema. If this page and the code
+[src/host/components.ts](../src/host/components.ts), [src/host/health.ts](../src/host/health.ts) and [src/host/backgrounds.ts](../src/host/backgrounds.ts) with its own description and argument schema. If this page and the code
 disagree, the code is right and this page needs fixing.
 
 There are three kinds of things:
@@ -110,6 +110,7 @@ Queries read things that aren't part of the live state. They return promises, ex
 | `host.catalog.live()` | none | What F1 TV has live now |
 | `host.catalog.upcoming()` | none | Formula 1 sessions that haven't started, soonest first |
 | `host.session.feeds()` | none | The open session's feeds (the same as `live.feeds`) |
+| `host.health.settled()` | none | `live.health`, once every place has drawn with its component's latest code, or after a second |
 | `host.data.sql({ sql, params?, asOf? })` | `sql: string`, `params?: (string \| number \| null)[]`, `asOf?: 'playhead' \| 'session'` | The rows from a read-only query on the open session |
 
 ### Session SQL
@@ -230,7 +231,8 @@ Build mode's snapshot of the mods folder, which the main process keeps. See [BUI
 
 ### `host.health`
 
-Whether what's on screen is drawing. The report itself is `live.health`.
+Whether what's on screen is drawing. The report itself is `live.health`, and its type, `PlaceHealth`, is in
+[shared/health.ts](../shared/health.ts) with the wording the build agent reads it in.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
@@ -266,6 +268,10 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   `src/agent/bridge.ts` use it.
 - `startMods(shared)`: starts loading mods, with the modules they share with the app. `src/main.tsx` calls it once, after registering
   the app's own components.
+- `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`
+  calls it once.
+- `setFixAsker(fn)`: how `host.health.askFix` reaches the agent. The shell registers it, so the request goes through the palette as a
+  line of the viewer's.
 
 ## Primitives
 
@@ -275,7 +281,8 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   uses it.
 - `<Grid />` draws the layout, showing each tile with the registered component its spec names, along with where a dragged
   suggestion would land. Every tile has an error boundary: a component that throws while drawing shows the error in its own tile, and
-  a new version of the component gets a fresh try.
+  a new version of the component gets a fresh try. A tile whose props lack one its component requires shows what it needs instead
+  of drawing. Both are in `live.health`.
 - `<Backdrop />` paints the background `live.background` names, on a canvas under the grid, so it shows only in the gaps. It paints
   when something changes, and every frame only while the background animates with its settings. With reduced motion it paints still
   frames.
@@ -284,8 +291,9 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   an optional `unit` (`'%'` shows 0 to 1 as a percentage), a boolean, or a union of literals; `shownWhen` names another setting it
   only applies with. `useData(params)` is a hook for what it needs from the host, `prepare` makes what it keeps between frames, and
   `draw(ctx, frame, params, state, data)` paints one frame in CSS pixels.
-- `<ComponentView spec={spec} fallback={...} />` draws one spec with its registered component, or `fallback` if none is registered.
-  The suggestion strip uses it for previews.
+- `<ComponentView spec={spec} scope={...} fallback={...} />` draws one spec with its registered component, or `fallback` if none is
+  registered. `scope` names the place it draws in, a tile's id or a preview's scope: with one, it reports to `live.health`. The
+  suggestion strip uses it for previews.
 - `defineComponent({ name, title, description, args, spec, sessions?, needs?, size?, View })` declares a component for tiles.
   `args` is a TypeBox object schema for its props, which must stay JSON-safe. `spec(props)` returns the tile's unique `key` and
   title-bar `label`, and `drivers` when the tile is about some: then `label` is the name alone ("Gap"), the title bar draws each
@@ -351,5 +359,6 @@ playhead in UTC milliseconds and the roster as driver code and number too, so th
 offered to the agent at the moment.
 
 While build mode is on, messages go to a second agent with its own prompt (`shared/buildPrompt.ts`) and conversation. From this list it
-has `list_streams`, `remove_tiles`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`, and the last two don't ask the
-spoiler gate. Its file tools run in the main process: see [BUILD_MODE.md](BUILD_MODE.md).
+has `list_streams`, `remove_tiles`, `edit_tile`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`, and the last two don't
+ask the spoiler gate. Its file tools run in the main process, and it's told what on screen isn't drawing, from `live.health`: see
+[BUILD_MODE.md](BUILD_MODE.md).
