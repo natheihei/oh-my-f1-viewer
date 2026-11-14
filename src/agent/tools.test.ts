@@ -551,7 +551,7 @@ describe('seeking to a moment', () => {
 
   it('the build agent has no tools for finding or opening a session', async () => {
     const names = BUILD_TOOLS.map((t) => t.name);
-    expect(names).toEqual(['list_streams', 'remove_tiles', 'play', 'pause', 'suggest_tiles', 'query_session', 'seek_to']);
+    expect(names).toEqual(['list_streams', 'remove_tiles', 'edit_tile', 'play', 'pause', 'suggest_tiles', 'query_session', 'seek_to']);
     expect(toolDefinitions('build').map((t) => t.name)).toEqual(names);
     await expect(runTool('load_session', { contentId: 1, title: 'x' }, 'build')).rejects.toThrow(/Unknown tool/);
     // The viewing agent's wording is unchanged by the build agent's.

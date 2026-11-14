@@ -140,7 +140,7 @@ async function shoot(name, items, squeeze) {
 }
 
 const pair = [1, 3];
-const table = { type: 'sector_table', props: { drivers: pair } };
+const table = { type: 'sector_table', props: { driver_a: pair[0], driver_b: pair[1] } };
 for (const lap of targetLaps) {
   let count = await seekTo(start + lap * 95);
   if (count?.current && count.current !== lap) count = await seekTo(start + (lap - 0.5) * ((lap * 95) / count.current));

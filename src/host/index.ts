@@ -28,7 +28,7 @@ export {
   type BackgroundParams,
   type BackgroundView,
 } from './backgrounds';
-export { defineComponent, fitting, misfit, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
+export { defineComponent, fitting, misfit, specOf, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
 export { ComponentView, Grid } from './Grid';
 export {
   CODE_BAR,
@@ -49,6 +49,7 @@ export {
   type Part,
 } from './drivers';
 export { startMods } from './mods';
+export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
 export { startBuild, type BuildView } from './build';
 export { previewScope } from './lookAhead';
 export type { BuildChange, ModLogLine, ModStatus } from '../../shared/mods';

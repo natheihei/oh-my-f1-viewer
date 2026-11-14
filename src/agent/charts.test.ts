@@ -10,7 +10,7 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 const { offeredCharts, runTool, toolDefinitions } = await import('./tools');
 const { askAgent, describeAppState, describeCharts } = await import('./bridge');
 const { driversOf, resolveDriver } = await import('./matching');
-const { defineComponent, host, read } = await import('../host');
+const { defineComponent, Displayed, Driver, Highlighted, host, keyPart, read } = await import('../host');
 const { useSession } = await import('../data/session');
 const { useSessionData } = await import('../data/sessionData');
 const { useBuild } = await import('../host/build');
@@ -78,33 +78,33 @@ describe('driver matching', () => {
   });
 });
 
-const Drivers = (options: { minItems?: number; maxItems?: number }) => Type.Array(Type.Integer(), options);
-const keyOf = (name: string, drivers?: number[]) => `${name}:${drivers?.join('-') ?? 'auto'}`;
-
 const gap = defineComponent({
   name: 'test_gap',
   title: 'Test gap',
   description: 'The gap between two drivers.',
-  args: Type.Object({ drivers: Drivers({ minItems: 2, maxItems: 2 }) }),
+  args: Type.Object({ driver_a: Driver('One'), driver_b: Driver('The other') }),
   sessions: ['race', 'sprint'],
   needs: ['timing'],
-  spec: ({ drivers }) => ({ key: keyOf('test_gap', drivers), label: `Gap ${drivers.join(' v ')}` }),
+  spec: ({ driver_a, driver_b }) => ({ key: `test_gap:${driver_a}-${driver_b}`, label: `Gap ${driver_a} v ${driver_b}` }),
   View: () => null,
 });
 const pit = defineComponent({
   name: 'test_pit',
   title: 'Test pit window',
   description: 'When one driver could stop.',
-  args: Type.Object({ drivers: Drivers({ minItems: 1, maxItems: 1 }) }),
-  spec: ({ drivers }) => ({ key: keyOf('test_pit', drivers), label: `Pit ${drivers[0]}` }),
+  args: Type.Object({ driver: Driver('The driver') }),
+  spec: ({ driver }) => ({ key: `test_pit:${driver}`, label: `Pit ${driver}` }),
   View: () => null,
 });
 const field = defineComponent({
   name: 'test_field',
   title: 'Test field',
-  description: 'Up to six drivers, or the ones it picks.',
-  args: Type.Object({ drivers: Type.Optional(Drivers({ maxItems: 6 })) }),
-  spec: ({ drivers }) => ({ key: keyOf('test_field', drivers), label: 'Field' }),
+  description: 'Every car.',
+  args: Type.Object({ drivers_to_display: Displayed(), drivers: Highlighted(6), laps: Type.Optional(Type.Integer({ description: 'Laps to show' })) }),
+  spec: ({ drivers_to_display, drivers, laps }) => ({
+    key: `test_field:${keyPart(drivers_to_display)}:${keyPart(drivers, 'none')}:${laps ?? 'all'}`,
+    label: `Field ${keyPart(drivers_to_display)}/${keyPart(drivers, 'none')}`,
+  }),
   View: () => null,
 });
 const weather = defineComponent({
@@ -125,14 +125,15 @@ describe('the chart list', () => {
     expect(Object.keys((suggest?.parameters as { properties: object }).properties)).toEqual(['streams']);
   });
 
-  it('lists each chart in a line, and the tool takes their names', () => {
+  it('lists each chart in a line with its props, and the tool takes their names', () => {
     host.components.register({ components: [gap, pit, field, weather] });
-    expect(describeCharts(read().components).split('\n')).toEqual([
-      'Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One marked replays only cannot be suggested in a live session. One that can take none picks its own.',
-      'test_gap, Test gap, exactly 2 drivers, race/sprint: The gap between two drivers.',
-      'test_pit, Test pit window, exactly 1 driver, any session: When one driver could stop.',
-      'test_field, Test field, 0 to 6 drivers, any session: Up to six drivers, or the ones it picks.',
-      'test_weather, Test weather, no drivers, any session: The weather.',
+    const lines = describeCharts(read().components).split('\n');
+    expect(lines[0]).toMatch(/^Charts for suggest_tiles\. .*Give a chart every required prop/);
+    expect(lines.slice(1)).toEqual([
+      'test_gap, Test gap, race/sprint: The gap between two drivers. props driver_a (required): One, as a car number; driver_b (required): The other, as a car number.',
+      'test_pit, Test pit window, any session: When one driver could stop. props driver (required): The driver, as a car number.',
+      'test_field, Test field, any session: Every car. props drivers_to_display (optional): Drivers to draw. Left out, everyone, as car numbers; drivers (optional, at most 6): Drivers to highlight among those drawn. Left out, none is, as car numbers; laps (optional): Laps to show.',
+      'test_weather, Test weather, any session: The weather. no props.',
     ]);
     const suggest = toolDefinitions().find((t) => t.name === 'suggest_tiles');
     expect(suggest?.parameters).toMatchObject({
@@ -161,72 +162,88 @@ describe('suggesting charts', () => {
   });
 
   it('lists a replay-only chart as such, and refuses it in a live session', async () => {
-    expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, exactly 1 driver, race/sprint, replays only: ');
-    expect(describeCharts(read().components)).toContain('speed_ribbon, Speed ribbon, 0 to 1 driver, race/sprint, replays only: ');
+    expect(describeCharts(read().components)).toContain('car_telemetry, Telemetry, race/sprint, replays only: ');
     useSession.setState({ session: { ...race, status: 'live' }, channels });
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).rejects.toThrow(
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', props: { driver: 'HAM' } }] })).rejects.toThrow(
       'car_telemetry works in replays only, and this session is live: leave it out. Nothing was suggested.',
     );
     useSession.setState({ session: race, channels });
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', drivers: ['HAM'] }] })).resolves.toContain('Suggested: Telemetry');
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'car_telemetry', props: { driver: 'HAM' } }] })).resolves.toContain('Suggested: Telemetry HAM');
   });
 
-  it('lists the pedal barcode as one driver or none, and suggests it either way', async () => {
-    expect(describeCharts(read().components)).toContain('pedal_barcode, Pedals, 0 to 1 driver, race/sprint, replays only: Is a driver driving every lap the same');
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode' }] })).resolves.toContain('Suggested: Pedals.');
-    host.suggestions.newTurn();
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', drivers: ['HAM'] }] })).resolves.toContain('Suggested: Pedals HAM');
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', drivers: ['HAM', 'VER'] }] })).rejects.toThrow();
+  it('needs the driver a one-driver chart is about, and never picks one', async () => {
+    for (const chart of ['pedal_barcode', 'speed_ribbon', 'car_telemetry', 'pit_window']) {
+      await expect(runTool('suggest_tiles', { charts: [{ chart }] }), chart).rejects.toThrow(`${chart} needs driver, and none was given: ask the user which driver`);
+    }
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', props: { driver: 'HAM' } }] })).resolves.toContain('Suggested: Pedals HAM');
+    // A list given to a one-driver prop is one too many.
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'pedal_barcode', props: { driver: ['HAM', 'VER'] } }] })).rejects.toThrow(/driver is one driver, and 2 were given/);
+    expect(props()).toEqual([{ type: 'pedal_barcode', props: { driver: 44 } }]);
   });
 
   it('suggests a chart next to the onboards, with drivers as car numbers', async () => {
-    const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER'], charts: [{ chart: 'test_gap', drivers: ['Hamilton', 'max'] }] });
+    const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER'], charts: [{ chart: 'test_gap', props: { driver_a: 'Hamilton', driver_b: 'max' } }] });
     expect(out).toBe('Suggested: HAM, VER, Gap 44 v 1. The user decides; nothing is on screen until they add it.');
     expect(props()).toEqual([
       { type: 'video', props: { feed: '1:44' } },
       { type: 'video', props: { feed: '1:1' } },
-      { type: 'test_gap', props: { drivers: [44, 1] } },
+      { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } },
     ]);
     expect(layout.tiles()).toEqual([]);
   });
 
-  it('resolves drivers from the roster, even without an onboard', async () => {
-    await runTool('suggest_tiles', { charts: [{ chart: 'test_pit', drivers: ['GAS'] }] });
-    expect(props()).toEqual([{ type: 'test_pit', props: { drivers: [10] } }]);
+  it('resolves drivers from the roster, even without an onboard, and takes a number as one', async () => {
+    await runTool('suggest_tiles', { charts: [{ chart: 'test_pit', props: { driver: 'GAS' } }, { chart: 'test_gap', props: { driver_a: 10, driver_b: '44' } }] });
+    expect(props()).toEqual([
+      { type: 'test_pit', props: { driver: 10 } },
+      { type: 'test_gap', props: { driver_a: 10, driver_b: 44 } },
+    ]);
   });
 
-  it('lets a chart that can take no drivers pick its own', async () => {
-    await runTool('suggest_tiles', { charts: [{ chart: 'test_field' }, { chart: 'test_weather' }] });
+  it('fills in who a whole-field chart draws and highlights, and leaves both out when not given', async () => {
+    await runTool('suggest_tiles', {
+      charts: [
+        { chart: 'test_field' },
+        { chart: 'test_field', props: { drivers_to_display: ['HAM', 'VER', 'GAS'], drivers: 'HAM', laps: 10 } },
+        { chart: 'test_weather' },
+      ],
+    });
     expect(props()).toEqual([
       { type: 'test_field', props: {} },
+      { type: 'test_field', props: { drivers_to_display: [44, 1, 10], drivers: [44], laps: 10 } },
       { type: 'test_weather', props: {} },
     ]);
   });
 
-  it('refuses the wrong number of drivers, and suggests nothing', async () => {
-    await expect(runTool('suggest_tiles', { streams: ['HAM'], charts: [{ chart: 'test_gap', drivers: ['HAM'] }] })).rejects.toThrow(
-      'test_gap takes exactly 2 drivers, and 1 was given. Nothing was suggested.',
+  it('refuses props a chart does not take, or that do not fit, and suggests nothing', async () => {
+    await expect(runTool('suggest_tiles', { streams: ['HAM'], charts: [{ chart: 'test_gap', props: { driver_a: 'HAM' } }] })).rejects.toThrow(
+      'test_gap needs driver_b, and none was given: ask the user which driver, unless the conversation already says. Nothing was suggested.',
     );
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_pit' }] })).rejects.toThrow(/takes exactly 1 driver, and none were given: ask the user which/);
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_weather', drivers: ['HAM'] }] })).rejects.toThrow(/takes no drivers/);
-    // The same driver twice is one driver.
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_gap', drivers: ['HAM', '44'] }] })).rejects.toThrow(/1 was given/);
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_weather', props: { drivers: ['HAM'] } }] })).rejects.toThrow(
+      'test_weather has no prop "drivers": it takes none.',
+    );
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_pit', props: { drivers: ['HAM'] } }] })).rejects.toThrow(/test_pit has no prop "drivers": it takes driver\./);
+    // The same driver named three ways is one driver.
+    await runTool('suggest_tiles', { charts: [{ chart: 'test_field', props: { drivers: ['HAM', '44', 'Hamilton'] } }] });
+    expect(props()).toEqual([{ type: 'test_field', props: { drivers: [44] } }]);
+    host.suggestions.newTurn();
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_field', props: { laps: 'ten' } }] })).rejects.toThrow(/^test_field: \/laps /);
     expect(props()).toEqual([]);
   });
 
   it('refuses a driver it cannot find', async () => {
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_pit', drivers: ['Senna'] }] })).rejects.toThrow(
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_pit', props: { driver: 'Senna' } }] })).rejects.toThrow(
       /No driver matches "Senna" in this session: ask the user who they mean/,
     );
   });
 
   it('refuses a chart for another session type', async () => {
     useSession.setState({ session: { ...race, type: 'sprint-qualifying' } });
-    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_gap', drivers: ['HAM', 'VER'] }] })).rejects.toThrow(
+    await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_gap', props: { driver_a: 'HAM', driver_b: 'VER' } }] })).rejects.toThrow(
       'test_gap is for race, sprint sessions, and this is sprint qualifying: leave it out. Nothing was suggested.',
     );
     // One for any session is fine.
-    await runTool('suggest_tiles', { charts: [{ chart: 'test_pit', drivers: ['HAM'] }] });
+    await runTool('suggest_tiles', { charts: [{ chart: 'test_pit', props: { driver: 'HAM' } }] });
     expect(props()).toHaveLength(1);
   });
 
@@ -306,9 +323,60 @@ describe('suggesting charts', () => {
     await expect(runTool('suggest_tiles', { charts: [{ chart: 'test_weather' }] })).rejects.toThrow(/No session is open/);
   });
 
-  it('shows chart tiles in the app state by label and chart name', () => {
-    host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'test_gap', props: { drivers: [44, 1] } }] });
-    expect(describeAppState()).toMatch(/^on screen: HAM; Gap 44 v 1 \(test_gap chart\)$/m);
+  it('shows chart tiles in the app state by label, chart name and props', () => {
+    host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } }, { type: 'test_weather', props: {} }] });
+    expect(describeAppState()).toMatch(/^on screen: HAM; Gap 44 v 1 \(test_gap chart, props \{"driver_a":44,"driver_b":1\}\); Weather \(test_weather chart\)$/m);
+  });
+
+  it('can have the same chart twice, for different drivers', async () => {
+    host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44 } }, { type: 'test_pit', props: { driver: 1 } }, { type: 'test_pit', props: { driver: 44 } }] });
+    expect(layout.tiles().map((t) => t.component.label)).toEqual(['Pit 44', 'Pit 1']);
+  });
+
+  describe('edit_tile', () => {
+    beforeEach(() => {
+      host.layout.add({
+        items: [
+          { type: 'video', props: { feed: '1:44' } },
+          { type: 'test_field', props: { drivers: [44] } },
+          { type: 'test_pit', props: { driver: 44 } },
+          { type: 'test_pit', props: { driver: 1 } },
+        ],
+      });
+    });
+    const tiles = () => layout.tiles().map((t) => ({ id: t.id, label: t.component.label, props: t.component.props }));
+
+    it('changes only the props it names, in place', async () => {
+      const before = tiles();
+      const rects = () => layout.tiles().map((t) => [t.x, t.y, t.w, t.h]);
+      const placed = rects();
+      expect(await runTool('edit_tile', { tile: 'test_field', props: { drivers_to_display: ['HAM', 'VER', 'GAS'] } })).toBe('Changed: Field 44-1-10/44.');
+      const after = tiles();
+      expect(after[1]).toEqual({ id: before[1].id, label: 'Field 44-1-10/44', props: { drivers: [44], drivers_to_display: [44, 1, 10] } });
+      expect(rects()).toEqual(placed);
+      // Null takes a prop away.
+      await runTool('edit_tile', { tile: 'Field 44-1-10/44', props: { drivers: null } });
+      expect(tiles()[1].props).toEqual({ drivers_to_display: [44, 1, 10] });
+    });
+
+    it('changes who a one-driver chart is about, by its label', async () => {
+      expect(await runTool('edit_tile', { tile: 'pit 1', props: { driver: 'Gasly' } })).toBe('Changed: Pit 10.');
+      expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 10']);
+    });
+
+    it('asks for one tile when a name fits several, and changes nothing', async () => {
+      await expect(runTool('edit_tile', { tile: 'test_pit', props: { driver: 'GAS' } })).rejects.toThrow('"test_pit" names 2 charts: Pit 44, Pit 1. Name one by its label.');
+      await expect(runTool('edit_tile', { tile: 'nothing', props: {} })).rejects.toThrow('No chart on screen is called "nothing".');
+      await expect(runTool('edit_tile', { tile: 'HAM', props: {} })).rejects.toThrow(/No chart on screen/);
+      expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1']);
+    });
+
+    it('refuses props that do not fit, or a chart that is already on screen', async () => {
+      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: null } })).rejects.toThrow(/test_pit needs driver/);
+      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: 'Senna' } })).rejects.toThrow(/No driver matches "Senna"/);
+      await expect(runTool('edit_tile', { tile: 'pit 1', props: { driver: 'HAM' } })).rejects.toThrow(/already on screen/);
+      expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1']);
+    });
   });
 
   describe('remove_tiles', () => {
@@ -317,9 +385,9 @@ describe('suggesting charts', () => {
         items: [
           { type: 'video', props: { feed: '1:44' } },
           { type: 'video', props: { feed: '1:1' } },
-          { type: 'test_gap', props: { drivers: [44, 1] } },
-          { type: 'test_pit', props: { drivers: [44] } },
-          { type: 'test_pit', props: { drivers: [1] } },
+          { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } },
+          { type: 'test_pit', props: { driver: 44 } },
+          { type: 'test_pit', props: { driver: 1 } },
         ],
       });
     });

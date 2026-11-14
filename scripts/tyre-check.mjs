@@ -156,7 +156,7 @@ for (const lap of LAPS) {
   {
     await layout([tyres]);
     await shot(`L${lap}-1-beside-video`);
-    await layout([tyres, { type: 'timing_tower', props: {} }, { type: 'gap_evolution', props: { drivers: [3, 44] } }, { type: 'tyre_deg', props: {} }]);
+    await layout([tyres, { type: 'timing_tower', props: {} }, { type: 'gap_evolution', props: { driver_a: 3, driver_b: 44 } }, { type: 'tyre_deg', props: {} }]);
     await shot(`L${lap}-2-crowded`);
     await layout([tyres]);
     await squeeze([364, 374]);

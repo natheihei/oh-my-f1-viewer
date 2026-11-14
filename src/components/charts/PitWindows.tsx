@@ -4,12 +4,13 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql } from '../../host';
+import { Displayed, defineComponent, Highlighted, keyPart, useLive, useSql } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
   circuitMessage,
   colors,
+  displayed,
   drawCode,
   hline,
   neutralOf,
@@ -17,6 +18,7 @@ import {
   styleOf,
   text,
   textWidth,
+  useDriverSet,
   useDriverStyles,
   type Box,
   type Ctx,
@@ -24,7 +26,6 @@ import {
   type Neutral,
 } from './kit';
 import { pitWindowModel, SQL } from './PitWindow';
-import { watchedKey } from './TimingTower';
 
 const NEEDS = ['timing' as const];
 
@@ -137,8 +138,8 @@ const MOST = { width: Math.ceil(widthAt(COLUMNS, MAX_SIZE, MAX_SPACING)), height
 interface Drawn {
   rows: WindowRow[];
   styles: Map<number, DriverStyle>;
-  /** Cars whose onboard is on screen: their rows are lifted. */
-  watched: ReadonlySet<number>;
+  /** The props' drivers: their rows are lifted. */
+  highlighted: ReadonlySet<number>;
   /** The pit loss every row adds, and the neutralisation it's for. */
   loss: number | null;
   status: Neutral | null;
@@ -204,8 +205,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
     const top = head + i * pitch;
     if (small && top + pitch > height) return;
     const y = top + pitch / 2 + 0.5;
-    const watched = m.watched.has(row.driver);
-    if (watched) {
+    const lifted = m.highlighted.has(row.driver);
+    if (lifted) {
       ctx.fillStyle = c.select;
       ctx.fillRect(0, top + 1, width, pitch - 1);
     }
@@ -219,7 +220,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
           text(ctx, String(row.from), x1, y, { align: 'right', color: c.ink, size });
           break;
         case 'driver':
-          drawCode(ctx, style, x0, y, { size, strong: watched, barHeight: pitch * 0.56 });
+          drawCode(ctx, style, x0, y, { size, strong: lifted, barHeight: pitch * 0.56 });
           break;
         case 'rejoin':
           if (row.pit) text(ctx, 'PIT', x1, y, { align: 'right', color: c.dim, size });
@@ -262,9 +263,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   });
 }
 
-const NO_ONE: ReadonlySet<number> = new Set();
-
-function PitWindows() {
+function PitWindows({ props }: { props: { drivers?: number[]; drivers_to_display?: number[] } }) {
   const view = useSql(SQL);
   const statusView = useSql(STATUS_SQL);
   const styles = useDriverStyles();
@@ -272,13 +271,14 @@ function PitWindows() {
   const normal = useLive((s) => (s.circuit.state === 'ready' ? s.circuit.pitLoss.normal : null));
   const safetyCar = useLive((s) => (s.circuit.state === 'ready' ? s.circuit.pitLoss.safetyCar : null));
   const virtualSafetyCar = useLive((s) => (s.circuit.state === 'ready' ? s.circuit.pitLoss.virtualSafetyCar : null));
-  const watchedList = useLive(watchedKey);
-  const watched = useMemo(() => (watchedList ? new Set(watchedList.split(',').map(Number)) : NO_ONE), [watchedList]);
+  const highlighted = useDriverSet(props.drivers);
+  const shown = props.drivers_to_display;
   const status = statusView.state === 'ready' ? neutralOf(statusView.rows[0]?.status) : null;
   const loss = lossNow({ normal, safetyCar, virtualSafetyCar }, status);
   const model = useMemo(
-    () => (view.state === 'ready' ? { rows: pitWindowsModel(view.rows, loss), styles, watched, loss, status } : null),
-    [view, loss, styles, watched, status],
+    // Every car's stop is played out against the whole field, then only those to draw are kept.
+    () => (view.state === 'ready' ? { rows: displayed(pitWindowsModel(view.rows, loss), shown), styles, highlighted, loss, status } : null),
+    [view, loss, styles, highlighted, shown, status],
   );
   return (
     <ChartFrame needs={NEEDS} waits={[circuit]} views={[view, statusView]}>
@@ -292,11 +292,15 @@ export default defineComponent({
   title: 'Pit windows',
   description:
     "Every running car's pit stop if it stopped now, one row each: where it would rejoin, the places that costs, how many seconds short of the place ahead and how many spare, and the car it would come out behind and whether that is traffic. Suggest it for who in the field can stop cheaply, or who would land in traffic; pit_window is for one driver's stop.",
-  args: Type.Object({}),
+  args: Type.Object({ drivers_to_display: Displayed(', from the running cars'), drivers: Highlighted() }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   fit: MOST,
-  spec: () => ({ key: 'pit_windows', label: 'Pit windows' }),
+  spec: ({ drivers_to_display, drivers }) => ({
+    key: drivers_to_display || drivers ? `pit_windows:${keyPart(drivers_to_display)}:${keyPart(drivers, 'none')}` : 'pit_windows',
+    label: 'Pit windows',
+    drivers: drivers_to_display ?? drivers,
+  }),
   View: PitWindows,
 });

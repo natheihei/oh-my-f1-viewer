@@ -26,8 +26,24 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **No title of its own.** The tile's title bar shows the spec's label. The first thing in the view is content. A spec about some
   drivers returns them as `drivers`, with the label as the name alone, and the title bar draws each as a code after the name.
   (2026-11-13, #78. The label was one string, so in "TELEMETRY HAM" the code read with the same weight as the chart's name.)
-- **It works with no props.** That is how it's first seen, in the suggestion strip. Every arg is optional, and with no drivers given
-  it picks from the data at the playhead.
+- **It declares the props it needs, and whoever puts it on screen fills them in.** The agent does, from what the user said, when it
+  suggests the tile, so a preview in the suggestion strip is already about its drivers and the tile stays about them. A component
+  never picks a driver from the data itself, or from which onboards are on screen, unless following one is its job (a "leader"
+  chart that tracks whoever leads), and then its label says so. (2026-11-13, #77. Before, a chart given no drivers picked its own
+  at every render: the top three reshuffled under the viewer, and a key such as `speed_ribbon:leader` never said who.)
+- **Driver props are named for what they hold,** so the agent fills them in by name. `src/host/props.ts` has the schemas.
+  - `driver`: the one driver a chart is about. Required: `car_telemetry`, `pit_window`, `speed_ribbon`, `pedal_barcode`.
+  - `driver_a`, `driver_b`: the two a comparison is about. Required: `gap_evolution`, where which is which only sets the colours,
+    and `sector_table`, where each difference is a's against b's.
+  - `drivers`: those to highlight among everyone drawn, a lifted row and a bold code. Optional: `track_map`, `timing_tower`,
+    `tyre_strategy`, `tyre_deg`, `pit_windows`.
+  - `drivers_to_display`: those to draw, when a chart of the field can show just some. Left out, everyone. Optional:
+    `tyre_strategy`, `tyre_deg`, `pit_windows`, where `drivers` then picks who stands out among those drawn.
+  A name starting `driver_` or `drivers_` is a driver prop too, one driver or a list, so a component can add its own.
+- **Every prop is in the key,** so the same chart can be on screen twice when its props differ, one telemetry for HAM and one for VER,
+  and the same props twice is one tile. Where the order of two drivers doesn't change what's drawn, the key sorts them.
+- **The agent can change the props of a chart on screen** with `edit_tile`, through `host.layout.setProps`: the tile keeps its place,
+  and its key and label follow.
 
 ### Size
 
@@ -120,8 +136,7 @@ and dim text in race control.)
   "column code", so a new chart or a mod picks from the same set instead of adding a case, and a new look is added once, as a
   variant anything can use.
 - **`bar` is the code everywhere: a 3px bar in the team colour, then the code in ink.** The title bar draws it bold. So does a
-  chart's own heading, such as the pedal barcode's or the speed ribbon's when the title bar doesn't name the driver. A table, such
-  as the timing tower, draws it at 500, and bold for a watched car. (Options explored: team-coloured text, a line key, an underline,
+  chart's own heading. A table, such as the timing tower, draws it at 500, and bold for a highlighted car. (Options explored: team-coloured text, a line key, an underline,
   a chip and an outline. Team-coloured text didn't read for Cadillac and Haas, whose colour is the theme's dim, or for Williams
   and Aston Martin, too dark on black. With the code always in ink, only the bar carries the team.)
 - **`plain` is for a plot.** A car's dot or line is already its team mark, so its label is the code alone, in ink: bold for the
@@ -161,8 +176,8 @@ Per-chart decisions go under a heading for that chart as each one is polished.
 
 Polished 2026-11-13.
 
-- **Who you're watching is lifted.** A car whose onboard is in a tile gets a raised row and a bold code, so the tower and the videos
-  read as one screen.
+- **Its `drivers` are lifted:** a raised row and a bold code. (Until #77, a car whose onboard was in a tile was lifted, so the tower
+  and the videos read as one screen. Now the agent names who to highlight, and an onboard alone highlights no one.)
 - **A car within range of the one ahead is marked.** An interval under the season's DRS or Overtake line (`spec.chaseAid`) is ink
   and bold, the rest dim. A lapped interval is never in range.
 - **Type doesn't go below 11px**, the app's smallest, and is 12px only where the tile is tall enough for a 21px row and wide enough for
@@ -185,6 +200,8 @@ Polished 2026-11-13.
 - **A list of elements, not a canvas.** A race has a couple of hundred messages, and every one stays reachable: the list scrolls
   with the app's hairline track. A canvas could only run past the tile for the host's mark, which doesn't reach them. The
   pointer on a line shows the messages it stands for, as sent.
+- **No props.** A run of blue flags between other lines is always counted on one. (A `blue_flags` prop that put each on its own
+  line was taken out in #77.)
 - **Fewer words, read from F1's wording.** The feed fills its structured columns only for flags. Deleted laps, the stewards'
   cases, penalties, the red flag and the restart order are plain text, so `raceControlMessages.ts` reads them with a pattern for
   each: "ALB lap 34 deleted · T1 limits" for "CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00". A
@@ -270,8 +287,6 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 - **104 is no reading.** The feed sends 104 for throttle or brake, nearly always both, when it has none, while the revs freeze. That
   cell is drawn `quiet`, like a gap of more than 2 s, never as full throttle or full brake.
 - **The playhead is a mark in the team's colour** on the lap in progress. Lap numbers at the left, the current lap in ink.
-- **With no driver named, the leader at the playhead,** whose code is drawn at the top left as a bold `bar` code, since the title bar
-  then says only "Pedals".
 - **Size.** Least 300 by 150: six 16px rows, the turn row and the 92px label column. Fit 640 by 200: 26px rows, and about two pixels a
   sample across a 75 s lap; wider only stretches the cells. Below the least size it's compact: the cells alone, which shrink to fit.
 - **Queries.** The completed laps' pedals and positions are read once per lap, keyed on their starts; only the lap in progress
@@ -282,15 +297,15 @@ Added 2026-11-13, from direction A of the `car_telemetry` proposals.
 Added 2026-11-13, from direction B of the pit window proposals.
 
 - **Its own component, not a form of `pit_window`.** `pit_window` plays out one driver's stop and needs that driver;
-  `pit_windows` takes no props and answers who in the field could stop now, and for how much. One name drawing two charts
+  `pit_windows` needs no driver and answers who in the field could stop now, and for how much. One name drawing two charts
   would leave the agent unable to tell them apart. Each description points at the other.
 - **The same stop as the ring.** Each row is `pitWindowModel` run for that car, so the two charts never disagree about a
   rejoin, a gap or clear air.
 - **Running order.** Sorting by the cheapest stop was tried and left out: rows that move every lap are hard to follow.
 - **Sized like the timing tower.** The same type, rows, spacing and least-size rule, and every column always. Least 312 by
   376, fit 403 by 508. Below its least size the table runs past the tile for the host's "more" mark.
-- **Who you're watching is lifted,** as in the tower: a car whose onboard is in a tile. With no props there is no chosen
-  driver.
+- **Its `drivers` are lifted,** as in the tower, and `drivers_to_display` keeps only some rows. Each stop is still played out
+  against the whole field.
 - **The pit loss follows the track status.** Under a safety car or a VSC every row uses MultiViewer's loss for it, and the
   REJOIN head says what a stop adds, "+21.8" or, in ink, "+14.2 SC". A loss MultiViewer doesn't give is missing, not
   the green-flag one.
@@ -323,7 +338,6 @@ Added 2026-11-13, from direction B of the `car_telemetry` proposals.
 - **The readout holds still.** Each number sits right-aligned in a slot as wide as its widest value, so nothing after it moves
   when the speed goes from two digits to three, or the throttle from 99% to 100%.
 - **The timing line,** a bar across the track at the outline's first point, as the track map draws it, so the lap's start reads.
-- **The leader when no driver is named,** and then the readout names them, since the title bar can't.
 - **Turn numbers just outside the track,** in the hint grey, left out where they would touch the readout, a corner speed or another
   number. (Corner speeds, lifts, the pedals in the readout and the timing line were picked from the speed ribbon proposals,
   2026-11-13.)
@@ -444,6 +458,8 @@ Polished 2026-11-13.
 
 - **Running order, with retired cars last.** Rows follow the order at the playhead, as the timing tower and pit windows do. A car
   that is out is dimmed with OUT after its last stint, and has no laps still to come.
+- **`drivers_to_display` keeps only some rows, and `drivers` lifts some,** as in the tower. (Before #77 its `drivers` did what
+  `drivers_to_display` does now.)
 - **The row head is the tower's:** position, team bar and code, so the two read as one.
 - **The laps still to come are drawn.** A quiet track runs from each running car's last lap to the race distance, the lap
   axis ends at that distance in bold, and the now line is named, "L39". Ticks past now are quieter.
@@ -476,7 +492,7 @@ Added 2026-11-13, in place of `field_pace`, from direction C of the Pace proposa
 - **Laps that don't count are said once.** A lap under a yellow, a safety car or a red is hatched; a pit lap or the race's first
   lap is left empty. None of them are in the median. There is no "P" box, which read as an alert in the soft tyre's red.
 - **Race order,** with position, team bar and code as the tower draws them, then the compound and laps on it, "S 22", so rows
-  hold still and read with the tower. A car whose onboard is on screen is lifted, as in the tower.
+  hold still and read with the tower. Its `drivers` are lifted, as in the tower, and `drivers_to_display` keeps only some rows.
 - **Retired cars on one line under the grid,** "OUT STR L31 · BOT L1", not a row of empty cells each.
 - **No number at the right.** A deg rate in seconds a lap was proposed and not picked: on a drying track the field gets quicker
   together, and a rate would read that as no wear. In São Paulo 2026 the long soft stints were still getting quicker after 40

@@ -1,7 +1,7 @@
 /** One car's speed, gear, revs, throttle and brake as of the playhead, with its speed over the last lap. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useLive, useSql, type ChaseAid } from '../../host';
+import { defineComponent, Driver, useLive, useSql, type ChaseAid } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -284,16 +284,10 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   }
 }
 
-const Drivers = Type.Array(Type.Integer({ description: 'A car number' }), {
-  minItems: 1,
-  maxItems: 1,
-  description: 'The driver, as a car number',
-});
-
 const NO_PLAYHEAD = 0;
 
-function CarTelemetry({ props }: { props: { drivers: number[] } }) {
-  const [driver] = props.drivers;
+function CarTelemetry({ props }: { props: { driver: number } }) {
+  const { driver } = props;
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const aid = useLive((s) => s.spec.chaseAid);
   const lap = useSql(LAP_SQL, [driver]);
@@ -324,11 +318,11 @@ export default defineComponent({
   description:
     "One car's speed, gear, revs, throttle and brake as the driver is driving, with its speed over the last lap and each corner's speed. Suggest it under that driver's onboard.",
   replayOnly: true,
-  args: Type.Object({ drivers: Drivers }),
+  args: Type.Object({ driver: Driver('The driver') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   size: { aspect: Math.round((FIT.width / FIT.height) * 100) / 100, min: { width: 300, height: 150 } },
   fit: FIT,
-  spec: ({ drivers }) => ({ key: `car_telemetry:${drivers[0]}`, label: 'Telemetry', drivers: [drivers[0]] }),
+  spec: ({ driver }) => ({ key: `car_telemetry:${driver}`, label: 'Telemetry', drivers: [driver] }),
   View: CarTelemetry,
 });

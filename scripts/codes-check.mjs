@@ -129,25 +129,25 @@ await shoot(
   [
     ...(main ? [{ type: 'video', props: { feed: main.id } }] : []),
     ...(onboard ? [{ type: 'video', props: { feed: onboard.id } }] : []),
-    { type: 'car_telemetry', props: { drivers: [44] } },
-    { type: 'gap_evolution', props: { drivers: [1, 81] } },
+    { type: 'car_telemetry', props: { driver: 44 } },
+    { type: 'gap_evolution', props: { driver_a: 1, driver_b: 81 } },
     { type: 'timing_tower', props: {} },
     { type: 'race_control', props: {} },
   ],
   onboard?.id,
 );
 await shoot('2-charts', [
-  { type: 'pit_window', props: { drivers: [44] } },
+  { type: 'pit_window', props: { driver: 44 } },
   { type: 'track_map', props: { drivers: [1, 81] } },
   { type: 'pedal_barcode', props: {} },
-  { type: 'sector_table', props: { drivers: [1, 81] } },
+  { type: 'sector_table', props: { driver_a: 1, driver_b: 81 } },
   { type: 'race_status', props: {} },
   { type: 'pit_windows', props: {} },
 ]);
 await shoot('3-tyres', [
   { type: 'tyre_strategy', props: {} },
   { type: 'tyre_deg', props: {} },
-  { type: 'speed_ribbon', props: { drivers: [44] } },
+  { type: 'speed_ribbon', props: { driver: 44 } },
 ]);
 
 if (keep) {
