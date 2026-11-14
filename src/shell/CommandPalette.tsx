@@ -1,13 +1,15 @@
 /**
  * The app's only control surface besides the timeline: an input box, plus a short history box when
- * there is history, and between them the spoiler check and the agent's suggested tiles. Older history
- * is a scroll away. Sits above the timeline, over the video. It stays open while there are suggestions
- * or a spoiler check.
+ * there is history, and between them the spoiler check, an offer of build mode, the agent's suggested
+ * tiles and the tiles' errors attached to the next message. Older history is a scroll away. Sits above
+ * the timeline, over the video. It stays open while any of those wait on the viewer.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { host, read, useLive } from '../host';
 import { AgentPanel, describeAgent } from './AgentPanel';
+import { AttachTag, AttachTray } from './AttachTray';
 import { BackgroundPanel } from './BackgroundPanel';
+import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPrompt';
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
 import { matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
@@ -52,7 +54,10 @@ export function CommandPalette() {
   const historyRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<SuggestionStripHandle | null>(null);
   const promptRef = useRef<LookAheadPromptHandle | null>(null);
+  const offerRef = useRef<BuildOfferPromptHandle | null>(null);
   const asking = useLookAhead((s) => s.asking);
+  const attached = useLive((s) => s.attached);
+  const offer = useLive((s) => s.build.offer);
   const contentId = useLive((s) => s.session?.contentId ?? null);
   const lookAheadAllowed = useLookAhead((s) => sessionAllowed(s, contentId));
   const tiles = useLive((s) => s.suggestions.items);
@@ -67,7 +72,8 @@ export function CommandPalette() {
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
   // While building, the tag beside the input is the only way out, so the palette stays.
-  const showing = open || blank || hasTiles || asking || building || panel != null;
+  // Attached errors and an offer of build mode wait on the viewer, so the palette stays for them too.
+  const showing = open || blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
   const suggestions = matchCommands(value);
 
   useEffect(() => {
@@ -95,6 +101,30 @@ export function CommandPalette() {
       requestAnimationFrame(() => (read().suggestions.items.length > 0 ? stripRef.current?.focus() : inputRef.current?.focus()));
     }
   }, [asking]);
+
+  // Attaching a tile's error opens the palette and puts the viewer in the input, to say more or send.
+  // At once, not a frame later: what they type next belongs there, not to the tile's button.
+  const attachedBefore = useRef(0);
+  useEffect(() => {
+    if (attached.length > attachedBefore.current) {
+      palette.show();
+      if (inputRef.current) inputRef.current.focus();
+      else requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    attachedBefore.current = attached.length;
+  }, [attached.length]);
+
+  // An offer of build mode takes focus, as the spoiler check does, and gives it back once answered.
+  const offeredBefore = useRef(false);
+  useEffect(() => {
+    if (offer) {
+      offeredBefore.current = true;
+      if (!useLookAhead.getState().asking) offerRef.current?.focus();
+    } else if (offeredBefore.current) {
+      offeredBefore.current = false;
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [offer]);
 
   function disarm(): void {
     if (armedTimer.current != null) clearTimeout(armedTimer.current);
@@ -201,7 +231,8 @@ export function CommandPalette() {
 
   const submit = () => {
     const text = value.trim();
-    if (!text) return;
+    // Attached errors can go on their own, with no words.
+    if (!text && attached.length === 0) return;
     const said = trimParts(parts);
     inputRef.current?.setText('');
     setSelected(0);
@@ -256,6 +287,11 @@ export function CommandPalette() {
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
               <span className="palette-mark">{ROLE_MARK[entry.role]}</span>
               <span className="palette-text">
+                {entry.attached?.map((tag) => (
+                  <Fragment key={tag.scope}>
+                    <AttachTag tag={tag} />{' '}
+                  </Fragment>
+                ))}
                 {entry.parts ? <MentionParts parts={entry.parts} /> : entry.text}
                 {entry.action ? (
                   <>
@@ -271,6 +307,7 @@ export function CommandPalette() {
         </div>
       ) : null}
       {asking ? <LookAheadPrompt ref={promptRef} /> : null}
+      {offer && !building ? <BuildOfferPrompt ref={offerRef} offer={offer} /> : null}
       {hasTiles ? (
         <>
           <SuggestionStrip ref={stripRef} items={tiles} onLeave={() => inputRef.current?.focus()} onEscape={escapeTiles} />
@@ -283,6 +320,7 @@ export function CommandPalette() {
           </div>
         </>
       ) : null}
+      {attached.length > 0 ? <AttachTray attached={attached} busy={busy} /> : null}
       {picker ? (
         <div className="palette-suggestions palette-mentions" data-testid="mention-picker">
           {picker.options.map((option, i) => (

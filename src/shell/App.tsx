@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Backdrop, Grid, host, useLive } from '../host';
-import { connectAgent, useFixRequests } from './agentFeed';
+import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { palette } from './palette';
@@ -39,7 +39,6 @@ export function App() {
   const hasSession = useLive((s) => s.session != null);
   usePersistVolume();
   usePersistBackground();
-  useFixRequests();
 
   useEffect(() => {
     const offAgent = connectAgent();

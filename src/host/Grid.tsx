@@ -8,7 +8,7 @@ import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
 import { fillTitle, useDriverStyles } from './drivers';
 import { componentOf, useComponents } from './components';
-import { fitProps, fixable, health, healthOps, type PlaceHealth } from './health';
+import { fitProps, health, healthOps, type PlaceHealth } from './health';
 import { layoutOps } from './layoutOps';
 import { useLive } from './live';
 import { previewScope, tileLookAhead, useTileLookAhead } from './lookAhead';
@@ -30,29 +30,19 @@ interface BoundaryProps {
 }
 
 /**
- * Stands in for a component that isn't drawing, and says why. On a tile, where the agent could fix it,
- * a button asks it to: props anywhere, code only in build mode.
+ * Stands in for a component that isn't drawing, and says why. On a tile, a button attaches the error to
+ * the viewer's next message, whatever the agent is doing: it only joins `live.attached`.
  */
 function TileProblem({ place, state, text }: { place: Place | null; state: 'needs_props' | 'error'; text: string }) {
-  const building = useBuild((s) => s.active);
-  // A request sent now would stop the agent's turn, so the button waits for it.
-  const busy = useLive((s) => s.agentBusy || s.fixRequests.length > 0);
   return (
     <div className="tile-warning tile-problem" data-testid="tile-problem" data-problem={state} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <div>
         <div className="tile-warning-title">! error</div>
         <div>{text}</div>
       </div>
-      {place && fixable({ state, where: place.where }, building) ? (
-        <button
-          type="button"
-          className="tile-warning-allow"
-          data-testid="ask-agent-fix"
-          disabled={busy}
-          title={busy ? 'The agent is busy. Ask once it has finished.' : undefined}
-          onClick={() => healthOps.askFix({ scope: place.scope })}
-        >
-          {busy ? 'Agent is busy' : 'Ask agent to fix'}
+      {place?.where === 'tile' ? (
+        <button type="button" className="tile-warning-allow" data-testid="attach-error" onClick={() => healthOps.attach({ scope: place.scope })}>
+          Attach error to agent
         </button>
       ) : null}
     </div>

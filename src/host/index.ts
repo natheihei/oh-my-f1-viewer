@@ -50,10 +50,10 @@ export {
   type DriverStyle,
   type Part,
 } from './drivers';
-export { startHealth, type FixRequest, type PlaceHealth } from './health';
+export { startHealth, type Attachment, type ErrorReport, type PlaceHealth } from './health';
 export { startMods } from './mods';
 export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
-export { startBuild, type BuildView } from './build';
+export { startBuild, type BuildOffer, type BuildView } from './build';
 export { previewScope } from './lookAhead';
 export type { BuildChange, ModLogLine, ModStatus } from '../../shared/mods';
 export { tilesOf } from './layoutOps';
@@ -194,7 +194,7 @@ export const host = {
   suggestions: suggestionOps,
   /** Build mode's snapshot: begin, then save or undo. */
   build: buildOps,
-  /** Whether what's on screen is drawing, and asking the agent to fix what isn't. The report itself is `live.health`. */
+  /** Whether what's on screen is drawing, and attaching what isn't to the viewer's next message. The report itself is `live.health`. */
   health: healthOps,
   catalog: catalogOps,
   /** Session data that isn't in the live state. Nothing here can change it. */

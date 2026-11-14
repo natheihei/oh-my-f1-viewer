@@ -11,7 +11,7 @@ import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView
 import { useAgentTurn } from './agentTurn';
 import { useBuild, type BuildView } from './build';
 import { useComponents, type ComponentInfo } from './components';
-import { useHealth, type FixRequest, type PlaceHealth } from './health';
+import { useHealth, type Attachment, type PlaceHealth } from './health';
 import { useMods } from './mods';
 import type { ModStatus } from '../../shared/mods';
 import { useSuggestions, type SuggestionsView } from './suggestions';
@@ -52,9 +52,9 @@ export interface Live {
   build: BuildView;
   /** Each place a component shows, a tile or a preview in the strip, and whether it's drawing. */
   health: PlaceHealth[];
-  /** What the viewer asked the agent to fix, from a tile's button, until it's taken to the agent. */
-  fixRequests: FixRequest[];
-  /** Whether the agent is working on a message. One sent now would stop that turn. */
+  /** Tiles' errors the viewer attached to their next message, from a tile's button, until a message takes them. */
+  attached: Attachment[];
+  /** Whether the agent is working on a message. One sent now stops that turn and starts another. */
   agentBusy: boolean;
 }
 
@@ -81,7 +81,7 @@ export function read(): Live {
     mods: useMods.getState().list,
     build: useBuild.getState(),
     health: useHealth.getState().places,
-    fixRequests: useHealth.getState().asked,
+    attached: useHealth.getState().attached,
     agentBusy: useAgentTurn.getState().busy,
   };
 }
