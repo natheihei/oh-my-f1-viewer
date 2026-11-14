@@ -427,8 +427,8 @@ async function partSave() {
   const line = viewLog.match(/build mode: the user left it having saved this\. [^\\"]*/)?.[0] ?? '';
   console.log(`  ${line}`);
   check("20 the viewing agent's next request holds the app's one line", built.every((c) => line.includes(c.name)), line);
-  check('20 and nothing else of the build', !/write_file|edit_file|look_at|go back and forward laps|lap number bigger/.test(viewLog));
-  check('20 the build is stored apart', newest(sessionsDir('build')).includes('write_file'));
+  check('20 and nothing else of the build', !/"toolName":"(write|edit)"|look_at|go back and forward laps|lap number bigger/.test(viewLog));
+  check('20 the build is stored apart', newest(sessionsDir('build')).includes('"toolName":"write"'));
   spoilerSeen = 0;
   spoilerAnswer = 'no';
   const held = await where();
