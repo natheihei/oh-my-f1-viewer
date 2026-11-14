@@ -51,7 +51,7 @@ read();                               // The same state, once, outside React
 // Typed writes, and async queries
 host.session.open({ contentId, fromStart });
 host.playback.seekBy({ seconds: -10 });
-host.layout.group({ feeds, title });
+host.layout.setProps({ tile: 'tile-3', props: { driver: 44 } });
 await host.catalog.events({ year });
 
 // A native primitive, like Herdr's embedded terminal: mounting it is what requests the stream
@@ -84,8 +84,8 @@ expose(host.playback.seekToDate, { name: 'seek_to', adapt: toDateMs, gate: [sess
 The tool's name, model-facing wording, name matching ("Hamilton") and gates live here, not in the host. A tool that needs different wording or
 arguments from the host's declares its own, and `adapt` must turn them into the host function's types.
 
-The agent can change the layout, except that it can't add to it: it suggests tiles, and the user adds them. It isn't offered groups for now: the
-host still supports them, so they can come back.
+The agent can change the layout, except that it can't add to it: it suggests tiles, and the user adds them. It names a tile on screen by
+its id, which `app_state` lists.
 
 ### Charts
 

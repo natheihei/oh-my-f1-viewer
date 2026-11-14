@@ -2,7 +2,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { GridSurface, type TileState } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
-import { allTiles, GRID_COLUMNS, GRID_ROWS } from '../layout/model';
+import { GRID_COLUMNS, GRID_ROWS } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
@@ -184,7 +184,7 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
 
 const onMove = (tile: string, rect: Rect) => layoutOps.move({ tile, rect });
 const onSwap = (a: string, b: string) => layoutOps.swap({ a, b });
-const onClose = (tile: string) => void layoutOps.close({ tile });
+const onClose = (tile: string) => void layoutOps.remove({ tiles: [tile] });
 
 const percent = (n: number, of: number) => `${(n / of) * 100}%`;
 
@@ -235,7 +235,7 @@ export function Grid() {
     [building, changes],
   );
   const approved = useTileLookAhead((s) => s.approved);
-  const nodes = useLayout((s) => s.nodes);
+  const tiles = useLayout((s) => s.tiles);
   const audio = useLive((s) => s.audio);
   const muted = useLive((s) => s.volume === 0);
   const streams = useLive((s) => s.streams);
@@ -244,7 +244,7 @@ export function Grid() {
   const states = useMemo(() => {
     const ahead = new Set(components.filter((c) => c.looksAhead).map((c) => c.name));
     const out: Record<string, TileState> = {};
-    for (const t of allTiles({ nodes })) {
+    for (const t of tiles) {
       const state: TileState = {};
       if (approved[t.id] && ahead.has(t.component.type)) state.ahead = true;
       if (marks[t.component.type]) state.mark = marks[t.component.type];
@@ -261,7 +261,7 @@ export function Grid() {
       out[t.id] = state;
     }
     return out;
-  }, [approved, components, nodes, audio, muted, streams, marks]);
+  }, [approved, components, tiles, audio, muted, streams, marks]);
   // Titles draw their drivers' codes from the roster, so they're drawn again when it changes.
   const styles = useDriverStyles();
   const drawTitle = useCallback((el: HTMLElement, component: ComponentSpec) => fillTitle(el, component, styles), [styles]);

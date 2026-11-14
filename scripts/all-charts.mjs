@@ -93,7 +93,7 @@ for (const chart of wanted) {
   }
   await page.evaluate(async () => {
     const { host, read, tilesOf } = await import('/src/host/index.ts');
-    host.layout.remove({ keys: tilesOf(read().layout).filter((t) => t.component.type !== 'video').map((t) => t.component.key) });
+    host.layout.remove({ tiles: tilesOf(read().layout).filter((t) => t.component.type !== 'video').map((t) => t.id) });
   });
 }
 writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

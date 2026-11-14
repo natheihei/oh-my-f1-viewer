@@ -170,12 +170,6 @@
   border-bottom-width: 0;
 }
 
-/* A group is framed all round, in the brighter hairline. */
-.grid-surface .grid-stack-item.tile-group::after {
-  border-width: 1px;
-  border-color: var(--color-rule);
-}
-
 /* The grid only takes the mouse at title bars and resize handles; the rest reaches the components. */
 .grid-surface,
 .grid-surface .grid-stack-item,
@@ -292,40 +286,6 @@
   border-left: 1px solid var(--color-line);
   font-size: var(--text-m);
   letter-spacing: 0;
-}
-
-.tile-group > .grid-stack-item-content {
-  pointer-events: none;
-}
-
-.tile-group > .grid-stack-item-content > * {
-  pointer-events: auto;
-}
-
-.group-title {
-  @apply z-10 truncate text-dim;
-  height: var(--row);
-  line-height: calc(var(--row) - 1px);
-  padding-left: 8px;
-  border-bottom: 1px solid var(--color-rule);
-  background: var(--color-raised);
-  font-size: var(--text-s);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.group-title::before {
-  content: 'group  ';
-  white-space: pre;
-  color: var(--color-mute);
-}
-
-/* The nested grid fills what the group title leaves. */
-.grid-stack-nested {
-  position: absolute !important;
-  inset: var(--row) 0 0 0;
-  min-height: 0 !important;
-  height: auto !important;
 }
 
 .grid-stack-placeholder > .placeholder-content {

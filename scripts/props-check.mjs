@@ -57,7 +57,8 @@ log(`drivers: ${a.code} ${a.number}, ${b.code} ${b.number}, ${c.code} ${c.number
 await page.evaluate(async (agent) => {
   const { host, read, tilesOf } = await import('/src/host/index.ts');
   const { runTool } = await import('/src/agent/tools.ts');
-  Object.assign(window, { host, read, tilesOf, runTool });
+  const { describeAppState } = await import('/src/agent/bridge.ts');
+  Object.assign(window, { host, read, tilesOf, runTool, describeAppState });
   window.events = [];
   if (agent) {
     window.f1a.ai.onEvent((e) => window.events.push(e));
@@ -113,6 +114,8 @@ const act = (words, name, args) => (agent ? say(words) : tool(name, args));
 const strip = () => page.evaluate(() => window.read().suggestions.items.map((i) => ({ key: i.key, type: i.type, label: i.label, props: i.props })));
 const tiles = () => page.evaluate(() => window.tilesOf(window.read().layout).map((t) => ({ id: t.id, key: t.component.key, type: t.component.type, label: t.component.label, props: t.component.props, rect: [t.x, t.y, t.w, t.h] })));
 const addFromStrip = (keys) => page.evaluate((keys) => keys.forEach((key) => window.host.suggestions.add({ key })), keys);
+/** The id of the tile showing a chart of this type, as app_state lists it for the model. */
+const idOf = async (type) => (await tiles()).find((t) => t.type === type)?.id ?? null;
 const same = (x, y) => JSON.stringify([...x].sort()) === JSON.stringify([...y].sort());
 
 // 1. A battle: the suggested chart is already about both drivers.
@@ -142,28 +145,43 @@ check('both are on screen at once', both.length === 2, both.map((t) => t.key).jo
 await shot('two-telemetry');
 
 // 4. A chart of the whole field, then who it highlights and who it draws, changed in place.
-await page.evaluate(() => window.host.layout.remove({ keys: window.tilesOf(window.read().layout).filter((t) => t.component.type === 'car_telemetry').map((t) => t.component.key) }));
+await page.evaluate(() => window.host.layout.remove({ tiles: window.tilesOf(window.read().layout).filter((t) => t.component.type === 'car_telemetry').map((t) => t.id) }));
 await page.evaluate(() => window.host.layout.add({ items: [{ type: 'timing_tower', props: {} }, { type: 'tyre_strategy', props: {} }] }));
 await shot('field-before');
 const before = await tiles();
-await act(`highlight ${a.name} and ${b.name} in the timing tower`, 'edit_tile', { tile: 'timing_tower', props: { drivers: [a.code, b.code] } });
+const appState = await page.evaluate(() => window.describeAppState());
+const onScreen = appState.split('\n').find((l) => l.startsWith('on screen: ')) ?? '';
+console.log(`\n  app_state ${onScreen}`);
+check('app_state names every tile by its id', before.every((t) => onScreen.includes(`${t.id} ${t.label} (`)), onScreen);
+await act(`highlight ${a.name} and ${b.name} in the timing tower`, 'edit_tile', { tile: await idOf('timing_tower'), props: { drivers: [a.code, b.code] } });
 const tower = (await tiles()).find((t) => t.type === 'timing_tower');
 check('the tower highlights both', tower != null && same(tower.props.drivers ?? [], [a.number, b.number]), JSON.stringify(tower?.props));
 const towerBefore = before.find((t) => t.type === 'timing_tower');
 check('the tower kept its tile and place', tower?.id === towerBefore?.id && JSON.stringify(tower?.rect) === JSON.stringify(towerBefore?.rect));
 await shot('tower-highlighted');
 
-await act(`in the tyre strategy, show only ${a.name}, ${b.name} and ${c.name}, and highlight ${a.name}`, 'edit_tile', { tile: 'Tyre strategy', props: { drivers_to_display: [a.code, b.code, c.code], drivers: [a.code] } });
+await act(`in the tyre strategy, show only ${a.name}, ${b.name} and ${c.name}, and highlight ${a.name}`, 'edit_tile', { tile: await idOf('tyre_strategy'), props: { drivers_to_display: [a.code, b.code, c.code], drivers: [a.code] } });
 const tyres = (await tiles()).find((t) => t.type === 'tyre_strategy');
 check('tyre strategy draws those three', tyres != null && same(tyres.props.drivers_to_display ?? [], [a.number, b.number, c.number]), JSON.stringify(tyres?.props));
 check('and highlights one of them', tyres != null && same(tyres.props.drivers ?? [], [a.number]), JSON.stringify(tyres?.props));
 await shot('tyres-filtered');
 
 // 5. Who a chart is about, changed in place.
-await act(`switch the gap chart to ${b.name} and ${c.name}`, 'edit_tile', { tile: 'gap_evolution', props: { driver_a: b.code, driver_b: c.code } });
+const gapId = await idOf('gap_evolution');
+await act(`switch the gap chart to ${b.name} and ${c.name}`, 'edit_tile', { tile: gapId, props: { driver_a: b.code, driver_b: c.code } });
 const gap = (await tiles()).find((t) => t.type === 'gap_evolution');
 check('the gap chart is now about the new pair', gap != null && same([gap.props.driver_a, gap.props.driver_b], [b.number, c.number]), JSON.stringify(gap?.props));
+check('and is still the same tile, under a new key', gap?.id === gapId && gap.key !== battle?.key, `${gap?.id} ${gap?.key}`);
 await shot('gap-switched');
+
+// 6. Taking tiles off by id: a label names nothing, and the gap chart's id still does after its props changed.
+if (!agent) {
+  const byLabel = await tool('remove_tiles', { tiles: [gap.label] });
+  check('a label is refused', !byLabel.ok && /Not on screen/.test(byLabel.text), byLabel.text);
+}
+await act('done with the gap chart', 'remove_tiles', { tiles: [gapId] });
+check('the gap chart is off screen', (await tiles()).every((t) => t.id !== gapId), (await tiles()).map((t) => t.label).join(', '));
+await shot('gap-removed');
 
 console.log(`\n${failures ? `${failures} FAILED` : 'all passed'}`);
 await page.evaluate(async () => window.host.session.close()).catch(() => {});

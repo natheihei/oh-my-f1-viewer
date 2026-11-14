@@ -459,7 +459,7 @@ describe('build mode', () => {
       expect(requests).toHaveLength(2);
       expect(requests[0].history).not.toContain('not drawing');
       expect(requests[1].history).toContain("Before you finish, these aren't drawing:");
-      expect(requests[1].history).toContain('Tile \\"Pace HAM\\" (pace): render error: lap is undefined. Fix the code.');
+      expect(requests[1].history).toContain('Tile tile-1 \\"Pace HAM\\" (pace): render error: lap is undefined. Fix the code.');
       expect(types().filter((t) => t === 'turn_end')).toHaveLength(1);
       expect(types().at(-1)).toBe('turn_end');
       expect(events().filter((e) => e.type === 'text_delta').map((e) => e.delta).join('')).toBe('Done.Fixed.');

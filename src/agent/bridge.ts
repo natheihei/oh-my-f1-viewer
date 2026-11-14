@@ -2,19 +2,14 @@
 import type { AgentMode, AgentToolCall } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
 import type { SessionDataView } from '../../shared/sessionData';
-import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
+import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type EventIndex, type LayoutState, type Tile } from '../host';
 import { formatClock, offeredCharts, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
-/** A stream by its label, a chart by its label, chart name and props, so the agent can change them. */
-const describeTile = (c: ComponentSpec) =>
-  c.type === 'video' ? c.label : `${c.label} (${c.type} chart${Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : ''})`;
+/** A tile by its id, then a stream by its label, a chart by its label, chart name and props, so the agent can change them. */
+const describeTile = ({ id, component: c }: Tile) =>
+  `${id} ` + (c.type === 'video' ? `${c.label} (stream)` : `${c.label} (${c.type} chart${Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : ''})`);
 
-function describeLayout(state: LayoutState): string {
-  if (state.nodes.length === 0) return 'nothing';
-  return state.nodes
-    .map((n) => (n.kind === 'tile' ? describeTile(n.component) : `group "${(n as GroupNode).title}" [${n.children.map((c) => describeTile(c.component)).join(', ')}]`))
-    .join('; ');
-}
+const describeLayout = (state: LayoutState): string => (state.tiles.length === 0 ? 'nothing' : state.tiles.map(describeTile).join('; '));
 
 /** The audible feed and the master volume together, so a feed is never called audible at volume 0. */
 function describeAudio(label: string | null, volume: number): string {

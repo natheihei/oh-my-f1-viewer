@@ -109,7 +109,7 @@ async function shoot(name, items, audio) {
   await page.evaluate(
     async ([items, audio]) => {
       const { host, read, tilesOf } = await import('/src/host/index.ts');
-      host.layout.remove({ keys: tilesOf(read().layout).map((t) => t.component.key) });
+      host.layout.remove({ tiles: tilesOf(read().layout).map((t) => t.id) });
       host.layout.add({ items });
       host.layout.autoLayout();
       if (audio) host.audio.set({ feed: audio });
