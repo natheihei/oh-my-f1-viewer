@@ -1,8 +1,9 @@
 // Runs an f1a of its own for checks and screenshots, apart from any other f1a on the machine: a fresh
-// user data dir (the F1 TV login is copied in from ~/.config/f1a, never moved), its own Vite
+// user data dir (the F1 TV login is copied in from ~/.config/f1a, never moved), or the main profile itself
+// when nothing else is using it and the run needs the agent's login, its own Vite
 // and devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
 // the devtools protocol, since Playwright's own Electron launch would spawn the window where it pleases.
-import { copyFileSync, cpSync, existsSync, mkdtempSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,23 +35,47 @@ const until = async (what, ok, ms = 60_000) => {
   throw new Error(what);
 };
 
+/** The main profile, ~/.config/f1a. */
+export const MAIN_PROFILE = path.join(os.homedir(), '.config', 'f1a');
+
+/** Whether an f1a is running on a user data dir: its single-instance lock names a live process. */
+export function profileInUse(dir) {
+  try {
+    const pid = Number(readlinkSync(path.join(dir, 'SingletonLock')).split('-').at(-1));
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Starts the app from the source, served by Vite, with its user data in `outDir`. The page gets 1600×900
  * CSS pixels, the room the charts are designed in, at `scale` device pixels each so a shot stays sharp.
  * Returns the page, `log`, and `stop`, which closes only this instance.
+ *
+ * `mainProfile` runs on ~/.config/f1a itself instead, for the agent: its login (pi-agent/auth.json) is never
+ * copied, since a copy refreshes the token on first use, and a refresh token that rotates would sign the
+ * main profile out. It refuses while another f1a is using that profile.
  */
-export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5 } = {}) {
+export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, mainProfile = false } = {}) {
   const log = (...a) => console.log(`[${name}]`, ...a);
-  // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
-  const userData = mkdtempSync(path.join(outDir, 'user-data-'));
-  const config = path.join(os.homedir(), '.config', 'f1a');
-  // Not the agent's login (pi-agent/auth.json): a copy refreshes its token on first use, and a refresh token
-  // that rotates would then sign the app in ~/.config/f1a out.
-  for (const file of ['f1a-session.json', 'f1a-cookies.json']) {
-    if (existsSync(path.join(config, file))) copyFileSync(path.join(config, file), path.join(userData, file));
+  const config = MAIN_PROFILE;
+  let userData = config;
+  // On the main profile, the window's size and place are put back after, so the next launch opens as before.
+  const windowState = path.join(config, 'window-state.json');
+  const savedWindow = mainProfile && existsSync(windowState) ? readFileSync(windowState) : null;
+  if (mainProfile) {
+    if (profileInUse(config)) throw new Error(`Another f1a is using ${config}: close it, or run without the agent.`);
+  } else {
+    // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
+    userData = mkdtempSync(path.join(outDir, 'user-data-'));
+    for (const file of ['f1a-session.json', 'f1a-cookies.json']) {
+      if (existsSync(path.join(config, file))) copyFileSync(path.join(config, file), path.join(userData, file));
+    }
+    // The DRM module, so the fresh dir doesn't fetch it again before the video can play.
+    if (existsSync(path.join(config, 'WidevineCdm'))) cpSync(path.join(config, 'WidevineCdm'), path.join(userData, 'WidevineCdm'), { recursive: true });
   }
-  // The DRM module, so the fresh dir doesn't fetch it again before the video can play.
-  if (existsSync(path.join(config, 'WidevineCdm'))) cpSync(path.join(config, 'WidevineCdm'), path.join(userData, 'WidevineCdm'), { recursive: true });
 
   const vitePort = await freePort();
   const cdpPort = await freePort();
@@ -101,6 +126,10 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5 
     }
     child?.kill();
     await server.close();
+    if (savedWindow) {
+      await until('The app never exited', async () => ownPids().length === 0, 15_000).catch(() => {});
+      writeFileSync(windowState, savedWindow);
+    }
   };
 
   if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
