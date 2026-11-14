@@ -35,6 +35,8 @@ interface BoundaryProps {
  */
 function TileProblem({ place, state, text }: { place: Place | null; state: 'needs_props' | 'error'; text: string }) {
   const building = useBuild((s) => s.active);
+  // A request sent now would stop the agent's turn, so the button waits for it.
+  const busy = useLive((s) => s.agentBusy || s.fixRequests.length > 0);
   return (
     <div className="tile-warning tile-problem" data-testid="tile-problem" data-problem={state} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <div>
@@ -42,8 +44,15 @@ function TileProblem({ place, state, text }: { place: Place | null; state: 'need
         <div>{text}</div>
       </div>
       {place && fixable({ state, where: place.where }, building) ? (
-        <button type="button" className="tile-warning-allow" data-testid="ask-agent-fix" onClick={() => healthOps.askFix({ scope: place.scope })}>
-          Ask agent to fix
+        <button
+          type="button"
+          className="tile-warning-allow"
+          data-testid="ask-agent-fix"
+          disabled={busy}
+          title={busy ? 'The agent is busy. Ask once it has finished.' : undefined}
+          onClick={() => healthOps.askFix({ scope: place.scope })}
+        >
+          {busy ? 'Agent is busy' : 'Ask agent to fix'}
         </button>
       ) : null}
     </div>

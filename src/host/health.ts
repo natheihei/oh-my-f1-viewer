@@ -9,6 +9,7 @@ import { list, type PlaceHealth } from '../../shared/health';
 import { modsLink } from '../data/mods';
 import { allTiles } from '../layout/model';
 import { useLayout } from '../layout/store';
+import { useAgentTurn } from './agentTurn';
 import { useBuild } from './build';
 import { componentOf } from './components';
 import { query, write } from './op';
@@ -129,14 +130,14 @@ export const healthOps = {
   askFix: write(
     {
       description:
-        "Ask the agent to fix a place that isn't drawing, as the viewer. The request joins live.fixRequests, for whatever speaks to the agent to take. Returns whether it was asked: only props can be fixed outside build mode, and a place is asked about once at a time.",
+        "Ask the agent to fix a place that isn't drawing, as the viewer. The request joins live.fixRequests, for whatever speaks to the agent to take. Returns whether it was asked: only props can be fixed outside build mode, and nothing is asked while the agent is busy or another request waits, since a new message would stop the turn in progress.",
       args: Type.Object({ scope: Type.String({ description: "A place's scope, from live.health" }) }),
     },
     ({ scope }): boolean => {
       const place = useHealth.getState().places.find((p) => p.scope === scope);
       const text = place && fixable(place, useBuild.getState().active) ? fixRequest(place) : null;
       const { asked } = useHealth.getState();
-      if (!text || asked.some((r) => r.scope === scope)) return false;
+      if (!text || asked.length > 0 || useAgentTurn.getState().busy) return false;
       requests += 1;
       useHealth.setState({ asked: [...asked, { id: `fix-${requests}`, scope, text }] });
       return true;
