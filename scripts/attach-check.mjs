@@ -123,7 +123,8 @@ await shot('1-tile-error');
 
 await page.locator('[data-testid=attach-error]').click();
 await page.waitForSelector('[data-testid=attach-tray]');
-check('attaching opens the tray with the tile', (await page.locator('[data-testid=attach-tray] [data-testid=attach-tag]').innerText()).includes(broken));
+const tag = await page.locator('[data-testid=attach-tray] [data-testid=attach-tag]').innerText();
+check('attaching opens the tray with the tile, by its label alone', tag.toUpperCase().includes(place.label.toUpperCase()) && !tag.includes(broken), tag);
 check('the input has focus', await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'palette-input'));
 
 if (!agent) {

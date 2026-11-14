@@ -1,18 +1,18 @@
 /**
  * The tiles' errors the viewer attached to their next message, above the palette's input. Each is a tag
- * naming the tile as its title bar does; × takes one out. The message takes them all, with or without
- * words. In the history, a sent line draws the same tags before its text.
+ * naming the tile by its label, as its title bar does: the tile id is for the agent, not the viewer. × takes
+ * one out. The message takes them all, with or without words. In the history, a sent line draws the same
+ * tags before its text.
  */
 import type { ReactNode } from 'react';
 import { formatClock } from '../agent/tools';
 import { host, type Attachment } from '../host';
 import type { AttachedTag } from './palette';
 
-/** A tile as an attachment names it: its id, then its label. */
+/** A tile as an attachment names it: its label, as in its title bar. */
 export function AttachTag({ tag, children }: { tag: AttachedTag; children?: ReactNode }) {
   return (
     <span className="attach-tag" data-testid="attach-tag">
-      <span className="attach-tag-id">{tag.scope}</span>
       {tag.label}
       {children}
     </span>
