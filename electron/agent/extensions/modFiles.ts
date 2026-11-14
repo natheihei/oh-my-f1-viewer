@@ -7,6 +7,7 @@ import { constants, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { minimatch } from 'minimatch';
 import type { ExtensionFactory, ToolDefinition } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
+import { describePlace, notDrawing, type PlaceHealth } from '../../../shared/health';
 import type { ModLogLine, ModStatus } from '../../../shared/mods';
 
 type Pi = typeof import('@earendil-works/pi-coding-agent', { with: { 'resolution-mode': 'import' } });
@@ -20,6 +21,8 @@ export interface ModFilesHost {
   logs(name: string): ModLogLine[];
   /** A PNG of a component as it shows now, in the strip or on the grid, or null if it's on neither. */
   picture(name: string): Promise<Buffer | null>;
+  /** How every tile and draft is drawing, once each has drawn with its latest code. Null when the app can't say. */
+  health(): Promise<PlaceHealth[] | null>;
 }
 
 /** Told about each call as it ends, with a line for the palette when there's one to show. */
@@ -251,7 +254,8 @@ function reworded(def: ToolDefinition, pathDescription: string, description = de
   return { ...def, description, parameters, promptSnippet: undefined, promptGuidelines: undefined };
 }
 
-export function modFilesExtension(host: () => ModFilesHost, report: ModToolReport): ExtensionFactory {
+/** `told` hears what a save's result said isn't drawing, so the agent isn't told of it again as its turn ends. */
+export function modFilesExtension(host: () => ModFilesHost, report: ModToolReport, told: (places: PlaceHealth[]) => void = () => {}): ExtensionFactory {
   /** Runs a tool, turning what it throws into an error result, and reports how it went. */
   const run = async (name: string, work: () => Promise<{ result: ReturnType<typeof text> | { content: unknown[]; details: undefined; isError: boolean }; note?: string | null }>) => {
     try {
@@ -268,8 +272,15 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
   const loaded = async (verb: string, mod: string, rel: string) => {
     const status = await host().settled(mod);
     const outcome = !status ? 'not a mod yet' : status.state === 'ready' ? 'loaded' : status.state === 'failed' ? "didn't load" : 'loading';
-    return { line: describeStatus(mod, status), note: `${verb} ${rel} · ${outcome}` };
+    // What loaded may still not draw: a save says so for this mod's own tiles and draft.
+    const broken = status?.state === 'ready' ? notDrawing(await placesOf(mod)) : [];
+    told(broken);
+    const problems = broken.map(describePlace);
+    return { line: [describeStatus(mod, status), ...problems].join(' '), note: `${verb} ${rel} · ${outcome}${problems.length ? ' · not drawing' : ''}` };
   };
+
+  /** Where a mod shows, and how each place stands. Nothing when the app can't say. */
+  const placesOf = async (mod: string): Promise<PlaceHealth[]> => ((await host().health().catch(() => null)) ?? []).filter((p) => p.type === mod);
 
   return async (pi) => {
     const tools: Pi = await import('@earendil-works/pi-coding-agent');
@@ -432,7 +443,7 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
       {
         name: 'mod_status',
         label: 'mod_status',
-        description: 'Whether a mod\'s latest save loaded, its error if not, and the last lines of its log: what it printed to the console, and errors thrown while drawing.',
+        description: 'Whether a mod\'s latest save loaded, its error if not, how each of its tiles and its draft is drawing, and the last lines of its log: what it printed to the console, and errors thrown while drawing.',
         parameters: object({ mod: string('The mod\'s folder name.') }, ['mod']),
         execute: (_id, args) =>
           run('mod_status', async () => {
@@ -442,7 +453,8 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
               .logs(mod)
               .slice(-LOG_LINES)
               .map((l) => `${l.level} ${l.text}`);
-            return { result: text(`${describeStatus(mod, status)}\n\nLog:\n${log.join('\n') || '(nothing)'}`) };
+            const places = (await placesOf(mod)).map(describePlace);
+            return { result: text(`${describeStatus(mod, status)}\n\nOn screen:\n${places.join('\n') || '(nowhere)'}\n\nLog:\n${log.join('\n') || '(nothing)'}`) };
           }),
       },
       {

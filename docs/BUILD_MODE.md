@@ -114,7 +114,7 @@ instructions, and a separate session keeps what the build read out of the viewin
   | `read`, `ls`, `grep`, `find` | Reads and searches the folder: mods, their `mod.error` and `mod.log`, and the types under `.types` |
   | `write`, `edit` | Writes inside a mod's folder, then waits for the app to load the save and says whether it did, with the error if not. `edit` takes several changes to one file in one call |
   | `delete_path` | Deletes a file in a mod, or a whole mod by its folder name |
-  | `mod_status` | Whether the latest save loaded, and the last lines of the mod's log |
+  | `mod_status` | Whether the latest save loaded, how each of the mod's tiles and its draft is drawing, and the last lines of its log |
   | `look_at` | A picture of the mod's component as it shows now |
 
   They refuse the app's own files (`tsconfig.json`, `.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
@@ -127,7 +127,20 @@ instructions, and a separate session keeps what the build read out of the viewin
   last two don't ask the spoiler gate. `suggest_tiles` takes any component name here, since the mod may have been written this turn.
 - **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` captures that part of the window.
   The viewing agent never sees what a chart shows. The build agent may, since it can already read the whole session.
-- **It gets more rounds.** A build turn may take 60 rounds of tool calls, where a viewing turn stops at 10.
+- **It hears when something isn't drawing.** A mod that loads may still not draw: its draft needs props nobody gave, a tile's props
+  stopped fitting, or the view threw. The report is `live.health`, and the agent gets it three ways, each line saying what would fix it:
+  - **A save's result** adds the saved mod's own places that aren't drawing: "pace loaded. Draft pace in the strip: needs driver. Call
+    suggest_tiles with it and its props, or ask the user whose."
+  - **Before a turn ends**, the app looks at every tile and draft. If something isn't drawing, the agent is told and goes on, so it's
+    fixed in the turn that caused it. This is pi's `agent_before_settle`, in `electron/agent/extensions/renderCheck.ts`. It's told only
+    of problems it hasn't been told of, and at most twice for one message: some it can't fix alone, such as a draft that needs a driver
+    the viewer hasn't named, and then it has to ask.
+  - **The next message's `app_state`** has a "not drawing" line for anything that stopped between turns, such as a render error at a lap
+    the code didn't expect.
+
+  "Drawn" only means it didn't throw. Whether it looks right still takes `look_at`.
+- **It gets more rounds.** A build turn may take 60 rounds of tool calls, where a viewing turn stops at 10. Being sent on to fix
+  something counts toward them.
 - **On exit, the viewing agent gets one line**, such as "Built lap_stepper, edited lap_form." The app writes it from the folder
   comparison. The model doesn't, so the line can't carry anything the build read. It arrives in the `app_state` of the viewer's next
   message, once. Undo all sends nothing.
@@ -257,6 +270,11 @@ and `/build` itself (`src/shell/commands.test.ts`).
 **The picture**
 
 23. After "give the buttons a 3px white border", the build session's `.jsonl` shows it took a picture of the draft, and the screen matches.
+24. Asked for a mod about one driver with nobody named, the agent hears that its draft needs a driver, the strip's card says so, and
+    the agent asks whose without picking.
+25. Asked to change a mod on screen from two drivers to one, the agent hears that the tile's props no longer fit, and gives the tile its
+    driver in the same turn.
+26. A tile that stopped between turns is named in the next message's app state, and the agent fixes its code.
 
 ## Where it lives
 
@@ -267,6 +285,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 | The build conversation beside the viewing one | `electron/agent/agent.ts` |
 | The build agent's file tools | `electron/agent/extensions/modFiles.ts` |
 | Its instructions | `shared/buildPrompt.ts`, `shared/modGuide.ts` |
+| What isn't drawing, and how it's said to the agent | `src/host/health.ts`, `shared/health.ts`, `electron/agent/extensions/renderCheck.ts` |
 | Its viewing tools, without the gate | `src/agent/tools.ts` |
 | Which agent a message goes to, and the line for the viewing agent | `src/agent/bridge.ts` |
 | The picture of a draft | `pictureOf` in `electron/ipc.ts` |
