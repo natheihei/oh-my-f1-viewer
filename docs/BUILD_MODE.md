@@ -165,7 +165,7 @@ The mod's author decides whether a component warns the viewer:
   hot reload, since the tile is the same tile, so a draft is approved once per build. The app starts with an empty layout, so no
   approval outlasts a restart.
 - **The strip preview asks too.** Allowing it there carries over to the tile it becomes.
-- **An approved tile says so quietly**: its title reads "Lap stepper · looks ahead", in the title's grey.
+- **An approved tile says so quietly**: its header carries an "ahead" slot.
 
 An earlier version of this design had `useSql` ask whenever it was given `asOf: 'session'`. The flag replaced it: whether a tile
 needs the warning is the author's call, and a tile can act on the future without a query that says so.
@@ -217,7 +217,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 4. The stepper appears in the strip marked "draft", without the agent calling `suggest_tiles`.
 5. The agent set `looksAhead` on it, and the preview shows the look-ahead warning. After Allow, clicking "lap ›" moves the real playback to the start of the next lap, by the
    session database.
-6. Enter adds it to the grid already approved, and its title reads "Lap stepper · looks ahead" in grey.
+6. Enter adds it to the grid already approved, and its header carries an "ahead" slot.
 7. A second tile of the same mod asks again.
 
 **An edit**
@@ -229,7 +229,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 **Props**
 
 11. "A battle chart for Hamilton and Norris" previews with those two drivers.
-12. The same request with no drivers named still draws something with `{}`.
+12. Added to the grid with those props, it draws something.
 
 **A delete**
 
@@ -252,7 +252,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 
 **The picture**
 
-23. After "make the buttons red", the build session's `.jsonl` shows it took a picture of the draft, and the screen matches.
+23. After "give the buttons a 3px white border", the build session's `.jsonl` shows it took a picture of the draft, and the screen matches.
 
 ## Where it lives
 
