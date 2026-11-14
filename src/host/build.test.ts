@@ -95,9 +95,15 @@ describe('drafts in the strip', () => {
     componentOps.unregister({ names: ['duel'] });
   });
 
-  it("skips a mod that can't draw without props", () => {
+  it("shows a mod that can't draw without props, with none, so its card can say what it needs", () => {
     building([{ name: 'needy', change: 'added' }]);
-    expect(keys()).toEqual([]);
+    expect(useSuggestions.getState().items).toMatchObject([{ type: 'needy', key: 'needy', label: 'needy', props: {} }]);
+  });
+
+  it('swaps that card for a real preview once the mod is suggested with its props', () => {
+    building([{ name: 'needy', change: 'added' }]);
+    suggestionOps.offer({ items: [{ type: 'needy', props: { driver: 44 } }] });
+    expect(useSuggestions.getState().items).toMatchObject([{ type: 'needy', props: { driver: 44 } }]);
   });
 
   it('stays away once dismissed, until the next turn', () => {
