@@ -183,6 +183,12 @@ await act('done with the gap chart', 'remove_tiles', { tiles: [gapId] });
 check('the gap chart is off screen', (await tiles()).every((t) => t.id !== gapId), (await tiles()).map((t) => t.label).join(', '));
 await shot('gap-removed');
 
+// 7. A stream off screen by the user's words: the agent finds its tile's id in app_state.
+const onboard = (await tiles()).find((t) => t.type === 'video' && t.label === b.code);
+await act(`done with ${b.name}'s onboard`, 'remove_tiles', { tiles: [onboard?.id] });
+check(`${b.code}'s onboard is off screen, and the rest stay`, (await tiles()).every((t) => t.id !== onboard?.id) && (await tiles()).length === 4, (await tiles()).map((t) => t.label).join(', '));
+await shot('onboard-removed');
+
 console.log(`\n${failures ? `${failures} FAILED` : 'all passed'}`);
 await page.evaluate(async () => window.host.session.close()).catch(() => {});
 await stop();
