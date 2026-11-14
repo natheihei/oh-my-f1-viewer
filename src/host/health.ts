@@ -15,12 +15,25 @@ import { query, write } from './op';
 
 export { list, type PlaceHealth };
 
+/** The viewer asked the agent to fix a place that isn't drawing. It waits here until something takes it to the agent. */
+export interface FixRequest {
+  id: string;
+  /** The place it's about, from `live.health`. */
+  scope: string;
+  /** The request in the viewer's words, such as "The Pace tile needs driver." */
+  text: string;
+}
+
 export interface HealthView {
   /** In no particular order. */
   places: PlaceHealth[];
+  /** Oldest first. */
+  asked: FixRequest[];
 }
 
-export const useHealth = create<HealthView>(() => ({ places: [] }));
+export const useHealth = create<HealthView>(() => ({ places: [], asked: [] }));
+
+let requests = 0;
 
 /** The component code each place last reported with, to tell a report from before a reload. */
 const reportedWith = new Map<string, unknown>();
@@ -88,16 +101,6 @@ export function fixRequest(place: PlaceHealth): string | null {
   return null;
 }
 
-type FixAsker = (text: string) => void;
-let asker: FixAsker | null = null;
-
-/** The shell says how a request reaches the agent: through the palette, as a line of the viewer's. Returns how to undo it. */
-export function setFixAsker(next: FixAsker): () => void {
-  asker = next;
-  return () => {
-    if (asker === next) asker = null;
-  };
-}
 
 const SETTLE_MS = 1000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -125,15 +128,30 @@ export const healthOps = {
   ),
   askFix: write(
     {
-      description: "Ask the agent to fix a place that isn't drawing, as the viewer. Returns whether it was asked: only props can be fixed outside build mode.",
+      description:
+        "Ask the agent to fix a place that isn't drawing, as the viewer. The request joins live.fixRequests, for whatever speaks to the agent to take. Returns whether it was asked: only props can be fixed outside build mode, and a place is asked about once at a time.",
       args: Type.Object({ scope: Type.String({ description: "A place's scope, from live.health" }) }),
     },
     ({ scope }): boolean => {
       const place = useHealth.getState().places.find((p) => p.scope === scope);
       const text = place && fixable(place, useBuild.getState().active) ? fixRequest(place) : null;
-      if (!text || !asker) return false;
-      asker(text);
+      const { asked } = useHealth.getState();
+      if (!text || asked.some((r) => r.scope === scope)) return false;
+      requests += 1;
+      useHealth.setState({ asked: [...asked, { id: `fix-${requests}`, scope, text }] });
       return true;
+    },
+  ),
+  takeFix: write(
+    {
+      description: 'Take a fix request off live.fixRequests, to send it to the agent. Returns it, or null if something else took it first.',
+      args: Type.Object({ id: Type.String({ description: "A request's id, from live.fixRequests" }) }),
+    },
+    ({ id }): FixRequest | null => {
+      const { asked } = useHealth.getState();
+      const request = asked.find((r) => r.id === id) ?? null;
+      if (request) useHealth.setState({ asked: asked.filter((r) => r.id !== id) });
+      return request;
     },
   ),
 };

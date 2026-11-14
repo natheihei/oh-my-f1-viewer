@@ -1,8 +1,9 @@
 /** Connects the agent to the palette: what the user types goes to it, and what it says comes back. */
+import { useEffect } from 'react';
 import type { AgentEvent } from '../../shared/api';
 import { askAgent, connectTools } from '../agent/bridge';
 import { setSpoilerAsker } from '../agent/spoilerGate';
-import { host, read, setFixAsker } from '../host';
+import { host, read, useLive } from '../host';
 import { loadEvents } from './commands';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
@@ -59,17 +60,27 @@ export function connectAgent(): () => void {
   const offEvent = host.agent.onEvent(onEvent);
   const offTools = connectTools();
   const offAsker = setSpoilerAsker(askViewer);
-  // A tile's "Ask agent to fix": the palette opens, and the request goes as a line of the viewer's.
-  const offFix = setFixAsker((text) => {
-    palette.show();
-    void sendToAgent(text);
-  });
   return () => {
     offEvent();
     offTools();
     offAsker();
-    offFix();
   };
+}
+
+/**
+ * A tile's "Ask agent to fix" leaves its request in `live.fixRequests`. This takes each one, opens the
+ * palette, and sends it as a line of the viewer's.
+ */
+export function useFixRequests(): void {
+  const requests = useLive((s) => s.fixRequests);
+  useEffect(() => {
+    for (const { id } of requests) {
+      const request = host.health.takeFix({ id });
+      if (!request) continue;
+      palette.show();
+      void sendToAgent(request.text);
+    }
+  }, [requests]);
 }
 
 /**
