@@ -231,7 +231,7 @@ async function partSave() {
   const warning = page.locator('[data-testid=command-warning]');
   check('1 with the spoiler warning beside it', (await warning.innerText().catch(() => '')) === '! spoiler the agent looks ahead without asking');
   const color = await warning.evaluate((el) => getComputedStyle(el).color).catch(() => '');
-  check('1 in red', color === 'rgb(255, 59, 48)', color);
+  check('1 in the hint grey', color === 'rgb(138, 138, 138)', color);
   const listed = await row.locator('.palette-suggestion').first().evaluate((el) => ({ text: el.innerText.replace(/\s+/g, ' '), height: el.getBoundingClientRect().height }));
   check('1 it reads "Enter build mode", on one line, with no argument hint', listed.text.includes('Enter build mode') && !listed.text.includes('<') && listed.height < 24, JSON.stringify(listed));
   await shot('build-01-command.png');
