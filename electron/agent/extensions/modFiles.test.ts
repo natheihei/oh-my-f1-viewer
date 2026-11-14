@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { ModStatus } from '../../../shared/mods';
 import { MOD_FILE_TOOLS, modFilesExtension } from './modFiles';
@@ -58,8 +58,19 @@ describe('the build agent\'s file tools', () => {
   });
 
   describe('each refuses paths outside the mods folder', () => {
-    const tag = `f1a-escape-${process.pid}`;
-    afterEach(() => rmSync(path.join(os.homedir(), tag), { force: true }));
+    // ~ expands to a home of the test's own, so a broken check can't touch the real one.
+    const tag = 'escape.txt';
+    const realHome = process.env.HOME;
+    let home = '';
+    beforeEach(() => {
+      home = mkdtempSync(path.join(os.tmpdir(), 'f1a-home-'));
+      process.env.HOME = home;
+      writeFileSync(path.join(home, tag), 'TOKEN');
+    });
+    afterEach(() => {
+      process.env.HOME = realHome;
+      rmSync(home, { recursive: true, force: true });
+    });
     // A file outside, for read, write and edit, and a folder outside, for ls, grep and find.
     const ways = (root: string) => ({
       absolute: [path.join(root, 'secret.txt'), root],
@@ -80,15 +91,18 @@ describe('the build agent\'s file tools', () => {
     for (const tool of ['read', 'write', 'edit', 'ls', 'grep', 'find']) {
       it(tool, async () => {
         const { root, call, settled, reports } = await setup();
-        writeFileSync(path.join(os.homedir(), tag), 'TOKEN');
+        expect(os.homedir()).toBe(home);
         for (const [way, [file, folder]] of Object.entries(ways(root))) {
           const result = await call(tool, args(tool, file, folder));
           expect(result.isError, way).toBe(true);
           expect(result.text, way).toMatch(/outside the mods folder/);
           expect(result.text, way).not.toContain('TOKEN');
+          // pi expanded ~ to the test's home, and the check saw that path.
+          if (way === 'home') expect(result.text).toContain(home);
         }
         expect(readFileSync(path.join(root, 'secret.txt'), 'utf8')).toBe('TOKEN');
-        expect(readFileSync(path.join(os.homedir(), tag), 'utf8')).toBe('TOKEN');
+        expect(readFileSync(path.join(home, tag), 'utf8')).toBe('TOKEN');
+        expect(readdirSync(home)).toEqual([tag]);
         expect(settled).not.toHaveBeenCalled();
         expect(reports.every(([name, ok, note]) => name === tool && !ok && note === null)).toBe(true);
         expect(reports).toHaveLength(4);
@@ -185,5 +199,51 @@ describe('the build agent\'s file tools', () => {
     expect(found).toEqual(['.types/f1a.d.ts']);
     expect((await call('find', { pattern: 'lap_form/*.tsx' })).text).toBe('lap_form/main.tsx');
     expect((await call('find', { pattern: '*.d.ts', path: '.types' })).text).toBe('f1a.d.ts');
+  });
+
+  describe('when pi answers with an error instead of throwing', () => {
+    // pi's write and edit throw today. These stand-ins return an error result, to check nothing leans on that.
+    afterEach(() => {
+      vi.doUnmock('@earendil-works/pi-coding-agent');
+    });
+    const failing = { content: [{ type: 'text' as const, text: 'pi said no' }], details: undefined, isError: true };
+    type Ops = { access?: (p: string) => Promise<void>; readFile?: (p: string) => Promise<Buffer>; writeFile: (p: string, c: string) => Promise<void> };
+    const mockPi = (name: 'createEditToolDefinition' | 'createWriteToolDefinition', run: (ops: Ops, file: string) => Promise<void>) =>
+      vi.doMock('@earendil-works/pi-coding-agent', async (importOriginal) => {
+        const pi = await importOriginal<Record<string, (cwd: string, options: { operations: Ops }) => ToolDefinition>>();
+        return {
+          ...pi,
+          [name]: (cwd: string, options: { operations: Ops }) => ({
+            ...pi[name](cwd, options),
+            execute: async (_id: string, args: { path: string }) => {
+              await run(options.operations, path.join(cwd, args.path));
+              return failing;
+            },
+          }),
+        };
+      });
+
+    it('an edit that only read the file waits for nothing', async () => {
+      mockPi('createEditToolDefinition', async (ops, file) => {
+        await ops.access!(file);
+        await ops.readFile!(file);
+      });
+      const { call, file, settled, reports } = await setup();
+      file('lap_stepper/main.tsx', 'const a = 1;');
+      const result = await call('edit', { path: 'lap_stepper/main.tsx', edits: [{ oldText: 'a', newText: 'b' }] });
+      expect(result).toEqual({ isError: true, text: 'pi said no' });
+      expect(settled).not.toHaveBeenCalled();
+      expect(reports).toEqual([['edit', false, null]]);
+    });
+
+    it('a write pi calls failed waits for nothing, even after writing', async () => {
+      mockPi('createWriteToolDefinition', (ops, file) => ops.writeFile(file, 'x'));
+      const { call, read, settled, reports } = await setup();
+      const result = await call('write', { path: 'lap_stepper/main.tsx', content: 'x' });
+      expect(result).toEqual({ isError: true, text: 'pi said no' });
+      expect(read('lap_stepper/main.tsx')).toBe('x');
+      expect(settled).not.toHaveBeenCalled();
+      expect(reports).toEqual([['write', false, null]]);
+    });
   });
 });
