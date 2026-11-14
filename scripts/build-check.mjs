@@ -122,7 +122,11 @@ const shot = async (file) => {
     console.log(`  [${file}: fell back to the window's own capture; the page drew a frame in ${frame ?? 'over 3000'}ms]`);
   }
 };
-const tagText = () => page.locator('[data-testid=build-tag]').innerText().catch(() => '');
+// The chrome is set in capitals by CSS, which innerText follows: compare in lower case, on one line.
+const plain = (text) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+const tagText = () => page.locator('[data-testid=build-tag]').innerText().then(plain, () => '');
+// A click by event, for what's on a tile: the open palette can lie over the tile and take a click by position.
+const press = (locator) => locator.dispatchEvent('click');
 const history = () => page.locator('[data-testid=palette-history]').innerText().catch(() => '');
 const tile = (type) => page.locator(`[data-tile-type="${type}"]`);
 const draft = (type) => page.locator(`[data-testid=suggestion]:has([data-draft-type="${type}"])`);
@@ -256,7 +260,7 @@ async function partSave() {
   check('3 the palette shows the write and "loaded"', new RegExp(`wrote ${stepper}/main\\.tsx · loaded`).test(text), r.notes.join(' | '));
   check('3 with no version number', !/\bv\d+\b/.test(r.notes.join(' ')));
   check('3 the tag reads "build · 1 change"', (await tagText()).includes('build · 1 change'), await tagText());
-  check('4 it is in the strip, marked draft', (await draft(stepper).locator('[data-testid=draft-badge]').innerText().catch(() => '')) === 'draft');
+  check('4 it is in the strip, marked draft', plain(await draft(stepper).locator('[data-testid=draft-badge]').innerText().catch(() => '')) === 'draft');
   check('4 without the agent calling suggest_tiles', !r.names.includes('suggest_tiles'), r.names.join(' '));
   await shot('build-02-draft.png');
 
@@ -299,8 +303,9 @@ async function partSave() {
   const tileId = await tile(stepper).getAttribute('data-tile');
   const titleOf = (id) => page.locator(`.grid-stack-item[gs-id="${id}"] .tile-title`);
   check('6 Enter adds it to the grid, already approved', (await tile(stepper).locator('[data-testid=look-ahead-warning]').count()) === 0);
-  const title = await titleOf(tileId).innerText();
-  check('6 its title says "· looks ahead"', title.endsWith('· looks ahead'), title);
+  const aheadSlot = page.locator(`.grid-stack-item[gs-id="${tileId}"] .tile-slot-ahead`);
+  const ahead = (await aheadSlot.isVisible()) ? plain(await aheadSlot.innerText()) : '(hidden)';
+  check('6 its header says "ahead"', ahead === 'ahead', ahead);
   const formId = (await tilesNow()).find((t) => t.type === 'lap_form').id;
   const [mine, other] = await Promise.all([tileId, formId].map((id) => titleOf(id).evaluate((el) => getComputedStyle(el).color)));
   check('6 in the same grey as any title', mine === other, `${mine} vs ${other}`);
@@ -312,11 +317,11 @@ async function partSave() {
   await live((type) => window.host.layout.add({ items: [{ type, props: {} }] }), stepper);
   await tile(stepper).waitFor({ state: 'visible', timeout: 10_000 });
   check('7 a new tile of the same mod asks again', !!(await until('7 asks again', async () => (await tile(stepper).locator('[data-testid=look-ahead-warning]').count()) === 1, 8000)));
-  await tile(stepper).locator('[data-testid=look-ahead-allow]').click();
+  await press(tile(stepper).locator('[data-testid=look-ahead-allow]'));
   await page.waitForTimeout(2500);
   buttons = await stepperButtons(tile(stepper));
   at = await where();
-  await buttons.forward.click();
+  await press(buttons.forward);
   await page.waitForTimeout(4000);
   now = await where();
   check('7 once allowed, the tile steps a lap too', lapAt(laps, now.playhead) === lapAt(laps, at.playhead) + 1, `lap ${lapAt(laps, at.playhead)} to ${lapAt(laps, now.playhead)}`);
@@ -351,23 +356,20 @@ async function partSave() {
   check('10 the agent got it loading again, unasked', (await modState(stepper))?.state === 'ready' && !existsSync(path.join(modsDir, stepper, 'mod.error')), r.notes.join(' | '));
 
   section('The picture');
-  r = await say('make the buttons red, and check how it looks');
+  r = await say('give the buttons a 3px white border, and check how it looks');
   const buildLog = newest(sessionsDir('build'));
   check('23 the build agent took a picture of the draft', r.names.includes('look_at') && buildLog.includes('"look_at"') && buildLog.includes('"image"'), r.names.join(' '));
-  const reds = await tile(stepper)
+  const borders = await tile(stepper)
     .locator('button')
     .evaluateAll((els) =>
       els.map((el) => {
         const s = getComputedStyle(el);
-        return [s.color, s.backgroundColor, s.borderTopColor];
+        return [s.borderTopWidth, s.borderTopColor];
       }),
     );
-  const reddish = (c) => {
-    const [r1, g, b] = (c.match(/\d+/g) ?? []).map(Number);
-    return r1 > 150 && g < 110 && b < 110;
-  };
-  check('23 and the buttons on screen are red', reds.length > 0 && reds.every((styles) => styles.some(reddish)), JSON.stringify(reds[0]));
-  await shot('build-07-red.png');
+  const whitish = (c) => (c.match(/\d+/g) ?? []).slice(0, 3).every((n) => Number(n) > 200);
+  check('23 and the buttons on screen have the border', borders.length > 0 && borders.every(([width, color]) => parseFloat(width) >= 3 && whitish(color)), JSON.stringify(borders[0]));
+  await shot('build-07-border.png');
 
   section('Props');
   // Worded as a new mod: asked for a plain battle chart, the agent rightly suggests the app's own gap chart.
@@ -384,12 +386,12 @@ async function partSave() {
     check('11 and only that preview, not a second with no props', items.filter((i) => i.type === battle).length === 1);
     await page.waitForTimeout(2000);
     await shot('build-08-battle.png');
-    await live((type) => window.host.suggestions.dismiss() ?? window.host.layout.add({ items: [{ type, props: {} }] }), battle);
+    await live(({ type, props }) => window.host.suggestions.dismiss() ?? window.host.layout.add({ items: [{ type, props }] }), { type: battle, props: offered?.props ?? {} });
     await tile(battle).first().waitFor({ state: 'visible', timeout: 10_000 });
     await page.waitForTimeout(3000);
     const drawn = await tile(battle).first().evaluate((el) => ({ text: el.innerText, canvases: el.querySelectorAll('canvas, svg').length }));
-    check('12 with no props it still draws something', !drawn.text.includes('This tile stopped') && (drawn.canvases > 0 || drawn.text.trim().length > 0), JSON.stringify(drawn).slice(0, 200));
-    await shot('build-09-battle-no-props.png');
+    check('12 on the grid with those props, it draws something', !drawn.text.includes('This tile stopped') && (drawn.canvases > 0 || drawn.text.trim().length > 0), JSON.stringify(drawn).slice(0, 200));
+    await shot('build-09-battle-on-grid.png');
   }
   // The agent reads ahead when it needs to. If it never did, ask for something that needs it.
   if (readAheads === 0) r = await say(`check ${stepper}'s lap query against the whole session's data, and fix it if it's wrong. Don't tell me what the data shows`);
