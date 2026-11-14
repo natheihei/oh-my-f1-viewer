@@ -58,11 +58,15 @@ This keeps the rule that the agent suggests tiles and the viewer adds them.
 
 - A draft previews with the props the agent suggested it with, or with none, `{}`. A mod declares the props it needs, as the app's
   charts do (see [COMPONENTS.md](COMPONENTS.md)), and never picks a driver itself, so one that needs a driver has no preview until the
-  agent suggests it with one. (Before #77 every mod had to draw with `{}`, and one about a pair picked "the closest pair at the
+  agent suggests it with one. Until then its card in the strip says what it needs, such as "Needs driver". (Before #77 every mod had to draw with `{}`, and one about a pair picked "the closest pair at the
   playhead".)
 - When the viewer named drivers ("a duel for Hamilton and Norris"), the agent passes them through `suggest_tiles` in the mod's props,
   `driver_a` and `driver_b` here, and the draft previews with them for the rest of the build. When they didn't, it asks whose.
-- A tile that's on screen keeps its props across an edit. If the mod's new `args` no longer accept them, it falls back to `{}`.
+- A tile that's on screen keeps its props across an edit. If the mod's new `args` no longer accept some of them, it keeps the rest.
+  If a required one is then missing, the tile shows an error, "Needs driver", with an "Ask agent to fix" button, and the view isn't
+  drawn. The button sends "The Pace tile needs driver." as a line of the viewer's, and the agent asks whose or fills it in. A tile
+  that threw, "This tile stopped", has the button only in build mode, where the agent can fix the code.
+- `live.health` says how every tile and every preview in the strip stands. See [HOST.md](HOST.md).
 
 ### Trying it
 

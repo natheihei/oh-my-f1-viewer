@@ -13,6 +13,7 @@ import { sessionSql } from '../data/sessionData';
 import { appearanceOps, backgroundOps } from './backgrounds';
 import { buildOps } from './build';
 import { componentOps } from './components';
+import { healthOps } from './health';
 import { layoutOps } from './layoutOps';
 import { query, write } from './op';
 import { suggestionOps } from './suggestions';
@@ -48,6 +49,7 @@ export {
   type DriverStyle,
   type Part,
 } from './drivers';
+export { setFixAsker, type PlaceHealth } from './health';
 export { startMods } from './mods';
 export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
 export { startBuild, type BuildView } from './build';
@@ -191,6 +193,8 @@ export const host = {
   suggestions: suggestionOps,
   /** Build mode's snapshot: begin, then save or undo. */
   build: buildOps,
+  /** Whether what's on screen is drawing, and asking the agent to fix what isn't. The report itself is `live.health`. */
+  health: healthOps,
   catalog: catalogOps,
   /** Session data that isn't in the live state. Nothing here can change it. */
   data,
