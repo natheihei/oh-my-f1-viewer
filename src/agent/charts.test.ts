@@ -346,6 +346,14 @@ describe('suggesting charts', () => {
     });
     const tiles = () => layout.tiles().map((t) => ({ id: t.id, label: t.component.label, props: t.component.props }));
 
+    it("drops props the tile holds that its chart doesn't declare any more", async () => {
+      layout.clear();
+      // As a tile stands after its mod swapped `drivers` for `driver`: the old prop is still in its spec.
+      host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44, drivers: [44] } }] });
+      expect(await runTool('edit_tile', { tile: 'test_pit', props: { driver: 'GAS' } })).toBe('Changed: Pit 10.');
+      expect(tiles().map((t) => t.props)).toEqual([{ driver: 10 }]);
+    });
+
     it('changes only the props it names, in place', async () => {
       const before = tiles();
       const rects = () => layout.tiles().map((t) => [t.x, t.y, t.w, t.h]);
