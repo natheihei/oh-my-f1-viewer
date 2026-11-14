@@ -237,6 +237,10 @@ export interface F1aApi {
     /** Reports whether a build loaded: `error` is null when it did. */
     loaded(name: string, version: number, error: string | null): void;
     log(name: string, line: import('./mods').ModLogLine): void;
+    /** The main process asks how what's on screen is drawing, for the build agent. */
+    onHealthAsked(cb: (id: string) => void): () => void;
+    /** The answer to that: null if it couldn't be read. */
+    health(id: string, places: import('./health').PlaceHealth[] | null): void;
   };
   /** Build mode's snapshot of the mods folder. See docs/BUILD_MODE.md. */
   build: {

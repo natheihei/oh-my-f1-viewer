@@ -5,31 +5,15 @@
 import Type, { type TObject, type TSchema } from 'typebox';
 import Value from 'typebox/value';
 import { create } from 'zustand';
+import { list, type PlaceHealth } from '../../shared/health';
+import { modsLink } from '../data/mods';
 import { allTiles } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useBuild } from './build';
 import { componentOf } from './components';
 import { query, write } from './op';
 
-export interface PlaceHealth {
-  /** A tile's id, or a preview's scope in the strip. */
-  scope: string;
-  where: 'tile' | 'strip';
-  /** The component's name. */
-  type: string;
-  label: string;
-  /**
-   * `drawn` means it didn't throw, not that it's right. `needs_props` and `error` aren't drawing.
-   * `waiting` looks ahead, and isn't drawn until the viewer allows it.
-   */
-  state: 'drawn' | 'needs_props' | 'error' | 'waiting';
-  /** Required props it has no value for. */
-  missing: string[];
-  /** Props it was given that its args don't accept any more. It draws without them, if nothing is missing. */
-  dropped: string[];
-  /** Why, for `error`, and for props that don't fit in a way the two lists can't say. */
-  message: string | null;
-}
+export { list, type PlaceHealth };
 
 export interface HealthView {
   /** In no particular order. */
@@ -88,11 +72,6 @@ export function fitProps(args: TObject, props: Record<string, unknown>): Fit {
   if (Value.Check(args, kept)) return { props: kept, missing, dropped, message: null };
   const error = Value.Errors(args, kept)[0];
   return { props: kept, missing, dropped, message: `Its props don't fit: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}` };
-}
-
-/** "a", "a and b", "a, b and c". */
-export function list(names: string[]): string {
-  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 /** Whether the agent could fix a place: props always, and code only while it's building. */
@@ -158,3 +137,13 @@ export const healthOps = {
     },
   ),
 };
+
+/** Answers the main process when it asks how the screen stands, for the build agent. Call it once, at start. */
+export function startHealth(): () => void {
+  return modsLink.onHealthAsked((id) => {
+    void healthOps.settled().then(
+      (places) => modsLink.health(id, places),
+      () => modsLink.health(id, null),
+    );
+  });
+}

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AgentToolCall, AgentToolDefinition } from '../../shared/api';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
+import type { PlaceHealth } from '../../shared/health';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 
 const host = vi.hoisted(() => ({
@@ -333,6 +334,17 @@ describe('build mode', () => {
     return existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(path.join(dir, f), 'utf8')) : [];
   };
   /** The mods folder as the build agent's tools see it, with every save loading at once. */
+  /** What the screen reports each time it's asked: the last answer repeats. */
+  let screen: (PlaceHealth[] | null)[] = [[]];
+  let asked = 0;
+  beforeEach(() => {
+    screen = [[]];
+    asked = 0;
+  });
+  const place = (over: Partial<PlaceHealth>): PlaceHealth => ({ scope: 'tile-1', where: 'tile', type: 'pace', label: 'Pace HAM', state: 'drawn', missing: [], dropped: [], message: null, ...over });
+  const needsDriver = place({ scope: 'preview:pace', where: 'strip', state: 'needs_props', missing: ['driver'], message: 'Needs driver' });
+  const threw = place({ state: 'error', message: 'lap is undefined' });
+
   function attach(agent: InstanceType<typeof Agent>, picture: Buffer | null = null) {
     mkdirSync(modsDir(), { recursive: true });
     agent.attachMods({
@@ -341,6 +353,7 @@ describe('build mode', () => {
         existsSync(path.join(modsDir(), name, 'main.tsx')) ? { name, state: 'ready', version: 1, url: null, error: null } : null,
       logs: () => [{ at: 0, level: 'log', text: 'drew' }],
       picture: async () => picture,
+      health: async () => screen[Math.min(asked++, screen.length - 1)],
     });
   }
   const notes = () => events().flatMap((e) => (e.type === 'tool_end' && e.note ? [e.note] : []));
@@ -434,6 +447,109 @@ describe('build mode', () => {
     expect(existsSync('/tmp/f1a-escape.txt')).toBe(false);
     expect(readdirSync(modsDir())).toEqual([]);
     expect(notes()).toEqual([]);
+  });
+
+  describe('before a build turn ends', () => {
+    it('sends the agent on when something is not drawing, and ends once it is', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[threw], []];
+      script(fauxAssistantMessage('Done.'), fauxAssistantMessage('Fixed.'));
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests).toHaveLength(2);
+      expect(requests[0].history).not.toContain('not drawing');
+      expect(requests[1].history).toContain("Before you finish, these aren't drawing:");
+      expect(requests[1].history).toContain('Tile \\"Pace HAM\\" (pace): render error: lap is undefined. Fix the code.');
+      expect(types().filter((t) => t === 'turn_end')).toHaveLength(1);
+      expect(types().at(-1)).toBe('turn_end');
+      expect(events().filter((e) => e.type === 'text_delta').map((e) => e.delta).join('')).toBe('Done.Fixed.');
+    });
+
+    it('ends the turn at once when everything draws, or the app cannot say', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      script(fauxAssistantMessage('Done.'), fauxAssistantMessage('Again.'));
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests).toHaveLength(1);
+      screen = [null];
+      await agent.send('and again', 'state', [], '', 'build');
+      expect(requests).toHaveLength(2);
+    });
+
+    it('says the same problems only once: the agent may need the user to fix them', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[needsDriver]];
+      script(fauxAssistantMessage('Built pace.'), fauxAssistantMessage('Whose pace?'), fauxAssistantMessage('Still need a driver.'));
+      await agent.send('build pace', 'state', [], '', 'build');
+      expect(requests).toHaveLength(2);
+      expect(requests[1].history).toContain('Draft pace in the strip: needs driver. Call suggest_tiles with it and its props, or ask the user whose.');
+      // The next message: the same problem is on screen, and the agent already knows.
+      await agent.send('hmm', 'state', [], '', 'build');
+      expect(requests).toHaveLength(3);
+    });
+
+    it("doesn't say again what a save's result just said", async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[place({ scope: 'preview:lap_stepper', where: 'strip', type: 'lap_stepper', state: 'needs_props', missing: ['driver'], message: 'Needs driver' })]];
+      script(fauxAssistantMessage([fauxToolCall('write', { path: 'lap_stepper/main.tsx', content: 'const a = 1;' })]), fauxAssistantMessage('Whose?'), fauxAssistantMessage('Extra.'));
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests[1].history).toContain('Draft lap_stepper in the strip: needs driver.');
+      expect(requests).toHaveLength(2);
+    });
+
+    it('says a problem again if it went away and came back', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[threw], [], [], [threw], []];
+      script(fauxAssistantMessage('1'), fauxAssistantMessage('2'), fauxAssistantMessage('3'), fauxAssistantMessage('4'), fauxAssistantMessage('5'));
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests).toHaveLength(2);
+      await agent.send('more', 'state', [], '', 'build');
+      expect(requests).toHaveLength(3);
+      await agent.send('and more', 'state', [], '', 'build');
+      expect(requests).toHaveLength(5);
+    });
+
+    it('sends the agent on at most twice for one message, however the problems change', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[threw], [place({ state: 'error', message: 'another' })], [place({ state: 'error', message: 'a third' })]];
+      script(fauxAssistantMessage('1'), fauxAssistantMessage('2'), fauxAssistantMessage('3'), fauxAssistantMessage('4'));
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests).toHaveLength(3);
+      expect(types().filter((t) => t === 'turn_end')).toHaveLength(1);
+    });
+
+    it('never looks for the viewing agent', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      screen = [[threw]];
+      script(fauxAssistantMessage('Hello.'), fauxAssistantMessage('Extra.'));
+      await agent.send('hi', 'state', [TOOL]);
+      expect(requests).toHaveLength(1);
+      expect(asked).toBe(0);
+    });
+
+    it('tells a save what of that mod is not drawing, and mod_status where it shows', async () => {
+      const { agent, requests, script } = setup();
+      attach(agent);
+      const draft = place({ scope: 'preview:lap_stepper', where: 'strip', type: 'lap_stepper', state: 'needs_props', missing: ['driver'], message: 'Needs driver' });
+      screen = [[draft, threw]];
+      script(
+        fauxAssistantMessage([fauxToolCall('write', { path: 'lap_stepper/main.tsx', content: 'const a = 1;' })]),
+        fauxAssistantMessage([fauxToolCall('mod_status', { mod: 'lap_stepper' })]),
+        fauxAssistantMessage('Whose?'),
+        fauxAssistantMessage('Still whose?'),
+      );
+      await agent.send('build it', 'state', [], '', 'build');
+      expect(requests[1].history).toContain('lap_stepper loaded. Draft lap_stepper in the strip: needs driver.');
+      // Another mod's trouble isn't a save's to report.
+      expect(requests[1].history).not.toContain('lap is undefined');
+      expect(requests[2].history).toContain('On screen:\\nDraft lap_stepper in the strip: needs driver.');
+      expect(notes()).toEqual(['wrote lap_stepper/main.tsx · loaded · not drawing']);
+    });
   });
 
   it('shows the build agent a picture of a draft', async () => {

@@ -62,6 +62,8 @@ const api: F1aApi = {
     onChanged: (cb) => subscribe<ModStatus[]>('mods:changed', cb),
     loaded: (name, version, error) => ipcRenderer.send('mods:loaded', name, version, error),
     log: (name, line) => ipcRenderer.send('mods:log', name, line),
+    onHealthAsked: (cb) => subscribe<string>('mods:healthAsk', cb),
+    health: (id, places) => ipcRenderer.send('mods:health', id, places),
   },
   build: {
     state: () => invoke('build:state'),

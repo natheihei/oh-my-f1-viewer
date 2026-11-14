@@ -1,6 +1,8 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import { randomUUID } from 'node:crypto';
 import type { F1TvStatus } from '../shared/api';
+import type { PlaceHealth } from '../shared/health';
 import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
@@ -55,6 +57,31 @@ async function pictureOf(name: string): Promise<Buffer | null> {
   )) as { x: number; y: number; width: number; height: number } | null;
   if (!box) return null;
   return (await win.webContents.capturePage(box)).toPNG();
+}
+
+const HEALTH_TIMEOUT_MS = 3000;
+const healthWaiting = new Map<string, (places: PlaceHealth[] | null) => void>();
+
+/**
+ * How every tile and draft is drawing, as the renderer reports it once each has drawn with its latest
+ * code. For the build agent. Null when there's no window, or it didn't answer.
+ */
+function healthOfScreen(): Promise<PlaceHealth[] | null> {
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const id = randomUUID();
+    const timer = setTimeout(() => {
+      healthWaiting.delete(id);
+      resolve(null);
+    }, HEALTH_TIMEOUT_MS);
+    healthWaiting.set(id, (places) => {
+      clearTimeout(timer);
+      healthWaiting.delete(id);
+      resolve(places);
+    });
+    sendToRenderer('mods:healthAsk', id);
+  });
 }
 
 function f1Status(): F1TvStatus {
@@ -259,12 +286,17 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     if (isTrusted(evt) && line && typeof line === 'object') mods.log(String(name), line);
   });
 
+  ipcMain.on('mods:health', (evt, id, places) => {
+    if (isTrusted(evt)) healthWaiting.get(String(id))?.(Array.isArray(places) ? (places as PlaceHealth[]) : null);
+  });
+
   // --- Build mode ---
   agent.attachMods({
     dir: mods.dir,
     settled: (name) => mods.settled(name),
     logs: (name) => mods.logs(name),
     picture: (name) => pictureOf(name),
+    health: () => healthOfScreen(),
   });
   handle('build:state', () => mods.buildState());
   handle('build:begin', () => mods.beginBuild());
