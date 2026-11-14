@@ -19,7 +19,7 @@ editor and no separate preview. The draft is the real component, on the open ses
 ## Entering and leaving
 
 - `/build` enters build mode, and what the viewer types next goes to the build agent. In the palette's command list it reads "Enter
-  build mode", with red text beside it:
+  build mode", with grey text beside it:
   "! spoiler the agent looks ahead without asking". That text is the viewer's consent to what [Spoilers](#spoilers) describes, and there's no check on entry.
 - Entering pauses playback, so the race doesn't run on unwatched while the viewer builds. Leaving doesn't start it again.
 - While build mode is on, the palette is yellow: its frame, its prompt, and the tag's text and outlines.
@@ -137,7 +137,7 @@ the playhead to test a query against.
 
 What protects the viewer instead:
 
-- **Consent on entry:** the red text on `/build`.
+- **Consent on entry:** the warning text on `/build`.
 - **Nothing crosses back.** The viewing session never sees the build conversation, only the line the app writes. Leaving build mode
   ends the build conversation, and the next build starts a new one.
 - **The prompt.** The build agent is told not to say what it read, as the viewing agent is after an approved read ahead.
@@ -207,7 +207,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 
 **Entering**
 
-1. Typing `/b` lists `/build` with the red "! spoiler the agent looks ahead without asking" beside it.
+1. Typing `/b` lists `/build` with "! spoiler the agent looks ahead without asking" beside it, in the hint grey.
 2. `/build a controller that can go back and forward laps` shows the `build ×` tag with no spoiler check. The layout is untouched
    and playback pauses.
 
@@ -272,6 +272,6 @@ and `/build` itself (`src/shell/commands.test.ts`).
 | `looksAhead` | `src/host/components.ts` |
 | Approval per tile | `src/host/lookAhead.ts` |
 | The warning, the outline and the title's "looks ahead" | `src/host/Grid.tsx`, `src/layout/Stage.tsx`, `src/layout/GridSurface.tsx` |
-| `/build` and its red text | `src/shell/commands.ts`, `src/shell/CommandPalette.tsx` |
+| `/build` and its warning text | `src/shell/commands.ts`, `src/shell/CommandPalette.tsx` |
 | Entering, leaving and the offer to go back | `src/shell/buildMode.ts` |
 | The tag, Undo all and Save | `src/shell/CommandPalette.tsx` |
