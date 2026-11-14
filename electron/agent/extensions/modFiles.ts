@@ -1,12 +1,15 @@
 /**
- * The build agent's own tools: reading and writing files in the mods folder, a mod's status, and a
- * picture of a draft. They run here, not in the renderer, and reach nothing outside the mods folder.
- * See docs/BUILD_MODE.md.
+ * The build agent's own tools: pi's read, write, edit, ls, grep and find, kept inside the mods folder,
+ * and our own for deleting, a mod's status, and a picture of a draft. They run here, not in the
+ * renderer, and reach nothing outside the mods folder. See docs/BUILD_MODE.md.
  */
-import { promises as fsp } from 'node:fs';
+import { constants, promises as fsp } from 'node:fs';
 import path from 'node:path';
+import { minimatch } from 'minimatch';
 import type { ExtensionFactory, ToolDefinition } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
 import type { ModLogLine, ModStatus } from '../../../shared/mods';
+
+type Pi = typeof import('@earendil-works/pi-coding-agent', { with: { 'resolution-mode': 'import' } });
 
 /** What the tools need from the app. */
 export interface ModFilesHost {
@@ -22,7 +25,6 @@ export interface ModFilesHost {
 /** Told about each call as it ends, with a line for the palette when there's one to show. */
 export type ModToolReport = (name: string, ok: boolean, note: string | null) => void;
 
-const MAX_READ = 60_000;
 const LOG_LINES = 40;
 const WRITTEN = new Set(['mod.error', 'mod.log']);
 
@@ -31,7 +33,7 @@ const object = (properties: Record<string, unknown>, required: string[]): Schema
   ({ type: 'object', properties, required, additionalProperties: false }) as unknown as Schema;
 const string = (description: string) => ({ type: 'string', description });
 
-/** Where a path the model gave points, or an error if it leaves the mods folder. */
+/** Where a path points, or an error if it leaves the mods folder. */
 export function resolveInside(dir: string, given: string): string {
   const target = path.resolve(dir, given || '.');
   if (target !== dir && !target.startsWith(dir + path.sep)) throw new Error(`"${given}" is outside the mods folder. Paths are relative to it, like "my_mod/main.tsx".`);
@@ -42,26 +44,61 @@ export function resolveInside(dir: string, given: string): string {
 function writable(dir: string, given: string): { file: string; mod: string; rel: string } {
   const file = resolveInside(dir, given);
   const parts = path.relative(dir, file).split(path.sep);
+  const rel = parts.join('/');
   if (parts.length < 2) throw new Error('Write inside a mod\'s folder, like "my_mod/main.tsx".');
-  if (parts.some((p) => p.startsWith('.') || p === 'node_modules')) throw new Error(`"${given}" is the app's, and can't be written.`);
+  if (parts.some((p) => p.startsWith('.') || p === 'node_modules')) throw new Error(`"${rel}" is the app's, and can't be written.`);
   if (parts.length === 2 && WRITTEN.has(parts[1])) throw new Error(`The app writes ${parts[1]} itself.`);
   if (!/^[a-z][a-z0-9_-]{0,47}$/.test(parts[0])) throw new Error(`"${parts[0]}" can't be a mod's name: use lower-case letters, digits, _ and -, starting with a letter.`);
-  return { file, mod: parts[0], rel: parts.join('/') };
+  return { file, mod: parts[0], rel };
 }
 
-async function listing(dir: string, base: string, depth: number): Promise<string[]> {
-  const entries = await fsp.readdir(path.join(dir, base), { withFileTypes: true });
-  const out: string[] = [];
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.name === 'node_modules') continue;
-    const rel = path.posix.join(base.split(path.sep).join('/'), entry.name);
-    if (entry.isDirectory()) {
-      out.push(`${rel}/`);
-      if (depth > 1) out.push(...(await listing(dir, rel, depth - 1)));
-    } else {
-      out.push(rel);
+/**
+ * Checks each path pi is about to touch. pi hands its operations the absolute path it resolved, after
+ * stripping a leading @ and expanding ~, so the check runs on the path really opened. The first
+ * refusal is kept, so the model hears it rather than pi's wrapping of it.
+ */
+class Guard {
+  refused: Error | null = null;
+  /** The mod file a write or edit saved. */
+  saved: { mod: string; rel: string } | null = null;
+  constructor(private readonly dir: string) {}
+  private hold<T>(check: () => T): T {
+    try {
+      return check();
+    } catch (e) {
+      this.refused ??= e instanceof Error ? e : new Error(String(e));
+      throw e;
     }
   }
+  read(file: string): string {
+    return this.hold(() => resolveInside(this.dir, file));
+  }
+  write(file: string): string {
+    return this.hold(() => {
+      const { file: target, mod, rel } = writable(this.dir, file);
+      this.saved = { mod, rel };
+      return target;
+    });
+  }
+}
+
+/** Files under a folder whose path matches a glob, for find. A pattern without / matches names at any depth. */
+async function glob(root: string, pattern: string, limit: number): Promise<string[]> {
+  const options = { dot: true, matchBase: !pattern.includes('/') };
+  const out: string[] = [];
+  const walk = async (rel: string) => {
+    const entries = await fsp.readdir(path.join(root, rel), { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (out.length >= limit) return;
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      const child = rel ? `${rel}/${entry.name}` : entry.name;
+      // Links aren't followed, so the walk stays in the folder.
+      const folder = entry.isDirectory();
+      if (minimatch(child, pattern, options) || (folder && minimatch(`${child}/`, pattern, options))) out.push(folder ? `${child}/` : child);
+      if (folder) await walk(child);
+    }
+  };
+  await walk('');
   return out;
 }
 
@@ -73,6 +110,16 @@ function describeStatus(name: string, status: ModStatus | null): string {
 }
 
 const text = (value: string, isError = false) => ({ content: [{ type: 'text' as const, text: value }], details: undefined, isError });
+
+const PATH = 'Relative to the mods folder, like "my_mod/main.tsx".';
+const FOLDER = 'A folder, relative to the mods folder, like "my_mod" or ".types". Leave out for the whole mods folder.';
+
+/** pi's definition with our wording: paths are relative to the mods folder, and pi's prompt lines are left out. */
+function reworded(def: ToolDefinition, pathDescription: string, description = def.description): ToolDefinition {
+  const params = def.parameters as unknown as { properties: Record<string, object> };
+  const parameters = { ...params, properties: { ...params.properties, path: { ...params.properties.path, description: pathDescription } } } as unknown as Schema;
+  return { ...def, description, parameters, promptSnippet: undefined, promptGuidelines: undefined };
+}
 
 export function modFilesExtension(host: () => ModFilesHost, report: ModToolReport): ExtensionFactory {
   /** Runs a tool, turning what it throws into an error result, and reports how it went. */
@@ -87,72 +134,128 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
     }
   };
 
-  /** A save's result: whether the mod loaded, for the model and for the palette. */
-  const saved = async (verb: string, mod: string, rel: string) => {
+  /** Whether a save loaded, for the model and for the palette. */
+  const loaded = async (verb: string, mod: string, rel: string) => {
     const status = await host().settled(mod);
-    const loaded = status?.state === 'ready';
-    const outcome = !status ? 'not a mod yet' : loaded ? 'loaded' : status.state === 'failed' ? "didn't load" : 'loading';
-    return { result: text(`Saved ${rel}. ${describeStatus(mod, status)}`), note: `${verb} ${rel} · ${outcome}` };
+    const outcome = !status ? 'not a mod yet' : status.state === 'ready' ? 'loaded' : status.state === 'failed' ? "didn't load" : 'loading';
+    return { line: describeStatus(mod, status), note: `${verb} ${rel} · ${outcome}` };
   };
 
-  return (pi) => {
-    const tools: ToolDefinition[] = [
-      {
-        name: 'list_files',
-        label: 'list_files',
-        description: 'List files in the mods folder, or in one folder of it. Folders end with /.',
-        parameters: object({ path: string('A folder, relative to the mods folder. Leave out for the top level.') }, []),
-        execute: (_id, args) =>
-          run('list_files', async () => {
-            const { path: given = '' } = args as { path?: string };
-            const { dir } = host();
-            const target = resolveInside(dir, given);
-            const lines = await listing(dir, path.relative(dir, target), given ? 4 : 2);
-            return { result: text(lines.join('\n') || '(empty)') };
-          }),
+  return async (pi) => {
+    const tools: Pi = await import('@earendil-works/pi-coding-agent');
+
+    /**
+     * One of pi's tools, made for each call with operations that check every path. A write or edit
+     * that saved waits for the mod to load and adds whether it did.
+     */
+    const wrapped = (name: string, make: (dir: string, guard: Guard) => ToolDefinition, shape: (def: ToolDefinition) => ToolDefinition, verb?: string): ToolDefinition => ({
+      ...shape(make('/', new Guard('/'))),
+      execute: async (id, args, signal, onUpdate, ctx) => {
+        let guard: Guard | null = null;
+        try {
+          const { dir } = host();
+          guard = new Guard(dir);
+          const result = await make(dir, guard).execute(id, args, signal, onUpdate, ctx);
+          if (!verb || !guard.saved) {
+            report(name, !result.isError, null);
+            return result;
+          }
+          const { line, note } = await loaded(verb, guard.saved.mod, guard.saved.rel);
+          report(name, true, note);
+          return { ...result, content: [...result.content, { type: 'text' as const, text: line }] };
+        } catch (e) {
+          report(name, false, null);
+          return text(guard?.refused?.message ?? (e instanceof Error ? e.message : String(e)), true);
+        }
       },
-      {
-        name: 'read_file',
-        label: 'read_file',
-        description: 'Read a text file in the mods folder: a mod\'s source, its mod.error or mod.log, or the types under .types.',
-        parameters: object({ path: string('Relative to the mods folder, like "lap_form/main.tsx".') }, ['path']),
-        execute: (_id, args) =>
-          run('read_file', async () => {
-            const { path: given } = args as { path: string };
-            const content = await fsp.readFile(resolveInside(host().dir, given), 'utf8');
-            return { result: text(content.length > MAX_READ ? `${content.slice(0, MAX_READ)}\n… (${content.length - MAX_READ} more characters)` : content) };
-          }),
-      },
-      {
-        name: 'write_file',
-        label: 'write_file',
-        description: 'Create or replace a file in a mod\'s folder, making the folder if needed. Waits for the app to compile and load the mod, and says whether it did.',
-        parameters: object({ path: string('Relative to the mods folder, like "lap_stepper/main.tsx".'), content: string('The whole file.') }, ['path', 'content']),
-        execute: (_id, args) =>
-          run('write_file', async () => {
-            const { path: given, content } = args as { path: string; content: string };
-            const { file, mod, rel } = writable(host().dir, given);
-            await fsp.mkdir(path.dirname(file), { recursive: true });
-            await fsp.writeFile(file, content);
-            return saved('wrote', mod, rel);
-          }),
-      },
-      {
-        name: 'edit_file',
-        label: 'edit_file',
-        description: 'Replace one piece of text in a mod\'s file. `old` must appear exactly once. Waits for the mod to load, like write_file.',
-        parameters: object({ path: string('Relative to the mods folder.'), old: string('The exact text to replace.'), new: string('What to put there.') }, ['path', 'old', 'new']),
-        execute: (_id, args) =>
-          run('edit_file', async () => {
-            const { path: given, old, new: next } = args as { path: string; old: string; new: string };
-            const { file, mod, rel } = writable(host().dir, given);
-            const content = await fsp.readFile(file, 'utf8');
-            const count = old ? content.split(old).length - 1 : 0;
-            if (count !== 1) throw new Error(count === 0 ? `That text isn't in ${rel}. Read the file and try again.` : `That text appears ${count} times in ${rel}. Include more around it.`);
-            await fsp.writeFile(file, content.replace(old, () => next));
-            return saved('edited', mod, rel);
-          }),
-      },
+    });
+
+    const exists = (p: string) =>
+      fsp.access(p).then(
+        () => true,
+        () => false,
+      );
+
+    const piTools: ToolDefinition[] = [
+      wrapped(
+        'read',
+        (dir, guard) =>
+          tools.createReadToolDefinition(dir, {
+            operations: {
+              access: async (p) => fsp.access(guard.read(p), constants.R_OK),
+              readFile: async (p) => fsp.readFile(guard.read(p)),
+            },
+          }) as ToolDefinition,
+        (def) => reworded(def, PATH, `In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. ${def.description}`),
+      ),
+      wrapped(
+        'write',
+        (dir, guard) =>
+          tools.createWriteToolDefinition(dir, {
+            operations: {
+              // pi makes the folder before writing. It's made below instead, once the file is known to be writable.
+              mkdir: async () => {},
+              writeFile: async (p, content) => {
+                const file = guard.write(p);
+                await fsp.mkdir(path.dirname(file), { recursive: true });
+                await fsp.writeFile(file, content);
+              },
+            },
+          }) as ToolDefinition,
+        (def) => reworded(def, PATH, `${def.description} Only inside a mod's folder. Waits for the app to compile and load the mod, and says whether it did.`),
+        'wrote',
+      ),
+      wrapped(
+        'edit',
+        (dir, guard) =>
+          tools.createEditToolDefinition(dir, {
+            operations: {
+              access: async (p) => fsp.access(guard.write(p), constants.R_OK | constants.W_OK),
+              readFile: async (p) => fsp.readFile(guard.write(p)),
+              writeFile: async (p, content) => fsp.writeFile(guard.write(p), content),
+            },
+          }) as ToolDefinition,
+        (def) => reworded(def, PATH, `${def.description} Only inside a mod's folder. Waits for the mod to load and says whether it did, like write.`),
+        'edited',
+      ),
+      wrapped(
+        'ls',
+        (dir, guard) =>
+          tools.createLsToolDefinition(dir, {
+            operations: {
+              exists: async (p) => exists(guard.read(p)),
+              stat: async (p) => fsp.stat(guard.read(p)),
+              readdir: async (p) => fsp.readdir(guard.read(p)),
+            },
+          }) as ToolDefinition,
+        (def) => reworded(def, FOLDER),
+      ),
+      wrapped(
+        'grep',
+        // pi checks the folder here before ripgrep starts, so a refusal stops the search.
+        (dir, guard) => tools.createGrepToolDefinition(dir, { operations: { isDirectory: async (p) => (await fsp.stat(guard.read(p))).isDirectory() } }) as ToolDefinition,
+        (def) => reworded(def, `${FOLDER} Or one file.`, def.description.replace(' Respects .gitignore.', '')),
+      ),
+      wrapped(
+        'find',
+        // With its own glob, pi checks the folder through exists and never runs fd.
+        (dir, guard) =>
+          tools.createFindToolDefinition(dir, {
+            operations: {
+              exists: async (p) => exists(guard.read(p)),
+              glob: async (pattern, cwd, { limit }) => glob(guard.read(cwd), pattern, limit),
+            },
+          }) as ToolDefinition,
+        (def) =>
+          reworded(
+            def,
+            FOLDER,
+            "Find files and folders by glob pattern, like '*.tsx' or 'my_mod/**/*.ts'. A pattern without '/' matches names at any depth. Returns paths relative to the folder searched, with '/' after folders. Includes dot folders like .types, and skips node_modules. Output is truncated to 1000 results.",
+          ),
+      ),
+    ];
+
+    const ours: ToolDefinition[] = [
       {
         name: 'delete_path',
         label: 'delete_path',
@@ -172,7 +275,9 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
               return { result: text(`Removed the mod ${parts[0]}.`), note: `removed ${parts[0]}` };
             }
             await fsp.rm(target, { recursive: true });
-            return saved('deleted', parts[0], parts.join('/'));
+            const rel = parts.join('/');
+            const { line, note } = await loaded('deleted', parts[0], rel);
+            return { result: text(`Deleted ${rel}. ${line}`), note };
           }),
       },
       {
@@ -209,8 +314,8 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
           }),
       },
     ];
-    for (const tool of tools) pi.registerTool(tool);
+    for (const tool of [...piTools, ...ours]) pi.registerTool(tool);
   };
 }
 
-export const MOD_FILE_TOOLS = ['list_files', 'read_file', 'write_file', 'edit_file', 'delete_path', 'mod_status', 'look_at'];
+export const MOD_FILE_TOOLS = ['read', 'write', 'edit', 'ls', 'grep', 'find', 'delete_path', 'mod_status', 'look_at'];
