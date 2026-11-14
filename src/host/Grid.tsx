@@ -1,6 +1,5 @@
 /** The grid and the components in it. Mouse edits arrive as host writes, like any other change. */
 import { Component, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import Value from 'typebox/value';
 import { GridSurface, type TileState } from '../layout/GridSurface';
 import type { ComponentSpec, Rect } from '../layout/model';
 import { allTiles, GRID_COLUMNS, GRID_ROWS } from '../layout/model';
@@ -9,18 +8,46 @@ import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
 import { fillTitle, useDriverStyles } from './drivers';
 import { componentOf, useComponents } from './components';
+import { fitProps, fixable, health, healthOps, type PlaceHealth } from './health';
 import { layoutOps } from './layoutOps';
 import { useLive } from './live';
-import { tileLookAhead, useTileLookAhead } from './lookAhead';
+import { previewScope, tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { useHiddenPast } from './overflow';
 import { setGridFrame, useSuggestions } from './suggestions';
+
+/** A place without its state: what's drawn where. Null where nothing is reported, outside a tile or preview. */
+type Place = Pick<PlaceHealth, 'scope' | 'where' | 'type' | 'label'>;
 
 interface BoundaryProps {
   type: string;
   /** The component's code: a new version, such as a mod saved again, gets a fresh try. */
   version: unknown;
+  place: Place | null;
+  /** Props the component's args no longer accept, which it draws without. */
+  dropped: string[];
   children: ReactNode;
+}
+
+/**
+ * Stands in for a component that isn't drawing, and says why. On a tile, where the agent could fix it,
+ * a button asks it to: props anywhere, code only in build mode.
+ */
+function TileProblem({ place, state, text }: { place: Place | null; state: 'needs_props' | 'error'; text: string }) {
+  const building = useBuild((s) => s.active);
+  return (
+    <div className="tile-warning tile-problem" data-testid="tile-problem" data-problem={state} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+      <div>
+        <div className="tile-warning-title">! error</div>
+        <div>{text}</div>
+      </div>
+      {place && fixable({ state, where: place.where }, building) ? (
+        <button type="button" className="tile-warning-allow" data-testid="ask-agent-fix" onClick={() => healthOps.askFix({ scope: place.scope })}>
+          Ask agent to fix
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 /** Keeps a component that throws while drawing inside its own tile, so it can't take the app down. */
@@ -33,14 +60,28 @@ class TileBoundary extends Component<BoundaryProps, { error: string | null }> {
 
   componentDidCatch(error: unknown) {
     reportTileError(this.props.type, error);
+    this.report();
+  }
+
+  componentDidMount() {
+    this.report();
   }
 
   componentDidUpdate(previous: BoundaryProps) {
     if (this.state.error !== null && previous.version !== this.props.version) this.setState({ error: null });
+    else this.report();
+  }
+
+  /** Says how the place stands, once what's on screen is settled. */
+  private report() {
+    const { place, version, dropped } = this.props;
+    if (!place) return;
+    const { error } = this.state;
+    health.report({ ...place, state: error !== null ? 'error' : 'drawn', missing: [], dropped, message: error }, version);
   }
 
   render() {
-    return this.state.error !== null ? <div className="chart-message">This tile stopped: {this.state.error}</div> : this.props.children;
+    return this.state.error !== null ? <TileProblem place={this.props.place} state="error" text={`This tile stopped: ${this.state.error}`} /> : this.props.children;
   }
 }
 
@@ -95,20 +136,38 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
   // Re-renders when a mod's component is replaced, wherever this is drawn.
   useComponents((s) => s.list);
   const definition = componentOf(spec.type);
-  // Props from before an edit that the component's new args no longer accept: it draws with none.
-  const props = useMemo(() => (definition && !Value.Check(definition.args, spec.props) ? {} : spec.props), [definition, spec.props]);
+  // Props from before an edit may not fit the component's new args: it keeps those that do.
+  const fit = useMemo(() => (definition ? fitProps(definition.args, spec.props) : null), [definition, spec.props]);
   useEffect(() => {
     if (scope == null) return;
-    return () => tileLookAhead.forget(scope);
+    return () => {
+      tileLookAhead.forget(scope);
+      health.forget(scope);
+    };
   }, [scope]);
   const allowed = useTileLookAhead((s) => scope != null && s.approved[scope] === true);
   const View = definition?.View;
-  if (!View) return <>{fallback}</>;
-  if (definition.looksAhead && !allowed) return scope != null ? <LookAheadWarning scope={scope} /> : null;
+  const place = useMemo<Place | null>(
+    () => (scope != null ? { scope, where: scope === previewScope(spec.key) ? 'strip' : 'tile', type: spec.type, label: spec.label } : null),
+    [scope, spec.key, spec.type, spec.label],
+  );
+  const waiting = !!View && !fit?.message && definition?.looksAhead === true && !allowed;
+  // What isn't drawn reports here. What is, reports from its boundary, once it has drawn or thrown.
+  useEffect(() => {
+    if (!place || !View || !fit) return;
+    if (fit.message) health.report({ ...place, state: 'needs_props', missing: fit.missing, dropped: fit.dropped, message: fit.message }, View);
+    else if (waiting) health.report({ ...place, state: 'waiting', missing: [], dropped: fit.dropped, message: null }, View);
+  }, [place, View, fit, waiting]);
+  useEffect(() => {
+    if (place && !View) health.forget(place.scope);
+  }, [place, View]);
+  if (!View || !fit) return <>{fallback}</>;
+  if (fit.message) return <TileProblem place={place} state="needs_props" text={fit.message} />;
+  if (waiting) return scope != null ? <LookAheadWarning scope={scope} /> : null;
   return (
     <ViewFrame>
-      <TileBoundary type={spec.type} version={View}>
-        <View props={props} label={spec.label} />
+      <TileBoundary type={spec.type} version={View} place={place} dropped={fit.dropped}>
+        <View props={fit.props} label={spec.label} />
       </TileBoundary>
     </ViewFrame>
   );

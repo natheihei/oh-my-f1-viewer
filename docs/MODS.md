@@ -109,7 +109,8 @@ The main process owns the folder, and the renderer imports what main hands it.
 
 A save that doesn't compile, or whose export doesn't check out, keeps the last good version running and writes the reason to
 `mod.error`. Every tile has an error boundary: a component that throws while drawing shows "This tile stopped" with the error in its
-tile, the rest of the app carries on, and a mod's error goes to `mod.log`. The next version gets a fresh try.
+tile, the rest of the app carries on, and a mod's error goes to `mod.log`. The next version gets a fresh try. A tile whose props
+no longer fit its mod's `args` shows what it needs instead of drawing. Both are in `live.health`.
 
 `live.mods` lists every mod with its `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. The components of the
 ones that loaded are in `live.components`, like any other.

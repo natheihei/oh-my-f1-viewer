@@ -10,6 +10,7 @@ import { useLayout } from '../layout/store';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
 import { useBuild, type BuildView } from './build';
 import { useComponents, type ComponentInfo } from './components';
+import { useHealth, type PlaceHealth } from './health';
 import { useMods } from './mods';
 import type { ModStatus } from '../../shared/mods';
 import { useSuggestions, type SuggestionsView } from './suggestions';
@@ -48,6 +49,8 @@ export interface Live {
   mods: ModStatus[];
   /** Build mode: whether it's on, and which mods it has changed. See docs/BUILD_MODE.md. */
   build: BuildView;
+  /** Each place a component shows, a tile or a preview in the strip, and whether it's drawing. */
+  health: PlaceHealth[];
 }
 
 export function read(): Live {
@@ -72,6 +75,7 @@ export function read(): Live {
     backgrounds: useBackgrounds.getState().list,
     mods: useMods.getState().list,
     build: useBuild.getState(),
+    health: useHealth.getState().places,
   };
 }
 
@@ -90,6 +94,7 @@ function subscribe(onChange: () => void): () => void {
     useBackgrounds.subscribe(onChange),
     useMods.subscribe(onChange),
     useBuild.subscribe(onChange),
+    useHealth.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }

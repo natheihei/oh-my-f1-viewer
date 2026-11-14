@@ -14,8 +14,8 @@ There are three kinds of things:
 | Kind | How | Changes anything? |
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
-| Queries | `host.catalog.*`, `host.session.feeds`, `host.data.sql`, `useSql` | No |
-| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
+| Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.data.sql`, `useSql` | No |
+| Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.askFix`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
 included. Rules like spoiler protection belong to the caller. The agent's are in `src/agent/tools.ts`.
@@ -47,6 +47,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
 | `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
+| `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -226,6 +227,15 @@ Build mode's snapshot of the mods folder, which the main process keeps. See [BUI
 | `build.begin` | none | Takes the snapshot and turns build mode on. Does nothing new if it's already on |
 | `build.save` | none | Drops the snapshot, keeping every change. Resolves to what changed in the app's words, like "Built lap_stepper.", or null |
 | `build.undo` | none | Puts the mods folder back as it stood on entry. Resolves to how many mods that undid |
+
+### `host.health`
+
+Whether what's on screen is drawing. The report itself is `live.health`.
+
+| Function | Arguments | Effect |
+| --- | --- | --- |
+| `health.settled` | none | A query. Resolves to `live.health` once every place has drawn with its component's latest code, or after a second: a mod that just loaded takes a moment to draw |
+| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as a line of the viewer's in the palette. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode |
 
 ### `host.suggestions`
 

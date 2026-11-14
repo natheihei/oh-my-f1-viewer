@@ -2,7 +2,7 @@
 import type { AgentEvent } from '../../shared/api';
 import { askAgent, connectTools } from '../agent/bridge';
 import { setSpoilerAsker } from '../agent/spoilerGate';
-import { host, read } from '../host';
+import { host, read, setFixAsker } from '../host';
 import { loadEvents } from './commands';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
@@ -59,10 +59,16 @@ export function connectAgent(): () => void {
   const offEvent = host.agent.onEvent(onEvent);
   const offTools = connectTools();
   const offAsker = setSpoilerAsker(askViewer);
+  // A tile's "Ask agent to fix": the palette opens, and the request goes as a line of the viewer's.
+  const offFix = setFixAsker((text) => {
+    palette.show();
+    void sendToAgent(text);
+  });
   return () => {
     offEvent();
     offTools();
     offAsker();
+    offFix();
   };
 }
 
