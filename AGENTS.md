@@ -1,0 +1,24 @@
+# f1a
+
+An agent-driven, multi-view F1 TV player, built on Electron and React, Linux only for now. The viewer tells an agent what to watch,
+and it opens the session and suggests tiles: video feeds, and charts drawn from a local SQLite copy of the session's timing data.
+Every stream and the data stay locked to one session clock, and nothing past the frame on screen reaches the viewer unless they allow
+it. Mods, folders that hot reload, add components a tile can show, and the app's own agent can write them in build mode.
+
+## Docs
+
+Read the one that covers what you're changing. [README.md](README.md) has how to run the app and the check scripts.
+
+| Doc | Read it for |
+| --- | --- |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What exists today: the layers, the host, charts and their kit, streams and sync, aligning data to video, layout, the agent on pi, sign-in. Start here |
+| [DESIGN.md](docs/DESIGN.md) | Where the layering is heading and its rules: one read surface and one write path through `src/host`, and a host with no gates. Also the agent's tools, suggested tiles, mentions and the spoiler check in full |
+| [HOST.md](docs/HOST.md) | Every read, query, write and primitive in `src/host`, and the agent tool built on each |
+| [COMPONENTS.md](docs/COMPONENTS.md) | How a tile's component should behave: props, size, auto-layout, overflow, colour, driver codes, and each chart's decisions. Rules a mod must follow are copied into `shared/modGuide.ts` by hand, in the same change |
+| [MODS.md](docs/MODS.md) | What a mod is, what it may import, and how the app watches, compiles, serves and reloads it |
+| [BUILD_MODE.md](docs/BUILD_MODE.md) | `/build`: the build agent and its file tools, drafts, Save and Undo all, what isn't drawing, and the cases that check it |
+| [SESSION_DATA.md](docs/SESSION_DATA.md) | The session database: tables, `visible_from` and versioned rows, ingest and caching, linking it to the video, and quirks in F1's data |
+| [SPOILER_PREVENTION.md](docs/SPOILER_PREVENTION.md) | Each layer that keeps the race from the viewer, from the data up to the agent's prompt. Read it before changing what a chart or the agent can see |
+| [STATUS.md](docs/STATUS.md) | What's verified on real sessions, what isn't, known issues, and what's deferred |
+| [PITWALL.md](docs/PITWALL.md) | Research: how pitwall.info builds and draws its live charts |
+| [CAPTIONS.md](docs/CAPTIONS.md) | Research for a deferred feature: F1 TV's commentary caption tracks, by season. Captions contain the race |
