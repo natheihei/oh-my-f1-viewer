@@ -49,6 +49,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) and `enteredAtSec` (the session clock on entry, or null with no session). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it |
 | `fixRequests` | `FixRequest[]` | What the viewer asked the agent to fix from a tile's button, oldest first, until something takes each to the agent: `id`, `scope` (the place, from `health`) and `text` (the request in the viewer's words) |
+| `agentBusy` | `boolean` | Whether the agent is working on a message: from when one is sent until its turn ends or is stopped. A message sent while it's busy stops that turn |
 | `spec` | `Spec` | What differs by season, Grand Prix or session, for the open session, or the defaults when none is open: `chaseAid` (`label`, `within`), the aid a car gets within `within` seconds of the one ahead, DRS until 2025 and Overtake ("OT") from 2026. From [src/data/spec.ts](../src/data/spec.ts) |
 | `background` | `BackgroundView` | What fills the gaps between tiles: `style` (a name from `backgrounds`, or `'off'`), `params` (every registered style's settings, defaults filled in, kept while another style shows) and `unavailable` (why the style showing draws nothing right now, like "Needs an open session", or null). The shell saves it across restarts |
 | `backgrounds` | `BackgroundInfo[]` | Every registered background, without its code: `name`, `title` and `params` (its settings' schema, as plain JSON). It only changes when something registers |
@@ -238,7 +239,7 @@ Whether what's on screen is drawing. The report itself is `live.health`, and its
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `health.settled` | none | A query. Resolves to `live.health` once every place has drawn with its component's latest code, or after a second: a mod that just loaded takes a moment to draw |
-| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as the viewer: the request joins `live.fixRequests`. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode. A place with a request waiting isn't asked about again |
+| `health.askFix` | `scope: string` | Asks the agent to fix a place that isn't drawing, as the viewer: the request joins `live.fixRequests`. Returns whether it was asked: a tile that needs props, anywhere, and a tile that threw only in build mode. Nothing is asked while `live.agentBusy` is set or another request waits, since a new message would stop the turn in progress. The tile's button is disabled then, and reads "Agent is busy" |
 | `health.takeFix` | `id: string` | Takes a request off `live.fixRequests`, to send it to the agent. Returns it, or null if something else took it first |
 
 The host doesn't send a request anywhere itself. The shell watches `live.fixRequests`, takes each one, opens the palette and sends
@@ -270,7 +271,7 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   the agent is set up. Only the shell uses them, for the user's `/` commands and to notice an expired sign-in.
 - `host.agent`: the link to the agent loop in the main process (`status`, `send`, `cancel`, `onEvent`, `onToolCall`, `toolResult`), and its
   setup (`providers`, `connect`, `cancelConnect`, `onConnect`, `disconnect`, `choose`). The shell's agent feed, `/settings-agent` and
-  `src/agent/bridge.ts` use it.
+  `src/agent/bridge.ts` use it. `send` keeps `live.agentBusy` as messages go through it (`src/host/agentTurn.ts`).
 - `startMods(shared)`: starts loading mods, with the modules they share with the app. `src/main.tsx` calls it once, after registering
   the app's own components.
 - `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`

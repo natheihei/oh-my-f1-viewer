@@ -8,6 +8,7 @@ import { specFor, type Spec } from '../data/spec';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
+import { useAgentTurn } from './agentTurn';
 import { useBuild, type BuildView } from './build';
 import { useComponents, type ComponentInfo } from './components';
 import { useHealth, type FixRequest, type PlaceHealth } from './health';
@@ -53,6 +54,8 @@ export interface Live {
   health: PlaceHealth[];
   /** What the viewer asked the agent to fix, from a tile's button, until it's taken to the agent. */
   fixRequests: FixRequest[];
+  /** Whether the agent is working on a message. One sent now would stop that turn. */
+  agentBusy: boolean;
 }
 
 export function read(): Live {
@@ -79,6 +82,7 @@ export function read(): Live {
     build: useBuild.getState(),
     health: useHealth.getState().places,
     fixRequests: useHealth.getState().asked,
+    agentBusy: useAgentTurn.getState().busy,
   };
 }
 
@@ -98,6 +102,7 @@ function subscribe(onChange: () => void): () => void {
     useMods.subscribe(onChange),
     useBuild.subscribe(onChange),
     useHealth.subscribe(onChange),
+    useAgentTurn.subscribe(onChange),
   ];
   return () => stops.forEach((stop) => stop());
 }

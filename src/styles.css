@@ -1295,6 +1295,11 @@
   height: var(--row);
 }
 
+/* Waiting for the agent to finish what it's doing. */
+.tile-warning-allow:disabled {
+  @apply cursor-default border-line bg-black text-dim;
+}
+
 /* A line in the history the viewer can act on. */
 .palette-action {
   @apply cursor-pointer border border-rule bg-transparent px-1.5 text-ink hover:border-ink;

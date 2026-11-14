@@ -6,7 +6,8 @@
  */
 import Type from 'typebox';
 import type { Channel, SessionInfo } from '../../shared/api';
-import { account, agentLink } from '../data/account';
+import { account } from '../data/account';
+import { agent } from './agentTurn';
 import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
 import { sessionSql } from '../data/sessionData';
@@ -201,5 +202,5 @@ export const host = {
   /** Sign-ins, for the user's `/` commands. */
   account,
   /** The link to the agent loop in the main process. */
-  agent: agentLink,
+  agent,
 };
