@@ -74,8 +74,8 @@ watching is the only one who sees that happen. A tile needing props is rarer: a 
 only happens when a mod's args change while its tile is on screen, such as a mod edited on disk outside the app.
 
 - The button only attaches: it never sends, and it's never disabled. The tile joins `live.attached` as it stands, replacing what was
-  attached for it before, and nothing on the tile changes. The palette opens with a tray above its input, a tag per tile (its id and
-  label, as its title bar names them, and "error at 1:12:40" or what it needs), and the viewer is put in the input. × takes one out.
+  attached for it before, and nothing on the tile changes. The palette opens with a tray above its input, a tag per tile (its label,
+  as its title bar names it, and "error at 1:12:40" or what it needs; the tile id is only in what the agent reads), and the viewer is put in the input. × takes one out.
 - Enter sends the tray with whatever was typed, or with nothing. While the agent is working, that stops its turn and starts one with
   this message, as any message does. The viewer's line in the history draws each attachment as its tag, as it stood when sent.
 - The agent reads each attachment as an `<error>` block of JSON after `app_state`, then the viewer's words: the tile, its label and

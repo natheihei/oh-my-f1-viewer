@@ -1285,7 +1285,6 @@
   content: '';
 }
 
-.attach-tag-id,
 .attach-tag-what {
   @apply text-dim normal-case;
   letter-spacing: 0;
