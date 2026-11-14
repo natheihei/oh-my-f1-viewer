@@ -107,13 +107,17 @@ instructions, and a separate session keeps what the build read out of the viewin
 
   | Tool | What it does |
   | --- | --- |
-  | `list_files`, `read_file` | Reads the folder: mods, their `mod.error` and `mod.log`, and the types under `.types` |
-  | `write_file`, `edit_file` | Writes inside a mod's folder, then waits for the app to load the save and says whether it did, with the error if not |
+  | `read`, `ls`, `grep`, `find` | Reads and searches the folder: mods, their `mod.error` and `mod.log`, and the types under `.types` |
+  | `write`, `edit` | Writes inside a mod's folder, then waits for the app to load the save and says whether it did, with the error if not. `edit` takes several changes to one file in one call |
   | `delete_path` | Deletes a file in a mod, or a whole mod by its folder name |
   | `mod_status` | Whether the latest save loaded, and the last lines of the mod's log |
   | `look_at` | A picture of the mod's component as it shows now |
 
   They refuse the app's own files (`tsconfig.json`, `.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
+  The first six are pi's own tools, wrapped. Each takes `operations` that pi calls with the absolute path it resolved, after it
+  strips a leading `@` and expands `~`, and the check runs there, on the path really touched. pi has no such check of its own.
+  `grep` runs ripgrep, which pi finds on the `PATH` or downloads into `~/.pi/agent/bin`. `find` doesn't run fd: it walks the
+  folder itself, so it can be checked the same way. `bash` stays off.
 - **It keeps some viewing tools:** `list_streams`, `remove_tiles`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`. The
   last two don't ask the spoiler gate. `suggest_tiles` takes any component name here, since the mod may have been written this turn.
 - **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` captures that part of the window.
