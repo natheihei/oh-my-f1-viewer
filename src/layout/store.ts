@@ -12,6 +12,7 @@ import {
   findTile,
   measure,
   removeTile,
+  replaceComponent,
   setMain,
   swap,
   ungroup,
@@ -33,6 +34,12 @@ export const layout = {
   /** Adds a tile where it was dropped on the grid. */
   addAt: (component: ComponentSpec, cell: Cell, cellAspect?: number) => set(addTileAt(get(), component, cell, cellAspect)),
   remove: (key: string) => set(removeTile(get(), key)),
+  /** Gives the tile with `key` another component in its place. Returns whether `key` was on screen. */
+  replace(key: string, component: ComponentSpec): boolean {
+    const next = replaceComponent(get(), key, component);
+    if (next) set(next);
+    return next != null;
+  },
   /** Removes a tile by its id, as the close button on its title bar does. */
   close(id: string): boolean {
     const tile = allTiles(get()).find((t) => t.id === id);

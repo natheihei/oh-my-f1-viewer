@@ -1,7 +1,7 @@
 /** Every driver's stints as bars in tyre colours, in running order, with the laps still to come. */
 import { useMemo } from "react";
 import Type from "typebox";
-import { defineComponent, useLive, useSql } from "../../host";
+import { Displayed, defineComponent, Highlighted, keyPart, useLive, useSql } from "../../host";
 import {
   ChartCanvas,
   ChartFrame,
@@ -15,6 +15,7 @@ import {
   textWidth,
   ticks,
   tyreColour,
+  useDriverSet,
   useDriverStyles,
   vline,
   type Box,
@@ -24,7 +25,7 @@ import {
 
 const NEEDS = ["timing" as const];
 
-/** Stints with each driver's latest position and whether they're out, those out last. `filter` limits it to some drivers. */
+/** Stints with each driver's latest position and whether they're out, those out last; limited to `count` drivers when it isn't 0. */
 export const sqlFor = (count: number) => `
 WITH pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
 out AS (SELECT DISTINCT driver_number FROM laps WHERE is_out)
@@ -105,6 +106,8 @@ export function tyreModel(
 
 interface Drawn extends TyreModel {
   styles: Map<number, DriverStyle>;
+  /** The props' drivers: their rows are lifted. */
+  highlighted: ReadonlySet<number>;
   /** The scheduled distance, when the session has one. */
   total: number | null;
 }
@@ -238,6 +241,11 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
     const y = rowTop + (pitch - bar) / 2;
     const mid = y + bar / 2 + 0.5;
     const style = styleOf(m.styles, driver);
+    const lifted = !out && m.highlighted.has(driver);
+    if (lifted) {
+      ctx.fillStyle = c.select;
+      ctx.fillRect(0, rowTop, box.width, pitch);
+    }
     ctx.globalAlpha = out ? 0.4 : 1;
     if (position !== null)
       text(ctx, String(position), POS_X, mid, {
@@ -245,7 +253,7 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
         color: c.ink,
         size: SIZE,
       });
-    drawCode(ctx, style, BAR_X, mid, { size: SIZE, barHeight: pitch * 0.56 });
+    drawCode(ctx, style, BAR_X, mid, { size: SIZE, strong: lifted, barHeight: pitch * 0.56 });
     const last = stints[stints.length - 1];
     // The laps still to come, behind a car that's running.
     if (!out && last && m.total !== null && last.to < m.total) {
@@ -296,15 +304,13 @@ function draw(ctx: Ctx, m: Drawn, box: Box): void {
   }
 }
 
-const Drivers = Type.Array(Type.Integer({ description: "A car number" }), {
-  minItems: 1,
-  description: "Drivers to show, as car numbers. Left out, it shows everyone.",
-});
+const NONE: number[] = [];
 
-function TyreStrategy({ props }: { props: { drivers?: number[] } }) {
-  const drivers = props.drivers ?? [];
-  const view = useSql(sqlFor(drivers.length), drivers);
+function TyreStrategy({ props }: { props: { drivers?: number[]; drivers_to_display?: number[] } }) {
+  const shown = props.drivers_to_display ?? NONE;
+  const view = useSql(sqlFor(shown.length), shown);
   const styles = useDriverStyles();
+  const highlighted = useDriverSet(props.drivers);
   const total = useLive((live) =>
     live.sessionData.state === "ready"
       ? (live.sessionData.lapCount?.total ?? null)
@@ -313,9 +319,9 @@ function TyreStrategy({ props }: { props: { drivers?: number[] } }) {
   const model = useMemo(
     () =>
       view.state === "ready"
-        ? { ...tyreModel(view.rows), styles, total }
+        ? { ...tyreModel(view.rows), styles, highlighted, total }
         : null,
-    [view, styles, total],
+    [view, styles, highlighted, total],
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
@@ -331,7 +337,7 @@ export default defineComponent({
   title: "Tyre strategy",
   description:
     "Every driver's stints as bars in tyre colours: which compound, for how many laps, and when they stopped. Suggest it for tyre choices or strategy across the field; tyre_deg is for how fast the tyres are wearing.",
-  args: Type.Object({ drivers: Type.Optional(Drivers) }),
+  args: Type.Object({ drivers_to_display: Displayed(), drivers: Highlighted() }),
   sessions: ["race", "sprint"],
   needs: NEEDS,
   size: {
@@ -339,10 +345,10 @@ export default defineComponent({
     min: LEAST,
   },
   fit: MOST,
-  spec: ({ drivers }) => ({
-    key: `tyre_strategy:${drivers?.join("-") ?? "all"}`,
+  spec: ({ drivers_to_display, drivers }) => ({
+    key: `tyre_strategy:${keyPart(drivers_to_display)}${drivers ? `:${keyPart(drivers)}` : ""}`,
     label: "Tyres",
-    drivers,
+    drivers: drivers_to_display ?? drivers,
   }),
   View: TyreStrategy,
 });

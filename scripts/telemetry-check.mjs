@@ -145,7 +145,7 @@ async function shoot(name, items, squeeze) {
   console.log(`${name}: ${JSON.stringify(await measure())} -> ${file}`);
 }
 
-const telemetry = { type: 'car_telemetry', props: { drivers: [CAR] } };
+const telemetry = { type: 'car_telemetry', props: { driver: CAR } };
 const feed = opened.feeds.find((f) => f.kind === 'onboard' && f.number === CAR);
 const onboard = feed ? [{ type: 'video', props: { feed: feed.id } }] : [];
 console.log(`onboard: ${feed?.id ?? 'none found'}`);

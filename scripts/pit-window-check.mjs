@@ -145,7 +145,7 @@ async function shoot(name, items, squeeze) {
   console.log(`${name}: ${JSON.stringify(await measure())} -> ${file}`);
 }
 
-const pw = { type: 'pit_window', props: { drivers: [DRIVER] } };
+const pw = { type: 'pit_window', props: { driver: DRIVER } };
 
 await shoot('1-beside-video', [pw]);
 await shoot('2-crowded', [pw, { type: 'timing_tower', props: {} }, { type: 'tyre_strategy', props: {} }, { type: 'race_control', props: {} }]);

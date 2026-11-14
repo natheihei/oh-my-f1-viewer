@@ -1,7 +1,7 @@
 /** The running order, one row per driver: position, places gained from the grid, gaps, last lap and tyre. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, tilesOf, useLive, useSql, type Live, type StartingGridEntry } from '../../host';
+import { defineComponent, Highlighted, keyPart, useLive, useSql, type StartingGridEntry } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -18,6 +18,7 @@ import {
   text,
   textWidth,
   tyreColour,
+  useDriverSet,
   useDriverStyles,
   type Box,
   type Ctx,
@@ -152,8 +153,8 @@ interface Drawn {
   /** Whether there's a grid to count places from: without one the column isn't drawn. */
   gains: boolean;
   styles: Map<number, DriverStyle>;
-  /** Cars whose onboard is on screen: their rows are lifted. */
-  watched: ReadonlySet<number>;
+  /** The props' drivers: their rows are lifted. */
+  highlighted: ReadonlySet<number>;
   /** The season's DRS or Overtake line, in seconds: an interval under it is set in ink and bold. */
   within: number;
 }
@@ -213,8 +214,8 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
     const top = head + i * pitch;
     if (top + pitch > height) return;
     const y = top + pitch / 2 + 0.5;
-    const watched = !row.out && m.watched.has(row.driver);
-    if (watched) {
+    const lifted = !row.out && m.highlighted.has(row.driver);
+    if (lifted) {
       ctx.fillStyle = c.select;
       ctx.fillRect(0, top + 1, width, pitch - 1);
     }
@@ -230,7 +231,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
           text(ctx, row.position === null ? '' : String(row.position), x1, y, { align: 'right', color: ink, size });
           break;
         case 'driver':
-          drawCode(ctx, style, x0, y, { size, tone: row.out ? 'dim' : 'ink', strong: watched, barHeight: pitch * 0.56 });
+          drawCode(ctx, style, x0, y, { size, tone: row.out ? 'dim' : 'ink', strong: lifted, barHeight: pitch * 0.56 });
           break;
         case 'gain':
           if (row.gained === null) break;
@@ -266,30 +267,17 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 }
 
 const NO_GRID: StartingGridEntry[] = [];
-const NO_ONE: ReadonlySet<number> = new Set();
-
-/** The car numbers of the onboards on screen, as a string so the selector's result compares by value. */
-export function watchedKey(live: Live): string {
-  const feeds = new Set(tilesOf(live.layout).flatMap((t) => (t.component.type === 'video' && typeof t.component.props.feed === 'string' ? [t.component.props.feed] : [])));
-  return live.feeds
-    .filter((f) => f.kind === 'onboard' && f.number != null && feeds.has(f.id))
-    .map((f) => f.number)
-    .sort((a, b) => a! - b!)
-    .join(',');
-}
-
-function TimingTower() {
+function TimingTower({ props }: { props: { drivers?: number[] } }) {
   const view = useSql(SQL);
   const styles = useDriverStyles();
   const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
   const grid = useLive((live) => (live.sessionData.state === 'ready' ? live.sessionData.startingGrid : NO_GRID));
   const within = useLive((live) => live.spec.chaseAid.within);
-  const watchedList = useLive(watchedKey);
-  const watched = useMemo(() => (watchedList ? new Set(watchedList.split(',').map(Number)) : NO_ONE), [watchedList]);
+  const highlighted = useDriverSet(props.drivers);
   const model = useMemo(
     () =>
-      view.state === 'ready' ? { rows: towerModel(view.rows, total, grid), gains: grid.some((g) => g.position != null), styles, watched, within } : null,
-    [view, styles, total, grid, watched, within],
+      view.state === 'ready' ? { rows: towerModel(view.rows, total, grid), gains: grid.some((g) => g.position != null), styles, highlighted, within } : null,
+    [view, styles, total, grid, highlighted, within],
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
@@ -303,12 +291,12 @@ export default defineComponent({
   title: 'Timing tower',
   description:
     'The running order: position, places gained or lost since the grid in a race, gap to the leader, interval to the car ahead, last lap, and tyre with its age, with retired cars at the bottom marked OUT. Suggest it for an overview, whenever the user asks where someone is, or who has gained or lost places.',
-  args: Type.Object({}),
+  args: Type.Object({ drivers: Highlighted() }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,
   // Its shape is the one it reads best at, its largest.
   size: { aspect: Math.round((MOST.width / MOST.height) * 100) / 100, min: LEAST },
   fit: MOST,
-  spec: () => ({ key: 'timing_tower', label: 'Timing' }),
+  spec: ({ drivers }) => ({ key: drivers ? `timing_tower:${keyPart(drivers)}` : 'timing_tower', label: 'Timing', drivers }),
   View: TimingTower,
 });

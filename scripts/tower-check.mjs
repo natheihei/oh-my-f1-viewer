@@ -1,5 +1,5 @@
 // Checks the timing tower in the real app over a real replay race, muted: at its fit size beside the main
-// feed, with two onboards on screen so their rows are lifted, and squeezed below its least size, where it
+// feed, with two onboards on screen and their rows lifted by its drivers prop, and squeezed below its least size, where it
 // keeps every column and lets its rows and columns run past the tile for the host to mark. Prints each
 // tile's size, the size the tower draws at and the host's mark, and saves a screenshot of each.
 //
@@ -140,17 +140,19 @@ async function shoot(name, items, squeeze) {
 }
 
 const tower = { type: 'timing_tower', props: {} };
+// The rows it lifts are the props' drivers; the onboards beside it no longer lift them.
+const lifted = { type: 'timing_tower', props: { drivers: [3, 44] } };
 const onboard = (n) => opened.feeds.find((f) => f.kind === 'onboard' && f.number === n);
 const watched = [3, 44].map(onboard).filter(Boolean).map((f) => ({ type: 'video', props: { feed: f.id } }));
 console.log(`onboards on screen: ${watched.map((w) => w.props.feed).join(', ') || 'none found'}`);
 
 await shoot('1-beside-video', [tower]);
-await shoot('2-with-onboards', [tower, ...watched]);
-await shoot('3-crowded', [tower, ...watched, { type: 'gap_evolution', props: { drivers: [3, 44] } }, { type: 'tyre_strategy', props: {} }, { type: 'tyre_deg', props: {} }]);
+await shoot('2-with-onboards', [lifted, ...watched]);
+await shoot('3-crowded', [lifted, ...watched, { type: 'gap_evolution', props: { driver_a: 3, driver_b: 44 } }, { type: 'tyre_strategy', props: {} }, { type: 'tyre_deg', props: {} }]);
 // Below its least size: about 200 by 290, then narrow and tall, then wide and short.
-await shoot('4-squeezed', [tower, ...watched], [200, 290]);
-await shoot('5-narrow', [tower, ...watched], [240, 560]);
-await shoot('6-short', [tower, ...watched], [420, 300]);
+await shoot('4-squeezed', [lifted, ...watched], [200, 290]);
+await shoot('5-narrow', [lifted, ...watched], [240, 560]);
+await shoot('6-short', [lifted, ...watched], [420, 300]);
 
 if (keep) {
   console.log(`left open: user data in ${userData}. Serving it until the app is closed.`);

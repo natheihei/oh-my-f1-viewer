@@ -2,10 +2,11 @@
 import type { AgentMode, AgentToolCall } from '../../shared/api';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type ComponentSpec, type EventIndex, type GroupNode, type LayoutState } from '../host';
-import { driverCount, formatClock, offeredCharts, readsPastPlayhead, runTool, toolDefinitions } from './tools';
+import { formatClock, offeredCharts, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
-/** A stream by its label, a chart by its label and chart name. */
-const describeTile = (c: ComponentSpec) => (c.type === 'video' ? c.label : `${c.label} (${c.type} chart)`);
+/** A stream by its label, a chart by its label, chart name and props, so the agent can change them. */
+const describeTile = (c: ComponentSpec) =>
+  c.type === 'video' ? c.label : `${c.label} (${c.type} chart${Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : ''})`;
 
 function describeLayout(state: LayoutState): string {
   if (state.nodes.length === 0) return 'nothing';
@@ -115,9 +116,11 @@ export function describeEvents(index: EventIndex): string {
 export function describeCharts(components: ComponentInfo[]): string {
   const charts = components.filter((c) => c.name !== 'video');
   if (charts.length === 0) return '';
-  const lines = ['Charts for suggest_tiles. Each line: name, title, drivers it takes, session types, what it is for. One marked replays only cannot be suggested in a live session. One that can take none picks its own.'];
+  const lines = [
+    'Charts for suggest_tiles. Each line: name, title, session types, what it is for, then its props. One marked replays only cannot be suggested in a live session. Give a chart every required prop; an optional one left out does what its description says. A prop named driver… is one driver and drivers… a list, each by code, surname or car number.',
+  ];
   for (const c of charts) {
-    lines.push(`${c.name}, ${c.title}, ${driverCount(c).text}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description}`);
+    lines.push(`${c.name}, ${c.title}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description} ${propsText(c)}.`);
   }
   return lines.join('\n');
 }
