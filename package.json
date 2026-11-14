@@ -23,6 +23,7 @@
     "axios": "^1.20.0",
     "esbuild": "0.28.2",
     "gridstack": "^14.1.0",
+    "minimatch": "11.0.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "shaka-player": "^5.0.5",
