@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
+const { useAgentTurn } = await import('./agentTurn');
 const { useBuild } = await import('./build');
 const { componentOf, componentOps, defineComponent, specOf } = await import('./components');
 const { fitProps, fixable, fixRequest, health, healthOps, list, useHealth } = await import('./health');
@@ -28,6 +29,7 @@ const pace = defineComponent({
 afterEach(() => {
   for (const p of useHealth.getState().places) health.forget(p.scope);
   useBuild.setState({ active: false, changes: [], enteredAtSec: null });
+  useAgentTurn.setState({ busy: false });
   layout.clear();
   componentOps.unregister({ names: ['pace'] });
   vi.useRealTimers();
@@ -112,14 +114,26 @@ describe('asking the agent to fix', () => {
     expect(asked()).toEqual([]);
   });
 
-  it('asks about a place once until the request is taken', () => {
+  it('asks nothing more while a request waits, for that place or another', () => {
     health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    health.report(place({ scope: 'tile-2', label: 'Pace NOR', state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
+    expect(healthOps.askFix({ scope: 'tile-2' })).toBe(false);
     expect(asked()).toHaveLength(1);
     const [{ id }] = read().fixRequests;
     expect(healthOps.takeFix({ id })).toMatchObject({ id, scope: 'tile-1' });
     expect(read().fixRequests).toEqual([]);
+    expect(healthOps.askFix({ scope: 'tile-2' })).toBe(true);
+  });
+
+  it('asks nothing while the agent is busy: a new message would stop its turn', () => {
+    health.report(place({ state: 'needs_props', missing: ['driver'], message: 'Needs driver' }), null);
+    useAgentTurn.setState({ busy: true });
+    expect(read().agentBusy).toBe(true);
+    expect(healthOps.askFix({ scope: 'tile-1' })).toBe(false);
+    expect(asked()).toEqual([]);
+    useAgentTurn.setState({ busy: false });
     expect(healthOps.askFix({ scope: 'tile-1' })).toBe(true);
   });
 
