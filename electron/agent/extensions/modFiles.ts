@@ -59,7 +59,7 @@ function writable(dir: string, given: string): { file: string; mod: string; rel:
  */
 class Guard {
   refused: Error | null = null;
-  /** The mod file a write or edit saved. */
+  /** The mod file a write or edit saved, once it really wrote it. */
   saved: { mod: string; rel: string } | null = null;
   constructor(private readonly dir: string) {}
   private hold<T>(check: () => T): T {
@@ -73,12 +73,16 @@ class Guard {
   read(file: string): string {
     return this.hold(() => resolveInside(this.dir, file));
   }
+  /** For a file that will be written: edit reads it this way first. */
   write(file: string): string {
-    return this.hold(() => {
-      const { file: target, mod, rel } = writable(this.dir, file);
-      this.saved = { mod, rel };
-      return target;
-    });
+    return this.hold(() => writable(this.dir, file).file);
+  }
+  /** Writes a file that may be written, and records the save. */
+  async save(file: string, content: string): Promise<void> {
+    const { file: target, mod, rel } = this.hold(() => writable(this.dir, file));
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, content);
+    this.saved = { mod, rel };
   }
 }
 
@@ -156,7 +160,8 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
           const { dir } = host();
           guard = new Guard(dir);
           const result = await make(dir, guard).execute(id, args, signal, onUpdate, ctx);
-          if (!verb || !guard.saved) {
+          // Only a save that pi reports done waits for the mod to load.
+          if (!verb || !guard.saved || result.isError) {
             report(name, !result.isError, null);
             return result;
           }
@@ -193,13 +198,9 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
         (dir, guard) =>
           tools.createWriteToolDefinition(dir, {
             operations: {
-              // pi makes the folder before writing. It's made below instead, once the file is known to be writable.
+              // pi makes the folder before writing. Guard.save makes it instead, once the file is known to be writable.
               mkdir: async () => {},
-              writeFile: async (p, content) => {
-                const file = guard.write(p);
-                await fsp.mkdir(path.dirname(file), { recursive: true });
-                await fsp.writeFile(file, content);
-              },
+              writeFile: (p, content) => guard.save(p, content),
             },
           }) as ToolDefinition,
         (def) => reworded(def, PATH, `${def.description} Only inside a mod's folder. Waits for the app to compile and load the mod, and says whether it did.`),
@@ -212,7 +213,7 @@ export function modFilesExtension(host: () => ModFilesHost, report: ModToolRepor
             operations: {
               access: async (p) => fsp.access(guard.write(p), constants.R_OK | constants.W_OK),
               readFile: async (p) => fsp.readFile(guard.write(p)),
-              writeFile: async (p, content) => fsp.writeFile(guard.write(p), content),
+              writeFile: (p, content) => guard.save(p, content),
             },
           }) as ToolDefinition,
         (def) => reworded(def, PATH, `${def.description} Only inside a mod's folder. Waits for the mod to load and says whether it did, like write.`),
