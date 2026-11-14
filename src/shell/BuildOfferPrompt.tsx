@@ -4,7 +4,7 @@
  * says in red. ← → move between answers, Enter answers, Esc stays.
  */
 import { forwardRef, useImperativeHandle, useRef, type KeyboardEvent } from 'react';
-import { useLive, type BuildOffer } from '../host';
+import type { BuildOffer } from '../host';
 import { stayInView, switchToBuild } from './buildMode';
 
 export interface BuildOfferPromptHandle {
@@ -14,8 +14,6 @@ export interface BuildOfferPromptHandle {
 export const BuildOfferPrompt = forwardRef<BuildOfferPromptHandle, { offer: BuildOffer }>(function BuildOfferPrompt({ offer }, ref) {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   useImperativeHandle(ref, () => ({ focus: () => buttons.current[0]?.focus() }), []);
-  // What's to be fixed, by the component the tiles show: "gap_ahead".
-  const types = useLive((s) => [...new Set(offer.tiles.map((t) => s.health.find((p) => p.scope === t)?.type ?? t))].join(', '));
 
   const answers = [
     { label: 'Switch to build', testid: 'offer-switch', build: true, run: () => void switchToBuild(offer) },
@@ -40,7 +38,7 @@ export const BuildOfferPrompt = forwardRef<BuildOfferPromptHandle, { offer: Buil
     <>
       <div className="spoiler build-offer" data-testid="build-offer" role="alertdialog" aria-label="Offer of build mode">
         <div>
-          Fix {types} in <span className="build-offer-mode">build mode</span>? <span className="spoiler-label">! spoiler</span>{' '}
+          Fix in <span className="build-offer-mode">build mode</span>? <span className="spoiler-label">! spoiler</span>{' '}
           <span className="build-offer-why">the build agent looks ahead without asking</span>
         </div>
         <div className="spoiler-actions">
