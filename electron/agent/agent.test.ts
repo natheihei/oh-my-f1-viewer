@@ -354,7 +354,8 @@ describe('build mode', () => {
     await agent.send('nor', 'state', [TOOL]);
 
     expect(requests[1].system).toBe(`${BUILD_PROMPT}\n\nTABLES`);
-    expect(requests[1].tools).toEqual(expect.arrayContaining(['act', 'read_file', 'write_file', 'edit_file', 'delete_path', 'list_files', 'mod_status', 'look_at']));
+    expect(requests[1].tools).toEqual(expect.arrayContaining(['act', 'read', 'write', 'edit', 'ls', 'grep', 'find', 'delete_path', 'mod_status', 'look_at']));
+    expect(requests[1].tools).not.toContain('bash');
     expect(requests[1].history).not.toContain('ham');
     expect(requests[0].tools).toEqual(['act']);
     // The viewing conversation carries on, and never saw the build.
@@ -394,15 +395,15 @@ describe('build mode', () => {
     const { agent, requests, script } = setup();
     attach(agent);
     script(
-      fauxAssistantMessage([fauxToolCall('write_file', { path: 'lap_stepper/main.tsx', content: 'const a = 1;' })]),
-      fauxAssistantMessage([fauxToolCall('edit_file', { path: 'lap_stepper/main.tsx', old: 'a = 1', new: 'a = 2' })]),
-      fauxAssistantMessage([fauxToolCall('read_file', { path: 'lap_stepper/main.tsx' })]),
+      fauxAssistantMessage([fauxToolCall('write', { path: 'lap_stepper/main.tsx', content: 'const a = 1;' })]),
+      fauxAssistantMessage([fauxToolCall('edit', { path: 'lap_stepper/main.tsx', edits: [{ oldText: 'a = 1', newText: 'a = 2' }] })]),
+      fauxAssistantMessage([fauxToolCall('read', { path: 'lap_stepper/main.tsx' })]),
       fauxAssistantMessage([fauxToolCall('mod_status', { mod: 'lap_stepper' })]),
       fauxAssistantMessage([fauxToolCall('delete_path', { path: 'lap_stepper' })]),
       fauxAssistantMessage('Done.'),
     );
     await agent.send('build it', 'state', [], '', 'build');
-    expect(requests[1].history).toContain('Saved lap_stepper/main.tsx. lap_stepper loaded.');
+    expect(requests[1].history).toContain('lap_stepper loaded.');
     expect(requests[3].history).toContain('const a = 2;');
     expect(requests[4].history).toContain('drew');
     expect(existsSync(path.join(modsDir(), 'lap_stepper'))).toBe(false);
@@ -415,13 +416,13 @@ describe('build mode', () => {
     attach(agent);
     writeFileSync(path.join(host.userData, 'secret.txt'), 'TOKEN');
     const tries = [
-      fauxToolCall('read_file', { path: '../secret.txt' }),
-      fauxToolCall('write_file', { path: '../escape/main.tsx', content: 'x' }),
-      fauxToolCall('write_file', { path: '/tmp/f1a-escape.txt', content: 'x' }),
-      fauxToolCall('write_file', { path: 'tsconfig.json', content: 'x' }),
-      fauxToolCall('write_file', { path: '.types/a.d.ts', content: 'x' }),
-      fauxToolCall('write_file', { path: 'a_mod/mod.log', content: 'x' }),
-      fauxToolCall('write_file', { path: 'Bad Name/main.tsx', content: 'x' }),
+      fauxToolCall('read', { path: '../secret.txt' }),
+      fauxToolCall('write', { path: '../escape/main.tsx', content: 'x' }),
+      fauxToolCall('write', { path: '/tmp/f1a-escape.txt', content: 'x' }),
+      fauxToolCall('write', { path: 'tsconfig.json', content: 'x' }),
+      fauxToolCall('write', { path: '.types/a.d.ts', content: 'x' }),
+      fauxToolCall('write', { path: 'a_mod/mod.log', content: 'x' }),
+      fauxToolCall('write', { path: 'Bad Name/main.tsx', content: 'x' }),
       fauxToolCall('delete_path', { path: '.' }),
     ];
     script(...tries.map((call) => fauxAssistantMessage([call])), fauxAssistantMessage('Done.'));
