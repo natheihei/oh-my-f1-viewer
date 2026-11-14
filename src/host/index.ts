@@ -49,7 +49,7 @@ export {
   type DriverStyle,
   type Part,
 } from './drivers';
-export { setFixAsker, startHealth, type PlaceHealth } from './health';
+export { startHealth, type FixRequest, type PlaceHealth } from './health';
 export { startMods } from './mods';
 export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
 export { startBuild, type BuildView } from './build';
