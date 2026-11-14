@@ -1,9 +1,7 @@
 # f1a
 
-An agent-driven, multi-view F1 TV player, built on Electron and React, Linux only for now. The viewer tells an agent what to watch,
-and it opens the session and suggests tiles: video feeds, and charts drawn from a local SQLite copy of the session's timing data.
-Every stream and the data stay locked to one session clock, and nothing past the frame on screen reaches the viewer unless they allow
-it. Mods, folders that hot reload, add components a tile can show, and the app's own agent can write them in build mode.
+An agent-driven, multi-view F1 TV player, built on Electron and React. The viewer tells an agent what to watch, and it opens the
+session and suggests tiles: video feeds and charts. The agent can also build mods in build mode, including components a tile can show.
 
 ## Docs
 
