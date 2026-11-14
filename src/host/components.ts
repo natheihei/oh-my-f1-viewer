@@ -185,6 +185,17 @@ export const componentOps = {
   ),
 };
 
+/**
+ * A spec for a component with no props, whether or not it can draw with none: for a place that shows
+ * what the component needs. Null for an unknown type.
+ */
+export function bareSpec(type: string): ComponentSpec | null {
+  const definition = definitions.get(type);
+  if (!definition) return null;
+  const size = sizeOf(definition);
+  return { type, key: type, label: definition.title, props: {}, ...(size ? { size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
+}
+
 /** The registered definition for a spec's type, if there is one. */
 export const componentOf = (type: string): ComponentDefinition | undefined => definitions.get(type);
 

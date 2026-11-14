@@ -12,7 +12,7 @@ import { useSession } from '../data/session';
 import { allTiles, findTile, GRID_COLUMNS, GRID_ROWS, dropTarget, type Cell, type ComponentSpec, type Rect } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
 import { useBuild } from './build';
-import { componentOf, Item, specOf, useComponents } from './components';
+import { bareSpec, componentOf, Item, specOf, useComponents } from './components';
 import { previewScope, tileLookAhead } from './lookAhead';
 import { write } from './op';
 
@@ -80,7 +80,10 @@ function carryApproval(key: string): void {
   if (found) tileLookAhead.move(previewScope(key), found.tile.id);
 }
 
-/** A draft's spec: with the props the agent suggested it with if they still fit, else with none. Null if neither draws. */
+/**
+ * A draft's spec: with the props the agent suggested it with if they still fit, else with none. If
+ * neither draws, a spec with no props all the same: its card then says what it needs.
+ */
 function draftSpec(name: string): ComponentSpec | null {
   for (const props of [draftProps.get(name), {}]) {
     if (!props) continue;
@@ -90,7 +93,7 @@ function draftSpec(name: string): ComponentSpec | null {
       // These props don't fit its args, or it can't draw without any.
     }
   }
-  return null;
+  return bareSpec(name);
 }
 
 /**
