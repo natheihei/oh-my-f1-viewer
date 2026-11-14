@@ -64,7 +64,8 @@ This keeps the rule that the agent suggests tiles and the viewer adds them.
   `driver_a` and `driver_b` here, and the draft previews with them for the rest of the build. When they didn't, it asks whose.
 - A tile that's on screen keeps its props across an edit. If the mod's new `args` no longer accept some of them, it keeps the rest.
   If a required one is then missing, the tile shows an error, "Needs driver", with an "Ask agent to fix" button, and the view isn't
-  drawn. The button sends "The Pace tile needs driver." as a line of the viewer's, and the agent asks whose or fills it in. A tile
+  drawn. The button leaves "The Pace tile needs driver." in `live.fixRequests`, which the shell sends as a line of the viewer's, and
+  the agent asks whose or fills it in. A tile
   that threw, "This tile stopped", has the button only in build mode, where the agent can fix the code.
 - `live.health` says how every tile and every preview in the strip stands. See [HOST.md](HOST.md).
 
