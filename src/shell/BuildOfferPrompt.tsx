@@ -38,8 +38,12 @@ export const BuildOfferPrompt = forwardRef<BuildOfferPromptHandle, { offer: Buil
     <>
       <div className="spoiler build-offer" data-testid="build-offer" role="alertdialog" aria-label="Offer of build mode">
         <div>
-          {offerReason(offer.reason, true)} in <span className="build-offer-mode">build mode</span>? <span className="spoiler-label">! spoiler</span>{' '}
-          <span className="build-offer-why">the build agent looks ahead without asking</span>
+          <div>
+            {offerReason(offer.reason, true)} in <span className="build-offer-mode">build mode</span>?
+          </div>
+          <div>
+            <span className="spoiler-label">! spoiler</span> <span className="build-offer-why">the build agent looks ahead without asking</span>
+          </div>
         </div>
         <div className="spoiler-actions">
           {answers.map(({ label, testid, build, run }, i) => (
