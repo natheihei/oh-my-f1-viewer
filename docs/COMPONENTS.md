@@ -165,7 +165,7 @@ Any component can show feeds: `video` is just the one that shows one feed and no
 
 - **Each picture is its own video and stream.** `useStream(feed)` holds one, and `<Video stream />` draws it with its own loading
   status. A feed can show in two tiles at once, each playing on its own. Every picture costs a stream from the CDN, so hold only
-  what's on screen: a picture that's off holds none.
+  what's on screen: an empty picture holds none.
 - **A driver's onboard comes from `live.feeds`:** the feed with `kind` `onboard` and their car number. Some sessions lack one, so say
   "No onboard" where it would go.
 - **The stream slots are the component's to say.** It spreads `streamSlots(...)` of its videos into `useTileHeader`, so the title bar
@@ -179,8 +179,9 @@ Any component can show feeds: `video` is just the one that shows one feed and no
   `gap_evolution`'s question, so the battle shows each fight's gap as one number and nothing over time.
 - **A fight is two cars next to each other on the road,** the one behind within the chase aid of the one ahead: DRS, or Overtake
   from 2026. A train of three is two fights. Lapped and retired cars aren't in one.
-- **No props.** It starts on the closest fight, and the viewer picks another in the list, which turns both pictures back on. It keeps
-  the pair after they drift apart, until the viewer picks again. Each picture has its driver's code and an off switch.
+- **No props.** It starts on the closest fight, and the viewer picks another in the list. It keeps the pair after they drift apart,
+  until the viewer picks again. Each picture has its driver's code.
+- **A picture is empty when there's nothing to show:** no fight yet, or no onboard for that driver. It holds no stream then.
 - **One on screen.** With no props, two battles would have the same key.
 
 ### Chase

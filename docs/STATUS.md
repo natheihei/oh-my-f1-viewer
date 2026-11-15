@@ -12,8 +12,7 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
 - Components that show video, on the 2026 São Paulo race at lap 12 with `scripts/battle-check.mjs` (2026-11-15). The battle started on
   the closest fight with both onboards playing and listed six fights; the same onboard played in a video tile of its own at the same
   time, as a second stream. Clicking a picture made it the one heard without raising the volume from 0, and the battle's title bar and
-  the picture said so. Picking another fight kept the sound with the driver who stayed in it, turning a picture off released its
-  stream, and closing the battle moved the sound to the other video of the same feed. The chase showed the car ahead and the gap,
+  the picture said so. Picking another fight kept the sound with the driver who stayed in it, and closing the battle moved the sound to the other video of the same feed. The chase showed the car ahead and the gap,
   marked OT within a second. Many streams at once haven't been soaked: each picture is its own stream, so this costs bandwidth.
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
 - The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
