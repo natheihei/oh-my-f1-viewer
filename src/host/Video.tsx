@@ -35,7 +35,7 @@ export interface Stream {
 
 /**
  * Holds one video of a feed while the component is drawn, and gives it back after. Null or no feed
- * holds nothing: that picture is off. `slot` names which of the component's pictures this is, so when
+ * holds nothing: that picture is empty. `slot` names which of the component's pictures this is, so when
  * a picture that's heard switches feed, the sound stays with it.
  */
 export function useStream(feed: string | null | undefined, { slot }: { slot?: string } = {}): Stream | null {
