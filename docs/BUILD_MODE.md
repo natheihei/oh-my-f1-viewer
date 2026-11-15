@@ -84,15 +84,38 @@ only happens when a mod's args change while its tile is on screen, such as a mod
   `shared/health.ts` writes it, next to `describePlace`.
 - The agent works on it on its own. It fixes the tile, or ends its turn with it still broken, the same way or a new one. The tile
   shows what it has then, and the viewer can attach it again.
-- In view mode, the viewing agent fixes props with `edit_tile`. A render error is in the code, which it can't change, so it calls
-  `offer_build` with the tiles and a note of what it found. That returns at once, and the palette shows the offer where the spoiler
-  check would be: "Fix in build mode?", with `/build`'s red "! spoiler the build agent looks ahead without asking", since
-  entering build mode is that consent. **Switch to build** is in build mode's yellow, beside **Stay in view mode**. The offer goes once
-  it's answered, or when the viewer sends another message.
-- Switching enters build mode the way `/build` does, then sends the build agent its first message without the viewer typing: an
-  `<error>` block for each offered tile that still isn't drawing, read again from `live.health`, and the note in
-  `<from_viewing_agent>`. The build agent's conversation is its own, so that is all it knows of the viewing one. The tray stays for
-  the viewer's own next message.
+- In view mode, the viewing agent fixes props with `edit_tile`. A render error is in the code, which it can't change, so it offers
+  build mode (below), with the tiles as `error_tiles`.
+
+### Offered from view mode
+
+The viewing agent can't write code, so when something needs it, it offers build mode with `offer_build`, and the viewer decides. It
+offers it for two things (#105, #110):
+- **A fix:** a tile whose render error is in its component's code, from an attached `<error>` block.
+- **Something to build or change:** the viewer clearly asks for something no chart can do, with any props, or that a close one
+  wouldn't do, such as "how many times NOR opens DRS each lap". It never offers unasked, or for what a chart with other props would do.
+
+`offer_build` takes:
+- `reason`: what build mode would do, for the viewer, as a few words that start with a verb: "fix the gap chart", "build a chart of
+  when NOR opens DRS".
+- `note`: the handoff, for the build agent. Its conversation is its own and it sees nothing of the viewing one, so the note says what
+  the viewer wants, in their words where they matter, and who or what it is about. The viewer's own words aren't sent along: the note
+  carries them.
+- `error_tiles`, optional: tiles on screen whose errors go along, for a fix.
+
+It returns at once, and the palette shows the offer where the spoiler check would be: "Build a chart of when NOR opens DRS in build
+mode?", the reason with its first letter raised, with `/build`'s red "! spoiler the build agent looks ahead without asking", since
+entering build mode is that consent. **Switch to build** is in build mode's yellow, beside **Stay in view mode**. The offer goes once
+it's answered, or when the viewer sends another message.
+
+Switching enters build mode the way `/build` does, then sends the build agent its first message without the viewer typing: an
+`<error>` block for each offered tile, read again from `live.health`, then the note in `<from_viewing_agent>`. A tile that has no error
+by then still goes, its block saying so ("It has no error now"), or that it's gone, and the build agent tells the viewer there's nothing
+to fix. The palette says "went to the build agent." with the tiles' tags, or "Asked the build agent to build a chart of when NOR opens
+DRS." for an offer with none. The tray stays for the viewer's own next message.
+
+`node scripts/offer-check.mjs <out-dir>` checks an offer with no tiles in the app, and with `--agent` the real models: a request a chart
+covers gets the chart and no offer, one nothing covers gets an offer, and switching starts the build agent on the note.
 
 ### Trying it
 

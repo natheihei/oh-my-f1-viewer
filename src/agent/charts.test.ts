@@ -338,12 +338,17 @@ describe('suggesting charts', () => {
 
     it('leaves the offer for the user to answer, and returns straight away', async () => {
       const [pit] = host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44 } }] });
-      expect(await runTool('offer_build', { tiles: [pit], note: 'It throws in the pit lane.' })).toBe('Offered. The user answers in the palette.');
-      expect(read().build.offer).toEqual({ tiles: [pit], note: 'It throws in the pit lane.' });
+      expect(await runTool('offer_build', { reason: 'fix the pit chart', note: 'It throws in the pit lane.', error_tiles: [pit] })).toBe('Offered. The user answers in the palette.');
+      expect(read().build.offer).toEqual({ reason: 'fix the pit chart', note: 'It throws in the pit lane.', tiles: [pit] });
+    });
+
+    it('offers to build a component with no tiles', async () => {
+      expect(await runTool('offer_build', { reason: 'build a tyre wear chart', note: 'The user wants tyre wear for HAM.' })).toBe('Offered. The user answers in the palette.');
+      expect(read().build.offer).toEqual({ reason: 'build a tyre wear chart', note: 'The user wants tyre wear for HAM.', tiles: [] });
     });
 
     it('names a tile that is not on screen by its id, and offers nothing', async () => {
-      await expect(runTool('offer_build', { tiles: ['tile-99'], note: '' })).rejects.toThrow('No tile tile-99 is on screen.');
+      await expect(runTool('offer_build', { reason: 'fix it', note: '', error_tiles: ['tile-99'] })).rejects.toThrow('No tile tile-99 is on screen.');
       expect(read().build.offer).toBeNull();
     });
 

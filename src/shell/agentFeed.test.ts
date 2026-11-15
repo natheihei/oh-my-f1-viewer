@@ -86,7 +86,7 @@ describe("the viewer's message", () => {
   });
 
   it('withdraws an offer of build mode', async () => {
-    useBuild.setState({ offer: { tiles: [ids[0]], note: '' } });
+    useBuild.setState({ offer: { reason: 'fix the gap chart', note: '', tiles: [ids[0]] } });
     await sendToAgent('never mind');
     expect(read().build.offer).toBeNull();
   });
@@ -97,7 +97,7 @@ describe('taking up an offer of build mode', () => {
 
   it("starts the build agent at once on the tiles' errors and the viewing agent's note, leaving the tray", async () => {
     host.health.attach({ scope: ids[1] });
-    await switchToBuild({ tiles: [ids[0]], note: 'It throws in the pit lane.' });
+    await switchToBuild({ reason: 'fix the gap chart', note: 'It throws in the pit lane.', tiles: [ids[0]] });
     expect(read().build.active).toBe(true);
     const [text] = sent();
     expect(text).toContain(`"tile": "${ids[0]}"`);
@@ -107,15 +107,27 @@ describe('taking up an offer of build mode', () => {
     expect(usePalette.getState().entries.at(-1)).toMatchObject({ role: 'system', text: 'went to the build agent.', attached: [{ scope: ids[0], label: 'Gap ahead' }] });
   });
 
-  it('sends nothing for tiles that draw again by then', async () => {
+  it('still sends a tile that draws again by then, saying it has no error now', async () => {
     health.report({ scope: ids[0], ...threw, state: 'drawn', message: null }, null);
-    await switchToBuild({ tiles: [ids[0]], note: '' });
+    await switchToBuild({ reason: 'fix the gap chart', note: 'It threw.', tiles: [ids[0]] });
     expect(read().build.active).toBe(true);
-    expect(send).not.toHaveBeenCalled();
+    const [text] = sent();
+    expect(text).toContain(`"tile": "${ids[0]}"`);
+    expect(text).toContain('"state": "drawn"');
+    expect(text).toContain('It has no error now.');
+    expect(text).not.toContain('first_threw');
+    expect(text.endsWith('<from_viewing_agent>\nIt threw.\n</from_viewing_agent>')).toBe(true);
+  });
+
+  it('starts the build agent on the note alone when no tiles are offered', async () => {
+    await switchToBuild({ reason: 'Build a tyre wear chart for HAM.', note: 'The user wants to track tyre wear for HAM. No chart does.', tiles: [] });
+    expect(read().build.active).toBe(true);
+    expect(sent()).toEqual(['<from_viewing_agent>\nThe user wants to track tyre wear for HAM. No chart does.\n</from_viewing_agent>']);
+    expect(usePalette.getState().entries.at(-1)).toMatchObject({ role: 'system', text: 'Asked the build agent to build a tyre wear chart for HAM.' });
   });
 
   it('stays in view mode when turned down', () => {
-    useBuild.setState({ offer: { tiles: [ids[0]], note: '' } });
+    useBuild.setState({ offer: { reason: 'fix the gap chart', note: '', tiles: [ids[0]] } });
     stayInView();
     expect(read().build.offer).toBeNull();
     expect(read().build.active).toBe(false);
