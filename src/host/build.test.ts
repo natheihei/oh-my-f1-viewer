@@ -155,22 +155,27 @@ describe('look-ahead approval', () => {
 describe('offering build mode', () => {
   it('waits in live state with the tiles and the note, replacing an earlier offer', () => {
     const [a, b] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }, { type: 'form', props: { drivers: [44] } }] });
-    buildOps.offer({ tiles: [a], note: 'first' });
-    buildOps.offer({ tiles: [a, b, a], note: 'It throws in the pit lane.' });
-    expect(useBuild.getState().offer).toEqual({ tiles: [a, b], note: 'It throws in the pit lane.' });
+    buildOps.offer({ reason: 'fix form', tiles: [a], note: 'first' });
+    buildOps.offer({ reason: 'fix the form charts', tiles: [a, b, a], note: 'It throws in the pit lane.' });
+    expect(useBuild.getState().offer).toEqual({ reason: 'fix the form charts', tiles: [a, b], note: 'It throws in the pit lane.' });
+  });
+
+  it('can offer to build something with no tiles', () => {
+    buildOps.offer({ reason: 'build a tyre wear chart', note: 'The user wants tyre wear for HAM.' });
+    expect(useBuild.getState().offer).toEqual({ reason: 'build a tyre wear chart', note: 'The user wants tyre wear for HAM.', tiles: [] });
   });
 
   it('refuses a tile that is not on screen, and any offer while building', () => {
     const [a] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }] });
-    expect(() => buildOps.offer({ tiles: [a, 'tile-99'], note: '' })).toThrow('Not on screen: tile-99.');
+    expect(() => buildOps.offer({ reason: 'fix it', tiles: [a, 'tile-99'], note: '' })).toThrow('Not on screen: tile-99.');
     building([]);
-    expect(() => buildOps.offer({ tiles: [a], note: '' })).toThrow('Build mode is already on.');
+    expect(() => buildOps.offer({ reason: 'fix it', tiles: [a], note: '' })).toThrow('Build mode is already on.');
     expect(useBuild.getState().offer).toBeNull();
   });
 
   it('goes when it is withdrawn', () => {
     const [a] = layoutOps.add({ items: [{ type: 'form', props: { drivers: [4] } }] });
-    buildOps.offer({ tiles: [a], note: '' });
+    buildOps.offer({ reason: 'fix it', tiles: [a], note: '' });
     buildOps.dismissOffer();
     expect(useBuild.getState().offer).toBeNull();
   });

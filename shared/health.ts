@@ -88,3 +88,14 @@ export function errorBlock({ place, props, log }: ErrorReport): string {
   };
   return `<error>\n${JSON.stringify(fields, null, 2)}\n</error>`;
 }
+
+/**
+ * A tile offered for a fix that has no error any more, or is gone, by the time the viewer switches to build mode, as
+ * the build agent reads it in place of its error. `place` is how it stands now, or null for a tile that's gone.
+ */
+export function drawsAgainBlock(tile: string, place: PlaceHealth | null): string {
+  const fields = place
+    ? { tile, label: place.label, type: place.type, state: place.state, message: 'It has no error now. There may be nothing to fix.' }
+    : { tile, state: 'gone', message: 'It is no longer on screen.' };
+  return `<error>\n${JSON.stringify(fields, null, 2)}\n</error>`;
+}
