@@ -11,12 +11,17 @@ import { allTiles } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { write } from './op';
 
-/** Build mode, offered to the viewer to fix tiles in their component's code. It waits for their answer. */
+/**
+ * Build mode, offered to the viewer from view mode: to fix tiles in their component's code, or to build or
+ * change a component. It waits for their answer.
+ */
 export interface BuildOffer {
-  /** Tile ids. */
-  tiles: string[];
-  /** What the offer found, for the build agent: its conversation starts with this and the tiles' errors. */
+  /** What build mode would do, for the viewer, as a phrase like "fix the gap chart": the offer asks it. */
+  reason: string;
+  /** The handoff, for the build agent: its conversation starts with this and the tiles' errors. */
   note: string;
+  /** Tile ids whose errors go to the build agent, as they stand when the viewer switches. May be none. */
+  tiles: string[];
 }
 
 export interface BuildView {
@@ -51,18 +56,19 @@ export const buildOps = {
   offer: write(
     {
       description:
-        "Offer the viewer build mode, to fix tiles in their component's code. It waits in live.build.offer, replacing any offer before it, until the viewer answers or sends another message. Whoever takes the offer up enters build mode and gives the build agent the tiles' errors and the note.",
+        "Offer the viewer build mode, to fix tiles in their component's code or to build or change a component. It waits in live.build.offer, replacing any offer before it, until the viewer answers or sends another message. Whoever takes the offer up enters build mode and gives the build agent the tiles' errors and the note.",
       args: Type.Object({
-        tiles: Type.Array(Type.String({ description: "A tile's id" }), { minItems: 1 }),
-        note: Type.String({ description: 'What was found, for the build agent' }),
+        reason: Type.String({ description: 'What build mode would do, for the viewer, as a phrase like "fix the gap chart"' }),
+        note: Type.String({ description: 'The handoff, for the build agent' }),
+        tiles: Type.Optional(Type.Array(Type.String({ description: "A tile's id" }), { description: 'Tiles whose errors go to the build agent' })),
       }),
     },
-    ({ tiles, note }): void => {
+    ({ reason, note, tiles = [] }): void => {
       if (useBuild.getState().active) throw new Error('Build mode is already on.');
       const onScreen = new Set(allTiles(useLayout.getState()).map((t) => t.id));
       const gone = tiles.filter((t) => !onScreen.has(t));
       if (gone.length) throw new Error(`Not on screen: ${gone.join(', ')}.`);
-      useBuild.setState({ offer: { tiles: [...new Set(tiles)], note } });
+      useBuild.setState({ offer: { reason, note, tiles: [...new Set(tiles)] } });
     },
   ),
   dismissOffer: write({ description: 'Withdraw the offer of build mode, if there is one: the viewer stayed, or moved on.' }, (): void => {

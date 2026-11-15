@@ -506,16 +506,24 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.build.offer, {
     name: 'offer_build',
     description:
-      "Offer the user build mode, to fix tiles in their component's code, such as a render error in an <error> block. Only when other props wouldn't fix it: those you change with edit_tile. The user answers in the palette. If they switch, the build agent gets the tiles' errors and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
+      "Offer the user build mode, where the build agent writes components' code: to fix tiles whose render error is in it, or to build a chart or change one when that is what the user asks for. The user answers in the palette. If they switch, the build agent gets the errors of the tiles you name and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
     args: Type.Object(
       {
-        tiles: Type.Array(TileId, { minItems: 1, description: 'The tiles to fix' }),
-        note: Type.String({ description: 'What you found, for the build agent, which sees nothing else of this conversation. One or two sentences.' }),
+        reason: Type.String({
+          description:
+            'What build mode would do, for the user, as a few words that start with a verb, like "fix the gap chart" or "build a tyre wear chart for HAM". The offer reads "<reason> in build mode?".',
+        }),
+        note: Type.String({
+          description:
+            "The handoff, for the build agent, which sees nothing else of this conversation: what the user asked for, in their words where they matter, the drivers or tiles it is about, and what you found. One to three sentences.",
+        }),
+        error_tiles: Type.Optional(Type.Array(TileId, { description: "Tiles on screen whose errors the build agent should get, to fix. Leave it out when nothing is broken." })),
       },
       { additionalProperties: false },
     ),
+    adapt: ({ reason, note, error_tiles }) => ({ reason, note, tiles: error_tiles ?? [] }),
     gate: [
-      (_, { tiles }) => {
+      ({ tiles }) => {
         const gone = tiles.filter((t) => !tileOnScreen(t));
         if (gone.length) throw new Error(`No tile ${gone.join(', ')} is on screen. ${ID_HINT}`);
       },
