@@ -462,12 +462,6 @@
   line-height: 16px;
 }
 
-.battle-switch {
-  @apply border border-line px-1 text-dim hover:border-ink hover:text-ink;
-  line-height: 14px;
-  letter-spacing: 0.06em;
-}
-
 .battle-list {
   @apply relative min-h-0 overflow-y-auto border-l border-line;
   grid-column: 2;

@@ -131,12 +131,6 @@ try {
     await shoot('4-another-fight');
   } else log('only one fight at this lap: switching is not checked');
 
-  // Turning a picture off holds no stream.
-  await page.locator('[data-testid=battle-switch]').nth(1).click();
-  s = await state();
-  check('a picture turned off holds no video', s.videos.filter((v) => v.tile === battle && !v.quiet).length === 1, JSON.stringify(s.videos));
-  await shoot('5-picture-off');
-
   // Closing the battle: the sound moves on.
   await host(async (tile) => (await import('/src/host/index.ts')).host.layout.remove({ tiles: [tile] }), battle);
   s = await waitFor('the battle goes', (s) => !s.videos.some((v) => v.tile === battle));
@@ -150,7 +144,7 @@ try {
   await waitFor('the chase plays its onboard', (s) => s.videos.some((v) => v.tile === chase && v.status === 'ready'));
   const ahead = await page.locator('[data-testid=chase-ahead]').textContent().catch(() => null);
   check('the chase names the car ahead and the gap', ahead != null && /ahead/i.test(ahead), ahead ?? 'nothing');
-  await shoot('6-chase');
+  await shoot('5-chase');
 } catch (e) {
   failed += 1;
   log('FAIL', e.message);

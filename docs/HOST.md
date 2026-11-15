@@ -295,7 +295,7 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 
 - `useStream(feed, { slot })` holds one video of a feed while the component is drawn, and gives it back after: it's the one thing that
   isn't a write, because a video lasts exactly as long as what shows it. Each call is its own video and stream, so a feed can show in
-  several places, playing independently (sharing one is a later optimisation). A null feed holds nothing, and that picture is off. It
+  several places, playing independently (sharing one is a later optimisation). A null feed holds nothing, and that picture is empty. It
   returns a `Stream`: `id`, `feed`, `label`, `status`, `error`, `heard` (`on`, `muted` or null) and `quiet`. `slot` names which picture
   it is in a component with more than one, for where the sound goes when a heard picture switches feed.
 - `<Video stream={stream} />` draws a video: it fills its box, letterboxes the picture, shows the feed's name and status until it's
