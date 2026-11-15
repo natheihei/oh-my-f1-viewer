@@ -325,6 +325,12 @@ and `/build` itself (`src/shell/commands.test.ts`).
     driver in the same turn.
 26. A tile that stopped between turns is named in the next message's app state, and the agent fixes its code.
 
+**Video**
+
+27. Asked for a mod with two onboards picked in the tile, the agent holds them with `useStream`, draws them with `<Video stream>`,
+    names them in the title bar with `useTileHeader` and `streamSlots`, and keeps the pick with `useTileState`, not props. Its tile
+    plays both. `scripts/build-video-check.mjs` runs this case on its own, and Undo all leaves the mods folder as it was.
+
 ## Where it lives
 
 | Piece | File |

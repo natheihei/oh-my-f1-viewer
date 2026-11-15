@@ -6,15 +6,15 @@ import { GRID_COLUMNS, GRID_ROWS } from '../layout/model';
 import { useLayout } from '../layout/store';
 import { Stage, type TileComponent } from '../layout/Stage';
 import { useBuild } from './build';
-import { fillTitle, useDriverStyles } from './drivers';
+import { fillTitle, labelText, useDriverStyles } from './drivers';
 import { componentOf, useComponents } from './components';
 import { fitProps, health, healthOps, type PlaceHealth } from './health';
 import { layoutOps } from './layoutOps';
-import { useLive } from './live';
 import { previewScope, tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { useHiddenPast } from './overflow';
 import { setGridFrame, useSuggestions } from './suggestions';
+import { forgetTile, TilePlaceContext, useTileHeaders, type TilePlace, type TileHeader } from './tile';
 
 /** A place without its state: what's drawn where. Null where nothing is reported, outside a tile or preview. */
 type Place = Pick<PlaceHealth, 'scope' | 'where' | 'type' | 'label'>;
@@ -142,6 +142,7 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
     return () => {
       tileLookAhead.forget(scope);
       health.forget(scope);
+      forgetTile(scope);
     };
   }, [scope]);
   const allowed = useTileLookAhead((s) => scope != null && s.approved[scope] === true);
@@ -150,6 +151,7 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
     () => (scope != null ? { scope, where: scope === previewScope(spec.key) ? 'strip' : 'tile', type: spec.type, label: spec.label } : null),
     [scope, spec.key, spec.type, spec.label],
   );
+  const tilePlace = useMemo<TilePlace | null>(() => (place ? { scope: place.scope, where: place.where } : null), [place]);
   const waiting = !!View && !fit?.message && definition?.looksAhead === true && !allowed;
   // What isn't drawn reports here. What is, reports from its boundary, once it has drawn or thrown.
   useEffect(() => {
@@ -166,7 +168,9 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
   return (
     <ViewFrame>
       <TileBoundary type={spec.type} version={View} place={place} dropped={fit.dropped}>
-        <View props={fit.props} label={spec.label} />
+        <TilePlaceContext.Provider value={tilePlace}>
+          <View props={fit.props} label={spec.label} />
+        </TilePlaceContext.Provider>
       </TileBoundary>
     </ViewFrame>
   );
@@ -201,6 +205,13 @@ function DropPreview() {
 
 const NO_MARKS: Record<string, string> = {};
 
+/** The part of a spec's title that a component's header replaces: its label, or its name and drivers. */
+function titleOf(header: TileHeader): Partial<Pick<ComponentSpec, 'label' | 'title'>> {
+  if (header.drivers) return { label: labelText(header.label ?? '', header.drivers), title: { name: header.label ?? '', drivers: header.drivers } };
+  if (header.label != null) return { label: header.label, title: undefined };
+  return {};
+}
+
 // One wrapper per component name for good, because a new one would remount every tile showing it.
 const wrappers = new Map<string, TileComponent>();
 function wrapperOf(name: string): TileComponent {
@@ -226,11 +237,9 @@ export function Grid() {
   );
   const approved = useTileLookAhead((s) => s.approved);
   const tiles = useLayout((s) => s.tiles);
-  const audio = useLive((s) => s.audio);
-  const muted = useLive((s) => s.volume === 0);
-  const streams = useLive((s) => s.streams);
-  // What each header's slots say. An approval outlives an edit that drops `looksAhead`, but the header
-  // only says so while it applies.
+  const headers = useTileHeaders((s) => s.headers);
+  // What each header's slots say: the stream slots are the component's to say, through useTileHeader.
+  // An approval outlives an edit that drops `looksAhead`, but the header only says so while it applies.
   const states = useMemo(() => {
     const ahead = new Set(components.filter((c) => c.looksAhead).map((c) => c.name));
     const out: Record<string, TileState> = {};
@@ -238,23 +247,23 @@ export function Grid() {
       const state: TileState = {};
       if (approved[t.id] && ahead.has(t.component.type)) state.ahead = true;
       if (marks[t.component.type]) state.mark = marks[t.component.type];
-      if (t.component.type === 'video') {
-        const feed = t.component.key;
-        if (feed === audio) state.audio = muted ? 'muted' : 'on';
-        const status = streams[feed]?.status;
-        if (status === 'error') {
-          state.status = 'error';
-          state.error = true;
-        } else if (status === 'resolving' || status === 'loading') state.status = 'load';
-        else if (status === 'syncing') state.status = 'sync';
+      const header = headers[t.id];
+      if (header?.audio) state.audio = header.audio;
+      if (header?.status) {
+        state.status = header.status;
+        if (header.status === 'error') state.error = true;
       }
       out[t.id] = state;
     }
     return out;
-  }, [approved, components, tiles, audio, muted, streams, marks]);
+  }, [approved, components, tiles, headers, marks]);
   // Titles draw their drivers' codes from the roster, so they're drawn again when it changes.
   const styles = useDriverStyles();
-  const drawTitle = useCallback((el: HTMLElement, component: ComponentSpec) => fillTitle(el, component, styles), [styles]);
+  const titles = useMemo(() => Object.fromEntries(Object.entries(headers).map(([id, h]) => [id, titleOf(h)])), [headers]);
+  const drawTitle = useCallback(
+    (el: HTMLElement, component: ComponentSpec, tileId: string) => fillTitle(el, { ...component, ...titles[tileId] }, styles),
+    [styles, titles],
+  );
   return (
     <>
       <Stage registry={registry} highlight={highlight} marks={marks} />

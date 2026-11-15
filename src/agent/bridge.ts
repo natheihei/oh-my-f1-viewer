@@ -2,14 +2,33 @@
 import type { AgentMode, AgentToolCall } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
 import type { SessionDataView } from '../../shared/sessionData';
-import { FIRST_SEASON, host, read, tilesOf, type ComponentInfo, type EventIndex, type LayoutState, type Tile } from '../host';
-import { formatClock, offeredCharts, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
+import { FIRST_SEASON, host, labelText, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
+import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
-/** A tile by its id, then a stream by its label, a chart by its label, chart name and props, so the agent can change them. */
-const describeTile = ({ id, component: c }: Tile) =>
-  `${id} ` + (c.type === 'video' ? `${c.label} (stream)` : `${c.label} (${c.type} chart${Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : ''})`);
+/**
+ * A tile by its id, then what its title bar says, which its component may set itself, then its
+ * component and props, and the feeds it shows, so the agent can name and change it.
+ */
+function describeTile({ id, component: c }: Tile, live: Live): string {
+  const header = live.headers[id];
+  const label = header?.drivers ? labelText(header.label ?? '', header.drivers) : (header?.label ?? c.label);
+  if (c.type === 'video') return `${id} ${label} (stream)`;
+  const shows = Object.values(live.streams)
+    .filter((v) => v.tile === id && !v.quiet)
+    .map((v) => live.feeds.find((f) => f.id === v.feed)?.label ?? v.feed);
+  const props = Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : '';
+  return `${id} ${label} (${c.type}${props}${shows.length ? `, shows ${shows.join(', ')}` : ''})`;
+}
 
-const describeLayout = (state: LayoutState): string => (state.tiles.length === 0 ? 'nothing' : state.tiles.map(describeTile).join('; '));
+const describeLayout = (live: Live): string => (live.layout.tiles.length === 0 ? 'nothing' : live.layout.tiles.map((t) => describeTile(t, live)).join('; '));
+
+/** The heard video as the agent names it: its feed, and the tile it's in. */
+function heardLabel(live: Live): string | null {
+  const video = live.audio != null ? live.streams[live.audio] : undefined;
+  if (!video) return null;
+  const feed = live.feeds.find((f) => f.id === video.feed)?.label ?? video.feed;
+  return video.tile ? `${feed} in ${video.tile}` : feed;
+}
 
 /** The audible feed and the master volume together, so a feed is never called audible at volume 0. */
 function describeAudio(label: string | null, volume: number): string {
@@ -23,7 +42,8 @@ function describeAudio(label: string | null, volume: number): string {
  * who is entered, not where they are. `note` is what the user did with the last turn's suggestions.
  */
 export function describeAppState(note: string | null = null, build: string | null = null): string {
-  const { session, audio, volume, feeds, clock, streams, countdown, layout, sessionData } = read();
+  const live = read();
+  const { session, volume, clock, streams, countdown, layout, sessionData } = live;
   const lines = [`now: ${new Date().toISOString().slice(0, 16)}Z`];
   if (countdown) lines.push(`countdown running for: ${countdown.title}`);
   if (build) lines.push(build);
@@ -31,14 +51,16 @@ export function describeAppState(note: string | null = null, build: string | nul
     lines.push('session: none open');
     return lines.join('\n');
   }
-  const failed = tilesOf(layout)
-    .filter((t) => streams[t.component.key]?.status === 'error')
-    .map((t) => `${t.component.label}: ${streams[t.component.key]?.error}`);
+  const failed = tilesOf(layout).flatMap((t) =>
+    Object.values(streams)
+      .filter((v) => v.tile === t.id && v.status === 'error')
+      .map((v) => `${t.id} ${live.feeds.find((f) => f.id === v.feed)?.label ?? v.feed}: ${v.error}`),
+  );
   lines.push(
     `session: ${session.title} (${session.status})`,
     `playback: ${clock.playing ? 'playing' : 'paused'} at ${formatClock(clock.timeSec)}`,
-    `on screen: ${describeLayout(layout)}`,
-    `audio: ${describeAudio(feeds.find((f) => f.id === audio)?.label ?? null, volume)}`,
+    `on screen: ${describeLayout(live)}`,
+    `audio: ${describeAudio(heardLabel(live), volume)}`,
   );
   if (sessionData.state === 'ready') {
     if (sessionData.playheadMs != null) lines.push(`playhead: ${Math.round(sessionData.playheadMs)} (UTC ms, as in date columns)`);
@@ -105,17 +127,18 @@ export function describeEvents(index: EventIndex): string {
 }
 
 /**
- * The charts `suggest_tiles` can offer, for the system prompt: one line each, or nothing when there
- * are none. Only what each chart is for, never what it shows. The viewing agent gets only those that
- * fit the open session; the build agent gets every one, since it writes and edits them.
+ * The components `suggest_tiles` can offer, for the system prompt: one line each, or nothing when
+ * there are none. Video isn't one: `streams` names feeds. Only what each is for, never what it shows.
+ * The viewing agent gets only those that fit the open session; the build agent gets every one, since
+ * it writes and edits them.
  */
-export function describeCharts(components: ComponentInfo[]): string {
-  const charts = components.filter((c) => c.name !== 'video');
-  if (charts.length === 0) return '';
+export function describeComponents(components: ComponentInfo[]): string {
+  const offered = components.filter((c) => c.name !== 'video');
+  if (offered.length === 0) return '';
   const lines = [
-    'Charts for suggest_tiles. Each line: name, title, session types, what it is for, then its props. One marked replays only cannot be suggested in a live session. Give a chart every required prop; an optional one left out does what its description says. A prop named driver… is one driver and drivers… a list, each by code, surname or car number.',
+    'Components for suggest_tiles. Each line: name, title, session types, what it is for, then its props. One marked replays only cannot be suggested in a live session. Give a component every required prop; an optional one left out does what its description says. A prop named driver… is one driver and drivers… a list, each by code, surname or car number.',
   ];
-  for (const c of charts) {
+  for (const c of offered) {
     lines.push(`${c.name}, ${c.title}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description} ${propsText(c)}.`);
   }
   return lines.join('\n');
@@ -167,13 +190,13 @@ export function askAgent(text: string): Promise<void> {
   const { events, components, sessionData, build } = read();
   if (build.active) {
     turnMode = 'build';
-    const reference = [describeCharts(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
+    const reference = [describeComponents(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
     return host.agent.send(text, describeAppState(note, describeBuild()), toolDefinitions('build'), reference, 'build');
   }
   turnMode = 'view';
   const fromBuild = buildNote ? `build mode: the user left it having saved this. ${buildNote}` : null;
   buildNote = null;
   // Least likely to change last: opening a session only changes what follows the events.
-  const reference = [describeEvents(events), describeCharts(offeredCharts()), describeTables(sessionData)].filter(Boolean).join('\n\n');
+  const reference = [describeEvents(events), describeComponents(offeredComponents()), describeTables(sessionData)].filter(Boolean).join('\n\n');
   return host.agent.send(text, describeAppState(note, fromBuild), toolDefinitions(), reference);
 }

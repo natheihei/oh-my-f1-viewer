@@ -32,8 +32,16 @@ export interface ClockState {
   wallClockMs: number | null;
 }
 
+/** One video: a feed playing in one place. A feed shown in two places is two videos, each its own stream. */
 export interface StreamView {
-  channelId: string;
+  /** The video's id, which audio and the clock name it by. */
+  id: string;
+  /** The feed it plays. */
+  feed: string;
+  /** The tile it's in, or null outside one, as in a preview. */
+  tile: string | null;
+  /** A quiet video, like a preview's, is never heard. */
+  quiet: boolean;
   status: StreamStatus;
   error: string | null;
 }
@@ -43,9 +51,11 @@ export interface SessionState {
   channels: Channel[];
   /** Why opening failed, if it did. */
   error: string | null;
+  /** Every video, by its id. */
   streams: Record<string, StreamView>;
-  audioChannelId: string | null;
-  /** Master level from 0 to 1, whichever feed is audible. It outlives any one session. */
+  /** The one video that is heard, by its id. */
+  audioVideoId: string | null;
+  /** Master level from 0 to 1, whichever video is audible. It outlives any one session. */
   volume: number;
   clock: ClockState;
 }
@@ -67,7 +77,7 @@ const INITIAL: Omit<SessionState, 'volume'> = {
   channels: [],
   error: null,
   streams: {},
-  audioChannelId: null,
+  audioVideoId: null,
   clock: IDLE_CLOCK,
 };
 
@@ -83,13 +93,32 @@ const SEEK_CLAMP_TOLERANCE_SEC = 1;
 export interface HoldOptions {
   /** A hold that shows the feed without ever making it audible, like a preview. */
   quiet?: boolean;
+  /** The tile it's drawn in, so the sound can stay in that tile when the video goes. */
+  tile?: string | null;
+  /** Which of the tile's pictures it is, so the sound follows a picture that switches feed. */
+  slot?: string | null;
 }
 
+interface Hold {
+  quiet: boolean;
+  tile: string | null;
+  slot: string | null;
+  /** When it was taken, in order: a later number is a later hold. */
+  seq: number;
+}
+
+/** Video ids count up across sessions, so one never names a video of an earlier session. */
+let nextVideo = 0;
+
 class SessionRuntime {
+  /** Every video by its id, in the order they started: a let-go one stays here until it stops. */
   private readonly handles = new Map<string, StreamHandle>();
   private readonly held = new Set<string>();
-  private readonly holds = new Map<string, { loud: number; quiet: number }>();
-  private readonly pendingRelease = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Who holds each video. A video has one holder at most. */
+  private readonly holds = new Map<string, Hold>();
+  /** Videos let go a moment ago, which the next hold on the same feed takes over. */
+  private readonly letGo = new Map<string, { hold: Hold; timer: ReturnType<typeof setTimeout> }>();
+  private seq = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private referenceId: string | null = null;
   private wantPlaying = true;
@@ -116,116 +145,151 @@ class SessionRuntime {
 
   private publishStreams(): void {
     const streams: Record<string, StreamView> = {};
-    for (const [id, h] of this.handles) streams[id] = { channelId: id, status: h.status, error: h.error };
+    for (const [id, h] of this.handles) {
+      const hold = this.holds.get(id) ?? this.letGo.get(id)?.hold;
+      streams[id] = { id, feed: h.channel.id, tile: hold?.tile ?? null, quiet: hold?.quiet ?? true, status: h.status, error: h.error };
+    }
     useSession.setState({ streams });
   }
 
   /**
-   * Takes a hold on a feed's stream, starting it if nobody holds it. There is one stream and one
-   * video element per feed: a second holder gets the same one, and moving the element between
-   * holders keeps it playing. A quiet hold, like a preview, never makes a feed audible.
+   * Starts a video of a feed for one holder. Each hold is its own video and stream, so a feed can
+   * show in several places. A video of the same feed let go a moment ago is taken over instead: a
+   * preview handing its feed to a tile, or a component drawn again, lets go in the same render the
+   * new holder takes hold, and the picture and its sound carry on. A quiet hold, like a preview,
+   * never makes a video audible.
    */
-  acquire(channelId: string, { quiet = false }: HoldOptions = {}): StreamHandle | null {
+  acquire(channelId: string, { quiet = false, tile = null, slot = null }: HoldOptions = {}): StreamHandle | null {
     const channel = this.channelOf(channelId);
     if (!channel) return null;
-    const pending = this.pendingRelease.get(channelId);
-    if (pending != null) clearTimeout(pending);
-    this.pendingRelease.delete(channelId);
-    const holds = this.holds.get(channelId) ?? { loud: 0, quiet: 0 };
-    const wasHeard = holds.loud > 0;
-    if (quiet) holds.quiet += 1;
-    else holds.loud += 1;
-    this.holds.set(channelId, holds);
-
-    let handle = this.handles.get(channelId);
-    if (!handle) {
-      const created = new StreamHandle(channel, {
-        join: () => joinPoint({ live: this.live, fromStart: this.fromStart, started: this.started }),
-        clockTime: () => this.now(),
-        onChange: () => this.publishStreams(),
-      });
-      handle = created;
-      this.handles.set(channelId, created);
+    const hold: Hold = { quiet, tile, slot, seq: (this.seq += 1) };
+    const free = [...this.letGo.entries()].filter(([id]) => this.handles.get(id)?.channel.id === channelId);
+    const taken = free.find(([, l]) => l.hold.tile === tile && tile != null) ?? free[0];
+    if (taken) {
+      const [id, l] = taken;
+      clearTimeout(l.timer);
+      this.letGo.delete(id);
+      this.holds.set(id, hold);
+      const handle = this.handles.get(id)!;
+      const { audioVideoId } = useSession.getState();
+      if (quiet && audioVideoId === id) this.setAudio(this.successor(id, l.hold));
+      // A preview of the main feed becoming its tile is heard as a new tile of it would be.
+      else if (!quiet && audioVideoId == null && channel.kind === 'main') this.setAudio(id);
       this.publishStreams();
-      const { audioChannelId, volume } = useSession.getState();
-      created.video.volume = volume;
-      created.video.muted = channelId !== audioChannelId;
-      this.startQueue = this.startQueue.then(() => this.startInTurn(created));
+      return handle;
     }
-    if (!quiet && !wasHeard && useSession.getState().audioChannelId == null && channel.kind === 'main') this.setAudio(channelId);
-    return handle;
+
+    const id = `v${(nextVideo += 1)}`;
+    const created = new StreamHandle(id, channel, {
+      join: () => joinPoint({ live: this.live, fromStart: this.fromStart, started: this.started }),
+      clockTime: () => this.now(),
+      onChange: () => this.publishStreams(),
+    });
+    this.handles.set(id, created);
+    this.holds.set(id, hold);
+    this.publishStreams();
+    const { audioVideoId, volume } = useSession.getState();
+    created.video.volume = volume;
+    created.video.muted = true;
+    this.startQueue = this.startQueue.then(() => this.startInTurn(created));
+    if (!quiet && audioVideoId == null && channel.kind === 'main') this.setAudio(id);
+    return created;
   }
 
   private async startInTurn(handle: StreamHandle): Promise<void> {
-    if (this.handles.get(handle.channel.id) !== handle) return;
+    if (this.handles.get(handle.id) !== handle) return;
     void handle.start();
     const deadline = performance.now() + START_STAGGER_MAX_MS;
-    while (performance.now() < deadline && this.handles.get(handle.channel.id) === handle) {
+    while (performance.now() < deadline && this.handles.get(handle.id) === handle) {
       if (handle.hasMedia || handle.status === 'error') return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
   /**
-   * Gives a hold back. The stream stops once nobody holds it, a moment later rather than at once:
-   * a preview handing its feed to a tile lets go in the same render the tile takes hold.
+   * Gives a video back. It stops a moment later rather than at once, unless a new hold on its feed
+   * takes it over first. If it was heard, the sound moves on as `successor` says.
    */
-  release(channelId: string, { quiet = false }: HoldOptions = {}): void {
-    const holds = this.holds.get(channelId);
-    if (!holds) return;
-    if (quiet) holds.quiet = Math.max(0, holds.quiet - 1);
-    else holds.loud = Math.max(0, holds.loud - 1);
-    if (holds.loud === 0 && useSession.getState().audioChannelId === channelId) this.setAudio(this.defaultAudioChannel());
-    if (holds.loud + holds.quiet > 0 || this.pendingRelease.has(channelId)) return;
-    this.pendingRelease.set(
-      channelId,
-      setTimeout(() => {
-        this.pendingRelease.delete(channelId);
-        const now = this.holds.get(channelId);
-        if (now && now.loud + now.quiet === 0) this.stop(channelId);
+  release(handle: StreamHandle): void {
+    const { id } = handle;
+    const hold = this.holds.get(id);
+    if (!hold || this.handles.get(id) !== handle) return;
+    this.holds.delete(id);
+    const released: Hold = { ...hold, seq: (this.seq += 1) };
+    this.letGo.set(id, {
+      hold: released,
+      timer: setTimeout(() => {
+        if (!this.letGo.delete(id)) return;
+        const next = useSession.getState().audioVideoId === id ? this.successor(id, released) : undefined;
+        this.stop(id);
+        if (next !== undefined) this.setAudio(next);
       }, 0),
-    );
+    });
   }
 
-  private stop(channelId: string): void {
-    const handle = this.handles.get(channelId);
-    this.holds.delete(channelId);
+  /**
+   * Where the sound goes when the heard video stops: another video of the same feed, so the same
+   * commentary carries on; else a video its tile started just after it, the same picture first, so
+   * a tile switching feeds keeps the sound; else the default.
+   */
+  private successor(goneId: string, gone: Hold): string | null {
+    const feed = this.handles.get(goneId)?.channel.id ?? null;
+    const loud = [...this.holds.entries()].filter(([id, h]) => !h.quiet && id !== goneId);
+    const sameFeed = loud.find(([id]) => this.handles.get(id)?.channel.id === feed);
+    if (sameFeed) return sameFeed[0];
+    if (gone.tile != null) {
+      const after = loud.filter(([, h]) => h.tile === gone.tile && h.seq > gone.seq);
+      const pick = after.find(([, h]) => gone.slot != null && h.slot === gone.slot) ?? after[0];
+      if (pick) return pick[0];
+    }
+    return this.defaultAudio(goneId);
+  }
+
+  private stop(id: string): void {
+    const handle = this.handles.get(id);
+    this.holds.delete(id);
     if (!handle) return;
-    if (this.referenceId === channelId) {
+    if (this.referenceId === id) {
       // The clock outlives the reference: remember where we are for whoever takes over.
       this.setVirtualTime(handle.video.currentTime);
       this.referenceId = null;
     }
     handle.destroy();
-    this.handles.delete(channelId);
-    this.held.delete(channelId);
+    this.handles.delete(id);
+    this.held.delete(id);
     this.publishStreams();
   }
 
-  handle(channelId: string): StreamHandle | undefined {
-    return this.handles.get(channelId);
+  handle(id: string): StreamHandle | undefined {
+    return this.handles.get(id);
   }
 
-  /** The main feed if something shows it out loud, otherwise the first such feed. */
-  private defaultAudioChannel(): string | null {
-    const ids = [...this.handles.keys()].filter((id) => (this.holds.get(id)?.loud ?? 0) > 0);
-    return ids.find((id) => this.channelOf(id)?.kind === 'main') ?? ids[0] ?? null;
+  /** The oldest video of the main feed that something shows out loud, otherwise the oldest such video. */
+  private defaultAudio(except: string | null = null): string | null {
+    const ids = [...this.holds.entries()].filter(([id, h]) => !h.quiet && id !== except).map(([id]) => id);
+    return ids.find((id) => this.handles.get(id)?.channel.kind === 'main') ?? ids[0] ?? null;
   }
 
-  setAudio(channelId: string | null): void {
-    for (const [id, handle] of this.handles) handle.video.muted = id !== channelId;
-    useSession.setState({ audioChannelId: channelId });
+  /** Makes one video the only one heard, or none. A video that isn't held out loud, like a preview's, can't be. */
+  setAudio(videoId: string | null): void {
+    if (videoId != null) {
+      const hold = this.holds.get(videoId);
+      if (!hold) throw new Error(`No video ${videoId} is on screen.`);
+      if (hold.quiet) throw new Error('A preview is never heard.');
+    }
+    for (const [id, handle] of this.handles) handle.video.muted = id !== videoId;
+    useSession.setState({ audioVideoId: videoId });
   }
 
   applyVolume(volume: number): void {
     for (const handle of this.handles.values()) handle.video.volume = volume;
   }
 
-  /** Makes the default feed audible, if there's one to hear. */
+  /** Makes the default video audible, if there's one to hear. */
   restoreAudio(): boolean {
-    const channelId = this.defaultAudioChannel();
-    if (channelId) this.setAudio(channelId);
-    return channelId != null;
+    const id = this.defaultAudio();
+    if (id) this.setAudio(id);
+    return id != null;
   }
 
   private setVirtualTime(t: number): void {
@@ -263,7 +327,7 @@ class SessionRuntime {
       if (!handle.hasMedia) continue;
       handle.markSyncing();
       const stagger = (i += 1) * SEEK_STAGGER_MS;
-      if (handle.channel.id === this.referenceId) handle.video.currentTime = target;
+      if (handle.id === this.referenceId) handle.video.currentTime = target;
       else setTimeout(() => { handle.video.currentTime = target; }, stagger);
     }
     this.tick();
@@ -296,7 +360,7 @@ class SessionRuntime {
 
   private tick(): void {
     const entries = [...this.handles.values()].map((h) => ({
-      id: h.channel.id,
+      id: h.id,
       isMain: h.channel.kind === 'main',
       hasMedia: h.hasMedia,
       handle: h,
@@ -364,8 +428,8 @@ class SessionRuntime {
     this.timer = null;
     this.sessionData?.destroy();
     this.sessionData = null;
-    for (const timer of this.pendingRelease.values()) clearTimeout(timer);
-    this.pendingRelease.clear();
+    for (const { timer } of this.letGo.values()) clearTimeout(timer);
+    this.letGo.clear();
     this.holds.clear();
     for (const handle of this.handles.values()) handle.destroy();
     this.handles.clear();
@@ -382,9 +446,9 @@ function setVolume(level: number): void {
 }
 
 function toggleMute(): void {
-  const { audioChannelId, volume } = useSession.getState();
-  // With no feed chosen, "unmute" has to choose one, and be heard once it has.
-  if (audioChannelId == null && runtime?.restoreAudio()) {
+  const { audioVideoId, volume } = useSession.getState();
+  // With no video chosen, "unmute" has to choose one, and be heard once it has.
+  if (audioVideoId == null && runtime?.restoreAudio()) {
     if (volume === 0) setVolume(toggledVolume(volume, lastHeardVolume));
     return;
   }
@@ -408,8 +472,9 @@ export function closeSession(): void {
 
 export const sessionControl = {
   acquire: (channelId: string, options?: HoldOptions) => runtime?.acquire(channelId, options) ?? null,
-  release: (channelId: string, options?: HoldOptions) => runtime?.release(channelId, options),
-  handle: (channelId: string) => runtime?.handle(channelId),
+  release: (handle: StreamHandle) => runtime?.release(handle),
+  /** A video by its id, to draw it. */
+  video: (id: string) => runtime?.handle(id),
   play: () => runtime?.play(),
   pause: () => runtime?.pause(),
   seek: (timeSec: number) => {
@@ -424,7 +489,13 @@ export const sessionControl = {
   },
   seekToStart: () => runtime?.seekToStart(),
   goLive: () => runtime?.goLive(),
-  setAudio: (channelId: string | null) => runtime?.setAudio(channelId),
+  setAudio: (videoId: string | null) => {
+    if (!runtime) {
+      if (videoId != null) throw new Error('No session is open.');
+      return;
+    }
+    runtime.setAudio(videoId);
+  },
   setVolume,
   changeVolumeBy: (amount: number) => setVolume(useSession.getState().volume + amount),
   toggleMute,
