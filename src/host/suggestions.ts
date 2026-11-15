@@ -16,9 +16,6 @@ import { bareSpec, componentOf, Item, specOf, useComponents } from './components
 import { previewScope, tileLookAhead } from './lookAhead';
 import { write } from './op';
 
-/** Each suggested stream is a live preview, and so a real stream from the CDN. */
-export const MAX_SUGGESTED_STREAMS = 4;
-
 export interface SuggestionsView {
   items: ComponentSpec[];
   /** The key of the tile to outline in the layout: the suggestion under the mouse is already on screen. */
@@ -136,11 +133,11 @@ const Point = { key: Key, x: Type.Number({ description: 'Client x in pixels' }),
 export const suggestionOps = {
   offer: write(
     {
-      description: `Suggest components as tiles, for the user to add. Joins what's already suggested this turn, up to ${MAX_SUGGESTED_STREAMS} video streams.`,
+      description: "Suggest components as tiles, for the user to add. Joins what's already suggested this turn.",
       args: Type.Object({ items: Type.Array(Item) }),
     },
     ({ items: offered }) => {
-      const result = { suggested: [] as string[], onScreen: [] as string[], repeated: [] as string[], overLimit: [] as string[] };
+      const result = { suggested: [] as string[], onScreen: [] as string[], repeated: [] as string[] };
       if (closed) throw new Error('The user dismissed the suggestions this turn.');
       const items = [...useSuggestions.getState().items];
       for (const spec of offered.map(specOf)) {
@@ -152,11 +149,6 @@ export const suggestionOps = {
         }
         if (taken.has(spec.key) || items.some((i) => i.key === spec.key)) {
           result.repeated.push(spec.label);
-          continue;
-        }
-        // Only streams count: each previewed one is a real stream from the CDN.
-        if (spec.type === 'video' && items.filter((i) => i.type === 'video').length >= MAX_SUGGESTED_STREAMS) {
-          result.overLimit.push(spec.label);
           continue;
         }
         items.push(spec);
@@ -175,7 +167,7 @@ export const suggestionOps = {
     ({ key }) => {
       const spec = itemOf(key);
       if (!spec) return false;
-      // The layout first: a preview hands its stream to the new tile rather than stopping it.
+      // In the same render, so the tile takes over the preview's videos rather than starting its own.
       if (!onScreen(key)) {
         layout.add(spec);
         carryApproval(key);

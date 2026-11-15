@@ -55,9 +55,9 @@ const sample = () =>
     const ref = videos[0];
     return {
       clock: { t: +state.clock.timeSec.toFixed(2), playing: state.clock.playing, buffering: state.clock.buffering, end: Math.round(state.clock.end), wall: !!state.clock.wallClockMs },
-      audio: state.channels.find((c) => c.id === state.audioChannelId)?.label ?? null,
+      audio: state.channels.find((c) => c.id === state.streams[state.audioVideoId]?.feed)?.label ?? null,
       streams: Object.values(state.streams).map((s) => {
-        const channel = state.channels.find((c) => c.id === s.channelId);
+        const channel = state.channels.find((c) => c.id === s.feed);
         const v = videos.find((x) => x.dataset.channel === s.channelId);
         const q = v?.getVideoPlaybackQuality();
         return {

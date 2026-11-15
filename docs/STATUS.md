@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-11.
+What has actually been verified, and what hasn't. Last updated 2026-11-15.
 
 ## Verified on real sessions
 
@@ -9,6 +9,12 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
 - The full journey: blank start, sign-ins, clarifying "2026 Brazil", loading "2025 Mexico", adding Hamilton and a Norris/Leclerc
   group, then closing the group. That was before groups were taken out (#101).
 - Four streams in sync, with the widest spread seen once settled under 0.07s, on the 2024 Mexico, 2025 Saudi Arabia, 2025 Mexico and 2026 Mexico races. None of these replays use DRM.
+- Components that show video, on the 2026 São Paulo race at lap 12 with `scripts/battle-check.mjs` (2026-11-15). The battle started on
+  the closest fight with both onboards playing and listed six fights; the same onboard played in a video tile of its own at the same
+  time, as a second stream. Clicking a picture made it the one heard without raising the volume from 0, and the battle's title bar and
+  the picture said so. Picking another fight kept the sound with the driver who stayed in it, turning a picture off released its
+  stream, and closing the battle moved the sound to the other video of the same feed. The chase showed the car ahead and the gap,
+  marked OT within a second. Many streams at once haven't been soaked: each picture is its own stream, so this costs bandwidth.
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
 - The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
   back from the video elements, not checked by ear.
@@ -152,7 +158,8 @@ The same mod with a 62px heading of its own still hid its message at 2 rows: see
 
 - **The agent using `suggest_tiles`.** The strip, keys, drag and drop, resizing a preview, and Esc are covered by `scripts/suggestions-check.mjs` in the real
   app. On the 2025 Mexico City race, a previewed onboard played muted in the strip, and adding it handed the same `<video>` to its tile,
-  still playing and ready, with the audio left on the main feed. The real agent hasn't been asked for a stream since it lost `add_streams`.
+  still playing and ready, with the audio left on the main feed. That was before each holder got its own video (2026-11-15): the handoff
+  is now a new holder taking over a video let go in the same render, covered by unit tests, and not yet run in the real strip. The real agent hasn't been asked for a stream since it lost `add_streams`.
 
 - Capturing a live session into the database, and the extra feeds it subscribes to. Check at the next live session.
 

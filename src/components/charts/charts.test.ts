@@ -1193,7 +1193,9 @@ describe('the registry', () => {
     expect(byName.pedal_barcode.spec({ driver: 44 })).toEqual({ key: 'pedal_barcode:44', label: 'Pedals', drivers: [44] });
     expect(byName.speed_ribbon.spec({ driver: 44 })).toEqual({ key: 'speed_ribbon:44', label: 'Speed ribbon', drivers: [44] });
     for (const gone of ['race_trace', 'speed_trace', 'lap_time_compare', 'pit_stops', 'position_chart', 'tyre_degradation', 'battle_card', 'stint_pace', 'telemetry_live', 'field_pace']) expect(byName[gone]).toBeUndefined();
-    expect(components).toHaveLength(14);
+    expect(byName.battle.spec({})).toEqual({ key: 'battle', label: 'Battle' });
+    expect(byName.chase.spec({ driver: 44 })).toEqual({ key: 'chase:44', label: 'Chase', drivers: [44] });
+    expect(components).toHaveLength(16);
     // Every chart is for races only, to start with; video is for any session.
     for (const c of components) expect(c.sessions).toEqual(c.name === 'video' ? undefined : ['race', 'sprint']);
   });
