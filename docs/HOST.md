@@ -46,7 +46,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
 | `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
-| `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) `enteredAtSec` (the session clock on entry, or null with no session) and `offer` (build mode offered to the viewer from view mode and not yet answered: `tiles` and the offering agent's `note`, or null). See [BUILD_MODE.md](BUILD_MODE.md) |
+| `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) `enteredAtSec` (the session clock on entry, or null with no session) and `offer` (build mode offered to the viewer from view mode and not yet answered: the offering agent's `reason`, for the viewer, and `note`, for the build agent, and `tiles` whose errors go along, maybe none; or null). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it. A place that isn't drawing has `since`, the moment it first stood this way (`clockSec`, and `playheadMs` in UTC ms), kept while it fails the same way. It's null otherwise, and with no session open |
 | `attached` | `Attachment[]` | Tiles' errors the viewer attached to their next message from a tile's button, in the order attached, until a message takes them: `scope` (the tile) and `report`, an `ErrorReport` of how it stood then: `place` (from `health`), the tile's `props`, and `log`, its mod's log relative to the mods folder, or null for the app's own components. A tile that closes goes from it |
 | `agentBusy` | `boolean` | Whether the agent is working on a message: from when one is sent until its turn ends or is stopped. A message sent while it's busy stops that turn and starts one with it |
@@ -233,7 +233,7 @@ Build mode's snapshot of the mods folder, which the main process keeps. See [BUI
 | `build.begin` | none | Takes the snapshot and turns build mode on. Does nothing new if it's already on |
 | `build.save` | none | Drops the snapshot, keeping every change. Resolves to what changed in the app's words, like "Built lap_stepper.", or null |
 | `build.undo` | none | Puts the mods folder back as it stood on entry. Resolves to how many mods that undid |
-| `build.offer` | `tiles: string[]`, `note: string` | Offers the viewer build mode, to fix those tiles in their component's code: it waits in `live.build.offer`, replacing any offer before it. Throws while build mode is on, and for a tile that isn't on screen. Whoever takes it up enters build mode and gives the build agent the tiles' errors and the note: the shell does, from the palette |
+| `build.offer` | `reason: string`, `note: string`, `tiles?: string[]` | Offers the viewer build mode, to fix those tiles in their component's code or to build or change a component: it waits in `live.build.offer`, replacing any offer before it. Throws while build mode is on, and for a tile that isn't on screen. Whoever takes it up enters build mode and gives the build agent the tiles as they stand and the note: the shell does, from the palette |
 | `build.dismissOffer` | none | Withdraws the offer, if there is one. `build.begin` withdraws it too |
 
 ### `host.health`
@@ -363,7 +363,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `suggest_tiles` | `host.suggestions.offer`, for streams and charts |
 | `remove_tiles` | `host.layout.remove`, for streams and charts |
 | `edit_tile` | `host.layout.setProps`, for one chart |
-| `offer_build` | `host.build.offer`. The viewing agent's only: for a tile whose fix is in its component's code |
+| `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer asks for that no chart does |
 | `set_audio` | `host.audio.set` |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |

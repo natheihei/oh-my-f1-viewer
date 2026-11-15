@@ -2,7 +2,7 @@
  * Build mode, as the palette runs it: `/build` or an offer from the viewing agent enters, and Save or
  * Undo all leaves. While it's on, what the viewer types goes to the build agent. See docs/BUILD_MODE.md.
  */
-import { errorBlock } from '../../shared/health';
+import { drawsAgainBlock, errorBlock } from '../../shared/health';
 import { formatClock } from '../agent/tools';
 import { tellViewingAgent } from '../agent/bridge';
 import { host, read, type BuildOffer } from '../host';
@@ -33,25 +33,36 @@ export async function enterBuild(request: string): Promise<void> {
 }
 
 /**
- * Takes up the viewing agent's offer: enters build mode, and starts the build agent on the offered tiles
- * at once. Its conversation is its own, so its first message is all it knows: each tile's error as it
- * stands now, and the viewing agent's note. A tile drawing again by now is left out.
+ * Takes up the viewing agent's offer: enters build mode, and starts the build agent on it at once. Its
+ * conversation is its own, so its first message is all it knows: each offered tile as it stands now, and
+ * the viewing agent's note. A tile drawing again by now still goes, saying so, and the build agent tells the
+ * viewer there's nothing to fix.
  */
 export async function switchToBuild(offer: BuildOffer): Promise<void> {
   const reports = host.health.errors({ tiles: offer.tiles });
+  const blocks = offer.tiles.map((tile) => {
+    const report = reports.find((r) => r.place.scope === tile);
+    return report ? errorBlock(report) : drawsAgainBlock(tile, read().health.find((p) => p.scope === tile && p.where === 'tile') ?? null);
+  });
   host.build.dismissOffer();
-  if (reports.length === 0) {
-    await enterBuild('');
-    palette.push('system', `${offer.tiles.length === 1 ? 'That tile draws' : 'Those tiles draw'} again, so the build agent has nothing to fix.`);
-    return;
-  }
-  const note = `<from_viewing_agent>\n${offer.note}\n</from_viewing_agent>`;
-  const request = [...reports.map(errorBlock), note].join('\n\n');
+  const request = [...blocks, `<from_viewing_agent>\n${offer.note}\n</from_viewing_agent>`].join('\n\n');
   await enterBuild('');
   if (!read().build.active) return;
-  const tags = reports.map((r) => ({ scope: r.place.scope, label: r.place.label }));
-  palette.push('system', 'went to the build agent.', undefined, undefined, tags);
+  if (offer.tiles.length) {
+    const tags = offer.tiles.map((tile) => ({ scope: tile, label: read().health.find((p) => p.scope === tile)?.label ?? tile }));
+    palette.push('system', 'went to the build agent.', undefined, undefined, tags);
+  } else {
+    palette.push('system', `Asked the build agent to ${offerReason(offer.reason, false)}.`);
+  }
   await sendToAgent(request, { echo: false, attach: false });
+}
+
+/** The offer's reason as a phrase in a sentence: its first letter up to start one, or down to go inside one. */
+export function offerReason(reason: string, start: boolean): string {
+  const text = reason.trim().replace(/[\s.?!]+$/, '');
+  // "HAM's tyres" keeps its capitals.
+  if (!start && /^[A-Z][A-Z0-9]/.test(text)) return text;
+  return (start ? text.charAt(0).toUpperCase() : text.charAt(0).toLowerCase()) + text.slice(1);
 }
 
 /** Turns the viewing agent's offer down: the tiles stay as they are, and can be attached again. */

@@ -1,11 +1,11 @@
 /**
- * The viewing agent's offer of build mode, laid out as the spoiler check is, between the history and the
- * input. Entering build mode lets its agent look ahead without asking, so the offer says what `/build`
- * says in red. ← → move between answers, Enter answers, Esc stays.
+ * The viewing agent's offer of build mode, as "<reason> in build mode?", laid out as the spoiler check is,
+ * between the history and the input. Entering build mode lets its agent look ahead without asking, so the
+ * offer says what `/build` says in red. ← → move between answers, Enter answers, Esc stays.
  */
 import { forwardRef, useImperativeHandle, useRef, type KeyboardEvent } from 'react';
 import type { BuildOffer } from '../host';
-import { stayInView, switchToBuild } from './buildMode';
+import { offerReason, stayInView, switchToBuild } from './buildMode';
 
 export interface BuildOfferPromptHandle {
   focus(): void;
@@ -38,7 +38,7 @@ export const BuildOfferPrompt = forwardRef<BuildOfferPromptHandle, { offer: Buil
     <>
       <div className="spoiler build-offer" data-testid="build-offer" role="alertdialog" aria-label="Offer of build mode">
         <div>
-          Fix in <span className="build-offer-mode">build mode</span>? <span className="spoiler-label">! spoiler</span>{' '}
+          {offerReason(offer.reason, true)} in <span className="build-offer-mode">build mode</span>? <span className="spoiler-label">! spoiler</span>{' '}
           <span className="build-offer-why">the build agent looks ahead without asking</span>
         </div>
         <div className="spoiler-actions">

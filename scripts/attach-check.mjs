@@ -149,7 +149,7 @@ if (!agent) {
   // As offer_build would leave it.
   await page.evaluate(async (id) => {
     const { host } = await import('/src/host/index.ts');
-    host.build.offer({ tiles: [id], note: 'attach_check names the car ahead, and the leader has none. Its props are fine.' });
+    host.build.offer({ reason: 'fix the attach check', tiles: [id], note: 'attach_check names the car ahead, and the leader has none. Its props are fine.' });
   }, broken);
   await page.waitForSelector('[data-testid=build-offer]');
   check('the offer takes focus on Switch to build', await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'offer-switch'));
