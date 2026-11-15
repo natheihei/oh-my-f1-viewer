@@ -55,8 +55,8 @@ const state = () =>
       session: s.session?.title ?? null,
       contentId: s.session?.contentId ?? null,
       tiles: l.tiles.map((t) => t.component.label),
-      statuses: Object.values(s.streams).map((v) => `${s.channels.find((c) => c.id === v.channelId)?.label}:${v.status}`),
-      audio: s.channels.find((c) => c.id === s.audioChannelId)?.label ?? null,
+      statuses: Object.values(s.streams).map((v) => `${s.channels.find((c) => c.id === v.feed)?.label}:${v.status}`),
+      audio: s.channels.find((c) => c.id === s.streams[s.audioVideoId]?.feed)?.label ?? null,
       playing: s.clock.playing,
       t: s.clock.timeSec,
     };

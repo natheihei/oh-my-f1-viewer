@@ -1,5 +1,5 @@
 /**
- * One playing channel: a <video> and its Shaka player. This object owns the element and lives
+ * One video of a channel: a <video> and its Shaka player, for one holder. This object owns the element and lives
  * outside React, so moving a tile around the layout can never restart or pause a stream.
  * Ported from F1OpenViewer's ShakaVideo, which holds the hard-won DRM and live-edge behaviour.
  */
@@ -81,6 +81,8 @@ export class StreamHandle {
   private recoveries = 0;
 
   constructor(
+    /** The video's id: one per holder, so a feed shown twice is two of these. */
+    readonly id: string,
     readonly channel: Channel,
     private readonly options: StreamOptions,
   ) {
@@ -90,6 +92,7 @@ export class StreamHandle {
     video.autoplay = false;
     video.className = 'stream-video';
     video.dataset.channel = channel.id;
+    video.dataset.video = id;
     this.video = video;
   }
 

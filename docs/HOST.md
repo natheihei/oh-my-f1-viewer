@@ -33,10 +33,11 @@ A selector must return a value or an existing reference. Building a new object o
 | --- | --- | --- |
 | `session` | `SessionInfo \| null` | The open session: `contentId`, `title`, `type`, `year`, `startMs`, `endMs`, `meetingKey`, `sessionKey`, `hasOnboards`, `series`, `status` (`'replay' \| 'live' \| 'upcoming'`) |
 | `feeds` | `Channel[]` | The feeds the open session offers: `id` (`${contentId}:${channelId ?? 0}`), `kind` (`main`, `onboard`, `data`, `tracker`, `other`), `label` (a driver code like HAM, or the channel name), `title`, and for onboards `driverName`, `driverCode`, `team`, `number` |
-| `streams` | `Record<feedId, StreamView>` | Each mounted stream's `status` and `error` |
-| `audio` | `string \| null` | The audible feed, or null if everything is muted |
+| `streams` | `Record<videoId, StreamView>` | Every video playing: `id`, `feed`, `tile` (the tile it's in, or null in a preview), `quiet` (a preview's, never heard), `status` and `error`. A feed shown in two places is two videos, each its own stream, in the order they started |
+| `audio` | `string \| null` | The one video heard, by its id, or null if none is |
 | `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
+| `headers` | `Record<tileId, TileHeader>` | What each tile's component says its title bar shows, where it says: `label`, `drivers`, `status` (`load`, `sync` or `error`) and `audio` (`on` or `muted`). See `useTileHeader` below |
 | `layout` | `LayoutState` | `tiles` (each tile's `id`, `component` spec and grid rect, in the order they were added), `manual` (whether the mouse has moved something), `main` (the id of the tile with the main place in auto-layout, or null) |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
@@ -183,10 +184,14 @@ All of these act on every stream at once.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `set` | `feed: string \| null` | Makes that one feed audible, or mutes everything with `null` |
-| `setVolume` | `volume: number` (0 to 1) | Sets the master volume. The audible feed stays the same |
+| `set` | `video: string \| null` | Makes that one video heard, by its id from `live.streams`, or none with `null`. Fails for a preview's video, or one that isn't playing |
+| `setVolume` | `volume: number` (0 to 1) | Sets the master volume. The heard video stays the same |
 | `changeVolumeBy` | `amount: number` | Raises the master volume, or lowers it with a negative number |
-| `toggleMute` | none | Mutes the master volume or restores it. If no feed is audible, makes the default feed audible |
+| `toggleMute` | none | Mutes the master volume or restores it. If no video is heard, makes the default one heard: the main feed's oldest, else the oldest |
+
+When the heard video stops, the sound moves to the first of: the video that takes it over (a preview becoming its tile, or a
+component drawn again, keeps its video and id); another video of the same feed; a video its tile started in the same moment, the same
+`slot` first, so a tile switching pictures keeps the sound; the main feed's oldest video; none.
 
 ### `host.layout`
 
@@ -263,7 +268,7 @@ feed id.
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `offer` | `items: { type, props }[]` | Adds the components to the strip. Videos stop at `MAX_SUGGESTED_STREAMS` (4), since each preview is a real stream; other components don't count. One already suggested or added this turn is skipped. Fails once the user has dismissed the strip this turn. Returns `{ suggested, onScreen, repeated, overLimit }`, as labels |
+| `offer` | `items: { type, props }[]` | Adds the components to the strip, with no limit on how many: each preview's videos are real streams, so many cost bandwidth. One already suggested or added this turn is skipped. Fails once the user has dismissed the strip this turn. Returns `{ suggested, onScreen, repeated }`, as labels |
 | `add` | `key: string` | Adds the suggestion where auto-layout puts it, and takes it out of the strip. A suggestion that's already on screen only leaves the strip. Returns whether the key matched |
 | `dragOver` | `key: string`, `x: number`, `y: number` | Shows where a suggestion dragged to that pointer position (client pixels) would land |
 | `drop` | `key: string`, `x: number`, `y: number` | Drops a suggestion there, splitting the tile under the pointer or filling the gap. Returns whether it landed |
@@ -288,9 +293,22 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 
 ## Primitives
 
-- `<Video feed={id} />` shows a feed. Mounting it is what asks for the stream, and unmounting gives it back. It's the one thing that
-  isn't a write, because a stream lasts exactly as long as the tile showing it.
-- `<PreviewScope>` marks the `<Video>`s inside it as previews: they show their feed without taking its audio. The suggestion strip
+- `useStream(feed, { slot })` holds one video of a feed while the component is drawn, and gives it back after: it's the one thing that
+  isn't a write, because a video lasts exactly as long as what shows it. Each call is its own video and stream, so a feed can show in
+  several places, playing independently (sharing one is a later optimisation). A null feed holds nothing, and that picture is off. It
+  returns a `Stream`: `id`, `feed`, `label`, `status`, `error`, `heard` (`on`, `muted` or null) and `quiet`. `slot` names which picture
+  it is in a component with more than one, for where the sound goes when a heard picture switches feed.
+- `<Video stream={stream} />` draws a video: it fills its box, letterboxes the picture, shows the feed's name and status until it's
+  ready, and stays shown through seeks. Hovering shows a speaker mark, and a click makes it the video heard, bringing the volume back
+  from 0. The heard one keeps its mark when its tile has more than one picture. `<Video feed={id} />` holds one and draws it.
+- `streamSlots(...streams)` turns a component's videos into the title bar's slots: the worst status and the sound. Spread it into
+  `useTileHeader`.
+- `useTileHeader({ label, drivers, status, audio })` says what the tile's title bar shows, for as long as the component is drawn. Each
+  field left out comes from the spec, so a component whose content changes as the viewer uses it, like the battle showing whichever
+  fight was picked, names what it shows itself. The host draws the bar; build mode's mark and looking ahead stay the host's.
+- `useTileState(key, initial)` is `useState` kept with the tile: a component drawn again, as when its mod is saved, gets back what it
+  had. It goes when the tile leaves the grid. `useTilePlace()` says which tile or preview a component is drawn in.
+- `<PreviewScope>` marks the videos inside it as previews: they show their feed and are never heard. The suggestion strip
   uses it.
 - `<Grid />` draws the layout, showing each tile with the registered component its spec names, along with where a dragged
   suggestion would land. Every tile has an error boundary: a component that throws while drawing shows the error in its own tile, and
@@ -342,35 +360,35 @@ matching and gates (spoiler approval among them). The host doesn't know about an
 
 The agent can't put a feed on screen itself: it suggests tiles, and the user adds them. `src/agent/bridge.ts` sends it the event
 index (`live.events`) with every message, so it can work out which weekend the user means without a tool. It also sends what
-`host.suggestions.newTurn` reports, and the tiles on screen, a chart by its label, component name and props.
+`host.suggestions.newTurn` reports, and the tiles on screen, each by its title, component name and props, and the feeds it shows.
 
-Every registered component but `video` is a chart. The bridge lists them at the end of the system prompt, one line each: name, title,
+The bridge lists every registered component but `video`, which `suggest_tiles` takes as `streams`, at the end of the system prompt, one line each: name, title,
 session types, description and props, each marked required or optional. With none registered, the list is left out. Once session data is ready, the
 tables `query_session` can read follow, from `sessionData.tables`: one line each with its columns, and `about` where a table has one.
-Before that the list is left out, and the tool refuses anyway. `suggest_tiles` takes charts
+Before that the list is left out, and the tool refuses anyway. `suggest_tiles` takes components
 by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
 `drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
-without one. A required prop left out is refused, with a note to ask the user whose; a chart never picks its own. `edit_tile` changes
-the props of one chart on screen in place, only those it names, null taking one away. `remove_tiles` and `edit_tile` name tiles by the
-ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream); tile-4 Pit 44 (pit_window chart, props {"driver":44})`, and refuse
-anything else, labels included. The agent never sees what a chart shows, and a
+without one. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
+the props of one component on screen in place, only those it names, null taking one away. `remove_tiles` and `edit_tile` name tiles by the
+ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream); tile-4 Pit 44 (pit_window, props {"driver":44}); tile-5 Battle NOR · VER (battle, shows Lando Norris, Max Verstappen)`, and refuse
+anything else, labels included. A tile's title is what its component says, from `live.headers`. The agent never sees what a component shows, and a
 refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:
 
 | Tool | Host function |
 | --- | --- |
 | `list_sessions`, `list_live`, `list_upcoming` | `host.catalog.sessions`, `.live`, `.upcoming` |
 | `load_session`, `list_streams` | `host.session.open`, `.feeds` |
-| `suggest_tiles` | `host.suggestions.offer`, for streams and charts |
-| `remove_tiles` | `host.layout.remove`, for streams and charts |
-| `edit_tile` | `host.layout.setProps`, for one chart |
-| `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer asks for that no chart does |
-| `set_audio` | `host.audio.set` |
+| `suggest_tiles` | `host.suggestions.offer`, for streams and components |
+| `remove_tiles` | `host.layout.remove`, for any tile |
+| `edit_tile` | `host.layout.setProps`, for one component that isn't video |
+| `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer asks for that no component does |
+| `set_audio` | `host.audio.set`. It takes a stream name, and picks the video: the one already heard if it shows that feed, else the one in the main tile, else the oldest. It refuses a feed no tile shows |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
 | `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
-`app_state` also carries the master volume next to the audible feed, so the agent never calls a feed audible at volume 0. It carries the
+`app_state` also carries the master volume next to the heard video and its tile, so the agent never calls a feed audible at volume 0. It carries the
 playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 

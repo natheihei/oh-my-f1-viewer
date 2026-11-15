@@ -27,7 +27,7 @@ app through one write path. f1a adopts the idea, not the machinery.
 │ reads    session · clock · feeds · streams · data …        │
 │ writes   host.session · playback · audio · layout ·        │
 │          appearance (typed)                                │
-│ native   <Video feed /> · <Grid /> · <Backdrop />          │
+│ native   useStream · <Video /> · <Grid /> · <Backdrop />   │
 ├ CORE ──────────────────────────────────────────────────────┤
 │ Data · Playback (streams, sync) · Layout (tree, GridStack) │
 │ Per-year/race spec → parser registry → one output shape    │
@@ -54,8 +54,10 @@ host.playback.seekBy({ seconds: -10 });
 host.layout.setProps({ tile: 'tile-3', props: { driver: 44 } });
 await host.catalog.events({ year });
 
-// A native primitive, like Herdr's embedded terminal: mounting it is what requests the stream
-<Video feed={id} />
+// A native primitive, like Herdr's embedded terminal: holding a video is what requests the stream
+const stream = useStream(feed);
+<Video stream={stream} />
+useTileHeader({ label: 'Battle', drivers: [4, 1], ...streamSlots(a, b) }); // what the title bar shows
 
 // A component
 export default defineComponent({
@@ -87,21 +89,30 @@ arguments from the host's declares its own, and `adapt` must turn them into the 
 The agent can change the layout, except that it can't add to it: it suggests tiles, and the user adds them. It names a tile on screen by
 its id, which `app_state` lists.
 
-### Charts
+### Components
 
-Every registered component but video is a chart. Each message carries a list of them at the end of the system prompt: name, title,
-session types, description and props. The agent picks one by its description, fills in its props and suggests it next to the onboards
-it's about.
-Suggesting a chart shows the agent no race data, so it needs no approval gate of its own. Its SQL tool is separate, and has the gate
+A component is a spec that conforms to its props and draws in a tile. Charts are components that happen to draw charts, `video` is
+one that draws a feed, and `battle` draws two feeds and a list: nothing is attached to any kind. (2026-11-15.) Each message carries a
+list of every component but video at the end of the system prompt, which `streams` names by feed: name, title, session types,
+description and props. The agent picks one by its description, fills in its props and suggests it, a chart next to the onboards it's
+about.
+
+- What the viewer picks inside a tile is the component's own state, not props: the battle has none, and starts on the closest fight.
+  Its title bar says what it shows, from `useTileHeader`, and `app_state` lists that with the feeds the tile shows, so the agent knows,
+  but it can't change the pick.
+- Sound belongs to a video. "Play HAM's onboard audio" still names a stream: `set_audio` picks the video, without asking, and refuses a
+  feed no tile shows.
+
+Suggesting a component shows the agent no race data, so it needs no approval gate of its own. Its SQL tool is separate, and has the gate
 described below:
 
 - A chart declares the props it needs, and the agent fills them in: only the drivers the user named, as car numbers. A chart never
   picks a driver itself, so one about a driver needs one (#77). The agent changes them on screen with `edit_tile`.
 - A refusal never depends on how the session is going. It may say no session is open, the chart is for another session type, the session
   has no data, the name is unknown, or the props are missing or don't fit.
-- The agent has not seen what a chart shows, so it never describes it.
+- The agent has not seen what a component shows, so it never describes it.
 
-Once session data is ready, the tables `query_session` can read follow the charts, from `sessionData.tables`. The tool's own description
+Once session data is ready, the tables `query_session` can read follow the components, from `sessionData.tables`. The tool's own description
 doesn't change, so opening a session only changes the end of the system prompt.
 
 ### A tile that isn't drawing
@@ -138,14 +149,15 @@ strip.
   `size.aspect` (see `src/shell/stripShape.ts`). A hand-picked size is at least 120×60, at most the strip's width and half the window's
   height, and holds for that component for the rest of the app session, across turns but not restarts. Double-clicking a grip gives back
   the automatic shape. Resizing never adds or drags the card, and the size doesn't carry to the tile it becomes.
-- Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, up to four
-  streams. The user's next message clears it, and tells the agent what they added, dismissed or left.
+- Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, with no
+  limit on streams (2026-11-15: each preview's videos are real streams, so this costs bandwidth, accepted for now). The user's next message clears it, and tells the agent what they added, dismissed or left.
 - Keys: the first suggestion takes focus. ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
   dismisses the strip, but while the agent is still working it takes a second Esc, which also stops the turn: otherwise the agent could fill
   the strip again right after.
 - The palette stays open while the strip is showing.
-- A preview holds its stream quietly: it never becomes audible. Streams are ref-counted, one `<video>` per feed, so adding a previewed
-  suggestion hands the same element to the tile rather than starting the stream again. That matters for DRM and the CDN alike. `/` commands stay a separate set for the user, and the two don't share entries.
+- A preview holds its videos quietly: they're never heard. Each holder has its own video, but one let go is taken over by a new holder
+  of the same feed in the same moment, so adding a previewed suggestion hands the same element to the tile rather than starting the
+  stream again. That matters for DRM and the CDN alike. `/` commands stay a separate set for the user, and the two don't share entries.
 
 ### Mentions
 

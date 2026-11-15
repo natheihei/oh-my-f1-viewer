@@ -15,18 +15,22 @@ import { useHealth, type Attachment, type PlaceHealth } from './health';
 import { useMods } from './mods';
 import type { ModStatus } from '../../shared/mods';
 import { useSuggestions, type SuggestionsView } from './suggestions';
+import { useTileHeaders, type TileHeader } from './tile';
 import { useCountdown, type Countdown } from './viewing';
 
 export interface Live {
   session: SessionInfo | null;
   feeds: Channel[];
+  /** Every video playing, by its id: a feed shown in two places is two videos. */
   streams: Record<string, StreamView>;
-  /** The feed that's audible, if any. */
+  /** The one video that's audible, by its id, if any. */
   audio: string | null;
   /** Master level from 0 to 1. */
   volume: number;
   clock: ClockState;
   layout: LayoutState;
+  /** What each tile's component says its title bar shows, by tile id, where it says. See `useTileHeader`. */
+  headers: Record<string, TileHeader>;
   countdown: Countdown | null;
   /** Tiles the agent suggested this turn, waiting in the strip. */
   suggestions: SuggestionsView;
@@ -59,15 +63,16 @@ export interface Live {
 }
 
 export function read(): Live {
-  const { session, channels, streams, audioChannelId, volume, clock } = useSession.getState();
+  const { session, channels, streams, audioVideoId, volume, clock } = useSession.getState();
   return {
     session,
     feeds: channels,
     streams,
-    audio: audioChannelId,
+    audio: audioVideoId,
     volume,
     clock,
     layout: useLayout.getState(),
+    headers: useTileHeaders.getState().headers,
     countdown: useCountdown.getState().countdown,
     suggestions: useSuggestions.getState(),
     events: useEventIndex.getState(),
@@ -90,6 +95,7 @@ function subscribe(onChange: () => void): () => void {
   const stops = [
     useSession.subscribe(onChange),
     useLayout.subscribe(onChange),
+    useTileHeaders.subscribe(onChange),
     useCountdown.subscribe(onChange),
     useSuggestions.subscribe(onChange),
     useEventIndex.subscribe(onChange),

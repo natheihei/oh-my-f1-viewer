@@ -60,8 +60,9 @@ export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
 export type { Op } from './op';
-export { PreviewScope, Video } from './Video';
-export { MAX_SUGGESTED_STREAMS, type SuggestionsView } from './suggestions';
+export { PreviewScope, streamSlots, useStream, Video, type Stream } from './Video';
+export { useTileHeader, useTilePlace, useTileState, type TileHeader, type TilePlace } from './tile';
+export type { SuggestionsView } from './suggestions';
 export type { Countdown } from './viewing';
 export type { Service } from '../data/account';
 export { FIRST_SEASON, type EventIndex } from '../data/catalog';
@@ -122,10 +123,11 @@ const playback = {
 const audio = {
   set: write(
     {
-      description: 'Choose which single feed is audible, or null to mute everything.',
-      args: Type.Object({ feed: Type.Union([Type.String(), Type.Null()]) }),
+      description:
+        'Choose the one video that is heard, by its id from live.streams, or null to hear none. A feed shown in two places is two videos, each with its own sound. A preview is never heard.',
+      args: Type.Object({ video: Type.Union([Type.String(), Type.Null()]) }),
     },
-    ({ feed }) => sessionControl.setAudio(feed),
+    ({ video }) => sessionControl.setAudio(video),
   ),
   setVolume: write(
     {
