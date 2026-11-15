@@ -15,7 +15,7 @@
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
-import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, MAX_SUGGESTED_STREAMS, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
+import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 import { formatClock } from '../../shared/clock';
@@ -152,43 +152,69 @@ function matchAll(refs: string[]): { feeds: Channel[]; missing: string[] } {
 
 const videosOf = (feeds: Channel[]) => feeds.map((f) => ({ type: 'video', props: { feed: f.id } }));
 const missingNote = (missing: string[]) => (missing.length ? ` Not found: ${missing.join(', ')}. Use list_streams to see the options.` : '');
-const onScreen = (id: string) => tilesOf(read().layout).some((t) => t.component.key === id);
+/** Whether a feed shows on screen: in its own tile, or in any component's. */
+const onScreen = (id: string) => {
+  const { layout, streams } = read();
+  return tilesOf(layout).some((t) => t.component.key === id) || Object.values(streams).some((v) => v.feed === id && v.tile != null && !v.quiet);
+};
+
+/**
+ * The video to hear for a stream the model named: the one already heard if it shows that feed, else
+ * the one in the main tile, else the oldest. Undefined when no tile shows it.
+ */
+function videoToHear(ref: string): string | undefined {
+  const { feeds, streams, audio, layout } = read();
+  const feed = resolveChannel(feeds, ref)?.id;
+  if (!feed) return undefined;
+  const videos = Object.values(streams).filter((v) => v.feed === feed && v.tile != null && !v.quiet);
+  return (videos.find((v) => v.id === audio) ?? videos.find((v) => v.tile === layout.main) ?? videos[0])?.id;
+}
+
+/** The heard video, as the agent is told it: its feed, and its tile. */
+function heardName(): string | null {
+  const { audio, streams, feeds } = read();
+  const video = audio != null ? streams[audio] : undefined;
+  if (!video) return null;
+  const label = feeds.find((f) => f.id === video.feed)?.label ?? video.feed;
+  return video.tile ? `${label} in ${video.tile}` : label;
+}
 
 function isoDate(ms: number | null): string | null {
   return ms ? new Date(ms).toISOString().slice(0, 16) + 'Z' : null;
 }
 
-// Charts: every component but video. The agent picks them by description and never sees what they show.
+// Components: every one but video, which `streams` names by feed. Charts are components like any other.
+// The agent picks them by description and never sees what they show.
 
 const VIDEO = 'video';
-const chartsOf = (): ComponentInfo[] => read().components.filter((c) => c.name !== VIDEO);
+const componentsOf = (): ComponentInfo[] => read().components.filter((c) => c.name !== VIDEO);
 
-/** The charts the viewing agent is offered: those that fit the open session. */
-export const offeredCharts = (): ComponentInfo[] => fitting(chartsOf(), read().session);
+/** The components the viewing agent is offered: those that fit the open session. */
+export const offeredComponents = (): ComponentInfo[] => fitting(componentsOf(), read().session);
 
 type PropSchema = { type?: string; description?: string; minItems?: number; maxItems?: number };
-const propsOf = (chart: ComponentInfo) => (chart.args.properties ?? {}) as Record<string, PropSchema>;
-const requiredOf = (chart: ComponentInfo) => new Set((chart.args.required ?? []) as string[]);
+const propsOf = (c: ComponentInfo) => (c.args.properties ?? {}) as Record<string, PropSchema>;
+const requiredOf = (c: ComponentInfo) => new Set((c.args.required ?? []) as string[]);
 
-/** A chart's props for the chart list: each with whether it's required and what it is, or "no props". */
-export function propsText(chart: ComponentInfo): string {
-  const required = requiredOf(chart);
-  const parts = Object.entries(propsOf(chart)).map(([name, p]) => {
+/** A component's props for the component list: each with whether it's required and what it is, or "no props". */
+export function propsText(c: ComponentInfo): string {
+  const required = requiredOf(c);
+  const parts = Object.entries(propsOf(c)).map(([name, p]) => {
     const most = p.type === 'array' && p.maxItems != null ? `, at most ${p.maxItems}` : '';
     return `${name} (${required.has(name) ? 'required' : 'optional'}${most})${p.description ? `: ${p.description}` : ''}`;
   });
   return parts.length ? `props ${parts.join('; ')}` : 'no props';
 }
 
-const ChartProps = Type.Record(Type.String(), Type.Unknown(), {
+const ComponentProps = Type.Record(Type.String(), Type.Unknown(), {
   description:
-    "The chart's props, from its line in the chart list. Give every required one. A driver prop takes a driver code (HAM), surname (Hamilton) or car number (44): one for a prop named driver…, a list for drivers….",
+    "The component's props, from its line in the component list. Give every required one. A driver prop takes a driver code (HAM), surname (Hamilton) or car number (44): one for a prop named driver…, a list for drivers….",
 });
 
-const ChartRef = Type.Object(
+const ComponentRef = Type.Object(
   {
-    chart: Type.String({ description: 'A chart name from the chart list' }),
-    props: Type.Optional(ChartProps),
+    component: Type.String({ description: 'A component name from the component list' }),
+    props: Type.Optional(ComponentProps),
   },
   { additionalProperties: false },
 );
@@ -196,17 +222,17 @@ const ChartRef = Type.Object(
 const SuggestArgs = Type.Object(
   {
     streams: Type.Optional(StreamRefs),
-    charts: Type.Optional(Type.Array(ChartRef, { description: 'Charts, each with its props' })),
+    components: Type.Optional(Type.Array(ComponentRef, { description: 'Components, each with its props' })),
   },
   { additionalProperties: false },
 );
 
-/** `suggest_tiles` as the model sees it: the names of the charts it is offered, or no charts at all. */
+/** `suggest_tiles` as the model sees it: the names of the components it is offered, or no components at all. */
 function suggestArgs(): typeof SuggestArgs {
   const schema = JSON.parse(JSON.stringify(SuggestArgs));
-  const names = offeredCharts().map((c) => c.name);
-  if (names.length) schema.properties.charts.items.properties.chart.enum = names;
-  else delete schema.properties.charts;
+  const names = offeredComponents().map((c) => c.name);
+  if (names.length) schema.properties.components.items.properties.component.enum = names;
+  else delete schema.properties.components;
   return schema;
 }
 
@@ -218,20 +244,20 @@ const rosterNow = () => {
 };
 
 /**
- * The props the model gave a chart, with drivers as car numbers, and what's wrong with them. Each driver
+ * The props the model gave a component, with drivers as car numbers, and what's wrong with them. Each driver
  * prop takes codes, names or numbers, one or a list by its name. `given` replaces what's in `base`, and a
- * null takes a prop away. Props the chart doesn't declare are refused, so a typo isn't silently dropped.
+ * null takes a prop away. Props the component doesn't declare are refused, so a typo isn't silently dropped.
  * `base` loses any it doesn't declare: a tile from before an edit to its mod can hold props the mod no longer has.
  */
-export function resolveProps(chart: ComponentInfo, given: Record<string, unknown>, base: Record<string, unknown> = {}): { props: Record<string, unknown>; problems: string[] } {
-  const declared = propsOf(chart);
+export function resolveProps(component: ComponentInfo, given: Record<string, unknown>, base: Record<string, unknown> = {}): { props: Record<string, unknown>; problems: string[] } {
+  const declared = propsOf(component);
   const roster = rosterNow();
   const props: Record<string, unknown> = Object.fromEntries(Object.entries(base).filter(([name]) => name in declared));
   const problems: string[] = [];
   const unknown: string[] = [];
   for (const [name, value] of Object.entries(given)) {
     if (!(name in declared)) {
-      problems.push(`${chart.name} has no prop "${name}": it takes ${Object.keys(declared).join(', ') || 'none'}.`);
+      problems.push(`${component.name} has no prop "${name}": it takes ${Object.keys(declared).join(', ') || 'none'}.`);
       continue;
     }
     if (value === null) {
@@ -251,35 +277,35 @@ export function resolveProps(chart: ComponentInfo, given: Record<string, unknown
     }
     if (isDriverList(name)) props[name] = numbers;
     else if (numbers.length === 1) props[name] = numbers[0];
-    else if (refs.length > 1) problems.push(`${chart.name}'s ${name} is one driver, and ${refs.length} were given.`);
+    else if (refs.length > 1) problems.push(`${component.name}'s ${name} is one driver, and ${refs.length} were given.`);
   }
   if (unknown.length) problems.push(`No driver matches ${unknown.map((u) => `"${u}"`).join(', ')} in this session: ask the user who they mean.`);
   if (problems.length) return { props, problems };
-  const missing = [...requiredOf(chart)].filter((name) => !(name in props));
+  const missing = [...requiredOf(component)].filter((name) => !(name in props));
   if (missing.length) {
     const drivers = missing.some(isDriverProp) ? ': ask the user which driver, unless the conversation already says' : '';
-    return { props, problems: [`${chart.name} needs ${missing.join(' and ')}, and none was given${drivers}.`] };
+    return { props, problems: [`${component.name} needs ${missing.join(' and ')}, and none was given${drivers}.`] };
   }
   try {
-    specOf({ type: chart.name, props });
+    specOf({ type: component.name, props });
   } catch (e) {
-    problems.push(`${chart.name}: ${(e as Error).message.replace(/^Invalid props for [^:]+: /, '')}.`);
+    problems.push(`${component.name}: ${(e as Error).message.replace(/^Invalid props for [^:]+: /, '')}.`);
   }
   return { props, problems };
 }
 
 /**
- * Turns the charts the model named into items, with drivers as car numbers. A problem never depends on
+ * Turns the components the model named into items, with drivers as car numbers. A problem never depends on
  * how the session is going: only on the session's type and whether it is live, missing data, an unknown name or the props.
  */
-function planCharts(charts: Static<typeof ChartRef>[]): { items: Item[]; problems: string[] } {
+function planComponents(components: Static<typeof ComponentRef>[]): { items: Item[]; problems: string[] } {
   const { session, sessionData } = read();
   const items: Item[] = [];
   const problems: string[] = [];
-  for (const { chart, props: given = {} } of charts) {
-    const info = chartsOf().find((c) => c.name === chart || normalize(c.title) === normalize(chart));
+  for (const { component, props: given = {} } of components) {
+    const info = componentsOf().find((c) => c.name === component || normalize(c.title) === normalize(component));
     if (!info) {
-      problems.push(`There is no chart "${chart}": pick a name from the chart list.`);
+      problems.push(`There is no component "${component}": pick a name from the component list.`);
       continue;
     }
     const why = misfit(info, session);
@@ -304,34 +330,34 @@ const ID_HINT = 'Name tiles by the ids app_state lists, such as tile-3.';
 const tileOnScreen = (id: string) => tilesOf(read().layout).find((t) => t.id === id) ?? null;
 
 /**
- * `suggest_tiles`. The viewing agent's lists the chart names registered when the message was sent. The
+ * `suggest_tiles`. The viewing agent's lists the component names registered when the message was sent. The
  * build agent's takes any name, since it suggests mods it wrote during the turn.
  */
 const suggestTiles = (args: typeof SuggestArgs | (() => typeof SuggestArgs)): AgentTool =>
   expose(host.suggestions.offer, {
     name: 'suggest_tiles',
-    description: `Suggest streams and charts as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. At most ${MAX_SUGGESTED_STREAMS} streams wait in the strip at a time. Charts come from the chart list, each with its props filled in.`,
+    description:
+      'Suggest streams and components as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. Components come from the component list, each with its props filled in.',
     args,
-    adapt: ({ streams = [], charts = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planCharts(charts).items] }),
+    adapt: ({ streams = [], components = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planComponents(components).items] }),
     gate: [
       sessionOpen,
-      (_, { streams = [], charts = [] }) => {
-        if (streams.length === 0 && charts.length === 0) throw new Error('Name at least one stream or chart.');
+      (_, { streams = [], components = [] }) => {
+        if (streams.length === 0 && components.length === 0) throw new Error('Name at least one stream or component.');
       },
-      (_, { charts = [] }) => {
-        const { problems } = planCharts(charts);
+      (_, { components = [] }) => {
+        const { problems } = planComponents(components);
         if (problems.length) throw new Error(`${problems.join(' ')} Nothing was suggested.`);
       },
       ({ items }, { streams = [] }) => {
         if (items.length === 0) throw new Error(`No matching streams.${missingNote(matchAll(streams).missing)}`);
       },
     ],
-    result: ({ suggested, onScreen, repeated, overLimit }, { streams = [] }) => {
+    result: ({ suggested, onScreen, repeated }, { streams = [] }) => {
       const parts = [
         suggested.length ? `Suggested: ${suggested.join(', ')}.` : '',
         onScreen.length ? `Already on screen, shown as such: ${onScreen.join(', ')}.` : '',
         repeated.length ? `Already suggested this turn: ${repeated.join(', ')}.` : '',
-        overLimit.length ? `Left out, the strip is full: ${overLimit.join(', ')}.` : '',
       ];
       return `${parts.filter(Boolean).join(' ')}${missingNote(matchAll(streams).missing)} The user decides; nothing is on screen until they add it.`;
     },
@@ -468,7 +494,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   suggestTiles(suggestArgs),
   expose(host.layout.remove, {
     name: 'remove_tiles',
-    description: 'Take tiles off screen, streams or charts, by their tile ids.',
+    description: 'Take tiles off screen, streams or components, by their tile ids.',
     args: Type.Object({ tiles: Type.Array(TileId) }, { additionalProperties: false }),
     gate: [
       sessionOpen,
@@ -482,11 +508,11 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.layout.setProps, {
     name: 'edit_tile',
     description:
-      'Change the props of one chart on screen, in place: who it is about, who it highlights or who it draws. It keeps its id and place. Only the props named change; null takes one away. To show the same chart for someone else as well, suggest another with suggest_tiles instead.',
-    args: Type.Object({ tile: TileId, props: ChartProps }, { additionalProperties: false }),
+      'Change the props of one component on screen, in place: who it is about, who it highlights or who it draws. It keeps its id and place. Only the props named change; null takes one away. To show the same component for someone else as well, suggest another with suggest_tiles instead.',
+    args: Type.Object({ tile: TileId, props: ComponentProps }, { additionalProperties: false }),
     adapt: ({ tile, props }) => {
       const hit = tileOnScreen(tile);
-      const info = hit && chartsOf().find((c) => c.name === hit.component.type);
+      const info = hit && componentsOf().find((c) => c.name === hit.component.type);
       return { tile, props: info ? resolveProps(info, props, hit.component.props).props : {} };
     },
     gate: [
@@ -494,19 +520,19 @@ export const AGENT_TOOLS: AgentTool[] = [
       (_, { tile, props }) => {
         const hit = tileOnScreen(tile);
         if (!hit) throw new Error(`No tile ${tile} is on screen. ${ID_HINT}`);
-        const info = chartsOf().find((c) => c.name === hit.component.type);
-        if (!info) throw new Error(`${tile} is a stream, not a chart: only a chart's props can be changed.`);
+        const info = componentsOf().find((c) => c.name === hit.component.type);
+        if (!info) throw new Error(`${tile} is a stream: only a component's props can be changed. To show another stream, suggest it.`);
         const { problems } = resolveProps(info, props, hit.component.props);
         if (problems.length) throw new Error(`${problems.join(' ')} Nothing was changed.`);
       },
     ],
-    result: (out) => (out ? `Changed: ${out.label}.` : 'That chart is no longer on screen.'),
-    hints: [[/Already on screen/, 'A chart with those props is already on screen: leave this one as it is, or remove it.']],
+    result: (out) => (out ? `Changed: ${out.label}.` : 'That tile is no longer on screen.'),
+    hints: [[/Already on screen/, 'A component with those props is already on screen: leave this one as it is, or remove it.']],
   }),
   expose(host.build.offer, {
     name: 'offer_build',
     description:
-      "Offer the user build mode, where the build agent writes components' code: to fix tiles whose render error is in it, or to build a chart or change one when that is what the user asks for. The user answers in the palette. If they switch, the build agent gets the errors of the tiles you name and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
+      "Offer the user build mode, where the build agent writes components' code: to fix tiles whose render error is in it, or to build a component or change one when that is what the user asks for. The user answers in the palette. If they switch, the build agent gets the errors of the tiles you name and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
     args: Type.Object(
       {
         reason: Type.String({
@@ -532,20 +558,20 @@ export const AGENT_TOOLS: AgentTool[] = [
   }),
   expose(host.audio.set, {
     name: 'set_audio',
-    description: 'Choose which single stream is audible, or mute everything with "none".',
+    description:
+      'Choose which single stream is heard, or mute everything with "none". With a stream on screen in more than one tile, the app picks which one: say only which stream.',
     args: Type.Object({ stream: Type.String({ description: 'A stream reference, or "none"' }) }, { additionalProperties: false }),
-    adapt: ({ stream }) => ({ feed: normalize(stream) === 'none' ? null : (resolveChannel(read().feeds, stream)?.id ?? stream) }),
+    adapt: ({ stream }) => ({ video: normalize(stream) === 'none' ? null : (videoToHear(stream) ?? null) }),
     gate: [
       sessionOpen,
-      ({ feed }, { stream }) => {
-        if (feed != null && !onScreen(feed)) throw new Error(`"${stream}" is not on screen.`);
+      (_, { stream }) => {
+        if (normalize(stream) !== 'none' && videoToHear(stream) === undefined) throw new Error(`"${stream}" is not on screen. Suggest it first.`);
       },
     ],
     result: () => {
-      const { audio, feeds, volume } = read();
-      if (audio == null) return 'All streams muted.';
-      const label = feeds.find((f) => f.id === audio)?.label;
-      return volume === 0 ? `Audio is now ${label}, but the volume is 0, so nothing can be heard.` : `Audio is now ${label}.`;
+      const label = heardName();
+      if (label == null) return 'All streams muted.';
+      return read().volume === 0 ? `Audio is now ${label}, but the volume is 0, so nothing can be heard.` : `Audio is now ${label}.`;
     },
   }),
   expose(host.audio.setVolume, {

@@ -55,7 +55,7 @@ await page.waitForFunction(() => window.read().sessionData.state === 'ready' && 
 
 // Muted, and paused so the playhead only moves when the agent moves it.
 await page.evaluate(() => {
-  window.host.audio.set({ feed: null });
+  window.host.audio.set({ video: null });
   window.host.playback.pause();
 });
 await page.waitForTimeout(1000);

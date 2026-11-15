@@ -171,10 +171,10 @@ describe('suggested tiles', () => {
     expect(keys()).toEqual(['VER', 'NOR']);
   });
 
-  it('holds at most four streams at a time', async () => {
+  it('holds any number of streams', async () => {
     const out = await runTool('suggest_tiles', { streams: ['HAM', 'VER', 'NOR', 'LEC', 'PER'] });
-    expect(keys()).toHaveLength(4);
-    expect(out).toMatch(/strip is full: PER/);
+    expect(keys()).toHaveLength(5);
+    expect(out).not.toMatch(/full/);
   });
 
   it('adding a suggestion puts it on screen and takes it out of the strip', async () => {
@@ -282,12 +282,12 @@ describe('components', () => {
     expect(layout.tiles()).toEqual([]);
   });
 
-  it('only video counts toward the stream limit', () => {
+  it('take any number of streams', () => {
     const out = host.suggestions.offer({
       items: [...['1:44', '1:1', '1:4', '1:16'].map(video), { type: 'test-chart', props: { driver: 'HAM' } }, video('1:11')],
     });
-    expect(out.overLimit).toEqual(['PER']);
-    expect(labels()).toEqual(['HAM', 'VER', 'NOR', 'LEC', 'Chart HAM']);
+    expect(out.suggested).toEqual(['HAM', 'VER', 'NOR', 'LEC', 'Chart HAM', 'PER']);
+    expect(labels()).toEqual(['HAM', 'VER', 'NOR', 'LEC', 'Chart HAM', 'PER']);
   });
 
   it('return the id of the tile showing each, whether added now or already on screen', () => {
@@ -598,41 +598,71 @@ describe('seeking to a moment', () => {
 describe('the master volume', () => {
   const open = { contentId: 1, title: 'Race', type: 'race', status: 'replay' } as SessionInfo;
   let setAudio: MockInstance<typeof sessionControl.setAudio>;
+  let ham = '';
+  const videoOf = (id: string, feed: string, tile: string | null, quiet = false) => ({ id, feed, tile, quiet, status: 'ready' as const, error: null });
 
   beforeEach(() => {
-    useSession.setState({ session: open, channels, audioChannelId: '1:44', volume: 0.6 });
     layout.clear();
-    host.layout.add({ items: [video('1:44')] });
-    setAudio = vi.spyOn(sessionControl, 'setAudio').mockImplementation((id) => useSession.setState({ audioChannelId: id }));
+    useSession.setState({ session: open, channels, volume: 0.6 });
+    [ham] = host.layout.add({ items: [video('1:44')] });
+    useSession.setState({ streams: { v1: videoOf('v1', '1:44', ham) }, audioVideoId: 'v1' });
+    setAudio = vi.spyOn(sessionControl, 'setAudio').mockImplementation((id) => useSession.setState({ audioVideoId: id }));
   });
   afterEach(() => {
     setAudio.mockRestore();
     layout.clear();
-    useSession.setState({ session: null, channels: [], audioChannelId: null, volume: 1 });
+    useSession.setState({ session: null, channels: [], streams: {}, audioVideoId: null, volume: 1 });
   });
 
-  it('is in app_state next to the audible feed', () => {
-    expect(describeAppState()).toContain('audio: HAM at 60% volume');
+  it('is in app_state next to the audible video and its tile', () => {
+    expect(describeAppState()).toContain(`audio: HAM in ${ham} at 60% volume`);
     useSession.setState({ volume: 0 });
-    expect(describeAppState()).toContain('audio: HAM, but the volume is 0 so nothing can be heard');
-    useSession.setState({ audioChannelId: null });
+    expect(describeAppState()).toContain(`audio: HAM in ${ham}, but the volume is 0 so nothing can be heard`);
+    useSession.setState({ audioVideoId: null });
     expect(describeAppState()).toContain('audio: muted');
   });
 
   it('is set as a percentage', async () => {
     expect(await runTool('set_volume', { volume: 35 })).toBe('Volume is now 35%.');
     expect(useSession.getState().volume).toBe(0.35);
-    expect(useSession.getState().audioChannelId).toBe('1:44');
+    expect(useSession.getState().audioVideoId).toBe('v1');
   });
 
   it('says when no stream is audible to hear it', async () => {
-    useSession.setState({ audioChannelId: null });
+    useSession.setState({ audioVideoId: null });
     expect(await runTool('set_volume', { volume: 80 })).toBe('Volume is now 80%. No stream is audible; choose one with set_audio.');
   });
 
   it('makes set_audio warn when nothing can be heard', async () => {
-    expect(await runTool('set_audio', { stream: 'HAM' })).toBe('Audio is now HAM.');
+    expect(await runTool('set_audio', { stream: 'HAM' })).toBe(`Audio is now HAM in ${ham}.`);
     useSession.setState({ volume: 0 });
-    expect(await runTool('set_audio', { stream: 'HAM' })).toBe('Audio is now HAM, but the volume is 0, so nothing can be heard.');
+    expect(await runTool('set_audio', { stream: 'HAM' })).toBe(`Audio is now HAM in ${ham}, but the volume is 0, so nothing can be heard.`);
+  });
+
+  it('picks the video for a stream shown in more than one tile, without asking', async () => {
+    const [battle] = host.layout.add({ items: [video('1:1')] });
+    // HAM also shows in a second tile, as a component's picture would, and a preview of it is never heard.
+    useSession.setState({
+      streams: { v1: videoOf('v1', '1:44', ham), v2: videoOf('v2', '1:44', battle), v3: videoOf('v3', '1:44', null, true) },
+      audioVideoId: null,
+    });
+    // No main tile: the oldest.
+    await runTool('set_audio', { stream: 'Hamilton' });
+    expect(setAudio).toHaveBeenLastCalledWith('v1');
+    // The main tile's comes first.
+    host.layout.setMain({ tile: battle });
+    useSession.setState({ audioVideoId: null });
+    await runTool('set_audio', { stream: 'HAM' });
+    expect(setAudio).toHaveBeenLastCalledWith('v2');
+    // The one already heard stays, if it shows that stream.
+    useSession.setState({ audioVideoId: 'v1' });
+    await runTool('set_audio', { stream: 'HAM' });
+    expect(setAudio).toHaveBeenLastCalledWith('v1');
+  });
+
+  it('refuses a stream no tile shows', async () => {
+    await expect(runTool('set_audio', { stream: 'NOR' })).rejects.toThrow('"NOR" is not on screen. Suggest it first.');
+    expect(await runTool('set_audio', { stream: 'none' })).toBe('All streams muted.');
+    expect(setAudio).toHaveBeenLastCalledWith(null);
   });
 });

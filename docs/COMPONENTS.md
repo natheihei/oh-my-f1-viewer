@@ -26,6 +26,10 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **No title of its own.** The tile's title bar shows the spec's label. The first thing in the view is content. A spec about some
   drivers returns them as `drivers`, with the label as the name alone, and the title bar draws each as a code after the name.
   (2026-11-13, #78. The label was one string, so in "TELEMETRY HAM" the code read with the same weight as the chart's name.)
+- **A component whose content changes as the viewer uses it names what it shows,** with `useTileHeader({ label, drivers })`, and the
+  title bar draws that in place of the spec's. Each field it leaves out comes from the spec. (2026-11-15.)
+- **What the viewer picks inside a tile is state, not props.** Props are what whoever puts the tile on screen decides; a pick made in
+  the tile, like the battle's fight, is the component's, kept with `useTileState` so it survives the mod being saved. (2026-11-15.)
 - **It declares the props it needs, and whoever puts it on screen fills them in.** The agent does, from what the user said, when it
   suggests the tile, so a preview in the suggestion strip is already about its drivers and the tile stays about them. A component
   never picks a driver from the data itself, or from which onboards are on screen, unless following one is its job (a "leader"
@@ -154,6 +158,36 @@ and dim text in race control.)
 
 - **It shows only what has happened at the playhead** unless it declares `looksAhead`, and it never has race data written into its
   source. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) and [BUILD_MODE.md](BUILD_MODE.md).
+
+## Video in a component
+
+Any component can show feeds: `video` is just the one that shows one feed and nothing else. (2026-11-15.)
+
+- **Each picture is its own video and stream.** `useStream(feed)` holds one, and `<Video stream />` draws it with its own loading
+  status. A feed can show in two tiles at once, each playing on its own. Every picture costs a stream from the CDN, so hold only
+  what's on screen: a picture that's off holds none.
+- **A driver's onboard comes from `live.feeds`:** the feed with `kind` `onboard` and their car number. Some sessions lack one, so say
+  "No onboard" where it would go.
+- **The stream slots are the component's to say.** It spreads `streamSlots(...)` of its videos into `useTileHeader`, so the title bar
+  says when they load or catch up, and which tile is heard.
+- **The sound belongs to a picture.** A click on a picture makes it the one heard. A component with more than one names each with a
+  `slot`, so when a heard picture switches feed the sound stays with it.
+
+### Battle
+
+- **For watching fights, not measuring them.** Two onboards stacked, and the fights at the playhead to pick from. How a gap moves is
+  `gap_evolution`'s question, so the battle shows each fight's gap as one number and nothing over time.
+- **A fight is two cars next to each other on the road,** the one behind within the chase aid of the one ahead: DRS, or Overtake
+  from 2026. A train of three is two fights. Lapped and retired cars aren't in one.
+- **No props.** It starts on the closest fight, and the viewer picks another in the list, which turns both pictures back on. It keeps
+  the pair after they drift apart, until the viewer picks again. Each picture has its driver's code and an off switch.
+- **One on screen.** With no props, two battles would have the same key.
+
+### Chase
+
+- **One driver's onboard, with the car ahead on the road and the interval to it,** in the corner. Within the chase aid, the gap and
+  the aid's name are set in ink. The car ahead is worked out from the order each time it changes; the leader shows none.
+- **The driver is a prop,** since who to follow is what the viewer asked for. The title bar names them like any tile about a driver.
 
 ## Charts
 
@@ -565,6 +599,10 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
 | Writing `AGENTS.md` into the mods folder | `electron/mods/index.ts` |
 | The host's overflow check and mark | `src/host/overflow.ts`, `src/host/Grid.tsx` |
 | The size declaration | `src/host/components.ts` |
+| Holding and drawing a video, and its title bar slots | `src/host/Video.tsx` |
+| What a component says its title bar shows, and the state it keeps with its tile | `src/host/tile.ts` |
+| Who is fighting whom, and the car ahead | `src/components/fights.ts` |
+| The battle and the chase in the real app, with one feed in two tiles and where the sound goes | `scripts/battle-check.mjs` |
 | Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
 | Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |

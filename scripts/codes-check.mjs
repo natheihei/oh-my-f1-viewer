@@ -112,7 +112,13 @@ async function shoot(name, items, audio) {
       host.layout.remove({ tiles: tilesOf(read().layout).map((t) => t.id) });
       host.layout.add({ items });
       host.layout.autoLayout();
-      if (audio) host.audio.set({ feed: audio });
+      if (audio) {
+        // The video of that feed, once its tile holds one.
+        const deadline = Date.now() + 10_000;
+        let video = null;
+        while (Date.now() < deadline && !(video = Object.values(read().streams).find((v) => v.feed === audio && v.tile))) await new Promise((r) => setTimeout(r, 200));
+        if (video) host.audio.set({ video: video.id });
+      }
     },
     [items, audio ?? null],
   );

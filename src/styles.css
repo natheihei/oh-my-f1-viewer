@@ -336,12 +336,46 @@
   @apply absolute inset-0 bg-black;
 }
 
-.tile-video {
+/*
+ * A video, from <Video>: it fills the box it's given and letterboxes the picture. Hovering one that can
+ * be heard shows a speaker mark in the slot style, and clicking makes it the one heard. The heard one
+ * keeps its mark while its tile has more than one picture; with one, the title bar says it.
+ */
+.video {
+  @apply relative h-full w-full overflow-hidden bg-black;
+}
+
+.tile > .video {
   @apply absolute inset-0;
 }
 
-.tile-video-hidden {
+.video-hearable {
+  cursor: pointer;
+}
+
+.video-picture {
+  @apply absolute inset-0;
+}
+
+.video-picture-hidden {
   visibility: hidden;
+}
+
+.video-sound {
+  @apply pointer-events-none absolute right-1 top-1 border border-line bg-black px-1 text-dim;
+  font-size: var(--text-s);
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  opacity: 0;
+}
+
+.video-hearable:hover .video-sound,
+.video-many[data-heard] .video-sound {
+  opacity: 1;
+}
+
+.video[data-heard='on'] .video-sound {
+  @apply border-ink text-ink;
 }
 
 .stream-video {
@@ -378,6 +412,109 @@
 .chart-message {
   @apply absolute inset-0 flex items-center justify-center p-2 text-center text-dim;
   font-size: var(--text-s);
+}
+
+/*
+ * Battle: two onboards stacked on the left, the fights on the right. In a tile taller than wide, the
+ * pictures stack at their own shape and the fights go below. Each picture names its driver in a bar
+ * over its top left, with a switch to turn it off; the picked fight is set in ink.
+ */
+.battle-host {
+  @apply absolute inset-0;
+  container-type: size;
+}
+
+.battle {
+  @apply absolute inset-0 grid bg-black;
+  grid-template-columns: 1fr 150px;
+  grid-template-rows: 1fr 1fr;
+}
+
+@container (orientation: portrait) {
+  .battle {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .battle-picture {
+    aspect-ratio: 16 / 9;
+  }
+
+  .battle .battle-list {
+    @apply border-l-0 border-t border-line;
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+.battle-picture {
+  @apply relative min-h-0 min-w-0 border-b border-line;
+  grid-column: 1;
+}
+
+.battle-picture:nth-of-type(2) {
+  @apply border-b-0;
+}
+
+.battle-picture-bar {
+  @apply absolute left-1 top-1 flex items-center gap-1 bg-black px-1;
+  font-size: var(--text-s);
+  line-height: 16px;
+}
+
+.battle-switch {
+  @apply border border-line px-1 text-dim hover:border-ink hover:text-ink;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+}
+
+.battle-list {
+  @apply relative min-h-0 overflow-y-auto border-l border-line;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.battle-fights {
+  @apply flex flex-col py-1;
+}
+
+.battle-fight {
+  @apply flex w-full items-center gap-2 px-2 text-left text-dim hover:bg-select;
+  height: var(--row);
+  font-size: var(--text-s);
+}
+
+.battle-fight-on {
+  @apply bg-select text-ink;
+}
+
+.battle-fight-pos {
+  @apply w-[3ch] text-mute;
+}
+
+.battle-fight-gap {
+  @apply ml-auto tabular-nums;
+}
+
+/* Chase: the car ahead and the gap to it, over the onboard's bottom left. Within the chase aid it's set in ink. */
+.chase-ahead {
+  @apply pointer-events-none absolute bottom-1 left-1 flex items-center gap-2 bg-black px-2 text-dim;
+  font-size: var(--text-s);
+  line-height: 18px;
+}
+
+.chase-ahead-word {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chase-ahead-gap {
+  @apply tabular-nums;
+}
+
+.chase-ahead-close .chase-ahead-gap,
+.chase-ahead-aid {
+  @apply font-bold text-ink;
 }
 
 /* Race control: what is in force on top, then the messages, newest first, in a list that scrolls. */

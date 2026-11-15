@@ -83,7 +83,6 @@ function addTitleBar(item: Element, tile: Tile, onClose: (id: string) => void): 
   const bar = document.createElement('div');
   bar.className = `tile-titlebar ${GRIP}`;
   bar.dataset.tileId = tile.id;
-  bar.dataset.kind = tile.component.type === 'video' ? 'video' : 'view';
   const title = document.createElement('span');
   title.className = 'tile-title';
   title.textContent = tile.component.label;
@@ -125,7 +124,7 @@ export function GridSurface({
   /** What each tile's header slots show, by tile id. */
   states?: Record<string, TileState>;
   /** Fills a tile's title from its component; a new function redraws every title. Without it, the title is the label. */
-  drawTitle?: (el: HTMLElement, component: ComponentSpec) => void;
+  drawTitle?: (el: HTMLElement, component: ComponentSpec, tileId: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<GridStack | null>(null);
@@ -220,7 +219,7 @@ export function GridSurface({
     hostRef.current?.querySelectorAll<HTMLElement>('.tile-titlebar[data-tile-id]').forEach((bar) => {
       const component = components.get(bar.dataset.tileId ?? '');
       const title = bar.querySelector<HTMLElement>(':scope > .tile-title');
-      if (component && title) drawTitle(title, component);
+      if (component && title) drawTitle(title, component, bar.dataset.tileId ?? '');
     });
   }, [tiles, drawTitle]);
 

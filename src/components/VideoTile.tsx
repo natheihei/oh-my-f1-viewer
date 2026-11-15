@@ -1,39 +1,14 @@
-/** A video feed in the layout. The stream itself belongs to the host. */
-import { useEffect, useState } from 'react';
+/** A video feed in the layout: one picture, which the title bar names. */
 import Type from 'typebox';
-import { defineComponent, read, useLive, Video } from '../host';
+import { defineComponent, read, streamSlots, useStream, useTileHeader, Video } from '../host';
 
-function VideoTile({ props, label }: { props: { feed: string }; label: string }) {
-  const { feed } = props;
-  const view = useLive((s) => s.streams[feed]);
-  // Once shown, a tile stays visible through seeks: its status line says when it is catching up.
-  const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    if (view?.status === 'ready') setRevealed(true);
-  }, [view?.status]);
-
-  const status = view?.status ?? 'resolving';
-  const statusText =
-    status === 'error'
-      ? view?.error || 'playback failed'
-      : status === 'resolving'
-        ? 'connecting…'
-        : status === 'loading'
-          ? 'loading…'
-          : status === 'syncing'
-            ? 'syncing…'
-            : '';
-
+function VideoTile({ props }: { props: { feed: string }; label: string }) {
+  const stream = useStream(props.feed);
+  // The label and drivers come from the spec. Whether it's loading, catching up or heard comes from the video.
+  useTileHeader(streamSlots(stream));
   return (
-    <div className="tile" data-status={status}>
-      <Video feed={feed} className={`tile-video ${revealed ? '' : 'tile-video-hidden'}`} />
-      {/* The label, which feed is heard, and catching up after a seek are in the header the grid draws. */}
-      {statusText && (status === 'error' || !revealed) ? (
-        <div className={`tile-status ${status === 'error' ? 'tile-status-error' : ''}`} data-testid="tile-status">
-          <span className="tile-status-name">{label}</span> {statusText}
-        </div>
-      ) : null}
+    <div className="tile">
+      <Video stream={stream} />
     </div>
   );
 }
@@ -47,7 +22,7 @@ export default defineComponent({
   fit: { aspect: 16 / 9 },
   // Below this a picture is a thumbnail.
   size: { aspect: 16 / 9, min: { width: 320, height: 180 } },
-  // Keyed by feed, so a feed is on screen at most once.
+  // Keyed by feed, so one video tile shows a feed. Other components may show it too.
   spec: ({ feed }) => {
     const channel = read().feeds.find((c) => c.id === feed);
     if (!channel) throw new Error(`Unknown feed: ${feed}`);

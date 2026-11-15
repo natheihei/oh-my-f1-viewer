@@ -31,12 +31,15 @@ Everything a component, the shell or the agent can do goes through here. [HOST.m
   time series, and can't write.
 - **Writes and queries:** typed functions such as `host.playback.seekBy({ seconds: -10 })`. Each declares its description and argument schema, and
   none of them checks who's calling. Policy, such as spoiler approval, belongs to the caller.
-- **Primitives:** `<Video feed={id} />` shows a feed, and `<Grid>` draws the layout. Mounting a `<Video>` is what asks for the stream, the one
-  thing that isn't a write function, because a stream's life follows the tile showing it.
+- **Primitives:** `useStream(feed)` holds a video of a feed and `<Video stream />` draws it, and `<Grid>` draws the layout. Holding a video
+  is what asks for the stream, the one thing that isn't a write function, because a video's life follows what shows it. Any component can
+  hold videos, as many as it likes: `video` is one component among the rest, and `battle` holds two. A component says what its title bar
+  shows with `useTileHeader`, and keeps what the viewer picks in it with `useTileState`.
 
 ## Charts (`src/components/charts`)
 
-Charts are components like video: one file each, holding the `defineComponent` declaration (the description the agent reads, `args`,
+A component is a spec that takes props and draws in a tile; nothing about charts is special. Charts are the components drawn on a
+canvas with the kit: one file each, holding the `defineComponent` declaration (the description the agent reads, `args`,
 `sessions`, `needs`, `size`), its SQL, a pure function from rows to a drawable model, and the drawing. They draw on Canvas 2D by hand,
 with no chart library. They may only import from the host, and from the kit beside them:
 
@@ -71,7 +74,12 @@ Keep the model's reference until its rows change (`useSql` already does for its 
 `session.ts` is the only source of "now". Upper layers acquire streams, read the clock, and issue play, pause and seek. They
 never touch a stream's time.
 
-- **Streams** (`stream.ts`) own their `<video>` and Shaka player outside React, so nothing in the UI can restart one.
+- **Streams** (`stream.ts`) own their `<video>` and Shaka player outside React, so nothing in the UI can restart one. There's one per
+  holder, named by a video id, so a feed shown in two tiles is two streams, synced to the clock on their own: two of a feed can sit up
+  to the sync threshold apart. One let go is kept for a moment, and a new holder of the same feed in that moment takes it over, so a
+  preview becoming its tile, or a component drawn again, carries on playing.
+- **Sound** belongs to one video, not a feed, so moving it between two videos of a feed never jumps. Clicking a picture makes it the
+  one heard. When the heard video stops, the sound moves as `HOST.md` says under `host.audio`.
 - **Clock.** A reference stream drives it: the main feed when available, otherwise another stream. With no streams at all an
   internal timer takes over, so closing the main feed doesn't stop time.
 - **Startup.** Streams start one at a time and wait out CDN hangs (see STATUS.md).
@@ -116,8 +124,9 @@ changes.
   tile is assigned with `host.layout.setMain`, which opening a session does for the main feed. With none assigned, tiles share the grid. Which goes where follows each component's declared shape and least size, and `src/layout/solve.ts` picks the arrangement that
   keeps tiles at their least size with the main tile as large as that allows. See [COMPONENTS.md](COMPONENTS.md).
 - Each tile has a title bar drawn by the grid, with its label, state slots and a close button. A label that names drivers draws
-  each as a driver code, from the roster, and is drawn again when the roster changes. The slots say which tile carries the sound,
-  when a stream is loading or catching up, and when a tile may look ahead, so nothing floats over the content. Only the title bar drags
+  each as a driver code, from the roster, and is drawn again when the roster changes. A component may replace the label and drivers
+  with its own, from `useTileHeader`. The slots say which tile carries the sound and when a stream is loading or catching up, both as
+  the component reports them, and when a tile may look ahead, so nothing floats over the content. Only the title bar drags
   and only the edges resize: everything else on the grid lets the mouse through to the component underneath.
 - A tile draws a hairline on its right and bottom edges only, so neighbours share one seam. Tiles are black on a slightly lifted
   ground, which is what separates them where there's no neighbour.

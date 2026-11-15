@@ -480,7 +480,7 @@ export default defineComponent({
   name: 'gap_evolution',
   title: 'Gap evolution',
   description:
-"Two drivers' battle: the gap between them over the last laps and whether it is closing, the line where DRS opens (Overtake from 2026) and whether the car behind is inside it, and each one's tyre and last lap. The one chart for a battle or a chase, next to both drivers' onboards.",
+"Two drivers' battle: the gap between them over the last laps and whether it is closing, the line where DRS opens (Overtake from 2026) and whether the car behind is inside it, and each one's tyre and last lap. The one chart for how a battle or chase between two named drivers is going, next to both drivers' onboards.",
   args: Type.Object({ driver_a: Driver('One of the two drivers'), driver_b: Driver('The other') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

@@ -119,7 +119,7 @@ const idOf = async (type) => (await tiles()).find((t) => t.type === type)?.id ??
 const same = (x, y) => JSON.stringify([...x].sort()) === JSON.stringify([...y].sort());
 
 // 1. A battle: the suggested chart is already about both drivers.
-await act(`battle between ${a.name} and ${b.name}`, 'suggest_tiles', { streams: [a.code, b.code], charts: [{ chart: 'gap_evolution', props: { driver_a: a.code, driver_b: b.code } }] });
+await act(`battle between ${a.name} and ${b.name}`, 'suggest_tiles', { streams: [a.code, b.code], components: [{ component: 'gap_evolution', props: { driver_a: a.code, driver_b: b.code } }] });
 const battle = (await strip()).find((s) => s.type === 'gap_evolution');
 check('a gap chart is suggested', battle != null, (await strip()).map((s) => s.label).join(', '));
 check('it is about both drivers from the start', battle != null && same([battle.props.driver_a, battle.props.driver_b], [a.number, b.number]), JSON.stringify(battle?.props));
@@ -128,7 +128,7 @@ await addFromStrip((await strip()).map((s) => s.key));
 
 // 2. A one-driver chart with no driver named: the agent asks whose, and nothing is picked for it.
 await page.evaluate(() => window.host.suggestions.newTurn());
-const pedals = await act('show me the pedal chart', 'suggest_tiles', { charts: [{ chart: 'pedal_barcode' }] });
+const pedals = await act('show me the pedal chart', 'suggest_tiles', { components: [{ component: 'pedal_barcode' }] });
 if (agent) check('the agent asks whose', /\?/.test(pedals.reply), pedals.reply);
 else check('a pedal chart with no driver is refused', !pedals.ok && /needs driver.*ask the user which driver/.test(pedals.text), pedals.text);
 check('no pedal chart is suggested without a driver', (await strip()).every((s) => s.type !== 'pedal_barcode' || s.props.driver != null));
@@ -136,7 +136,7 @@ if (agent) await shot('asks-whose');
 
 // 3. The same chart twice, for two drivers.
 await page.evaluate(() => window.host.suggestions.newTurn());
-await act(`telemetry for ${a.name}, and another for ${b.name}`, 'suggest_tiles', { charts: [{ chart: 'car_telemetry', props: { driver: a.code } }, { chart: 'car_telemetry', props: { driver: b.code } }] });
+await act(`telemetry for ${a.name}, and another for ${b.name}`, 'suggest_tiles', { components: [{ component: 'car_telemetry', props: { driver: a.code } }, { component: 'car_telemetry', props: { driver: b.code } }] });
 const telemetry = (await strip()).filter((s) => s.type === 'car_telemetry');
 check('a telemetry chart is suggested for each', same(telemetry.map((s) => s.props.driver), [a.number, b.number]), JSON.stringify(telemetry.map((s) => s.props)));
 await addFromStrip(telemetry.map((s) => s.key));
