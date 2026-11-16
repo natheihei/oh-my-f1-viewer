@@ -12,8 +12,6 @@ export type DerivedTable = (typeof DERIVED_TABLES)[number];
 
 export type RowTable =
   | Exclude<SqlTable, DerivedTable>
-  | 'starting_grid'
-  | 'session_result'
   | 'lap_count';
 
 export interface TableDefinition {
@@ -208,6 +206,7 @@ export const TABLES: TableDefinition[] = [
     key: ['driver_number'],
     columns: { position: 'INTEGER', lap_duration: 'REAL' },
     versioned: false,
+    about: 'Races and sprints only, from formula1.com, so empty in a live session. Shown from the start of the session. lap_duration is the qualifying time that set the place, in seconds.',
   },
   {
     name: 'session_result',
@@ -226,6 +225,9 @@ export const TABLES: TableDefinition[] = [
     versioned: false,
     json: ['duration', 'gap_to_leader'],
     booleans: ['dnf', 'dns', 'dsq'],
+    about:
+      'The published result, from formula1.com. Empty until the session has finished at the playhead, and in a live session. ' +
+      'duration and gap_to_leader are seconds, gap_to_leader can be text such as +1 LAP, and in qualifying both are JSON lists with one value per part. dnf, dns and dsq are 0 or 1.',
   },
 ];
 

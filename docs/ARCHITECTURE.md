@@ -87,7 +87,7 @@ never touch a stream's time.
   everyone while the reference stalls. The decisions are pure and unit-tested.
 - **Reveal.** A new stream reports `resolving`, `loading` and `syncing` before `ready`, and its tile shows that status instead
   of the picture until it is within 0.25s of the clock.
-- **Session data** (`sessionData.ts`) is the session database from this side: the calendar, the roster and results, and SQL over the time series, all as of the frame on screen, never later. Its `state`
+- **Session data** (`sessionData.ts`) is the session database from this side: the calendar, the roster and lap count, and SQL over the rest, all as of the frame on screen, never later. Its `state`
   says whether there's data and, if not, why. The database itself lives in `electron/timingdb`, on a worker thread. See [SESSION_DATA.md](SESSION_DATA.md).
 
 ### Aligning data to video

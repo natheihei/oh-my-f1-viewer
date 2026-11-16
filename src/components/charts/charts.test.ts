@@ -275,13 +275,12 @@ describe('timing_tower', () => {
   });
 
   it('counts places gained from the grid, but not for a retired car or one without a slot', () => {
-    const grid = [
-      { driver_number: 4, position: 3, lap_duration: null },
-      { driver_number: 1, position: 1, lap_duration: null },
-      { driver_number: 44, position: 2, lap_duration: null },
-      { driver_number: 16, position: null, lap_duration: null },
-    ];
-    const rows = towerModel([row(4, 1, null, null), row(1, 2, 1.2, 1.2), row(16, 3, 2, 0.8), row(44, 4, 9, 7, { is_out: 1 })], null, grid);
+    const rows = towerModel([
+      row(4, 1, null, null, { grid_position: 3 }),
+      row(1, 2, 1.2, 1.2, { grid_position: 1 }),
+      row(16, 3, 2, 0.8, { grid_position: null }),
+      row(44, 4, 9, 7, { is_out: 1, grid_position: 2 }),
+    ]);
     expect(rows.map((r) => r.gained)).toEqual([2, -1, null, null]);
   });
 
