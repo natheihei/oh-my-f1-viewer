@@ -1,9 +1,8 @@
 // Runs an f1a of its own for checks and screenshots, apart from any other f1a on the machine: a fresh
-// user data dir (the F1 TV login is copied in from ~/.config/f1a, never moved), or the main profile itself
-// when nothing else is using it and the run needs the agent's login, its own Vite
-// and devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
+// user data dir with copies of what it needs from ~/.config/f1a (see prepareProfile), its own Vite and
+// devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
 // the devtools protocol, since Playwright's own Electron launch would spawn the window where it pleases.
-import { copyFileSync, cpSync, existsSync, mkdtempSync, openSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -49,33 +48,78 @@ export function profileInUse(dir) {
   }
 }
 
+const CREDENTIALS = 'f1a-credentials.json';
+const SETTINGS = 'f1a-settings.json';
+/** The agent's login as each prepared profile got it, to tell whether a run refreshed it. */
+const copiedLogins = new Map();
+
+const readOrNull = (file) => (existsSync(file) ? readFileSync(file) : null);
+
 /**
- * Starts the app from the source, served by Vite, with its user data in `outDir`. The page gets 1600×900
- * CSS pixels, the room the charts are designed in, at `scale` device pixels each so a shot stays sharp.
- * Returns the page, `log`, `userData` (the user data dir it runs on), and `stop`, which closes only this instance.
- *
- * `mainProfile` runs on ~/.config/f1a itself instead, for the agent: its login (f1a-credentials.json) is never
- * copied, since a copy refreshes the token on first use, and a refresh token that rotates would sign the
- * main profile out. It refuses while another f1a is using that profile.
+ * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from ~/.config/f1a, and with
+ * `agent`, of the agent's login and its settings too (not the rest of the settings: the run's volume and
+ * background start from the defaults). The originals are never moved. The agent's login is written back after
+ * the run if it was refreshed: see syncAgentLogin. Returns `dir`.
  */
-export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, mainProfile = false } = {}) {
-  const log = (...a) => console.log(`[${name}]`, ...a);
-  const config = MAIN_PROFILE;
-  let userData = config;
-  // On the main profile, the window's size and place are put back after, so the next launch opens as before.
-  const windowState = path.join(config, 'window-state.json');
-  const savedWindow = mainProfile && existsSync(windowState) ? readFileSync(windowState) : null;
-  if (mainProfile) {
-    if (profileInUse(config)) throw new Error(`Another f1a is using ${config}: close it, or run without the agent.`);
-  } else {
-    // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
-    userData = mkdtempSync(path.join(outDir, 'user-data-'));
-    for (const file of ['f1a-session.json', 'f1a-cookies.json']) {
-      if (existsSync(path.join(config, file))) copyFileSync(path.join(config, file), path.join(userData, file));
-    }
-    // The DRM module, so the fresh dir doesn't fetch it again before the video can play.
-    if (existsSync(path.join(config, 'WidevineCdm'))) cpSync(path.join(config, 'WidevineCdm'), path.join(userData, 'WidevineCdm'), { recursive: true });
+export function prepareProfile(dir, { agent = false } = {}) {
+  mkdirSync(dir, { recursive: true });
+  for (const file of ['f1a-session.json', 'f1a-cookies.json']) {
+    if (existsSync(path.join(MAIN_PROFILE, file))) copyFileSync(path.join(MAIN_PROFILE, file), path.join(dir, file));
   }
+  // The DRM module, so the fresh dir doesn't fetch it again before the video can play.
+  if (existsSync(path.join(MAIN_PROFILE, 'WidevineCdm'))) cpSync(path.join(MAIN_PROFILE, 'WidevineCdm'), path.join(dir, 'WidevineCdm'), { recursive: true });
+  if (agent) {
+    // Encrypted with the OS keystore, which works the same for any profile of this app on this machine.
+    const login = readOrNull(path.join(MAIN_PROFILE, CREDENTIALS));
+    if (login) {
+      writeFileSync(path.join(dir, CREDENTIALS), login, { mode: 0o600 });
+      copiedLogins.set(dir, login);
+    }
+    let settings = {};
+    try {
+      settings = JSON.parse(readFileSync(path.join(MAIN_PROFILE, SETTINGS), 'utf8'));
+    } catch {}
+    if (settings.agent) writeFileSync(path.join(dir, SETTINGS), JSON.stringify({ agent: settings.agent }, null, 2));
+  }
+  return dir;
+}
+
+/**
+ * A sign-in like ChatGPT's refreshes its token when it expires, and the refresh token can change with it, which
+ * leaves the one in ~/.config/f1a no longer valid. So once a run's app has quit, a login it refreshed is
+ * written back there, unless something changed that one meanwhile, such as an f1a running on it.
+ */
+export function syncAgentLogin(dir, log = console.log) {
+  const copied = copiedLogins.get(dir);
+  if (!copied) return;
+  const now = readOrNull(path.join(dir, CREDENTIALS));
+  if (!now || now.equals(copied)) return;
+  const main = path.join(MAIN_PROFILE, CREDENTIALS);
+  if (!readOrNull(main)?.equals(copied)) {
+    log(`the agent's login was refreshed here, but ${main} changed meanwhile, so it was left as it is`);
+    return;
+  }
+  const next = `${main}.${process.pid}.tmp`;
+  writeFileSync(next, now, { mode: 0o600 });
+  chmodSync(next, 0o600);
+  renameSync(next, main);
+  copiedLogins.set(dir, now);
+  log(`the agent's login was refreshed, so it was written back to ${main}`);
+}
+
+/**
+ * Starts the app from the source, served by Vite, on a fresh profile in `outDir`, or on `userData` when a run
+ * prepared one to launch more than once. The page gets 1600×900 CSS pixels, the room the charts are designed in,
+ * at `scale` device pixels each so a shot stays sharp. Returns the page, `log`, `userData` (the user data dir it
+ * runs on), and `stop`, which closes only this instance.
+ *
+ * `agent` copies in the agent's login and settings, for runs with the real model: see prepareProfile.
+ */
+export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, agent = false, userData: given = null } = {}) {
+  const log = (...a) => console.log(`[${name}]`, ...a);
+  // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
+  const userData = given ?? prepareProfile(mkdtempSync(path.join(outDir, 'user-data-')), { agent });
+  if (profileInUse(userData)) throw new Error(`Another f1a is using ${userData}.`);
 
   const vitePort = await freePort();
   const cdpPort = await freePort();
@@ -129,10 +173,8 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
     }
     child?.kill();
     await server.close();
-    if (savedWindow) {
-      await until('The app never exited', async () => ownPids().length === 0, 15_000).catch(() => {});
-      writeFileSync(windowState, savedWindow);
-    }
+    await until('The app never exited', async () => ownPids().length === 0, 15_000).catch(() => {});
+    syncAgentLogin(userData, log);
   };
 
   if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {

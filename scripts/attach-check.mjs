@@ -5,9 +5,8 @@
 // By default there's no agent sign-in: it attaches the error, types into the tray, and catches what would
 // go to the agent in place of sending it. Then it offers build mode as offer_build would, and turns it down.
 // With --agent the real models answer: the error goes to the viewing agent with no words, and once it
-// offers build mode the check switches, waits for the build agent's turn, and checks the tile draws. That
-// runs on ~/.config/f1a itself, so the agent's login is never copied, and refuses while another f1a is using
-// it. It puts the mods folder back afterwards: Undo all, then the test mod goes.
+// offers build mode the check switches, waits for the build agent's turn, and checks the tile draws, with the
+// agent's login copied in. It puts the mods folder back afterwards: Undo all, then the test mod goes.
 // Needs the F1 TV sign-in. Prints race data: use a race you've watched.
 // Usage: node scripts/attach-check.mjs <out-dir> [--agent] [--session <key>] [--year 2026] [--lap 30]
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -57,7 +56,7 @@ export default defineComponent({
 });
 `;
 
-const { page, log, stop, userData } = await startIsolatedApp(outDir, { name: 'attach', mainProfile: agent });
+const { page, log, stop, userData } = await startIsolatedApp(outDir, { name: 'attach', agent });
 const modDir = path.join(userData, 'mods', MOD);
 const cleanUp = async () => {
   // Undo all puts back whatever a build changed; the test mod was there before it began, so it goes after.

@@ -1,14 +1,16 @@
 // Runs build mode in the real app, over a real replay race, muted, with the real agent: the cases in
-// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up, and a mods folder with no
-// mods in it: it works in the real profile's, and leaves it as it found it. Prints what the agent says,
-// which could give the race away: use a session you've watched.
+// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up in ~/.config/f1a.
+// It runs in an f1a of its own, with both logins copied in (see isolated.mjs), launched more than once on the same
+// profile, whose mods folder starts empty. Prints what the agent says, which could give the race away: use a
+// session you've watched.
 // Usage: node scripts/build-check.mjs <screenshot-dir> [sessionKey] [year] [lap]
 //   F1A_BUILD_PARTS picks parts to run, like "a" or "bc": a saves a build, b undoes one, c quits in one.
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+//   F1A_BUILD_PROFILE runs on that profile instead of a fresh one, so a later run can pick up what an earlier left.
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startApp, typeInPalette } from './harness.mjs';
 import { newestConversationText } from './conversations.mjs';
+import { prepareProfile } from './isolated.mjs';
 
 const outDir = process.argv[2];
 if (!outDir) throw new Error('Usage: node scripts/build-check.mjs <screenshot-dir> [sessionKey] [year] [lap]');
@@ -16,7 +18,8 @@ const [sessionKey, year, LAP] = [Number(process.argv[3] ?? 11396), Number(proces
 const PARTS = process.env.F1A_BUILD_PARTS ?? 'abc';
 mkdirSync(outDir, { recursive: true });
 
-const profile = path.join(os.homedir(), '.config', 'f1a');
+const profile = prepareProfile(process.env.F1A_BUILD_PROFILE ?? mkdtempSync(path.join(path.resolve(outDir), 'user-data-')), { agent: true });
+console.log(`profile: ${profile}`);
 const modsDir = path.join(profile, 'mods');
 const snapshotDir = path.join(profile, 'mods-snapshot');
 const LAP_FORM = readFileSync(path.resolve('examples/mods/lap_form/main.tsx'), 'utf8');
@@ -51,7 +54,7 @@ let readAheads = 0;
 let watcher = null;
 
 async function launch(port) {
-  ({ app, page, stop } = await startApp(port));
+  ({ app, page, stop } = await startApp(port, { userData: profile }));
   page.on('console', (m) => {
     if (m.type() === 'error') console.log('  [console error]', m.text().slice(0, 200));
   });
