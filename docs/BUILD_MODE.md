@@ -197,8 +197,8 @@ instructions, and a separate session keeps what the build read out of the viewin
 - **On exit, the viewing agent gets one line**, such as "Built lap_stepper, edited lap_form." The app writes it from the folder
   comparison. The model doesn't, so the line can't carry anything the build read. It arrives in the `app_state` of the viewer's next
   message, once. Undo all sends nothing.
-- **Each build is stored** as its own `<time>_build.sqlite` in `<userData>/conversations`, beside the viewing conversations'
-  `<time>_view.sqlite`, for reviewing what the build agent did: `node devscripts/conversation.mjs build`.
+- **Each build is stored** as its own `<time>_build.sqlite` in `<userData>/conversations`, beside the picking and viewing conversations'
+  `<time>_pick.sqlite` and `<time>_view.sqlite`, for reviewing what the build agent did: `node devscripts/conversation.mjs build`.
 
 ## Spoilers
 

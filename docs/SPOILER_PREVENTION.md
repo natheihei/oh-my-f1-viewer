@@ -12,7 +12,7 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
 | What the agent is given | Spoilers arriving unasked in the agent's input | `src/agent/bridge.ts`, `src/agent/tools.ts` |
 | The spoiler check | The agent reading ahead or seeking forward unapproved | `src/agent/spoilerGate.ts`, `src/shell/lookAhead.ts` |
 | Forgetting read-ahead turns | An approved read leaking into later turns | `electron/agent/extensions/forgetReadAhead.ts` |
-| The system prompt | The agent saying what it knows from memory | `shared/tools.ts` |
+| The system prompt | The agent saying what it knows from memory | `shared/viewPrompt.ts` |
 
 ## Data as of the playhead
 
@@ -98,12 +98,15 @@ If the agent needs the data again, it queries again. Under "Allow once" that ask
 
 ## The system prompt
 
-The prompt in `shared/tools.ts` covers what code can't:
+The viewing prompt, `VIEW_PROMPT` in `shared/viewPrompt.ts`, covers what code can't:
 
 - Never reveal results from memory, or from anything not approved to read.
 - With approval, the agent may answer from what that read returned. It's allowed to, not required to: "Jumped to lap 30." is still a fine answer.
 - Never ask for permission itself: the app asks.
 - Never describe what a chart shows.
+
+The picking prompt beside it, for when no session is open, says only never to reveal or hint at results. Its agent can't read a
+session or see a chart.
 
 ## What this doesn't cover
 

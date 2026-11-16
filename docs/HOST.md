@@ -395,9 +395,10 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 
-With no session open, as on a countdown, the viewing agent is shown only `list_sessions`, `list_live`, `list_upcoming` and `load_session`
-(`PICKING_TOOLS` in `src/agent/tools.ts`). The rest act on an open session. A call to one of them anyway, from an older turn, still
-reaches its gate, which refuses it.
+With no session open, as on a countdown, messages go to the picking agent, which has only `list_sessions`, `list_live`, `list_upcoming`
+and `load_session` (`PICKING_TOOLS` in `src/agent/tools.ts`). The rest act on an open session, and are the viewing agent's, which keeps
+these to switch sessions. A call to one of them anyway, from an older turn, still reaches its gate, which refuses it. See
+[ARCHITECTURE.md](ARCHITECTURE.md#agent) for how a message moves from one agent to the other.
 
 While build mode is on, messages go to a second agent with its own prompt (`shared/buildPrompt.ts`) and conversation. From this list it
 has `list_streams`, `remove_tiles`, `edit_tile`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`, and the last two don't
