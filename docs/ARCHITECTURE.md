@@ -160,16 +160,19 @@ Each conversation is a Harness of its own with three extensions: the prompt, as 
 reference; the renderer's tools, replaced by installing the extension again; and the rules, which are hooks. The cap on tool rounds
 per message is the conversation's `maxTurns`. Nothing of pi's own is in the prompt, and the model can only call what the app defines.
 
-Everything the agent keeps is under `<userData>/pi-agent`:
+What the agent keeps:
 
-- `auth.json` holds the connected provider's credential, in the shape pi-ai gives it (`credentialFile.ts`). `settings.json` is written
-  only if missing, so it can be edited, and `/settings-agent` saves the provider, model and thinking level there. It's read at every
-  message (`settingsFile.ts`).
-- `sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
+- **Its settings** live in the renderer with the rest of the UI state, in `localStorage` under `f1a.agent`
+  (`shared/agentSettings.ts`): the provider, model and thinking level `/settings-agent` chose, and the compaction and retry policy,
+  which is changed by hand. The renderer hands them to main before it asks anything about the agent, and keeps what main changes
+  when a provider is connected or a model chosen.
+- **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
+  keystore (`credentials.ts`), in the shape pi-ai gives it.
+- `<userData>/pi-agent/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
   results, and token use (`transcript.ts`). The lines are the ones pi's own sessions had. It's a record only: the conversation
   itself is in memory, in pi-durable's `MemoryStorage`, so a new conversation or a restart starts empty. The files hold whatever
   the agent read, including race data, stay on this machine, and aren't pruned.
-- `build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
+- `<userData>/pi-agent/build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
 - The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 
 `src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the
@@ -205,8 +208,8 @@ that refuse a call.
 - **The agent's provider** is connected in `/settings-agent`. A ChatGPT sign-in uses your real browser, with pi running the local
   callback on port 1455. An API key is typed into its own small sandboxed window (`electron/agent/keyWindow.ts`), not the app's
   renderer, because mods run there with no sandbox and could read it. The key goes straight to main, and the renderer never sees it.
-  pi keeps credentials in a plain `auth.json`, readable only by your user, in `agentDir`.
-- F1 TV credentials are encrypted with the OS keyring. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
+- Both sign-ins are encrypted with the OS keyring: F1 TV's in `f1a-session.json` and `f1a-cookies.json`, the agent provider's in
+  `f1a-credentials.json`. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
 
 ## What sessions exist

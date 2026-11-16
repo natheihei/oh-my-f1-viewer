@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
+import type { AgentSettings } from '../shared/agentSettings';
 import type { BuildState, ModStatus } from '../shared/mods';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
@@ -42,6 +43,8 @@ const api: F1aApi = {
     sql: (sessionKey, playheadMs, sql, params) => invoke('data:sql', sessionKey, playheadMs, sql, params),
   },
   ai: {
+    useSettings: (settings) => invoke('ai:useSettings', settings),
+    onSettings: (cb) => subscribe<AgentSettings>('ai:settings', cb),
     status: () => invoke('ai:status'),
     providers: () => invoke('ai:providers'),
     connect: (provider, way) => invoke('ai:connect', provider, way),
