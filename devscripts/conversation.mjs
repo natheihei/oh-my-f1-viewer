@@ -2,8 +2,8 @@
 // the messages with their app_state, tool calls and results, summaries, and what a read ahead had cut.
 // They hold whatever the agent read, including race data.
 //
-//   node devscripts/conversation.mjs                 the newest, viewing or building
-//   node devscripts/conversation.mjs build           the newest build
+//   node devscripts/conversation.mjs                 the newest, of any kind
+//   node devscripts/conversation.mjs view            the newest of a kind: pick, view or build
 //   node devscripts/conversation.mjs <file.sqlite>   that one
 //   F1A_CONVERSATIONS=<dir>                          another profile's conversations folder
 import { existsSync } from 'node:fs';
@@ -11,7 +11,7 @@ import { conversationEntries, conversationFiles, MAIN_CONVERSATIONS } from '../s
 
 const arg = process.argv[2];
 const dir = process.env.F1A_CONVERSATIONS ?? MAIN_CONVERSATIONS;
-const file = arg && existsSync(arg) ? arg : conversationFiles(dir, arg === 'view' || arg === 'build' ? arg : undefined).at(-1);
+const file = arg && existsSync(arg) ? arg : conversationFiles(dir, ['pick', 'view', 'build'].includes(arg) ? arg : undefined).at(-1);
 if (!file) {
   console.error(`No stored conversations in ${dir}.`);
   process.exit(1);

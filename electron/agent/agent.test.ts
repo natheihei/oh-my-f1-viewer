@@ -7,7 +7,7 @@ import type { Conversation as DurableConversation, Harness } from '@earendil-wor
 import type { AgentEvent, AgentToolCall, AgentToolDefinition } from '../../shared/api';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import type { PlaceHealth } from '../../shared/health';
-import { SYSTEM_PROMPT } from '../../shared/tools';
+import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
 
 const host = vi.hoisted(() => ({
   userData: '',
@@ -72,7 +72,7 @@ const text = (content: unknown): string =>
 const agentDir = () => path.join(host.userData, 'pi-agent');
 /** The stored conversations of one kind, oldest first: one database each. */
 const conversationsDir = () => path.join(host.userData, 'conversations');
-const conversationFiles = (kind: 'view' | 'build') =>
+const conversationFiles = (kind: 'pick' | 'view' | 'build') =>
   existsSync(conversationsDir()) ? readdirSync(conversationsDir()).filter((f) => f.endsWith(`_${kind}.sqlite`)).sort() : [];
 type StoredEntry = { kind: string; model?: Message[]; edits?: unknown[] };
 /** A stored conversation's entries, in order. */
@@ -297,7 +297,7 @@ describe('the prompt', () => {
     const { agent, requests, script } = setup();
     script(fauxAssistantMessage('ok'));
     await agent.send('hi', 'state', [TOOL], 'THE REFERENCE');
-    expect(requests[0].system).toBe(`${SYSTEM_PROMPT}\n\nTHE REFERENCE`);
+    expect(requests[0].system).toBe(`${VIEW_PROMPT}\n\nTHE REFERENCE`);
     expect(requests[0].tools).toEqual(['act']);
   });
 
@@ -305,7 +305,7 @@ describe('the prompt', () => {
     const { agent, requests, script } = setup();
     script(fauxAssistantMessage('ok'));
     await agent.send('hi', 'state', [TOOL]);
-    expect(requests[0].system).toBe(SYSTEM_PROMPT);
+    expect(requests[0].system).toBe(VIEW_PROMPT);
   });
 
   it('follows the reference as it changes, keeping the tools', async () => {
@@ -314,7 +314,7 @@ describe('the prompt', () => {
     await agent.send('a', 'state', [TOOL], 'FIRST');
     script(fauxAssistantMessage('two'));
     await agent.send('b', 'state', [TOOL], 'SECOND');
-    expect(requests[1].system).toBe(`${SYSTEM_PROMPT}\n\nSECOND`);
+    expect(requests[1].system).toBe(`${VIEW_PROMPT}\n\nSECOND`);
     expect(requests[1].tools).toEqual(['act']);
   });
 
@@ -323,6 +323,90 @@ describe('the prompt', () => {
     script(fauxAssistantMessage('ok'));
     await agent.send('/compact now', 'state', [TOOL]);
     expect(requests[0].lastUser).toContain('/compact now');
+  });
+});
+
+describe('picking and viewing', () => {
+  const OPEN: AgentToolDefinition = { ...TOOL, name: 'open' };
+  const VIEW_TOOL: AgentToolDefinition = { ...TOOL, name: 'view' };
+  /** The renderer answering every call, with `open` opening a session for the scope `scope`. */
+  function answerOpening(agent: InstanceType<typeof Agent>, scope = 'view-1') {
+    const calls: AgentToolCall[] = [];
+    host.onToolCall = (raw) => {
+      const call = raw as AgentToolCall;
+      calls.push(call);
+      const handoff = { mode: 'view' as const, scope, appState: `session: ${scope}`, reference: 'EVENTS AND CHARTS', tools: [OPEN, VIEW_TOOL] };
+      agent.onToolResult({ callId: call.callId, ok: true, content: 'Opened.', ...(call.name === 'open' ? { handoff } : {}) });
+    };
+    return calls;
+  }
+
+  it('picks with its own prompt, in a conversation of its own', async () => {
+    const { agent, requests, script } = setup();
+    script(fauxAssistantMessage('Which one?'), fauxAssistantMessage('ok'));
+    await agent.send('mexico', 'session: none open', [OPEN], 'EVENTS', 'pick', 'pick');
+    await agent.send('the race', 'session: none open', [OPEN], 'EVENTS', 'pick', 'pick');
+    expect(requests[0].system).toBe(`${PICK_PROMPT}\n\nEVENTS`);
+    expect(requests[1].history).toContain('Which one?');
+    expect(conversationFiles('pick')).toHaveLength(1);
+  });
+
+  it('answers the message again in a new viewing conversation once a call opens a session', async () => {
+    const { agent, requests, script } = setup();
+    const calls = answerOpening(agent);
+    script(fauxAssistantMessage([{ type: 'text', text: 'Opening. ' }, fauxToolCall('open', { n: 1 })]), fauxAssistantMessage('Suggested Norris.'));
+    await agent.send('mexico with norris', 'session: none open', [OPEN], 'EVENTS', 'pick', 'pick');
+    expect(calls.map((c) => c.name)).toEqual(['open']);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].system).toBe(`${VIEW_PROMPT}\n\nEVENTS AND CHARTS`);
+    expect(requests[1].tools).toEqual(['open', 'view']);
+    expect(requests[1].roles.filter((r) => r !== 'system')).toEqual(['user']);
+    expect(requests[1].lastUser).toBe('<app_state>\nsession: view-1\n</app_state>\n\nmexico with norris');
+    expect(said()).toBe('Opening. Suggested Norris.');
+    expect(types().filter((t) => t === 'turn_start' || t === 'turn_end')).toEqual(['turn_start', 'turn_end']);
+    expect(events().at(-1)).toMatchObject({ type: 'turn_end', acted: true });
+    expect(conversationFiles('pick')).toHaveLength(1);
+    expect(conversationFiles('view')).toHaveLength(1);
+  });
+
+  it('runs nothing more of the round that opened a session', async () => {
+    const { agent, requests, script } = setup();
+    const calls = answerOpening(agent);
+    script(fauxAssistantMessage([fauxToolCall('open', { n: 1 }), fauxToolCall('act', { n: 2 })]), fauxAssistantMessage('Done.'));
+    await agent.send('go', 'state', [OPEN, TOOL], '', 'pick', 'pick');
+    expect(calls.map((c) => c.name)).toEqual(['open']);
+    expect(requests).toHaveLength(2);
+    expect(said()).toBe('Done.');
+  });
+
+  it('keeps one viewing conversation per opening of a session, and starts afresh for the next', async () => {
+    const { agent, requests, script } = setup();
+    script(fauxAssistantMessage('one'), fauxAssistantMessage('two'), fauxAssistantMessage('three'), fauxAssistantMessage('four'));
+    await agent.send('a', 'state', [TOOL], '', 'view', 'view-1');
+    await agent.send('b', 'state', [TOOL], '', 'view', 'view-1');
+    await agent.send('c', 'state', [TOOL], '', 'view', 'view-2');
+    await agent.send('d', 'state', [TOOL], '', 'pick', 'pick');
+    expect(requests[1].history).toContain('one');
+    expect(requests[2].history).not.toContain('one');
+    expect(requests[3].history).not.toContain('three');
+    expect(requests[3].system).toBe(PICK_PROMPT);
+    expect(conversationFiles('view')).toHaveLength(2);
+    expect(conversationFiles('pick')).toHaveLength(1);
+  });
+
+  it('hands one message on at most twice', async () => {
+    const { agent, requests, script } = setup();
+    let opened = 0;
+    host.onToolCall = (raw) => {
+      const call = raw as AgentToolCall;
+      opened += 1;
+      const handoff = { mode: 'view' as const, scope: `view-${opened}`, appState: 'state', reference: '', tools: [OPEN] };
+      agent.onToolResult({ callId: call.callId, ok: true, content: 'Opened.', handoff });
+    };
+    script(...[1, 2, 3, 4].map((n) => fauxAssistantMessage([fauxToolCall('open', { n })])), fauxAssistantMessage('never'));
+    await agent.send('go', 'state', [OPEN], '', 'pick', 'pick');
+    expect(requests).toHaveLength(3);
+    expect(events().at(-1)).toMatchObject({ type: 'turn_end' });
   });
 });
 
@@ -353,7 +437,7 @@ describe('forgetting a read ahead', () => {
     script(...readAhead(), fauxAssistantMessage('ok'));
     await agent.send('go', 'state', [TOOL], 'THE REFERENCE');
     await agent.send('next', 'state', [TOOL], 'THE REFERENCE');
-    expect(requests[2].system).toBe(`${SYSTEM_PROMPT}\n\nTHE REFERENCE`);
+    expect(requests[2].system).toBe(`${VIEW_PROMPT}\n\nTHE REFERENCE`);
     expect(requests[2].tools).toEqual(['act']);
   });
 
@@ -493,7 +577,7 @@ describe('build mode', () => {
     expect(requests[1].history).not.toContain('ham');
     expect(requests[0].tools).toEqual(['act']);
     // The viewing conversation carries on, and never saw the build.
-    expect(requests[2].system).toBe(SYSTEM_PROMPT);
+    expect(requests[2].system).toBe(VIEW_PROMPT);
     expect(requests[2].history).toContain('ham');
     expect(requests[2].history).not.toContain('a lap stepper');
     expect(requests[2].history).not.toContain('Building.');
@@ -911,7 +995,7 @@ describe('stored conversations', () => {
     expect(files()).toHaveLength(1);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\nhi', 'assistant: Hello.']);
     // The prompt as the model got it, for review.
-    expect(records(files()[0]).find((r) => r.model?.[0]?.role === 'system')?.model?.[0]?.sections).toEqual({ f1a: SYSTEM_PROMPT });
+    expect(records(files()[0]).find((r) => r.model?.[0]?.role === 'system')?.model?.[0]?.sections).toEqual({ f1a: VIEW_PROMPT });
   });
 
   it('adds later turns to the same one', async () => {

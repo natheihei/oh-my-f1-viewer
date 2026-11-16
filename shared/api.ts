@@ -151,10 +151,33 @@ export interface AgentToolResult {
   pastPlayhead?: boolean;
   /** The tools the model has from the next request on, when the call changed them, as opening a session does. */
   tools?: AgentToolDefinition[];
+  /** The call opened a session, so the message goes on in a conversation for it. See AgentHandoff. */
+  handoff?: AgentHandoff;
 }
 
-/** Which of the app's two agents a message goes to: the one that drives viewing, or the one that builds mods. */
-export type AgentMode = 'view' | 'build';
+/**
+ * Which agent a message goes to: the one that picks a session while none is open, the one that drives viewing
+ * once one is, or the one that builds mods. Each has its own prompt and conversation.
+ */
+export type AgentMode = 'pick' | 'view' | 'build';
+
+/**
+ * What a conversation is about: picking, or one opening of a session. A message whose scope differs from the
+ * conversation's starts a new one, so opening a session, even the same one again, starts afresh.
+ */
+export type AgentScope = string;
+
+/**
+ * Opening a session mid-turn ends the turn's run where it is: the same message is then answered in a new
+ * conversation for that session, from this state, reference and tools.
+ */
+export interface AgentHandoff {
+  mode: AgentMode;
+  scope: AgentScope;
+  appState: string;
+  reference: string;
+  tools: AgentToolDefinition[];
+}
 
 export type AgentEvent =
   | { type: 'turn_start'; turnId: string }
@@ -229,7 +252,7 @@ export interface F1aApi {
     /** Saves the model and thinking level. They apply from the next message, in the same conversation. */
     choose(model: string, thinking: ThinkingLevel): Promise<AiStatus>;
     /** `reference` is appended to the system prompt: what the agent should know up front, like the event list. */
-    send(text: string, context: string, tools: AgentToolDefinition[], reference: string, mode?: AgentMode): Promise<void>;
+    send(text: string, context: string, tools: AgentToolDefinition[], reference: string, mode?: AgentMode, scope?: AgentScope): Promise<void>;
     /** Ends build mode's conversation. The viewing one is untouched. */
     endBuild(): Promise<void>;
     cancel(): Promise<void>;

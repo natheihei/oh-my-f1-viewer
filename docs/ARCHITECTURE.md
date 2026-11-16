@@ -157,10 +157,23 @@ doesn't know any of this happens.
 `electron/agent/agent.ts` runs a conversation on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable), pi's
 harness without its terminal agent, on the provider, model and thinking level chosen in `/settings-agent`. Models and sign-ins are
 pi-ai's. It lives in main because it holds the credentials. Tools run in the renderer because it owns layout and playback, so their
-definitions come with each message and each call goes over IPC. With no session open the viewing agent is shown only what finds and
-opens one: `list_sessions`, `list_live`, `list_upcoming` and `load_session`. When a call opens or closes a session, its result
-carries the new set, and the model has it from the next request in the same turn, so "2025 Mexico race with Norris" can open the race
-and suggest his onboard in one turn.
+definitions come with each message and each call goes over IPC.
+
+Messages go to one of three agents, each with its own prompt and conversation, and the renderer says which (`src/agent/bridge.ts`):
+
+- **Picking**, with no session open: `PICK_PROMPT` (`shared/viewPrompt.ts`), the event list for reference, and only the tools that
+  find and open a session, `list_sessions`, `list_live`, `list_upcoming` and `load_session`.
+- **Viewing**, once one is: `VIEW_PROMPT`, then the events, the components and the tables, and every viewing tool. It keeps the
+  picking tools, to switch sessions.
+- **Building**, in build mode: see [BUILD_MODE.md](BUILD_MODE.md).
+
+A message also carries its scope: `pick`, or one opening of a session, which the renderer tells apart by the session object the data
+layer makes on each open. A message whose mode or scope differs from the conversation's closes it and starts a new one, so opening a
+session, even the same one again, or closing it starts afresh. When a call opens a session part way through a turn, its result
+carries a hand-off: the new scope, app state, reference and tools. That run ends there, with every call left in its round answered
+without running, and the same message is answered again in a new viewing conversation, so "2025 Mexico race with Norris" opens the
+race and then suggests his onboard in one turn. A message is handed on at most twice. A call that closes a session, as a failed switch
+does, carries only the picking tools, and the turn goes on in the same conversation.
 
 Each conversation is a Harness of its own with three extensions: the prompt, as one section holding the app's words and then the
 reference; the renderer's tools, replaced by installing the extension again; and the rules, which are hooks. The cap on tool rounds
@@ -173,11 +186,11 @@ What the agent keeps:
   and writes them when a provider is connected or a model chosen.
 - **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
   keystore (`credentials.ts`), in the shape pi-ai gives it.
-- **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_view.sqlite`, or `<time>_build.sqlite`
-  for build mode's agent ([BUILD_MODE.md](BUILD_MODE.md)): pi-durable's own storage, holding every entry as the model saw it, the
+- **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_pick.sqlite`, `<time>_view.sqlite`,
+  or `<time>_build.sqlite` for build mode's agent ([BUILD_MODE.md](BUILD_MODE.md)): pi-durable's own storage, holding every entry as the model saw it, the
   prompt and each change to it, `app_state`, tool calls and results, summaries, the edits that cut down a read-ahead turn, and token
   use. It's for review, and so a crash loses nothing: it's never resumed, so a new conversation or a restart starts empty.
-  `node devscripts/conversation.mjs [view|build|<file>]` prints one. They hold whatever the agent read, including race data, stay on
+  `node devscripts/conversation.mjs [pick|view|build|<file>]` prints one. They hold whatever the agent read, including race data, stay on
   this machine, and aren't pruned.
 - The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 

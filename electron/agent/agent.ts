@@ -14,8 +14,10 @@ import type { Conversation as DurableConversation, EntryRecord, Harness, Harness
 import type {
   AgentConnectEvent,
   AgentEvent,
+  AgentHandoff,
   AgentMode,
   AgentProviderOption,
+  AgentScope,
   AgentToolCall,
   AgentToolDefinition,
   AgentToolResult,
@@ -25,7 +27,7 @@ import type {
 } from '../../shared/api';
 import { parseAgentSettings, THINKING_LEVELS, type AgentSettings } from '../../shared/agentSettings';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
-import { SYSTEM_PROMPT } from '../../shared/tools';
+import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
 import { appSettings, type Settings } from '../settings';
 import { sendToRenderer } from '../windows';
 import { credentialStore, installId } from './credentials';
@@ -39,6 +41,11 @@ const MAX_TOOL_ROUNDS = 10;
 /** Building takes more steps than viewing: reading the types, writing, fixing, looking. */
 const MAX_BUILD_ROUNDS = 60;
 const TOOL_TIMEOUT_MS = 60_000;
+/** How many times one message may be handed on to a new conversation: picking, then switching once more. */
+const MAX_HANDOFFS = 2;
+/** What a call gets when one before it in the same round opened a session: the message is answered there now. */
+const HANDED_OFF = 'Not run: a session was opened, so this message is answered in a new conversation for it.';
+const PROMPTS: Record<AgentMode, string> = { pick: PICK_PROMPT, view: VIEW_PROMPT, build: BUILD_PROMPT };
 const CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** How often the text of a reply in progress is published. */
 const PARTIAL_INTERVAL_MS = 40;
@@ -102,6 +109,9 @@ interface Choice {
 
 /** One conversation. Starting over makes a new one. */
 interface Conversation {
+  mode: AgentMode;
+  /** What it's about: picking, one opening of a session, or the build. */
+  scope: AgentScope;
   harness: Harness;
   root: DurableConversation;
   /** Makes exactly these tools available to the model, from its next request. */
@@ -121,9 +131,23 @@ interface Conversation {
 
 interface Turn {
   id: string;
+  /** The conversation it's answered in, which a hand-off changes. */
   mode: AgentMode;
+  scope: AgentScope;
   cancelled: boolean;
   acted: boolean;
+  /** A call opened a session: once this run ends, the message goes on in a new conversation for it. */
+  handoff: AgentHandoff | null;
+}
+
+const MODES: AgentMode[] = ['pick', 'view', 'build'];
+
+/** A hand-off as the renderer sent it, or null if it isn't one. */
+function handoffOf(value: unknown): AgentHandoff | null {
+  const v = value as Partial<AgentHandoff> | null | undefined;
+  if (!v || typeof v !== 'object' || !MODES.includes(v.mode as AgentMode) || v.mode === 'build') return null;
+  if (typeof v.scope !== 'string' || typeof v.appState !== 'string' || typeof v.reference !== 'string' || !Array.isArray(v.tools)) return null;
+  return { mode: v.mode as AgentMode, scope: v.scope, appState: v.appState, reference: v.reference, tools: v.tools };
 }
 
 /** The text blocks of a model message, joined. */
@@ -135,6 +159,10 @@ function textOf(message: Message | undefined): string {
 
 export class Agent {
   private runtimePromise: Promise<Runtime> | null = null;
+  /**
+   * The picking or viewing conversation. A message for another mode or scope closes it and starts a new one:
+   * opening a session, or closing it, starts afresh.
+   */
   private conversation: Conversation | null = null;
   /** Build mode's own conversation, apart from the viewing one. Leaving build mode ends it. See docs/BUILD_MODE.md. */
   private building: Conversation | null = null;
@@ -257,19 +285,21 @@ export class Agent {
     };
   }
 
-  private async createConversation(choice: Choice, mode: AgentMode = 'view'): Promise<Conversation> {
+  private async createConversation(choice: Choice, mode: AgentMode, scope: AgentScope): Promise<Conversation> {
     const { durable, context, providers, open, conversationsDir } = await this.runtime();
     const { createRegistry, defineExtension, defineTool, hook, section, CompactionTask, GenerationTask, Harness: HarnessClass, ProviderDoc } = durable;
     const build = mode === 'build';
-    const id = build ? 'f1a-build' : 'f1a';
+    const id = mode === 'view' ? 'f1a' : `f1a-${mode}`;
     // Kept for review, and so a crash loses nothing, but never resumed: each conversation has a database of its own,
     // and a new conversation or a restart starts empty.
     await fsp.mkdir(conversationsDir, { recursive: true });
-    const storage = await open(path.join(conversationsDir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${build ? 'build' : 'view'}.sqlite`));
+    const storage = await open(path.join(conversationsDir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${mode}.sqlite`));
 
     const registry = createRegistry();
     const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;
     const conversation: Conversation = {
+      mode,
+      scope,
       harness: null as unknown as Harness,
       root: null as unknown as DurableConversation,
       register: () => {},
@@ -283,7 +313,7 @@ export class Agent {
       close: async () => {},
     };
 
-    const base = build ? BUILD_PROMPT : SYSTEM_PROMPT;
+    const base = PROMPTS[mode];
     // One section, so the prompt is exactly these words: the app's own, then what it knows up front.
     const prompt = defineExtension({
       name: 'f1a-prompt',
@@ -298,8 +328,16 @@ export class Agent {
           description,
           parameters,
           execute: async (args, api) => {
+            // The run ends with this round, every call of which has to say so.
+            if (this.turn?.handoff) return { output: [{ type: 'text', text: HANDED_OFF }], isError: true, control: { terminate: true } };
             const result = await this.callTool({ callId: api.callId, name, args: args as Record<string, unknown> });
-            // A call that opens or closes a session changes what the model can do next, in the same turn.
+            // A call that opened a session ends this run. The message is answered again in a conversation for that session.
+            const handoff = handoffOf(result.handoff);
+            if (handoff && this.turn && !this.turn.cancelled) {
+              this.turn.handoff = handoff;
+              return { output: [{ type: 'text', text: result.content }], isError: !result.ok, control: { terminate: true } };
+            }
+            // A call that closes a session changes what the model can do next, in the same turn.
             if (result.tools) register(result.tools);
             // The build agent reads the whole session by design, and its conversation ends with the build.
             if (!build && result.ok && result.pastPlayhead) conversation.readAhead.add(api.callId);
@@ -596,12 +634,13 @@ export class Agent {
     turn.acted = turn.acted || ok;
   }
 
-  async send(text: string, appState: string, definitions: AgentToolDefinition[], reference = '', mode: AgentMode = 'view'): Promise<void> {
+  /** `scope` is what the message is about: one for another than the conversation's starts a new one. See AgentScope. */
+  async send(text: string, appState: string, definitions: AgentToolDefinition[], reference = '', mode: AgentMode = 'view', scope: AgentScope = mode): Promise<void> {
     this.generation += 1;
     const generation = this.generation;
     await this.stopTurn();
     if (generation !== this.generation) return;
-    const turn: Turn = { id: randomUUID(), mode, cancelled: false, acted: false };
+    const turn: Turn = { id: randomUUID(), mode, scope, cancelled: false, acted: false, handoff: null };
     this.turn = turn;
     const running = this.runTurn(turn, text, appState, definitions, reference);
     this.running = running;
@@ -654,6 +693,39 @@ export class Agent {
     };
   }
 
+  /** The conversation a turn is answered in now: the one it's for, if there is one already, or a new one. */
+  private async conversationFor(turn: Turn, choice: Choice): Promise<Conversation> {
+    // A provider changed outside connect(), such as a hand edit of the settings, starts over too.
+    const stale = (c: Conversation | null) => c && (c.provider !== choice.entry.provider || c.mode !== turn.mode || c.scope !== turn.scope);
+    if (turn.mode === 'build') {
+      if (stale(this.building)) {
+        const old = this.building!;
+        this.building = null;
+        await old.close();
+      }
+      return (this.building ??= await this.createConversation(choice, 'build', turn.scope));
+    }
+    if (stale(this.conversation)) {
+      const old = this.conversation!;
+      this.conversation = null;
+      await old.close();
+    }
+    // A read ahead the last turn couldn't cut is cut now. If it still can't be, the conversation starts over:
+    // what it read past the playhead must not reach another request, or a summary.
+    if (this.conversation?.readAhead.size) {
+      const left = this.conversation;
+      const cut = await this.forget(left).then(
+        () => true,
+        (e: Error) => (console.warn('[ai] forgetting a read ahead, again:', e.message), false),
+      );
+      if (!cut) {
+        this.conversation = null;
+        await left.close();
+      }
+    }
+    return (this.conversation ??= await this.createConversation(choice, turn.mode, turn.scope));
+  }
+
   private async runTurn(turn: Turn, text: string, appState: string, definitions: AgentToolDefinition[], reference: string): Promise<void> {
     emit({ type: 'turn_start', turnId: turn.id });
     let label: string | undefined;
@@ -663,64 +735,55 @@ export class Agent {
       const choice = await this.current();
       if (!choice) throw new Error(SETUP_NEEDED);
       label = choice.entry.label;
-      const { context } = await this.runtime();
-      // A provider changed outside connect(), such as a hand edit of the settings, starts over too.
-      if (this.conversation && this.conversation.provider !== choice.entry.provider) {
-        await this.conversation.close();
-        this.conversation = null;
-      }
-      if (this.building && this.building.provider !== choice.entry.provider) {
-        await this.building.close();
-        this.building = null;
-      }
-      // A read ahead the last turn couldn't cut is cut now. If it still can't be, the conversation starts over:
-      // what it read past the playhead must not reach another request, or a summary.
-      if (this.conversation?.readAhead.size) {
-        const left = this.conversation;
-        const cut = await this.forget(left).then(
-          () => true,
-          (e: Error) => (console.warn('[ai] forgetting a read ahead, again:', e.message), false),
-        );
-        if (!cut) {
-          this.conversation = null;
-          await left.close();
-        }
-      }
       this.policy = this.policyOf(choice.stored);
-      if (turn.mode === 'build') this.building ??= await this.createConversation(choice, 'build');
-      else this.conversation ??= await this.createConversation(choice);
-      if (turn.cancelled) return;
-
-      const conversation = (turn.mode === 'build' ? this.building : this.conversation)!;
-      const { root, check } = conversation;
-      // A model or thinking level chosen since the last message, and the rounds this message may take.
-      await root.configure({ model: { provider: choice.model.provider, modelId: choice.model.id }, thinkingLevel: choice.thinking, maxTurns: conversation.maxRounds }, context);
-      conversation.model = choice.model;
-      conversation.reference = reference;
-      conversation.register(definitions);
-      conversation.rounds = 0;
-      check?.start();
-
-      const stream = await this.streamText(turn, conversation, context);
-      let settled;
-      try {
-        const submission = await root.submit({ type: 'input', content: `<app_state>\n${appState}\n</app_state>\n\n${text}` }, context);
-        settled = await submission.wait(context);
-      } finally {
-        await stream.flush().catch(() => {});
-        await this.forget(conversation).catch((e: Error) => console.warn('[ai] forgetting a read ahead:', e.message));
-      }
-      if (turn.cancelled) return;
-
-      // A model that keeps calling tools is stopped at the cap, and what it did stands: that's an end, not an error.
-      if (settled.status === 'unanswered' && settled.reason !== 'turn_limit') {
-        const detail = typeof settled.detail === 'string' ? settled.detail : '';
-        throw new Error(detail || 'The model request failed.');
+      let message = { appState, definitions, reference };
+      for (let handoffs = 0; ; handoffs += 1) {
+        const conversation = await this.conversationFor(turn, choice);
+        if (turn.cancelled) return;
+        const settled = await this.answer(turn, conversation, choice, text, message.appState, message.definitions, message.reference);
+        if (turn.cancelled) return;
+        const next = turn.handoff;
+        turn.handoff = null;
+        // The run that opened a session ended there, unanswered: the new conversation answers.
+        if (next && handoffs < MAX_HANDOFFS) {
+          turn.mode = next.mode;
+          turn.scope = next.scope;
+          message = { appState: next.appState, definitions: next.tools, reference: next.reference };
+          continue;
+        }
+        // A model that keeps calling tools is stopped at the cap, and what it did stands: that's an end, not an error.
+        if (settled.status === 'unanswered' && settled.reason !== 'turn_limit') {
+          const detail = typeof settled.detail === 'string' ? settled.detail : '';
+          throw new Error(detail || 'The model request failed.');
+        }
+        break;
       }
       emit({ type: 'turn_end', turnId: turn.id, acted: turn.acted });
     } catch (e) {
       if (turn.cancelled) return;
       emit({ type: 'error', turnId: turn.id, message: friendlyError(e, label) });
+    }
+  }
+
+  /** Has `conversation` answer the message, and waits until it has. */
+  private async answer(turn: Turn, conversation: Conversation, choice: Choice, text: string, appState: string, definitions: AgentToolDefinition[], reference: string) {
+    const { context } = await this.runtime();
+    const { root, check } = conversation;
+    // A model or thinking level chosen since the last message, and the rounds this message may take.
+    await root.configure({ model: { provider: choice.model.provider, modelId: choice.model.id }, thinkingLevel: choice.thinking, maxTurns: conversation.maxRounds }, context);
+    conversation.model = choice.model;
+    conversation.reference = reference;
+    conversation.register(definitions);
+    conversation.rounds = 0;
+    check?.start();
+
+    const stream = await this.streamText(turn, conversation, context);
+    try {
+      const submission = await root.submit({ type: 'input', content: `<app_state>\n${appState}\n</app_state>\n\n${text}` }, context);
+      return await submission.wait(context);
+    } finally {
+      await stream.flush().catch(() => {});
+      await this.forget(conversation).catch((e: Error) => console.warn('[ai] forgetting a read ahead:', e.message));
     }
   }
 
