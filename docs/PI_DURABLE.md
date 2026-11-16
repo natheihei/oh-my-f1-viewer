@@ -21,7 +21,7 @@ three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helpe
 | `ModelRuntime`, over `auth.json` | pi-ai's `createModels()` with only the supported providers, and a `CredentialStore` of the app's (`credentials.ts`) on `<userData>/f1a-credentials.json`, encrypted with the OS keystore like F1 TV's sign-in |
 | `SettingsManager`, over `settings.json` | `agent` in the app's settings file, `<userData>/f1a-settings.json` (`electron/settings.ts`, `shared/agentSettings.ts`) |
 | `createAgentSession`, `SessionManager` and its `.jsonl` | A `Harness` per conversation, on pi-durable's SQLite storage: one database per conversation in `<userData>/conversations`, never resumed |
-| The prompt extension, over `SYSTEM.md` | One prompt `section()`, from `SYSTEM_PROMPT` in code. `SYSTEM.md` is no longer written |
+| The prompt extension, over `SYSTEM.md` | One prompt `section()`, from the agent's prompt in code (`shared/viewPrompt.ts`, `shared/buildPrompt.ts`). `SYSTEM.md` is no longer written |
 | The tools extension | `defineTool()` tools in an extension that's installed again to replace the set, also from inside a call |
 | `roundCap` | `maxTurns`. The run ends with `turn_limit`, which is told apart from a cancel |
 | `forgetReadAhead`, on each request and each compaction | One `f1a.forget` entry when the turn ends, holding context edits, and a `beforeCompact` hook for a turn still running. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) |

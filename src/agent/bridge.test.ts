@@ -87,35 +87,88 @@ describe("the tools sent with the agent's messages", () => {
     vi.unstubAllGlobals();
   });
 
-  it('are the picking ones with no session, and a call that opens one carries the rest, once', async () => {
-    const sent: string[][] = [];
+  /** Records what each message and tool result sends, with tool calls made as the agent would. */
+  function connect() {
+    const sent: { tools: string[]; reference: string; mode: string; scope: string }[] = [];
     const results: AgentToolResult[] = [];
     let onCall: (call: AgentToolCall) => void = () => {};
     vi.stubGlobal('window', {
       f1a: {
         ai: {
-          send: async (_text: string, _context: string, tools: { name: string }[]) => void sent.push(tools.map((t) => t.name)),
+          send: async (_text: string, _context: string, tools: { name: string }[], reference: string, mode: string, scope: string) =>
+            void sent.push({ tools: tools.map((t) => t.name), reference, mode, scope }),
           onToolCall: (cb: (call: AgentToolCall) => void) => ((onCall = cb), () => {}),
           toolResult: (result: AgentToolResult) => results.push(result),
         },
       },
     });
-    const stop = connectTools();
-    await askAgent('last race');
-    expect(sent).toEqual([PICKING_TOOLS]);
-
-    // As load_session leaves things: a session open, part way through the turn.
-    useSession.setState({ session: { contentId: 1, title: 'Race', type: 'race', status: 'replay' } as SessionInfo, channels: [] });
     const call = async (callId: string) => {
       onCall({ callId, name: 'list_streams', args: {} });
       await vi.waitFor(() => expect(results.find((r) => r.callId === callId)).toBeDefined());
       return results.find((r) => r.callId === callId)!;
     };
-    expect((await call('a')).tools?.map((t) => t.name)).toEqual(AGENT_TOOLS.map((t) => t.name));
-    expect((await call('b')).tools).toBeUndefined();
+    return { sent, call, stop: connectTools() };
+  }
+  const race = (): SessionInfo => ({ contentId: 1, title: 'Race', type: 'race', status: 'replay' }) as SessionInfo;
 
+  it('go to the picking agent with no session, with its tools and the events alone', async () => {
+    const { sent, stop } = connect();
+    await askAgent('last race');
+    expect(sent[0]).toMatchObject({ tools: PICKING_TOOLS, mode: 'pick', scope: 'pick' });
+    expect(sent[0].reference).toMatch(/^Events on F1 TV/);
+    expect(sent[0].reference).not.toMatch(/Components for suggest_tiles/);
+    stop();
+  });
+
+  it('hand the message on to a viewing conversation when a call opens a session, once', async () => {
+    const { sent, call, stop } = connect();
+    await askAgent('last race');
+
+    // As load_session leaves things: a session open, part way through the turn.
+    useSession.setState({ session: race(), channels: [] });
+    const opened = await call('a');
+    expect(opened.handoff).toMatchObject({ mode: 'view', tools: AGENT_TOOLS.map((t) => t.name).map((name) => expect.objectContaining({ name })) });
+    expect(opened.handoff!.scope).toMatch(/^view-/);
+    expect(opened.handoff!.appState).toMatch(/session: Race/);
+    expect(opened.handoff!.reference).toMatch(/^Events on F1 TV/);
+    expect(opened.tools).toBeUndefined();
+    expect((await call('b')).handoff).toBeUndefined();
+
+    // The next message is for the same opening, so it goes on in that conversation.
     await askAgent('norris');
-    expect(sent[1]).toEqual(AGENT_TOOLS.map((t) => t.name));
+    expect(sent[1]).toMatchObject({ tools: AGENT_TOOLS.map((t) => t.name), mode: 'view', scope: opened.handoff!.scope });
+    stop();
+  });
+
+  it('give each opening of a session a scope of its own, even of the same one', async () => {
+    const { sent, stop } = connect();
+    useSession.setState({ session: race(), channels: [] });
+    await askAgent('norris');
+    await askAgent('and piastri');
+    useSession.setState({ session: race(), channels: [] });
+    await askAgent('norris');
+    expect(sent[0].scope).toBe(sent[1].scope);
+    expect(sent[2].scope).not.toBe(sent[0].scope);
+    useSession.setState({ session: null, channels: [] });
+    await askAgent('the next race');
+    expect(sent[3]).toMatchObject({ mode: 'pick', scope: 'pick' });
+    stop();
+  });
+
+  it('switch sessions with a hand-off, and leave a failed switch in the same conversation with the picking tools', async () => {
+    const { call, stop } = connect();
+    useSession.setState({ session: race(), channels: [] });
+    await askAgent('the sprint');
+    useSession.setState({ session: { ...race(), contentId: 2, title: 'Sprint' }, channels: [] });
+    const switched = await call('a');
+    expect(switched.handoff).toMatchObject({ mode: 'view' });
+    expect(switched.handoff!.appState).toMatch(/session: Sprint/);
+
+    // load_session closes the open session before opening the next, so a failure leaves none open.
+    useSession.setState({ session: null, channels: [] });
+    const failed = await call('b');
+    expect(failed.handoff).toBeUndefined();
+    expect(failed.tools?.map((t) => t.name)).toEqual(PICKING_TOOLS);
     stop();
   });
 });
