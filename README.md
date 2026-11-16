@@ -32,6 +32,18 @@ npm run dev
 The first two commands install the dependencies and the castLabs Electron build with Widevine. The app then opens to a
 blank page with the command palette, which tells you what to sign in to.
 
+### In the browser
+
+f1a also runs entirely inside Chrome, as an extension, with no desktop app and no server:
+
+```bash
+npm run build:web
+```
+
+Then open `chrome://extensions`, turn on Developer mode, choose **Load unpacked** and pick `dist-web`. The f1a toolbar button opens
+it. Everything works there, including building mods. [docs/WEB.md](docs/WEB.md) says why it's an extension and not a hosted page,
+and what differs from the desktop app.
+
 ## Using it
 
 | | |
@@ -129,6 +141,18 @@ During a live session:
 
 ```bash
 node scripts/live-check.mjs
+```
+
+The browser build, in a Chrome of its own, after `npm run build:web`. Add `--agent` to run the real agent too:
+
+```bash
+node scripts/web-check.mjs /tmp/web-check
+```
+
+And during a live session, or with `--simulate` when nothing is on air:
+
+```bash
+node scripts/web-live-check.mjs /tmp/web-live-check
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together and [docs/STATUS.md](docs/STATUS.md) for what is

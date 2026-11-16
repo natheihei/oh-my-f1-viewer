@@ -23,6 +23,10 @@ or from outside the app in a [mod](MODS.md).
 
 [DESIGN.md](DESIGN.md) has the direction this is heading in, and why.
 
+The same two halves also run in a browser with no Electron: the renderer as it is, and the main half in the page, on stand-ins for
+Node's and Electron's modules. `electron/ipc.ts` reaches whatever shows the app through `electron/platform.ts`, which is Electron's
+IPC here and direct calls there. See [WEB.md](WEB.md).
+
 ## Host (`src/host`)
 
 Everything a component, the shell or the agent can do goes through here. [HOST.md](HOST.md) lists every read and write:
@@ -169,7 +173,7 @@ Everything the agent keeps is under `<userData>/pi-agent`:
 - `sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
   results, and token use (`transcript.ts`). The lines are the ones pi's own sessions had. It's a record only: the conversation
   itself is in memory, in pi-durable's `MemoryStorage`, so a new conversation or a restart starts empty. The files hold whatever
-  the agent read, including race data, stay on this machine, and aren't pruned.
+  the agent read, including race data, stay on this machine, and aren't pruned. The browser build keeps the newest 40.
 - `build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
 - The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 

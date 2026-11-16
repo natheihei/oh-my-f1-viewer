@@ -1,0 +1,23 @@
+/** `os` for main-process code in the browser. */
+module.exports = {
+  EOL: '\n',
+  platform: () => 'linux',
+  type: () => 'Linux',
+  arch: () => 'x64',
+  release: () => 'browser',
+  version: () => 'browser',
+  hostname: () => 'browser',
+  homedir: () => '/home',
+  tmpdir: () => '/tmp',
+  endianness: () => 'LE',
+  totalmem: () => 8 * 1024 ** 3,
+  freemem: () => 4 * 1024 ** 3,
+  uptime: () => performance.now() / 1000,
+  loadavg: () => [0, 0, 0],
+  cpus: () => Array.from({ length: navigator.hardwareConcurrency || 4 }, () => ({ model: 'browser', speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } })),
+  availableParallelism: () => navigator.hardwareConcurrency || 4,
+  networkInterfaces: () => ({}),
+  userInfo: () => ({ username: 'f1a', uid: 1000, gid: 1000, shell: null, homedir: '/home' }),
+  constants: { signals: {}, errno: {} },
+  devNull: '/dev/null',
+};

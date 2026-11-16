@@ -160,7 +160,7 @@ On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1
   stored tool results stayed, and the next turns worked on the cut-down history.
 - **Build mode.** `scripts/build-check.mjs` passed in full, over the 2026 United States race, once it followed two earlier changes
   to the app: the "not drawing" note names a tile by its id, and `/build` needs a session open.
-- **Compaction**, with the threshold lowered to a few thousand tokens, in the desktop app: three to five
+- **Compaction**, with the threshold lowered to a few thousand tokens, in the desktop app and in the browser build: three to five
   summaries were made over five turns, each turn carried on, the agent could say what had been asked so far, and no summary held
   what a read-ahead turn had read. A summary does hold the playhead from app state, which is what the viewer is looking at.
   These runs found one fault, since fixed: a summary placed in the middle of a read-ahead turn was taken for the turn's start, and
@@ -169,14 +169,63 @@ On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1
   provider. The renderer never sees it, Cancel changes nothing, and disconnecting removes it.
 - **Stored conversations**: one `.jsonl` each, the build's apart from the viewing one.
 
-**A ChatGPT sign-in by a person** (2026-11-16), on a profile of its own with no login in it: "Sign in with ChatGPT" opened
-OpenAI's page in the default browser, the callback came back, the provider showed as "OpenAI (ChatGPT subscription)" with GPT-6.1
-Terra at medium, and a real turn replied on the new login.
+The browser build ran the same agent through `scripts/web-check.mjs --agent`, below, and its sign-ins: an API key typed in the key
+window is stored in pi's shape and connects the provider, and Cancel changes nothing.
+
+**A ChatGPT sign-in by a person, in both builds** (2026-11-16), each on a profile of its own with no login in it:
+
+- **Desktop.** "Sign in with ChatGPT" opened OpenAI's page in the default browser, the callback came back, the provider showed as
+  "OpenAI (ChatGPT subscription)" with GPT-6.1 Terra at medium, and a real turn replied on the new login.
+- **Browser.** The same, through Google, in a Chrome started by hand with the extension loaded from `chrome://extensions`: the tab
+  reached the callback, the login was stored in the volume's `auth.json`, and a real turn replied on it when the profile was opened
+  again. The first try failed at its last step, because the `http` shim's server had no `closeAllConnections()`, which pi-ai calls
+  when a sign-in ends. Fixed, with `web/shims/chatgptSignIn.test.ts` running pi-ai's own sign-in on the shim.
+- Google refuses a sign-in in a Chrome that's being debugged, which is how `scripts/web.mjs` starts one. So a check can't do this
+  sign-in: sign in by hand in a plain Chrome on a profile of its own, then give that profile to `startWebApp` as `profile`.
+
+## Verified for the browser build
+
+`node scripts/web-check.mjs <dir> --agent` on the production build (`npm run build:web`), in Google Chrome 157 on Linux with a fresh
+profile, over the 2025 Mexico City race. See [WEB.md](WEB.md).
+
+- **F1 TV sign-in** from a `login-session` cookie already in the browser, with the token's RS256 signature checked in the page, and
+  the sign-in kept across a reload. The sign-in window opens on F1's page when there's no cookie.
+- **Protected video.** Four streams, each licensed through the in-page license proxy with its own tokens, within 0.1s of each other.
+- **The session database** on SQLite's WebAssembly build: timing, results and telemetry (711,100 `car_data` and 726,800 `location`
+  rows) ingested in the worker, SQL held to the playhead and to reading, and the session opened again from the stored database in 2s.
+- **Charts**: the track map, car telemetry and a mod's chart draw from it.
+- **Mods**: compiled with esbuild's WebAssembly build and imported through the service worker. A broken save reports the compiler's
+  error and leaves the last build running, and a mod is still there after a reload.
+- **Build mode**: the snapshot, what changed, Undo all and Save. The build agent's picture of a tile is drawn in the page.
+- **The agent, on pi-durable and a ChatGPT plan** (GPT-6.1 Terra), with its login copied in: the viewing agent opened the session with its tools, and
+  the build agent wrote a mod that loaded, looked at it, and Save kept it. A token refresh ran in the page.
+- **The sign-in window.** With no session cookie in the browser, `/login-f1tv` opens a window on F1's login page and waits. When
+  the cookie appears, as F1's page sets it once a password is accepted, the app takes the token, validates it, closes the window and
+  is signed in. Signing out clears the session.
+- **Live capture.** Between sessions F1's feed answers a subscription with the last session's state: the socket connected, the
+  capture began with `live` as its source, and its rows (22 drivers, the lap count, race control) were readable from the database.
+- **Live playback, simulated** (`node scripts/web-live-check.mjs <dir> --simulate`). F1 TV's answers for one made-up live session
+  were replaced in the page, with DASH-IF's public live test stream as its four feeds. The app joined 9.2s behind the edge, the four
+  stayed within 0.04s of each other, a seek three minutes back landed and hid the rows the video hadn't reached, and it returned
+  to the edge, all while timing was captured from F1's real feed.
+- **The API-key window**: a key typed there connects the provider, and Cancel changes nothing.
+- **The mods folder on disk**, against a stand-in directory: a save on disk compiles, a broken one puts `mod.error` on disk, and edits and
+  deletions travel both ways.
+- **The timing archive on a slow link.** In two of seven runs on a fresh profile a session's data ended as "The timing archive
+  couldn't be downloaded": files that were still arriving ran out of the 30 seconds each is allowed. With downloads given up only when
+  they stall, seven of seven loaded, including files that took 30 to 41 seconds.
+- **One tab**: a second one says the app is already open.
 
 ## Not verified
 
+- **F1's own live streams in the browser build.** The live path is verified on a simulated session (above), and F1's protected
+  streams and their licenses on replays. The two together, on a session that's on air, haven't run: nothing has been since it was
+  built. `scripts/web-live-check.mjs` without `--simulate` checks it.
+- **Typing a password into F1's sign-in window** in the browser build, and the folder picker for the mods folder: both are the
+  browser's own windows, which the checks can't fill in. Everything around the password is verified (above).
+- **The browser build outside Chrome on Linux**: other platforms, and other Chromium browsers.
 - **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key from
-  the panel hasn't run either. A ChatGPT sign-in from the panel has (above).
+  the panel hasn't run either. A ChatGPT sign-in from the panel has, in the browser build (above).
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 

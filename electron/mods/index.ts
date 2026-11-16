@@ -35,7 +35,6 @@ interface Mod {
   again: boolean;
 }
 
-const urlOf = (name: string, version: number) => `${MOD_SCHEME}://mods/${name}/main.js?v=${version}`;
 const inside = (file: string, dir: string) => file === dir || file.startsWith(dir + path.sep);
 
 function entryOf(dir: string): string | null {
@@ -91,6 +90,9 @@ export class Mods {
   private lastBuild = '';
   /** Callers waiting for a mod's next build to load or fail. */
   private readonly waiters = new Set<() => void>();
+
+  /** Where the renderer imports builds from. A browser has no custom schemes, so the browser build serves them from its own origin. */
+  urlBase = `${MOD_SCHEME}://mods`;
 
   /** `snapshotDir` holds build mode's copy of the folder, and must be outside it. */
   constructor(
@@ -240,6 +242,11 @@ export class Mods {
 
   logs(name: string): ModLogLine[] {
     return this.mods.get(name)?.log ?? [];
+  }
+
+  /** The latest build of a mod that compiled, or null. */
+  codeOf(name: string): string | null {
+    return this.mods.get(name)?.code ?? null;
   }
 
   /** Serves `f1a-mod://mods/<name>/main.js`: the latest build that compiled. */
@@ -393,7 +400,7 @@ export class Mods {
       if (!output) throw new Error('The build produced no JavaScript.');
       mod.code = output.text;
       const version = mod.status.version + 1;
-      mod.status = { name: mod.name, state: 'loading', version, url: urlOf(mod.name, version), error: null };
+      mod.status = { name: mod.name, state: 'loading', version, url: `${this.urlBase}/${mod.name}/main.js?v=${version}`, error: null };
     } catch (e) {
       mod.status = { ...mod.status, state: 'failed', error: await formatErrors(e) };
       await this.writeError(mod);

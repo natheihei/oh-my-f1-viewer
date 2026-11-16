@@ -40,7 +40,9 @@ export default defineConfig({
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
   build: { outDir: 'dist', chunkSizeWarningLimit: 2000 },
   test: {
-    include: ['src/**/*.test.ts', 'electron/**/*.test.js', 'electron/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'electron/**/*.test.js', 'electron/**/*.test.ts', 'web/**/*.test.ts', 'tests/**/*.test.ts'],
     environment: 'node',
+    // Run through Vite so web/shims/chatgptSignIn.test.ts can give it the http shim for `node:http`.
+    server: { deps: { inline: [/pi-ai\/dist\/auth\/oauth\/openai-chatgpt/] } },
   },
 } as never);

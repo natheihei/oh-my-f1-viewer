@@ -1,7 +1,8 @@
 /**
  * The build agent's own tools: read, write, edit, ls, grep and find, kept inside the mods folder, and
  * ours for deleting, a mod's status, and a picture of a draft. They run here, not in the renderer, and
- * reach nothing outside the mods folder. They use only plain fs calls. See docs/BUILD_MODE.md.
+ * reach nothing outside the mods folder. They use only the fs calls memfs has too, so the browser build
+ * runs the same code on its in-memory folder. See docs/BUILD_MODE.md.
  *
  * The six file tools were pi-coding-agent's, wrapped. They are ours now, and answer the model in pi's
  * words: the same descriptions, schemas, results, notices and errors, so a build reads as it did.

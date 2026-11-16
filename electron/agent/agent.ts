@@ -59,11 +59,17 @@ function emitConnect(event: AgentConnectEvent): void {
   sendToRenderer('ai:connect', event);
 }
 
+/** How a sign-in reaches the user: Electron's by default, and the browser build puts its own in (`web/backend/agentSignIn.ts`). */
+export const signInWays = {
+  open: (url: string): void => void shell.openExternal(url),
+  askForKey,
+};
+
 /** Sign-in pages open in the real browser, and only over https. */
 function openExternal(raw: string): void {
   try {
     const url = new URL(raw);
-    if (url.protocol === 'https:') void shell.openExternal(url.href);
+    if (url.protocol === 'https:') signInWays.open(url.href);
     else console.warn('[ai] ignored a sign-in URL that is not https:', url.protocol);
   } catch {
     console.warn('[ai] ignored an invalid sign-in URL');
@@ -478,7 +484,7 @@ export class Agent {
         const signals = p.signal ? AbortSignal.any([signal, p.signal]) : signal;
         if (p.type === 'secret') {
           emitConnect({ type: 'key_window', message: `Paste your ${entry.label} API key in the window that opened.` });
-          return askForKey(`${entry.label} API key`, `Paste your ${entry.label} API key.`, signals);
+          return signInWays.askForKey(`${entry.label} API key`, `Paste your ${entry.label} API key.`, signals);
         }
         if (p.type !== 'manual_code') {
           return Promise.reject(new Error(`${entry.label} asked for something the app can't show: ${p.message}`));

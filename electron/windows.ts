@@ -148,7 +148,15 @@ export function createMainWindow(): BrowserWindow {
   return win;
 }
 
+let rendererSink: ((channel: string, payload?: unknown) => void) | null = null;
+
+/** Sends to something other than the window: the page, in the browser build. */
+export function setRendererSink(sink: (channel: string, payload?: unknown) => void): void {
+  rendererSink = sink;
+}
+
 export function sendToRenderer(channel: string, payload?: unknown): void {
+  if (rendererSink) return rendererSink(channel, payload);
   const win = mainWindow;
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }

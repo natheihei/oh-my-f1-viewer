@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 dist-types/
+dist-web/
 release/
 .env
 *.log

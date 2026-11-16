@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "f1a",
+  "version": "0.1.0",
+  "description": "Agent-driven F1 multi-view streaming app, running entirely in the browser.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwGpVvJ9IWeFPIsx53T38t4ERv/ccm3rT9AxOmx33m//p9mH95nInAHA/tANsHzZuWYldJJEQubcFzSYV+Stzz+9bWPOm+0yNU07iWDNGTMgACNizLd1WAEOrkmg19bIGdkOw74+JjPGikvY8LYnVrG3tA4l4uxaYjEdT8J4DcPafa6eZqWurIFFjwq2JBj+XtIxi5tORljdOGdk5L/ufXfIAsESUqrnyYKRt1bWw5mGKOX+UnogwLVPTYk/15/SWiPqyvZlWOKbcldEwciYURRciP9Y37t6XL43HbL8/4qpMQhU8LmhGnQr2y0aIAJo1tgjE+TZTDRiI3x/N9Hx+FwIDAQAB",
+  "minimum_chrome_version": "122",
+  "action": {
+    "default_title": "Open f1a",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  },
+  "permissions": [
+    "cookies",
+    "tabs",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "*://*.formula1.com/*",
+    "https://*.akamaized.net/*",
+    "https://*.akamaihd.net/*",
+    "https://api.multiviewer.app/*",
+    "https://api.openai.com/*",
+    "https://auth.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-src 'none'"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "options_ui": {
+    "page": "folder.html",
+    "open_in_tab": true
+  }
+}

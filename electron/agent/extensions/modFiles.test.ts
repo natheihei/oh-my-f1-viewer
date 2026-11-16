@@ -793,4 +793,38 @@ describe('the build agent\'s file tools', () => {
     expect(await read.execute({ path: 'a' }, {} as ToolExecutionApi, BACKGROUND_CONTEXT)).toEqual({ output: [{ type: 'text', text: 'The mods folder is not available.' }], isError: true });
     expect(reports).toEqual([['read', false, null]]);
   });
+
+  it('run on memfs, the browser build\'s fs', async () => {
+    const { Volume, createFsFromVolume } = await import('memfs');
+    const fs = createFsFromVolume(new Volume());
+    vi.resetModules();
+    vi.doMock('node:fs', () => ({ ...fs, default: fs, promises: fs.promises }));
+    try {
+      const { modFilesExtension: onMemfs } = await import('./modFiles');
+      fs.mkdirSync('/mods/.types', { recursive: true });
+      fs.writeFileSync('/mods/.types/f1a.d.ts', 'export type Lap = number;');
+      const extension = onMemfs(durable, () => ({ dir: '/mods', settled: async (name) => ready(name), logs: () => [], picture: async () => null, health: async () => [] }), () => {});
+      const run = (name: string, args: Record<string, unknown>) => extension.tools!.find((t) => t.name === name)!.execute(args, {} as ToolExecutionApi, BACKGROUND_CONTEXT);
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await run(name, args);
+        return { isError: !!result.isError, text: (result.output ?? []).map((c) => (c.type === 'text' ? c.text : '')).join('\n') };
+      };
+      expect(await call('write', { path: 'a_mod/main.tsx', content: 'const lap: Lap = 1;\r\n' })).toEqual({ isError: false, text: 'Successfully wrote to a_mod/main.tsx\na_mod loaded.' });
+      expect((await call('edit', { path: 'a_mod/main.tsx', edits: [{ oldText: '= 1', newText: '= 2' }] })).isError).toBe(false);
+      expect(await call('read', { path: 'a_mod/main.tsx' })).toEqual({ isError: false, text: 'const lap: Lap = 2;\r\n' });
+      expect(await call('read', { path: 'a_mod/nope.tsx' })).toEqual({ isError: true, text: "ENOENT: no such file or directory, access '/mods/a_mod/nope.tsx'" });
+      expect((await call('ls', {})).text).toBe('.types/\na_mod/');
+      expect((await call('find', { pattern: '*.ts*' })).text).toBe('.types/f1a.d.ts\na_mod/main.tsx');
+      expect((await call('grep', { pattern: 'Lap' })).text).toBe('.types/f1a.d.ts:1: export type Lap = number;\na_mod/main.tsx:1: const lap: Lap = 2;');
+      // A PNG's signature and IHDR, 4x4.
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 4, 0, 0, 0, 4, 8, 6, 0, 0, 0, 0, 0, 0, 0]);
+      fs.writeFileSync('/mods/a_mod/pic.png', png);
+      expect(await run('read', { path: 'a_mod/pic.png' })).toEqual({ output: [{ type: 'text', text: png.toString('utf-8') }], isError: false });
+      expect((await call('delete_path', { path: 'a_mod' })).isError).toBe(false);
+      expect(fs.existsSync('/mods/a_mod')).toBe(false);
+    } finally {
+      vi.doUnmock('node:fs');
+      vi.resetModules();
+    }
+  });
 });

@@ -1,18 +1,23 @@
 # From pi-coding-agent to pi-durable
 
-The agent runs on [`@earendil-works/pi-durable`](https://www.npmjs.com/package/@earendil-works/pi-durable), with models
+The agent in both builds runs on [`@earendil-works/pi-durable`](https://www.npmjs.com/package/@earendil-works/pi-durable), with models
 and sign-ins from pi-ai. Until Nov 2026 it ran on pi-coding-agent. This says why it moved, what each part became, and what changed for
 someone using or working on the app. [ARCHITECTURE.md](ARCHITECTURE.md) describes the agent as it is now.
 
 ## Why
 
-pi-coding-agent is a terminal coding agent the app borrowed a session from. It brings its own model settings, session files,
-built-in tools and extension loading, and assumes Node everywhere. pi-durable is the harness alone, written to run anywhere: it takes
-its storage, its model credentials and its tools from the host, so the app supplies exactly what the agent can reach.
+pi-coding-agent is a terminal coding agent the app borrowed a session from. It assumes Node everywhere, and the browser build had to
+stand in for all of it. pi-durable is the harness alone, written to run anywhere: it takes its storage, its model credentials and its
+tools from the host.
 
-It's also what makes a browser build of f1a practical, which is kept for later. A browser bundle of what `agent.ts` imported from
-pi-coding-agent asks for 39 Node modules and is 7.6 MB minified. pi-durable with pi-ai's OpenAI and Anthropic providers asks for
-three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helper) and is 0.9 MB.
+| A browser bundle of | pi-coding-agent, what `agent.ts` imported | pi-durable + pi-ai's OpenAI and Anthropic providers |
+| --- | --- | --- |
+| Node modules asked for | 39 | `http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helper |
+| Minified | 7.6 MB | 0.9 MB |
+
+The browser's main-process bundle went from 7.9 MB to 1.8 MB, and about twenty stand-ins left `web/shims` (`os` aside: `module`, `assert`,
+`util`, `timers`, `async_hooks`, `readline`, `net`, `tls` and the rest), with the stubs for jiti and photon and one of the two rewrites
+`web/build.mjs` made of pi's sources.
 
 ## What each part became
 

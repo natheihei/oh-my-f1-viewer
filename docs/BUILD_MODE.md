@@ -171,7 +171,8 @@ instructions, and a separate session keeps what the build read out of the viewin
   | `look_at` | A picture of the mod's component as it shows now |
 
   They refuse the app's own files (`tsconfig.json`, `.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
-  All of them are the app's own (`electron/agent/extensions/modFiles.ts`), written over `fs` alone, with the descriptions, parameters and result texts pi's tools of those names had. Every path is resolved the way
+  All of them are the app's own (`electron/agent/extensions/modFiles.ts`), written over `fs` alone so they run the same in the
+  browser build, with the descriptions, parameters and result texts pi's tools of those names had. Every path is resolved the way
   pi resolved it (a leading `@` stripped, `~` expanded) and then checked against the mods folder, so a refusal names the path really
   meant. `read` returns any file as text: a picture of a component comes from `look_at`. `edit` matches as pi's does:
   exactly first, then with quotes, dashes and trailing spaces made plain, keeping each line's ending and a BOM. Each piece must

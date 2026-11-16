@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>f1a · mods folder</title>
+    <style>
+      html, body { margin: 0; background: #0a0a0a; color: #e7e7e7; font: 13px/1.6 'JetBrains Mono', ui-monospace, monospace; }
+      main { max-width: 640px; margin: 0 auto; padding: 28px 24px; display: grid; gap: 14px; }
+      h1 { font: inherit; margin: 0; }
+      p { margin: 0; color: #8a8a8a; }
+      #status { color: #e7e7e7; }
+      .actions { display: flex; gap: 8px; }
+      button { background: transparent; border: 1px solid #4a4a4a; color: #e7e7e7; font: inherit; padding: 2px 10px; cursor: pointer; }
+      button:hover, button:focus-visible { border-color: #e7e7e7; background: rgb(255 255 255 / .1); outline: none; }
+      button[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Mods folder</h1>
+      <p>f1a keeps its mods in the browser. Link a folder on this computer to work on them with your own editor or coding agent: the two are kept the same, in both directions, while f1a is open.</p>
+      <p id="status"></p>
+      <div class="actions">
+        <button id="choose" type="button">Choose a folder</button>
+        <button id="allow" type="button" hidden>Allow it again</button>
+        <button id="unlink" type="button" hidden>Unlink</button>
+      </div>
+    </main>
+    <script src="./folder.js"></script>
+  </body>
+</html>
