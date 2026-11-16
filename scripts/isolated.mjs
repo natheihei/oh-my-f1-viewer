@@ -115,7 +115,7 @@ export function syncAgentLogin(dir, log = console.log) {
  *
  * `agent` copies in the agent's login and settings, for runs with the real model: see prepareProfile.
  */
-export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, agent = false, userData: given = null } = {}) {
+export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, agent = false, userData: given = null, inspect = false } = {}) {
   const log = (...a) => console.log(`[${name}]`, ...a);
   // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
   const userData = given ?? prepareProfile(mkdtempSync(path.join(outDir, 'user-data-')), { agent });
@@ -123,6 +123,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
 
   const vitePort = await freePort();
   const cdpPort = await freePort();
+  const inspectPort = inspect ? await freePort() : null;
   const server = await createServer({
     root,
     cacheDir: path.join(outDir, 'vite-cache'),
@@ -134,7 +135,13 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
 
   const electronBin = path.join(root, 'node_modules/electron/dist/electron');
   const [width, height] = [1600 * scale, 900 * scale];
-  const electronArgs = [root, `--user-data-dir=${userData}`, `--remote-debugging-port=${cdpPort}`, `--force-device-scale-factor=${scale}`];
+  const electronArgs = [
+    ...(inspectPort ? [`--inspect=127.0.0.1:${inspectPort}`] : []),
+    root,
+    `--user-data-dir=${userData}`,
+    `--remote-debugging-port=${cdpPort}`,
+    `--force-device-scale-factor=${scale}`,
+  ];
   // The main process's own output: why a renderer went, what the agent and mods did.
   const mainLog = path.join(outDir, 'main.log');
   let child = null;
@@ -163,8 +170,10 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   page.on('pageerror', (e) => log('[pageerror]', e.message));
   page.on('crash', () => log('[crash] the renderer went: see main.log'));
   await page.waitForSelector('[data-testid=palette]', { timeout: 60_000 });
+  const main = inspectPort ? await mainProcess(inspectPort) : null;
 
   const stop = async () => {
+    main?.close();
     await browser.close().catch(() => {});
     for (const pid of ownPids()) {
       try {
@@ -188,7 +197,44 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   await page.addStyleTag({ content: '@keyframes isolated-tick{to{opacity:.99}}#isolated-tick{position:fixed;left:0;top:0;width:1px;height:1px;animation:isolated-tick 1s infinite alternate;pointer-events:none}' });
   await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div id="isolated-tick"></div>'));
 
-  return { page, log, stop, userData };
+  return { page, log, stop, userData, evaluate: main?.evaluate ?? null };
+}
+
+/**
+ * The main process, over its Node inspector (`--inspect`). `evaluate(fn, arg)` runs `fn(electron, arg)` there and
+ * returns what it resolves to, like Playwright's `ElectronApplication.evaluate`: `fn` is sent as source, so it
+ * can't close over anything, and `arg` and the result must be JSON.
+ */
+async function mainProcess(port) {
+  const targets = await until('The main process never opened its inspector', async () => (await fetch(`http://127.0.0.1:${port}/json/list`)).json());
+  const socket = new WebSocket(targets[0].webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = () => reject(new Error("The main process's inspector refused the connection"));
+  });
+  let last = 0;
+  const waiting = new Map();
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    waiting.get(message.id)?.(message);
+    waiting.delete(message.id);
+  };
+  const send = (method, params) =>
+    new Promise((resolve) => {
+      const id = ++last;
+      waiting.set(id, resolve);
+      socket.send(JSON.stringify({ id, method, params }));
+    });
+  return {
+    evaluate: async (fn, arg) => {
+      const expression = `(${fn})(process.mainModule.require('electron'), ${JSON.stringify(arg) ?? 'undefined'})`;
+      const { result, error } = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+      if (error) throw new Error(error.message);
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
+      return result.result.value;
+    },
+    close: () => socket.close(),
+  };
 }
 
 /**
