@@ -118,6 +118,10 @@ const weather = defineComponent({
 });
 
 describe('the chart list', () => {
+  // suggest_tiles is shown only with a session open.
+  beforeEach(() => useSession.setState({ session: { contentId: 1, title: 'Race', status: 'replay', type: 'race' } as SessionInfo, channels }));
+  afterEach(() => useSession.setState({ session: null, channels: [] }));
+
   it('is left out while only video is registered', () => {
     host.components.register({ components: components.filter((c) => c.name === 'video') });
     expect(describeComponents(read().components)).toBe('');

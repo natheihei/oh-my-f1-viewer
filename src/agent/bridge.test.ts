@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { EventInfo } from '../../shared/api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AgentToolCall, AgentToolResult, EventInfo, SessionInfo } from '../../shared/api';
 import type { SessionDataView, SqlTableInfo } from '../../shared/sessionData';
 
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { describeEvents, describeTables } = await import('./bridge');
+const { askAgent, connectTools, describeEvents, describeTables } = await import('./bridge');
+const { PICKING_TOOLS, AGENT_TOOLS } = await import('./tools');
+const { useSession } = await import('../data/session');
 
 const day = (iso: string) => Date.parse(`${iso}T12:00:00Z`);
 const event = (pageId: number, round: number, shortName: string, start: string, end: string, isTest = false): EventInfo => ({
@@ -76,5 +78,44 @@ describe('the table list for the agent', () => {
     expect(describeTables({ state: 'loading', sessionKey: 1, datasets: null })).toBe('');
     expect(describeTables({ state: 'idle' })).toBe('');
     expect(describeTables(ready([]))).toBe('');
+  });
+});
+
+describe("the tools sent with the agent's messages", () => {
+  afterEach(() => {
+    useSession.setState({ session: null, channels: [] });
+    vi.unstubAllGlobals();
+  });
+
+  it('are the picking ones with no session, and a call that opens one carries the rest, once', async () => {
+    const sent: string[][] = [];
+    const results: AgentToolResult[] = [];
+    let onCall: (call: AgentToolCall) => void = () => {};
+    vi.stubGlobal('window', {
+      f1a: {
+        ai: {
+          send: async (_text: string, _context: string, tools: { name: string }[]) => void sent.push(tools.map((t) => t.name)),
+          onToolCall: (cb: (call: AgentToolCall) => void) => ((onCall = cb), () => {}),
+          toolResult: (result: AgentToolResult) => results.push(result),
+        },
+      },
+    });
+    const stop = connectTools();
+    await askAgent('last race');
+    expect(sent).toEqual([PICKING_TOOLS]);
+
+    // As load_session leaves things: a session open, part way through the turn.
+    useSession.setState({ session: { contentId: 1, title: 'Race', type: 'race', status: 'replay' } as SessionInfo, channels: [] });
+    const call = async (callId: string) => {
+      onCall({ callId, name: 'list_streams', args: {} });
+      await vi.waitFor(() => expect(results.find((r) => r.callId === callId)).toBeDefined());
+      return results.find((r) => r.callId === callId)!;
+    };
+    expect((await call('a')).tools?.map((t) => t.name)).toEqual(AGENT_TOOLS.map((t) => t.name));
+    expect((await call('b')).tools).toBeUndefined();
+
+    await askAgent('norris');
+    expect(sent[1]).toEqual(AGENT_TOOLS.map((t) => t.name));
+    stop();
   });
 });
