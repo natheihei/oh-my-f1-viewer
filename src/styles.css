@@ -1173,9 +1173,44 @@
 }
 
 /* The tile a suggestion duplicates, while that suggestion is hovered or focused. */
-.stage-host-highlight::after {
-  @apply pointer-events-none absolute inset-0 border border-ink;
+/*
+ * The spotlight on a tile the viewer points at, from the prompt or a duplicate suggestion: every other
+ * tile dims, and this one is framed with its header lit, so it's plain on a bright feed or a dark chart.
+ */
+.grid-surface .grid-stack-item.tile-dimmed > .grid-stack-item-content::before {
+  @apply pointer-events-none absolute inset-0 bg-black;
+  opacity: 0.55;
   content: '';
+  z-index: 6;
+}
+
+.grid-surface .grid-stack-item.tile-pointed > .grid-stack-item-content::before {
+  @apply pointer-events-none absolute inset-0 border-2 border-ink;
+  content: '';
+  z-index: 6;
+}
+
+.tile-pointed .tile-titlebar,
+.tile-pointed .tile-titlebar:hover {
+  @apply bg-ink text-black;
+  border-bottom-color: var(--color-ink);
+}
+
+/* Everything in the lit header goes black, the sound's label and square too; an error or a warning keeps its colour. */
+.tile-pointed .tile-titlebar .tile-title,
+.tile-pointed .tile-titlebar .driver-code,
+.tile-pointed .tile-titlebar .tile-close,
+.tile-pointed .tile-titlebar .tile-slot:not(.tile-slot-error):not(.tile-slot-warn) {
+  @apply text-black;
+}
+
+.tile-pointed .tile-titlebar .tile-slot,
+.tile-pointed .tile-titlebar .tile-close {
+  border-color: rgb(0 0 0 / 0.35);
+}
+
+.tile-pointed .tile-titlebar-audio .tile-title::before {
+  @apply bg-black;
 }
 
 /* The spoiler check: between the palette's history and the suggested tiles. */
