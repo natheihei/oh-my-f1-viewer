@@ -164,9 +164,20 @@ On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1
   what a read-ahead turn had read. A summary does hold the playhead from app state, which is what the viewer is looking at.
   These runs found one fault, since fixed: a summary placed in the middle of a read-ahead turn was taken for the turn's start, and
   the turn wasn't cut down when it ended.
-- **The key window**, on a profile of its own: a key typed there is stored in `auth.json`, readable only by the user, and connects the
-  provider. The renderer never sees it, Cancel changes nothing, and disconnecting removes it.
-- **Stored conversations**: one `.jsonl` each, the build's apart from the viewing one.
+- **The key window**, on a profile of its own: a key typed there is stored, readable only by the user, and connects the provider. The
+  renderer never sees it, Cancel changes nothing, and disconnecting removes it. This ran while the credential was still in
+  `pi-agent/auth.json`, before it moved to the encrypted `f1a-credentials.json`.
+
+**After the files of pi-coding-agent's conventions went** (no `SYSTEM.md`, mods `AGENTS.md` or `tsconfig.json`), the credential moved
+to `f1a-credentials.json`, the settings to `f1a-settings.json` and each conversation to a SQLite database, on the main profile
+(2026-11-16):
+
+- **A ChatGPT sign-in from `/settings-agent`** stored the encrypted credential, and every turn below used it.
+- **`scripts/seek-check.mjs`** passed in full again, and its viewing conversation was stored as `<time>_view.sqlite`, with the
+  `f1a.forget` entries of its read-ahead turns. `node devscripts/conversation.mjs` prints it.
+- **The settings** are shared by every build on the profile: the checks, each on a Vite port of its own, found the agent set up from
+  the file. The volume saved in one launch came back after a reload, and a change made just before quitting was written.
+- **Build mode wasn't run again**: `scripts/build-check.mjs` needs an empty mods folder, and the main profile's has mods in it.
 
 **A ChatGPT sign-in by a person** (2026-11-16), on a profile of its own with no login in it: "Sign in with ChatGPT" opened
 OpenAI's page in the default browser, the callback came back, the provider showed as "OpenAI (ChatGPT subscription)" with GPT-6.1
