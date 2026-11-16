@@ -74,19 +74,23 @@ and what the agent said to them, which the viewer already knows.
 
 How it works, in `electron/agent/extensions/forgetReadAhead.ts`:
 
-- **Marking.** A tool that reads past the playhead says so with `pastPlayhead` on its exposure in `src/agent/tools.ts`, and a successful result carries the mark
-  in pi's `details`, which the model never sees. The mark means "read past the playhead", not "the viewer was asked", so live-edge reads count too.
+- **Marking.** A tool that reads past the playhead says so with `pastPlayhead` on its exposure in `src/agent/tools.ts`, and the agent notes the call of each successful
+  result that carries it, for as long as the turn lasts. The mark means "read past the playhead", not "the viewer was asked", so live-edge reads count too.
 - **Collapsing.** A marked turn is reduced to its user message and one assistant message holding everything the agent said, in order. Tool calls, tool
   results and reasoning are all dropped, including the SQL and seek dates, which can carry what the agent learned.
 - **Telling the agent.** The user message gains an `<app_note>` block saying the tool calls were removed. It's on the user side, next to `<app_state>`, so the
   agent isn't shown a pattern of replying without tools that it could copy.
-- **Before each model request** (pi's `context` hook), every turn but the current one is collapsed.
-- **Before each compaction** (pi's `session_before_compact` hook), every marked turn is collapsed, including the turn in progress, because a summary outlives
-  the turn. Compaction reads stored messages and doesn't go through the `context` hook, so it needs its own.
-- **A turn split by compaction** has lost its start, and with it possibly the mark. Once it's over, it's treated as marked.
+- **When the turn ends**, however it ends, one more entry is written to the conversation (`f1a.forget`). It holds an edit for each
+  entry of the turn: replace the user message with the noted one, replace the last reply with everything the agent said, and omit the
+  rest. pi-durable applies those edits whenever it builds what the model sees, so every later request reads the cut-down turn.
+- **Compaction** summarizes what the model sees, so it reads the cut-down turn too. A turn that read ahead and is still running
+  has its rows in the context it needs, and a summary would outlive the turn. So a `beforeCompact` hook makes that summary itself:
+  from the same messages with the running turn cut down the same way, by the conversation's own model. If that fails, compaction
+  is declined: no summary is better than one that could give the race away.
+- **Build mode** marks nothing: its agent reads the whole session by design, and its conversation ends with the build.
 
-The stored conversation isn't changed: collapsing edits the copy sent to the model. The palette is built from events during the turn, so the viewer's history
-doesn't change either. The first request after a collapse re-reads that turn and the new message, about 300 more uncached tokens when measured. The prompt and the turns before it stay cached.
+The stored conversation isn't changed: the turn's entries stay as they were, and the edits apply only to what the model is sent. The palette is built from events during the turn, so the viewer's history
+doesn't change either. The first request after a collapse re-reads that turn and the new message. The prompt and the turns before it stay cached.
 
 If the agent needs the data again, it queries again. Under "Allow once" that asks again. Under "Allow for this session" it doesn't.
 
