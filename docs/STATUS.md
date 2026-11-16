@@ -200,9 +200,6 @@ The same mod with a 62px heading of its own still hid its message at 2 rows: see
   needs confirming by eye first. The sync engine already has an `offsetSec` input for them.
 - **No data while behind the join point of a live session.** A capture only has what arrived since the app connected, so watching a
   live race from its start shows nothing until the video catches up with that moment. Nothing displays session data yet.
-- **Electron 46 needs the async `safeStorage`.** The F1 TV sign-in (its token and cookies) is read and written
-  with `safeStorage.encryptString`, `decryptString` and `isEncryptionAvailable`, which Electron 45 deprecates and 46 removes. On 45
-  they still work and log a deprecation warning. Moving `secureStore.js` and its callers to the `…Async` versions comes before 46.
 - **Tall windows waste space.** Tiles are sized without regard to 16:9, so a nearly square window shows large black bars.
 
 ## Deferred, by design
