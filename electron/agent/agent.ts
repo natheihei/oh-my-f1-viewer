@@ -52,6 +52,9 @@ const PARTIAL_INTERVAL_MS = 40;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
 
+/** Stored conversations of each kind kept for review. Older ones are deleted when a new one starts. */
+export const KEPT_CONVERSATIONS = 100;
+
 const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
 
 type Durable = typeof import('@earendil-works/pi-durable', { with: { 'resolution-mode': 'import' } });
@@ -148,6 +151,20 @@ function handoffOf(value: unknown): AgentHandoff | null {
   if (!v || typeof v !== 'object' || !MODES.includes(v.mode as AgentMode) || v.mode === 'build') return null;
   if (typeof v.scope !== 'string' || typeof v.appState !== 'string' || typeof v.reference !== 'string' || !Array.isArray(v.tools)) return null;
   return { mode: v.mode as AgentMode, scope: v.scope, appState: v.appState, reference: v.reference, tools: v.tools };
+}
+
+/**
+ * Deletes all but the newest `keep` stored conversations of one kind, with SQLite's files beside each. Names start
+ * with the time, so they sort oldest first. Best effort: a file that can't be deleted is left for next time.
+ */
+export async function pruneConversations(dir: string, mode: AgentMode, keep = KEPT_CONVERSATIONS): Promise<void> {
+  const suffix = `_${mode}.sqlite`;
+  const names = await fsp.readdir(dir).catch(() => [] as string[]);
+  const ofMode = names.filter((name) => name.endsWith(suffix)).sort();
+  const old = ofMode.slice(0, Math.max(0, ofMode.length - keep));
+  await Promise.all(
+    old.flatMap((name) => ['', '-wal', '-shm', '-journal'].map((extra) => fsp.rm(path.join(dir, name + extra), { force: true }).catch(() => {}))),
+  );
 }
 
 /** The text blocks of a model message, joined. */
@@ -294,6 +311,7 @@ export class Agent {
     // and a new conversation or a restart starts empty.
     await fsp.mkdir(conversationsDir, { recursive: true });
     const storage = await open(path.join(conversationsDir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${mode}.sqlite`));
+    await pruneConversations(conversationsDir, mode);
 
     const registry = createRegistry();
     const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;

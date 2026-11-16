@@ -38,7 +38,7 @@ vi.mock('./keyWindow', () => ({
   },
 }));
 
-const { Agent } = await import('./agent');
+const { Agent, KEPT_CONVERSATIONS, pruneConversations } = await import('./agent');
 const { BACKGROUND_CONTEXT } = await import('@earendil-works/chord/context');
 const pi = await import('@earendil-works/pi-ai');
 const { fauxProvider, fauxToolCall } = pi;
@@ -1054,6 +1054,33 @@ describe('stored conversations', () => {
     await agent.send('go', 'state', [TOOL]);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\ngo', 'assistant: ', 'toolResult: SECRET ROWS', 'assistant: Jumped to lap 30.']);
     expect(records(files()[0]).at(-1)).toMatchObject({ kind: 'f1a.forget' });
+  });
+
+  it('keeps only the newest of each kind when a new one starts', async () => {
+    mkdirSync(conversationsDir());
+    const old = (i: number, kind: string) => `2020-01-01T00-00-${String(i).padStart(3, '0')}Z_${kind}.sqlite`;
+    for (let i = 0; i < KEPT_CONVERSATIONS; i++) {
+      for (const extra of ['', '-wal', '-shm']) writeFileSync(path.join(conversationsDir(), old(i, 'view') + extra), '');
+    }
+    writeFileSync(path.join(conversationsDir(), old(0, 'build')), '');
+    const { agent, script } = setup();
+    script(fauxAssistantMessage('Hello.'));
+    await agent.send('hi', 'state', [TOOL]);
+    // The oldest view one goes, with its side files; the new one and the other kinds stay.
+    expect(files()).toHaveLength(KEPT_CONVERSATIONS);
+    expect(files()).not.toContain(old(0, 'view'));
+    expect(readdirSync(conversationsDir()).filter((f) => f.startsWith(old(0, 'view')))).toEqual([]);
+    expect(files()).toContain(old(1, 'view'));
+    expect(stored(files().at(-1)!)).toContain('assistant: Hello.');
+    expect(conversationFiles('build')).toEqual([old(0, 'build')]);
+  });
+
+  it('prunes nothing it cannot read, and keeps exactly as many as asked', async () => {
+    await pruneConversations(conversationsDir(), 'view', 1);
+    mkdirSync(conversationsDir());
+    for (const name of ['a_view.sqlite', 'b_view.sqlite', 'c_view.sqlite', 'notes.txt']) writeFileSync(path.join(conversationsDir(), name), '');
+    await pruneConversations(conversationsDir(), 'view', 2);
+    expect(readdirSync(conversationsDir()).sort()).toEqual(['b_view.sqlite', 'c_view.sqlite', 'notes.txt']);
   });
 
   it('writes nothing until there is a message', async () => {
