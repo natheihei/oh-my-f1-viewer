@@ -614,7 +614,7 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
       {
         name: 'read',
         description:
-          "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+          "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
         parameters: piObject({ path: string(PATH), offset: number('Line number to start reading from (1-indexed)'), limit: number('Maximum number of lines to read') }, ['path']),
         constrainedSampling: STRICT,
         outputLimits: OUTPUT_LIMITS,
@@ -624,7 +624,7 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
         stopIfAborted(context);
         const file = resolveInside(dir, await resolveReadPath(args.path, dir));
         await fsp.access(file, constants.R_OK);
-        // Every file as text, images and binary files too: the wrapped pi read had no image detection.
+        // Every file as text, as the description says: the wrapped pi read had no image detection, though its description claimed it.
         const content = await fsp.readFile(file);
         return { output: text(readText(content.toString('utf-8'), args)) };
       },

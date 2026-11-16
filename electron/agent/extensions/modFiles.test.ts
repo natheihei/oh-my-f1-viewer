@@ -81,7 +81,7 @@ describe('the build agent\'s file tools', () => {
     const strict = { type: 'json_schema', strict: 'prefer' };
     expect(shown('read')).toEqual({
       description:
-        "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+        "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
       parameters: {
         type: 'object',
         required: ['path'],
