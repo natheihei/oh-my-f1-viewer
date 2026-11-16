@@ -1,15 +1,16 @@
 /**
- * The agent: a pi session on the provider, model and thinking level chosen in `/settings-agent`, from the
- * providers in supported.ts. It holds the credentials, so it lives here, but its tools run in the renderer,
- * which owns layout and playback. The renderer sends their definitions with each message, each call goes
- * over IPC, and its result comes back here.
+ * The agent: a pi-durable conversation on the provider, model and thinking level chosen in `/settings-agent`,
+ * from the providers in supported.ts. It holds the credentials, so it lives here, but its tools run in the
+ * renderer, which owns layout and playback. The renderer sends their definitions with each message, each call
+ * goes over IPC, and its result comes back here.
  */
 import { app, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import type { Api, AssistantMessage, AuthInteraction, Model } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
-import type { AgentSession, ModelRuntime, SettingsManager } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
+import type { Context } from '@earendil-works/chord/context' with { 'resolution-mode': 'import' };
+import type { Api, AuthInteraction, CredentialStore, Message, Model, Models, Provider } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
+import type { Conversation as DurableConversation, EntryRecord, Harness, HarnessSettings } from '@earendil-works/pi-durable' with { 'resolution-mode': 'import' };
 import type {
   AgentConnectEvent,
   AgentEvent,
@@ -25,33 +26,30 @@ import type {
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
+import { fileCredentialStore } from './credentialFile';
 import { installId } from './credentials';
-import { forgetReadAhead } from './extensions/forgetReadAhead';
-import { MOD_FILE_TOOLS, modFilesExtension, type ModFilesHost } from './extensions/modFiles';
-import { promptExtension } from './extensions/prompt';
+import { forgetForSummary, forgetTurn, readAheadIn, SUMMARY_SYSTEM_PROMPT, summaryRequest } from './extensions/forgetReadAhead';
+import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
-import { roundCap, type RoundCap } from './extensions/roundCap';
-import { toolsExtension, type ToolsExtension } from './extensions/tools';
 import { askForKey } from './keyWindow';
+import { AgentSettings, type StoredSettings } from './settingsFile';
 import { SUPPORTED, supported, type SupportedProvider } from './supported';
+import { Transcript } from './transcript';
 
 const MAX_TOOL_ROUNDS = 10;
 /** Building takes more steps than viewing: reading the types, writing, fixing, looking. */
 const MAX_BUILD_ROUNDS = 60;
 const TOOL_TIMEOUT_MS = 60_000;
 const CONNECT_TIMEOUT_MS = 5 * 60_000;
+/** How often the text of a reply in progress is published. */
+const PARTIAL_INTERVAL_MS = 40;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
 const LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-/** Written only if missing, so it can be edited. The provider, model and thinking level come from `/settings-agent`. */
-const STARTER_SETTINGS = {
-  compaction: { enabled: true },
-  retry: { enabled: false },
-  cacheWarming: 'off',
-};
-
 const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
+
+type Durable = typeof import('@earendil-works/pi-durable', { with: { 'resolution-mode': 'import' } });
 
 function emit(event: AgentEvent): void {
   sendToRenderer('ai:event', event);
@@ -72,12 +70,23 @@ function openExternal(raw: string): void {
   }
 }
 
+/** The model providers and their credentials, as the agent uses them. Tests put fakes in its place. */
+export interface AgentModels {
+  models: Models;
+  credentials: CredentialStore;
+  /** Adds a provider, or replaces the one with its id. */
+  setProvider(provider: Provider): void;
+  login: Models['login'];
+  logout: Models['logout'];
+}
+
 /** Set up once per run of the app. */
 interface Runtime {
-  models: ModelRuntime;
-  settings: SettingsManager;
+  durable: Durable;
+  context: Context;
+  providers: AgentModels;
+  settings: AgentSettings;
   agentDir: string;
-  cwd: string;
   levels: (model: Model<Api>) => ThinkingLevel[];
   clamp: (model: Model<Api>, level: ThinkingLevel) => ThinkingLevel;
 }
@@ -88,17 +97,28 @@ interface Choice {
   way: ConnectWay;
   model: Model<Api>;
   thinking: ThinkingLevel;
+  stored: StoredSettings;
 }
 
 /** One conversation. Starting over makes a new one. */
 interface Conversation {
-  session: AgentSession;
-  tools: ToolsExtension;
-  cap: RoundCap;
+  harness: Harness;
+  root: DurableConversation;
+  /** Makes exactly these tools available to the model, from its next request. */
+  register(definitions: AgentToolDefinition[]): void;
   /** The build agent's look at the screen before it ends a turn. */
   check: RenderCheck | null;
   reference: string;
   provider: string;
+  model: Model<Api>;
+  /** The conversation's `.jsonl`, for reviewing it later. */
+  transcript: Transcript;
+  /** Model requests made for the message being answered. */
+  rounds: number;
+  maxRounds: number;
+  /** Calls of the message being answered that read past the playhead. */
+  readAhead: Set<string>;
+  close(): Promise<void>;
 }
 
 interface Turn {
@@ -106,6 +126,13 @@ interface Turn {
   mode: AgentMode;
   cancelled: boolean;
   acted: boolean;
+}
+
+/** The text blocks of a model message, joined. */
+function textOf(message: Message | undefined): string {
+  if (!message) return '';
+  if (typeof message.content === 'string') return message.content;
+  return message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
 }
 
 export class Agent {
@@ -120,9 +147,11 @@ export class Agent {
   private generation = 0;
   private pendingTools = new Map<string, (result: AgentToolResult) => void>();
   private connectAbort: AbortController | null = null;
+  /** The run policy every conversation reads, from settings.json as it stood at the last message. */
+  private policy: HarnessSettings = {};
 
-  /** `onRuntime` lets tests register a fake model. */
-  constructor(private readonly onRuntime?: (models: ModelRuntime) => void) {}
+  /** `onRuntime` lets tests register a fake model and credentials. */
+  constructor(private readonly onRuntime?: (providers: AgentModels) => void) {}
 
   private runtime(): Promise<Runtime> {
     this.runtimePromise ??= this.createRuntime().catch((e) => {
@@ -133,31 +162,39 @@ export class Agent {
   }
 
   private async createRuntime(): Promise<Runtime> {
-    const { ModelRuntime, SettingsManager } = await import('@earendil-works/pi-coding-agent');
+    const durable = await import('@earendil-works/pi-durable');
+    const { BACKGROUND_CONTEXT } = await import('@earendil-works/chord/context');
     const { clampThinkingLevel, getSupportedThinkingLevels } = await import('@earendil-works/pi-ai');
+    const { createModels } = await import('@earendil-works/pi-ai/models');
+    const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
+    const { anthropicProvider } = await import('@earendil-works/pi-ai/providers/anthropic');
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
-    const cwd = path.join(app.getPath('userData'), 'mods');
-    await fsp.mkdir(agentDir, { recursive: true });
-    await fsp.mkdir(cwd, { recursive: true });
-    // App-owned, like the mods folder's tsconfig.json: hand edits are lost, and app updates always reach it.
+    const settings = new AgentSettings(path.join(agentDir, 'settings.json'));
+    await settings.ensure();
+    // The viewing agent's prompt as this version has it, to read beside its conversations. App-owned: hand edits are lost.
     await fsp.writeFile(path.join(agentDir, 'SYSTEM.md'), SYSTEM_PROMPT);
-    await fsp
-      .writeFile(path.join(agentDir, 'settings.json'), JSON.stringify(STARTER_SETTINGS, null, 2) + '\n', { flag: 'wx' })
-      .catch((e: NodeJS.ErrnoException) => {
-        if (e.code !== 'EEXIST') throw e;
-      });
-    const models = await ModelRuntime.create({
-      authPath: path.join(agentDir, 'auth.json'),
-      modelsPath: path.join(agentDir, 'models.json'),
-    });
-    this.onRuntime?.(models);
-    // Not trusted: anything in mods/.pi could otherwise override the prompt or run in this process.
-    const settings = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
+    // A test's fakes go in first: its credentials are what the collection is made over, and its providers
+    // replace the real ones of the same id.
+    const added: Provider[] = [];
+    const providers: AgentModels = {
+      models: null as unknown as Models,
+      credentials: fileCredentialStore(path.join(agentDir, 'auth.json')),
+      setProvider: (provider) => void added.push(provider),
+      login: (...args) => providers.models.login(...args),
+      logout: (...args) => providers.models.logout(...args),
+    };
+    this.onRuntime?.(providers);
+    const models = createModels({ credentials: providers.credentials });
+    // Only the providers supported.ts offers: nothing else in pi's catalog can be reached.
+    for (const provider of [openaiProvider(), anthropicProvider(), ...added]) models.setProvider(provider);
+    providers.models = models;
+    providers.setProvider = (provider) => models.setProvider(provider);
     return {
-      models,
+      durable,
+      context: BACKGROUND_CONTEXT,
+      providers,
       settings,
       agentDir,
-      cwd,
       levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
       clamp: (model, level) => clampThinkingLevel(model, level) as ThinkingLevel,
     };
@@ -165,9 +202,10 @@ export class Agent {
 
   /** The way a provider is connected: its credential in auth.json. Environment variables never count. */
   private async connectedWay(entry: SupportedProvider): Promise<ConnectWay | null> {
-    const { models } = await this.runtime();
-    const credential = (await models.listCredentials()).find((c) => c.providerId === entry.provider);
-    return credential && entry.ways[credential.type] ? credential.type : null;
+    const { providers } = await this.runtime();
+    const credential = (await providers.credentials.list()).find((c) => c.providerId === entry.provider);
+    const way = credential?.type as ConnectWay | undefined;
+    return way && entry.ways[way] ? way : null;
   }
 
   /**
@@ -175,17 +213,18 @@ export class Agent {
    * model missing from its supported list falls back to the recommended one.
    */
   private async current(): Promise<Choice | null> {
-    const { models, settings, clamp } = await this.runtime();
-    const entry = supported(settings.getDefaultProvider());
+    const { providers, settings, clamp } = await this.runtime();
+    const stored = await settings.read();
+    const entry = supported(stored.defaultProvider);
     if (!entry) return null;
     const way = await this.connectedWay(entry);
     if (!way) return null;
-    const saved = settings.getDefaultModel();
-    const id = saved && entry.models.includes(saved) && models.getModel(entry.provider, saved) ? saved : entry.recommended.model;
-    const model = models.getModel(entry.provider, id);
+    const saved = stored.defaultModel;
+    const id = saved && entry.models.includes(saved) && providers.models.getModel(entry.provider, saved) ? saved : entry.recommended.model;
+    const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
     if (!model) return null;
-    const thinking = clamp(model, (settings.getDefaultThinkingLevel() as ThinkingLevel | undefined) ?? entry.recommended.thinking);
-    return { entry, way, model, thinking };
+    const thinking = clamp(model, (stored.defaultThinkingLevel as ThinkingLevel | undefined) ?? entry.recommended.thinking);
+    return { entry, way, model, thinking, stored };
   }
 
   /** Gives the build agent its mods folder. Until then it has no file tools. */
@@ -193,53 +232,155 @@ export class Agent {
     this.modFiles = host;
   }
 
-  private async createConversation(choice: Choice, mode: AgentMode = 'view'): Promise<Conversation> {
-    const { DefaultResourceLoader, SessionManager, createAgentSession } = await import('@earendil-works/pi-coding-agent');
-    const { models, settings, agentDir, cwd } = await this.runtime();
-    const { model } = choice;
-
-    const build = mode === 'build';
-    const tools = toolsExtension((call) => this.callTool(call), build ? MOD_FILE_TOOLS : []);
-    const cap = roundCap(build ? MAX_BUILD_ROUNDS : MAX_TOOL_ROUNDS);
-    const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;
-    const modFiles = modFilesExtension(
-      () => {
-        if (!this.modFiles) throw new Error('The mods folder is not available.');
-        return this.modFiles;
+  /** The run policy for a conversation, from what settings.json says. */
+  private policyOf(stored: StoredSettings): HarnessSettings {
+    const { enabled, reserveTokens, keepRecentTokens } = stored.compaction ?? {};
+    return {
+      // The renderer's tools change what's on screen: one at a time, in the order the model asked.
+      toolExecution: 'sequential',
+      retry: { maxRetries: stored.retry?.enabled ? (stored.retry.maxRetries ?? 3) : 0 },
+      compaction: {
+        enabled: enabled ?? true,
+        ...(reserveTokens === undefined ? {} : { reserveTokens }),
+        ...(keepRecentTokens === undefined ? {} : { keepRecentTokens }),
       },
-      (name, ok, note) => this.reportTool(name, ok, note),
-      (places) => check?.heard(places),
+      progress: { partialIntervalMs: PARTIAL_INTERVAL_MS },
+      // A message waiting behind a turn that failed is not answered later, out of the blue.
+      afterFailedRun: 'withdraw',
+    };
+  }
+
+  private async createConversation(choice: Choice, mode: AgentMode = 'view'): Promise<Conversation> {
+    const { durable, context, providers, agentDir } = await this.runtime();
+    const { createRegistry, defineExtension, defineTool, hook, section, CompactionTask, GenerationTask, Harness: HarnessClass, MemoryStorage, ProviderDoc } = durable;
+    const build = mode === 'build';
+    const id = build ? 'f1a-build' : 'f1a';
+    // Stored for review but never resumed: each conversation gets its own timestamped file, and lives in memory.
+    const transcript = new Transcript(
+      path.join(agentDir, build ? 'build-sessions' : 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}_${id}.jsonl`),
+      id,
+      path.join(app.getPath('userData'), 'mods'),
     );
-    const conversation: Conversation = { session: null as unknown as AgentSession, tools, cap, check, reference: '', provider: choice.entry.provider };
-    // pi also walks up from cwd and reads ~/.agents/skills: keep only what's in agentDir.
-    const inside = (p: string) => path.resolve(p).startsWith(agentDir + path.sep);
-    const resourceLoader = new DefaultResourceLoader({
-      cwd,
-      agentDir,
-      settingsManager: settings,
-      agentsFilesOverride: (base) => ({ agentsFiles: base.agentsFiles.filter((f) => inside(f.path)) }),
-      skillsOverride: (base) => ({ ...base, skills: base.skills.filter((s) => inside(s.filePath)) }),
-      // The build agent reads the whole session by design, and nothing of its conversation reaches the viewing one.
-      extensionFactories: build
-        ? [promptExtension(() => conversation.reference, BUILD_PROMPT), modFiles, tools.factory, cap.factory, check!.factory]
-        : [promptExtension(() => conversation.reference), tools.factory, cap.factory, forgetReadAhead],
+    await transcript.start();
+
+    const registry = createRegistry();
+    const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;
+    const conversation: Conversation = {
+      harness: null as unknown as Harness,
+      root: null as unknown as DurableConversation,
+      register: () => {},
+      check,
+      reference: '',
+      provider: choice.entry.provider,
+      model: choice.model,
+      transcript,
+      rounds: 0,
+      maxRounds: build ? MAX_BUILD_ROUNDS : MAX_TOOL_ROUNDS,
+      readAhead: new Set(),
+      close: async () => {},
+    };
+
+    const base = build ? BUILD_PROMPT : SYSTEM_PROMPT;
+    // One section, so the prompt is exactly these words: the app's own, then what it knows up front.
+    const prompt = defineExtension({
+      name: 'f1a-prompt',
+      sections: [section('f1a', () => (conversation.reference ? `${base}\n\n${conversation.reference}` : base), { tag: false })],
     });
-    await resourceLoader.reload();
-    const { session } = await createAgentSession({
-      cwd,
-      agentDir,
-      model,
-      thinkingLevel: choice.thinking,
-      modelRuntime: models,
-      settingsManager: settings,
-      resourceLoader,
-      noTools: 'builtin',
-      // Stored for review but never resumed: each conversation gets its own timestamped file.
-      // A fixed id, passed on to the provider as the prompt cache key.
-      sessionManager: SessionManager.create(cwd, path.join(agentDir, build ? 'build-sessions' : 'sessions'), { id: build ? 'f1a-build' : 'f1a' }),
+
+    /** The renderer's tools. Installing the extension again under its name replaces the set, from the next request. */
+    const register = (definitions: AgentToolDefinition[]): void => {
+      const tools = definitions.map(({ name, description, parameters }) =>
+        defineTool({
+          name,
+          description,
+          parameters,
+          execute: async (args, api) => {
+            const result = await this.callTool({ callId: api.callId, name, args: args as Record<string, unknown> });
+            // A call that opens or closes a session changes what the model can do next, in the same turn.
+            if (result.tools) register(result.tools);
+            // The build agent reads the whole session by design, and its conversation ends with the build.
+            if (!build && result.ok && result.pastPlayhead) conversation.readAhead.add(api.callId);
+            return { output: [{ type: 'text', text: result.content }], isError: !result.ok };
+          },
+        }),
+      );
+      registry.install(defineExtension({ name: 'f1a-tools', tools }));
+    };
+    conversation.register = register;
+
+    const rules = defineExtension({
+      name: 'f1a-rules',
+      hooks: [
+        hook(GenerationTask, {
+          beforeRequest: () => {
+            conversation.rounds += 1;
+            return undefined;
+          },
+          // The build agent is sent on when something it made isn't drawing, within the rounds the message has left.
+          onYield: async () => {
+            const left = conversation.maxRounds - conversation.rounds;
+            if (!check || left <= 0) return undefined;
+            const text = await check.next();
+            if (!text) return undefined;
+            await conversation.root.configure({ maxTurns: left }, context);
+            return { continue: text };
+          },
+        }),
+        hook(CompactionTask, {
+          // A summary outlives the turn, so it can't hold rows a turn still running read past the playhead. Such a
+          // turn is summarized here from its cut-down form. Once a turn has ended it's cut down in the
+          // context itself, and pi-durable's own summary is right.
+          beforeCompact: async ({ messages, entries, instructions }) => {
+            if (!readAheadIn(messages, conversation.readAhead)) return undefined;
+            const summary = await this.summarize(conversation, forgetForSummary(messages, conversation.readAhead, entries), instructions).catch((e: Error) => {
+              console.warn('[ai] summarizing a read ahead:', e.message);
+              return null;
+            });
+            // No summary is better than one that could give the race away.
+            return summary ? { summary } : { decline: true };
+          },
+        }),
+      ],
     });
-    session.agent.toolExecution = 'sequential';
-    conversation.session = session;
+
+    registry.install(prompt);
+    if (build) {
+      registry.install(
+        modFilesExtension(
+          durable,
+          () => {
+            if (!this.modFiles) throw new Error('The mods folder is not available.');
+            return this.modFiles;
+          },
+          (name, ok, note) => this.reportTool(name, ok, note),
+          (places) => check?.heard(places),
+        ),
+      );
+    }
+    register([]);
+    registry.install(rules);
+
+    const harness = await HarnessClass.open(
+      new MemoryStorage(),
+      {
+        models: providers.models,
+        registry,
+        // Read at every use, so settings.json as it stood at the last message applies.
+        settings: () => this.policy,
+        identity: { attribution: null },
+        // A fixed id, passed on to the provider as the prompt cache key.
+        conversationCreated: async (tx, created) => {
+          (await tx.doc(ProviderDoc, created.id)).sessionId = id;
+        },
+        onReport: (report) => console.warn(`[ai] ${report.kind}:`, report.error),
+      },
+      context,
+    );
+    conversation.harness = harness;
+    conversation.close = () => harness.close(context).catch((e: Error) => console.warn('[ai] closing a conversation:', e.message));
+    conversation.root = await harness.root(context, {
+      agent: { model: { provider: choice.model.provider, modelId: choice.model.id }, thinkingLevel: choice.thinking, maxTurns: conversation.maxRounds },
+    });
     return conversation;
   }
 
@@ -257,10 +398,10 @@ export class Agent {
 
   /** The supported providers, as pi describes them. One missing from the installed pi is left out. */
   async providers(): Promise<AgentProviderOption[]> {
-    const { models, levels } = await this.runtime();
+    const { providers, levels } = await this.runtime();
     const choice = await this.current();
     return SUPPORTED.flatMap((entry): AgentProviderOption[] => {
-      const provider = models.getProvider(entry.provider);
+      const provider = providers.models.getProvider(entry.provider);
       if (!provider) return [];
       const { oauth, apiKey } = provider.auth;
       const label = (way: ConnectWay) => (way === 'oauth' ? (oauth?.loginLabel ?? `Sign in with ${entry.label}`) : 'Use an API key');
@@ -273,7 +414,7 @@ export class Agent {
           ways: WAYS.filter(offered).map((w) => ({ way: w, label: label(w), note: entry.ways[w] as string })),
           connected: way ? { way, label: way === 'oauth' ? (oauth?.name ?? 'Signed in') : 'API key' } : null,
           models: entry.models.flatMap((id) => {
-            const model = models.getModel(entry.provider, id);
+            const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
             return model ? [{ id, name: model.name, thinking: levels(model) }] : [];
           }),
           recommended: entry.recommended,
@@ -290,27 +431,26 @@ export class Agent {
   async connect(providerId: string, way: ConnectWay): Promise<AiStatus> {
     const entry = supported(providerId);
     if (!entry || !entry.ways[way]) throw new Error(`${providerId} can't be connected that way.`);
-    const { models, settings } = await this.runtime();
+    const { providers, settings } = await this.runtime();
     this.connectAbort?.abort();
     const abort = new AbortController();
     this.connectAbort = abort;
     const timeout = setTimeout(() => abort.abort(), CONNECT_TIMEOUT_MS);
     try {
-      await models.login(entry.provider, way, this.interaction(entry, abort.signal), { agentName: 'f1a', getDeviceId: installId });
+      await providers.login(entry.provider, way, this.interaction(entry, abort.signal), { agentName: 'f1a', getDeviceId: installId });
     } finally {
       clearTimeout(timeout);
       if (this.connectAbort === abort) this.connectAbort = null;
     }
 
-    const switched = settings.getDefaultProvider() !== entry.provider;
+    const stored = await settings.read();
+    const switched = stored.defaultProvider !== entry.provider;
     if (switched) await this.reset();
-    for (const credential of await models.listCredentials()) {
-      if (credential.providerId !== entry.provider) await models.logout(credential.providerId);
+    for (const credential of await providers.credentials.list()) {
+      if (credential.providerId !== entry.provider) await providers.logout(credential.providerId);
     }
-    if (switched || !entry.models.includes(settings.getDefaultModel() ?? '')) {
-      settings.setDefaultModelAndProvider(entry.provider, entry.recommended.model);
-      settings.setDefaultThinkingLevel(entry.recommended.thinking);
-      await settings.flush();
+    if (switched || !entry.models.includes(stored.defaultModel ?? '')) {
+      await settings.change({ defaultProvider: entry.provider, defaultModel: entry.recommended.model, defaultThinkingLevel: entry.recommended.thinking });
     }
     return this.status();
   }
@@ -357,40 +497,40 @@ export class Agent {
   /** Removes the connected provider. The agent then needs setting up again. */
   async disconnect(): Promise<void> {
     await this.reset();
-    const { models, settings } = await this.runtime();
-    const provider = settings.getDefaultProvider();
-    if (provider) await models.logout(provider);
+    const { providers, settings } = await this.runtime();
+    const provider = (await settings.read()).defaultProvider;
+    if (provider) await providers.logout(provider);
   }
 
   /** Saves the model and thinking level. A conversation picks them up at its next message. */
   async choose(modelId: string, thinking: ThinkingLevel): Promise<AiStatus> {
     const choice = await this.current();
     if (!choice) throw new Error(SETUP_NEEDED);
-    const { models, settings } = await this.runtime();
+    const { providers, settings } = await this.runtime();
     if (!LEVELS.includes(thinking)) throw new Error(`Unknown thinking level: ${thinking}`);
-    if (!choice.entry.models.includes(modelId) || !models.getModel(choice.entry.provider, modelId)) {
+    if (!choice.entry.models.includes(modelId) || !providers.models.getModel(choice.entry.provider, modelId)) {
       throw new Error(`${modelId} isn't offered for ${choice.entry.label}.`);
     }
-    settings.setDefaultModelAndProvider(choice.entry.provider, modelId);
-    settings.setDefaultThinkingLevel(thinking);
-    await settings.flush();
+    await settings.change({ defaultProvider: choice.entry.provider, defaultModel: modelId, defaultThinkingLevel: thinking });
     return this.status();
   }
 
   /** Starts a new conversation. The next send creates it. */
   async reset(): Promise<void> {
     await this.cancel();
-    this.conversation?.session.dispose();
+    const [viewing, building] = [this.conversation, this.building];
     this.conversation = null;
-    this.building?.session.dispose();
     this.building = null;
+    await viewing?.close();
+    await building?.close();
   }
 
   /** Leaves build mode: its conversation ends here, and the viewing one never sees it. */
   async endBuild(): Promise<void> {
     if (this.turn?.mode === 'build') await this.cancel();
-    this.building?.session.dispose();
+    const building = this.building;
     this.building = null;
+    await building?.close();
   }
 
   async cancel(): Promise<void> {
@@ -398,11 +538,12 @@ export class Agent {
     await this.stopTurn();
   }
 
-  /** The abort has to start before tools are released, and be awaited after: pi waits for a running tool. */
+  /** The abort has to start before tools are released, and be awaited after: a running tool is waited for. */
   private async stopTurn(): Promise<void> {
     if (!this.turn) return;
     this.turn.cancelled = true;
-    const stopped = (this.turn.mode === 'build' ? this.building : this.conversation)?.session.abort();
+    const { context } = await this.runtime();
+    const stopped = (this.turn.mode === 'build' ? this.building : this.conversation)?.root.abort(context).catch(() => {});
     for (const resolve of this.pendingTools.values()) {
       resolve({ callId: '', ok: false, content: 'Cancelled by the user.' });
     }
@@ -435,7 +576,7 @@ export class Agent {
 
   private async callTool(call: AgentToolCall): Promise<AgentToolResult> {
     const turn = this.turn;
-    if (!turn) return { callId: call.callId, ok: false, content: 'Cancelled by the user.' };
+    if (!turn || turn.cancelled) return { callId: call.callId, ok: false, content: 'Cancelled by the user.' };
     emit({ type: 'tool_start', turnId: turn.id, name: call.name, args: call.args });
     const result = await this.runTool(call);
     emit({ type: 'tool_end', turnId: turn.id, name: call.name, ok: result.ok });
@@ -471,68 +612,148 @@ export class Agent {
     }
   }
 
-  private async runTurn(
-    turn: Turn,
-    text: string,
-    appState: string,
-    definitions: AgentToolDefinition[],
-    reference: string,
-  ): Promise<void> {
+  /**
+   * Passes on a reply's text as it arrives. The text of the reply in progress is published a few times a
+   * second, and each finished reply is an entry, so whatever of an entry wasn't passed on yet goes with it.
+   */
+  private async streamText(turn: Turn, conversation: Conversation, context: Context): Promise<{ flush(): Promise<void> }> {
+    const { durable } = await this.runtime();
+    const seen = new Set<EntryRecord['id']>();
+    const before = new Set<EntryRecord['id']>();
+    let sent = '';
+    const say = (full: string, done: boolean) => {
+      const delta = full.startsWith(sent) ? full.slice(sent.length) : full;
+      sent = done ? '' : full;
+      if (delta && !turn.cancelled) emit({ type: 'text_delta', turnId: turn.id, delta });
+    };
+    const take = (entries: readonly EntryRecord[]) => {
+      conversation.transcript.add(entries.filter((entry) => !before.has(entry.id)));
+      for (const entry of entries) {
+        if (seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        if (durable.AssistantEntry.is(entry)) say(textOf(entry.model?.[0]), true);
+      }
+    };
+    const watch = await conversation.root.watch(context);
+    // What's already there belongs to earlier messages.
+    for (const entry of watch.value.entries) {
+      seen.add(entry.id);
+      before.add(entry.id);
+    }
+    watch.start(async (call) => {
+      if (call.kind !== 'value') return;
+      take(call.value.entries);
+      const live = call.value.docs['pi.live'] as { generation?: { message?: Message } } | undefined;
+      if (live?.generation?.message) say(textOf(live.generation.message), false);
+    });
+    return {
+      flush: async () => {
+        await watch.stop();
+        // The watch folds commits together, so the last entries are read again, in order.
+        const page = await conversation.root.entries({ order: 'descending' }, 100, undefined, context);
+        take([...page.items].reverse());
+      },
+    };
+  }
+
+  private async runTurn(turn: Turn, text: string, appState: string, definitions: AgentToolDefinition[], reference: string): Promise<void> {
     emit({ type: 'turn_start', turnId: turn.id });
     let label: string | undefined;
     try {
-      // Only a credential stored through /settings-agent counts: agentDir doesn't isolate the environment,
-      // so a key like ANTHROPIC_API_KEY would otherwise be used without anyone choosing it.
+      // Only a credential stored through /settings-agent counts: a key in the environment, like
+      // ANTHROPIC_API_KEY, would otherwise be used without anyone choosing it.
       const choice = await this.current();
       if (!choice) throw new Error(SETUP_NEEDED);
       label = choice.entry.label;
+      const { context } = await this.runtime();
       // A provider changed outside connect(), such as a hand edit of settings.json, starts over too.
       if (this.conversation && this.conversation.provider !== choice.entry.provider) {
-        this.conversation.session.dispose();
+        await this.conversation.close();
         this.conversation = null;
       }
       if (this.building && this.building.provider !== choice.entry.provider) {
-        this.building.session.dispose();
+        await this.building.close();
         this.building = null;
       }
+      this.policy = this.policyOf(choice.stored);
       if (turn.mode === 'build') this.building ??= await this.createConversation(choice, 'build');
       else this.conversation ??= await this.createConversation(choice);
       if (turn.cancelled) return;
 
       const conversation = (turn.mode === 'build' ? this.building : this.conversation)!;
-      const { session, tools, cap, check } = conversation;
-      // A model or thinking level chosen since the last message.
-      if (session.model?.id !== choice.model.id) await session.setModel(choice.model);
-      if (session.thinkingLevel !== choice.thinking) session.setThinkingLevel(choice.thinking);
+      const { root, check } = conversation;
+      // A model or thinking level chosen since the last message, and the rounds this message may take.
+      await root.configure({ model: { provider: choice.model.provider, modelId: choice.model.id }, thinkingLevel: choice.thinking, maxTurns: conversation.maxRounds }, context);
+      conversation.model = choice.model;
+      conversation.transcript.runsOn(choice.model.provider, choice.model.id, choice.thinking);
       conversation.reference = reference;
-      tools.register(definitions);
-      cap.start();
+      conversation.register(definitions);
+      conversation.rounds = 0;
+      conversation.readAhead.clear();
       check?.start();
-      const unsubscribe = session.subscribe((event) => {
-        if (turn.cancelled) return;
-        if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
-          emit({ type: 'text_delta', turnId: turn.id, delta: event.assistantMessageEvent.delta });
-        }
-      });
+
+      const stream = await this.streamText(turn, conversation, context);
+      let settled;
       try {
-        await session.prompt(`<app_state>\n${appState}\n</app_state>\n\n${text}`, { expandPromptTemplates: false });
+        const submission = await root.submit({ type: 'input', content: `<app_state>\n${appState}\n</app_state>\n\n${text}` }, context);
+        settled = await submission.wait(context);
       } finally {
-        unsubscribe();
+        await stream.flush().catch(() => {});
+        await this.forget(conversation).catch((e: Error) => console.warn('[ai] forgetting a read ahead:', e.message));
+        await this.record(conversation).catch((e: Error) => console.warn('[ai] writing the conversation:', e.message));
       }
       if (turn.cancelled) return;
 
-      if (!cap.capped) {
-        // prompt() doesn't throw on model errors: they end up on the last reply.
-        const last = session.messages.findLast((m): m is AssistantMessage => m.role === 'assistant');
-        if (last?.stopReason === 'error' || last?.stopReason === 'aborted') {
-          throw new Error(last.errorMessage || 'The model request failed.');
-        }
+      // A model that keeps calling tools is stopped at the cap, and what it did stands: that's an end, not an error.
+      if (settled.status === 'unanswered' && settled.reason !== 'turn_limit') {
+        const detail = typeof settled.detail === 'string' ? settled.detail : '';
+        throw new Error(detail || 'The model request failed.');
       }
       emit({ type: 'turn_end', turnId: turn.id, acted: turn.acted });
     } catch (e) {
       if (turn.cancelled) return;
       emit({ type: 'error', turnId: turn.id, message: friendlyError(e, label) });
     }
+  }
+
+  /** Writes what the conversation gained to its `.jsonl`: whatever the stream didn't pass by, such as a cut-down turn. */
+  private async record(conversation: Conversation): Promise<void> {
+    const { context } = await this.runtime();
+    const page = await conversation.root.entries({ order: 'descending' }, 200, undefined, context);
+    conversation.transcript.add([...page.items].reverse());
+    await conversation.transcript.flush();
+  }
+
+  /** A summary of `messages`, from the conversation's own model. Throws if the model gives none. */
+  private async summarize(conversation: Conversation, messages: Message[], instructions?: string): Promise<string> {
+    const { providers } = await this.runtime();
+    const now = Date.now();
+    const reply = await providers.models.completeSimple(conversation.model, {
+      messages: [
+        { role: 'system', content: SUMMARY_SYSTEM_PROMPT, timestamp: now },
+        { role: 'user', content: [{ type: 'text', text: summaryRequest(messages, instructions) }], timestamp: now },
+      ],
+    });
+    const summary = reply.stopReason === 'stop' ? textOf(reply).trim() : '';
+    if (!summary) throw new Error(reply.errorMessage || 'The model gave no summary.');
+    return summary;
+  }
+
+  /**
+   * An approved read ahead is usable only in the turn that asked for it. Once the turn is over, its tool calls
+   * and results are taken out of what the model sees, leaving the viewer's message and the agent's words.
+   * The stored entries stay as they are. See docs/SPOILER_PREVENTION.md.
+   */
+  private async forget(conversation: Conversation): Promise<void> {
+    if (!conversation.readAhead.size) return;
+    const { context } = await this.runtime();
+    await conversation.root.waitForIdle(context);
+    const page = await conversation.root.entries({ order: 'descending' }, 500, undefined, context);
+    const edits = forgetTurn([...page.items].reverse(), conversation.readAhead);
+    conversation.readAhead.clear();
+    if (!edits.length) return;
+    const written = await conversation.root.submit({ type: 'write', entry: { kind: 'f1a.forget', edits } }, context);
+    await written.wait(context);
   }
 }
 
