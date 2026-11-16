@@ -431,8 +431,6 @@ describe('seeking to a moment', () => {
     revision: 1,
     playheadMs,
     drivers: [driver('VER', 1), driver('HAM', 44)],
-    startingGrid: [],
-    sessionResult: [],
     lapCount: null,
     tables: [],
   });

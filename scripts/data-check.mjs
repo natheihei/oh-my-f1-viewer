@@ -63,7 +63,7 @@ console.log(`     missing feeds: ${coverage?.missingFeeds.join(', ') || 'none'}`
 
 const counts = await page.evaluate(async (key) => {
   const out = {};
-  for (const table of ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary']) {
+  for (const table of ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary', 'drivers', 'championship_drivers', 'championship_teams', 'starting_grid', 'session_result']) {
     out[table] = (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
   }
   const objects = await window.f1a.data.objects(key, Number.MAX_SAFE_INTEGER);
@@ -71,8 +71,8 @@ const counts = await page.evaluate(async (key) => {
   return out;
 }, sessionKey);
 console.log(`     rows: ${JSON.stringify(counts)}`);
-check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary'].every((t) => counts[t] > 0));
-check('roster and results filled', Object.values(counts.objects).every((v) => (typeof v === 'number' ? v > 0 : v?.current > 0 && v.total > 0)));
+check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary', 'drivers', 'championship_drivers', 'championship_teams', 'starting_grid', 'session_result'].every((t) => counts[t] > 0));
+check('roster and lap count filled', Object.values(counts.objects).every((v) => (typeof v === 'number' ? v > 0 : v?.current > 0 && v.total > 0)));
 
 const database = path.join(os.homedir(), '.config/f1a/timing.sqlite');
 console.log(`     database: ${(statSync(database).size / 1e6).toFixed(0)} MB`);
@@ -104,15 +104,13 @@ const visibility = await page.evaluate(async ({ key, timeBaseMs }) => {
   const mid = Math.round((rows[0].a + rows[0].b) / 2);
   const beforeFeed = timeBaseMs - 1;
   const denied = async (sql) => window.f1a.data.sql(key, all, sql, []).then(() => false, () => true);
-  const objects = await window.f1a.data.objects(key, mid);
-  const final = await window.f1a.data.objects(key, all);
   return {
     before: (await Promise.all(['laps', 'position', 'intervals', 'stints', 'pit', 'race_control', 'weather', 'car_data', 'location'].map((t) => count(t, beforeFeed)))).reduce((x, y) => x + y, 0),
     midway: await count('laps', mid),
     all: await count('laps', all),
-    resultMidway: objects.sessionResult.length,
-    resultEnd: final.sessionResult.length,
-    gridMidway: objects.startingGrid.length,
+    resultMidway: await count('session_result', mid),
+    resultEnd: await count('session_result', all),
+    gridMidway: await count('starting_grid', mid),
     deniedBase: await denied('SELECT * FROM t_laps'),
     deniedWrite: await denied('DELETE FROM laps'),
   };
@@ -176,6 +174,7 @@ const viaHost = await page.evaluate(async (year) => {
     writeRefused = true;
   }
   const rows = await host.data.sql({ sql: 'SELECT COUNT(*) AS n FROM laps' }).catch((e) => e.message);
+  const result = await host.data.sql({ sql: 'SELECT COUNT(*) AS n FROM session_result' }).then((r) => r.rows[0].n, (e) => e.message);
   const direct = await host.data.sql({ sql: 'SELECT * FROM t_laps' }).then(() => 'allowed', () => 'refused');
   const schedule = read().schedule;
   host.session.close();
@@ -183,7 +182,7 @@ const viaHost = await page.evaluate(async (year) => {
     state: data.state,
     moved: (data.revision ?? 0) > (startRevision ?? 0),
     drivers: data.drivers?.length,
-    results: data.sessionResult?.length,
+    results: result,
     writeRefused,
     lapsVisible: rows.rows?.[0]?.n ?? rows,
     direct,

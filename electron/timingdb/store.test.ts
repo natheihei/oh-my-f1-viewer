@@ -360,16 +360,18 @@ describe('session database', () => {
     it('shows the grid from the start of the feed, and the result only once the session has finished', () => {
       ingest();
       ingestResults(store, META, { grid, result, final: true, failed: false }, BASE + DAY);
-      expect(store.sessionObjects(META.sessionKey, at(-1)).startingGrid).toEqual([]);
-      expect(store.sessionObjects(META.sessionKey, at(100_000)).startingGrid).toEqual(grid);
-      expect(store.sessionObjects(META.sessionKey, at(599_999)).sessionResult).toEqual([]);
-      expect(store.sessionObjects(META.sessionKey, at(600_000)).sessionResult).toEqual(result);
+      const gridAt = (playhead: number) => sql('SELECT driver_number, position, lap_duration FROM starting_grid', playhead);
+      const resultAt = (playhead: number) => sql('SELECT driver_number, position, points, dnf, duration FROM session_result', playhead);
+      expect(gridAt(at(-1))).toEqual([]);
+      expect(gridAt(at(100_000))).toEqual(grid);
+      expect(resultAt(at(599_999))).toEqual([]);
+      expect(resultAt(at(600_000))).toEqual([{ driver_number: 1, position: 1, points: 25, dnf: 0, duration: 300 }]);
     });
 
     it('stores no result for a session still in progress', () => {
       ingestTiming(store, META, { files: raceFiles(), failed: ['WeatherData'] }, null, BASE + DAY);
       ingestResults(store, META, { grid, result, final: true, failed: false }, BASE + DAY);
-      expect(store.sessionObjects(META.sessionKey, at(10 * DAY)).sessionResult).toEqual([]);
+      expect(sql('SELECT * FROM session_result', at(10 * DAY))).toEqual([]);
       expect(store.isComplete(META.sessionKey, 'results')).toBe(false);
     });
   });
@@ -531,11 +533,6 @@ describe('session database', () => {
       denied('SELECT * FROM t_ingest');
       denied('SELECT * FROM sqlite_master');
       denied('SELECT * FROM (SELECT * FROM t_laps)');
-    });
-
-    it('offers no way to the grid and result objects through SQL', () => {
-      denied('SELECT * FROM session_result');
-      denied('SELECT * FROM starting_grid');
     });
 
     it('refuses every kind of write', () => {
