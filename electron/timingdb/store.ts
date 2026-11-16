@@ -207,8 +207,6 @@ export class TimingStore {
   sessionObjects(sessionKey: number, playheadMs: number): SessionObjects {
     return {
       drivers: this.objects('drivers', sessionKey, playheadMs, 'driver_number'),
-      startingGrid: this.objects('starting_grid', sessionKey, playheadMs, 'position IS NULL, position, driver_number'),
-      sessionResult: this.objects('session_result', sessionKey, playheadMs, 'position IS NULL, position, driver_number'),
       lapCount: this.lapCount(sessionKey, playheadMs),
     };
   }

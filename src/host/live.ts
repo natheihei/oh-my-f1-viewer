@@ -38,7 +38,7 @@ export interface Live {
   events: EventIndex;
   /** Every meeting and session from 2023 on. Refreshed each time the app starts. */
   schedule: ScheduleView;
-  /** The open session's roster and results, as they stood at the frame on screen. */
+  /** The open session's roster and lap count, as they stood at the frame on screen, and what SQL can read. */
   sessionData: SessionDataView;
   /** The open session's circuit: outline, corners and pit loss. It doesn't depend on the playhead. */
   circuit: CircuitView;

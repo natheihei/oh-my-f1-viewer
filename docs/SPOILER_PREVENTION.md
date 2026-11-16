@@ -24,8 +24,9 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
   reached, so a stint's `lap_end` can't reveal a stop that hasn't happened yet.
 - **SQL can only reach limited views.** Consumers' queries run on a read-only connection against temporary views limited to the session and the playhead. An
   authorizer refuses everything else, including the tables behind those views.
-- **`sessionData` follows the playhead too.** The roster, the grid and `lapCount` read as they stood at that frame. `sessionResult` appears
-  only once the session has finished at the playhead.
+- **`sessionData` follows the playhead too.** The roster and `lapCount` read as they stood at that frame.
+- **The result waits for the finish.** `session_result` is revealed when the feed reports the session over, so it's empty until the
+  playhead gets there. `asOf: 'session'` reads it like any other table.
 - **Charts read as of the playhead.** `useSql` does by default, and seeking back hides what had been shown. A component can ask it
   for the whole session, and its author decides whether to warn: with `looksAhead: true` in its definition, the grid shows a red `! spoiler`, "This tile
   looks ahead of where you are." and an Allow button in place of the tile until the viewer allows it. See [BUILD_MODE.md](BUILD_MODE.md).

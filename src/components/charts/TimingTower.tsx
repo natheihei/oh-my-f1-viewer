@@ -1,7 +1,7 @@
 /** The running order, one row per driver: position, places gained from the grid, gaps, last lap and tyre. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, Highlighted, keyPart, useLive, useSql, type StartingGridEntry } from '../../host';
+import { defineComponent, Highlighted, keyPart, useLive, useSql } from '../../host';
 import {
   ChartCanvas,
   ChartFrame,
@@ -27,8 +27,8 @@ import {
 
 const NEEDS = ['timing' as const];
 
-// Each driver's latest position, gaps, lap, last completed lap and stint, and whether they're out, with
-// those that are out last. `laps` is read once.
+// Each driver's latest position, gaps, lap, last completed lap and stint, grid slot, and whether they're
+// out, with those that are out last. `laps` is read once. Only a race or sprint has a grid.
 export const SQL = `
 WITH l AS MATERIALIZED (SELECT driver_number, lap_number, lap_duration, is_out FROM laps),
 pos AS (SELECT driver_number, position, MAX(date) FROM position GROUP BY driver_number),
@@ -38,10 +38,11 @@ last AS (SELECT driver_number, lap_duration AS last_lap, MAX(lap_number) FROM l 
 tyre AS (SELECT driver_number, compound, lap_start, lap_end, tyre_age_at_start, MAX(stint_number) FROM stints GROUP BY driver_number),
 out AS (SELECT DISTINCT driver_number FROM l WHERE is_out)
 SELECT pos.driver_number, pos.position, gap.gap_to_leader, gap.interval, gap.gap_date, lap.lap, last.last_lap,
-  tyre.compound, tyre.lap_start, tyre.lap_end, tyre.tyre_age_at_start, out.driver_number IS NOT NULL AS is_out
+  tyre.compound, tyre.lap_start, tyre.lap_end, tyre.tyre_age_at_start, out.driver_number IS NOT NULL AS is_out,
+  starting_grid.position AS grid_position
 FROM pos
 LEFT JOIN gap USING (driver_number) LEFT JOIN lap USING (driver_number) LEFT JOIN last USING (driver_number) LEFT JOIN tyre USING (driver_number)
-LEFT JOIN out USING (driver_number)
+LEFT JOIN out USING (driver_number) LEFT JOIN starting_grid USING (driver_number)
 ORDER BY is_out, pos.position`;
 
 export interface TowerRow {
@@ -63,14 +64,9 @@ export interface TowerRow {
 
 /**
  * The rows of `SQL` as text, ready to draw. Lapped cars read "+1 LAP", never NaN, and retired ones "OUT".
- * `total` is the race distance, and `grid` the starting order, which only a race or sprint has.
+ * `total` is the race distance.
  */
-export function towerModel(
-  rows: ReadonlyArray<Record<string, unknown>>,
-  total: number | null = null,
-  grid: readonly StartingGridEntry[] = [],
-): TowerRow[] {
-  const slots = new Map(grid.map((g) => [g.driver_number, g.position]));
+export function towerModel(rows: ReadonlyArray<Record<string, unknown>>, total: number | null = null): TowerRow[] {
   return rows.flatMap((r, i): TowerRow[] => {
     const driver = num(r.driver_number);
     if (driver === null) return [];
@@ -78,7 +74,7 @@ export function towerModel(
     const start = num(r.lap_start);
     const out = Boolean(r.is_out);
     const position = num(r.position);
-    const slot = slots.get(driver) ?? null;
+    const slot = num(r.grid_position);
     // The leader's gap is the lap it's on, once the session has gaps at all.
     const leader = i === 0 && !out;
     const interval = out || leader ? null : parseGap(r.interval);
@@ -266,18 +262,16 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
   });
 }
 
-const NO_GRID: StartingGridEntry[] = [];
 function TimingTower({ props }: { props: { drivers?: number[] } }) {
   const view = useSql(SQL);
   const styles = useDriverStyles();
   const total = useLive((live) => (live.sessionData.state === 'ready' ? (live.sessionData.lapCount?.total ?? null) : null));
-  const grid = useLive((live) => (live.sessionData.state === 'ready' ? live.sessionData.startingGrid : NO_GRID));
   const within = useLive((live) => live.spec.chaseAid.within);
   const highlighted = useDriverSet(props.drivers);
   const model = useMemo(
     () =>
-      view.state === 'ready' ? { rows: towerModel(view.rows, total, grid), gains: grid.some((g) => g.position != null), styles, highlighted, within } : null,
-    [view, styles, total, grid, highlighted, within],
+      view.state === 'ready' ? { rows: towerModel(view.rows, total), gains: view.rows.some((r) => r.grid_position != null), styles, highlighted, within } : null,
+    [view, styles, total, highlighted, within],
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
