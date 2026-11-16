@@ -232,7 +232,7 @@ function wrapperOf(name: string): TileComponent {
 export function Grid() {
   const components = useComponents((s) => s.list);
   const registry = useMemo(() => Object.fromEntries(components.map(({ name }) => [name, wrapperOf(name)])), [components]);
-  // A suggestion under the mouse outlines the tile it duplicates; a tile pointed at from the prompt, itself.
+  // The spotlight: a suggestion under the mouse puts it on the tile it duplicates; pointing from the prompt, on that tile.
   const suggested = useSuggestions((s) => s.highlight);
   const pointed = usePointed((s) => s.tile);
   const building = useBuild((s) => s.active);
@@ -244,7 +244,7 @@ export function Grid() {
   );
   const approved = useTileLookAhead((s) => s.approved);
   const tiles = useLayout((s) => s.tiles);
-  const highlight = suggested ?? tiles.find((t) => t.id === pointed)?.component.key ?? null;
+  const spotlit = (suggested != null ? tiles.find((t) => t.component.key === suggested)?.id : pointed) ?? null;
   const headers = useTileHeaders((s) => s.headers);
   // What each header's slots say: the stream slots are the component's to say, through useTileHeader.
   // An approval outlives an edit that drops `looksAhead`, but the header only says so while it applies.
@@ -255,6 +255,7 @@ export function Grid() {
       const state: TileState = {};
       if (approved[t.id] && ahead.has(t.component.type)) state.ahead = true;
       if (marks[t.component.type]) state.mark = marks[t.component.type];
+      if (spotlit) state.spot = t.id === spotlit ? 'pointed' : 'dimmed';
       const header = headers[t.id];
       if (header?.audio) state.audio = header.audio;
       if (header?.status) {
@@ -264,7 +265,7 @@ export function Grid() {
       out[t.id] = state;
     }
     return out;
-  }, [approved, components, tiles, headers, marks]);
+  }, [approved, components, tiles, headers, marks, spotlit]);
   // Titles draw their drivers' codes from the roster, so they're drawn again when it changes.
   const styles = useDriverStyles();
   const titles = useMemo(() => Object.fromEntries(Object.entries(headers).map(([id, h]) => [id, titleOf(h)])), [headers]);
@@ -274,7 +275,7 @@ export function Grid() {
   );
   return (
     <>
-      <Stage registry={registry} highlight={highlight} marks={marks} />
+      <Stage registry={registry} marks={marks} />
       <GridSurface onMove={onMove} onSwap={onSwap} onClose={onClose} states={states} drawTitle={drawTitle} />
       <DropPreview />
     </>
