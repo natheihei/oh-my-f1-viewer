@@ -148,25 +148,30 @@ the host through the host's ordinary writes (`src/shell/persistVolume.ts`). The 
 
 ## Agent
 
-`electron/agent/agent.ts` runs a session on [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), on the
-provider, model and thinking level chosen in `/settings-agent`. It lives in main because it holds the credentials. Tools run in the renderer because it owns
-layout and playback, so their definitions come with each message and each call goes over IPC. With no session open the viewing agent
-is shown only what finds and opens one: `list_sessions`, `list_live`, `list_upcoming` and `load_session`. When a call opens or closes a
-session, its result carries the new set, and pi uses it from the next request in the same turn, so "2025 Mexico race with Norris" can
-open the race and suggest his onboard in one turn. Three small pi extensions in
-`electron/agent/extensions/` do the f1a-specific parts: the prompt, the renderer's tools, and the cap on tool rounds per message.
+`electron/agent/agent.ts` runs a conversation on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable), pi's
+harness without its terminal agent, on the provider, model and thinking level chosen in `/settings-agent`. Models and sign-ins are
+pi-ai's. It lives in main because it holds the credentials. Tools run in the renderer because it owns layout and playback, so their
+definitions come with each message and each call goes over IPC. With no session open the viewing agent is shown only what finds and
+opens one: `list_sessions`, `list_live`, `list_upcoming` and `load_session`. When a call opens or closes a session, its result
+carries the new set, and the model has it from the next request in the same turn, so "2025 Mexico race with Norris" can open the race
+and suggest his onboard in one turn.
 
-pi gets two folders, passed in code, and never reads or writes `~/.pi`:
+Each conversation is a Harness of its own with three extensions: the prompt, as one section holding the app's words and then the
+reference; the renderer's tools, replaced by installing the extension again; and the rules, which are hooks. The cap on tool rounds
+per message is the conversation's `maxTurns`. Nothing of pi's own is in the prompt, and the model can only call what the app defines.
 
-- `agentDir`, `<userData>/pi-agent`, holds `auth.json`, `models.json`, `settings.json` and `SYSTEM.md`. The app rewrites `SYSTEM.md` from
-  `SYSTEM_PROMPT` on every start. `settings.json` is written only if missing, so it can be edited, and `/settings-agent` saves the
-  provider, model and thinking level there.
-- `<agentDir>/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
-  results, and token use. They're never resumed, so a new conversation or a restart starts empty, as if in memory. They hold whatever
+Everything the agent keeps is under `<userData>/pi-agent`:
+
+- `auth.json` holds the connected provider's credential, in the shape pi-ai gives it (`credentialFile.ts`). `SYSTEM.md` is the
+  viewing agent's prompt, written on every start to read beside the conversations: nothing reads it back. `settings.json` is written
+  only if missing, so it can be edited, and `/settings-agent` saves the provider, model and thinking level there. It's read at every
+  message (`settingsFile.ts`).
+- `sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
+  results, and token use (`transcript.ts`). The lines are the ones pi's own sessions had. It's a record only: the conversation
+  itself is in memory, in pi-durable's `MemoryStorage`, so a new conversation or a restart starts empty. The files hold whatever
   the agent read, including race data, stay on this machine, and aren't pruned.
-- `<agentDir>/build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
-- `cwd` is the mods folder, where build mode's agent writes. It's untrusted: pi ignores any `.pi` folder there, which could otherwise
-  change the prompt or run code in main.
+- `build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
+- The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 
 `src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the
 function's schema, and one with its own must type-check against the function's through `adapt`, so a host change that breaks a tool fails
@@ -174,7 +179,7 @@ to compile. Only what's specific to the agent lives there: names, model-facing w
 that refuse a call.
 
 - **Why not `codex app-server`.** It keeps built-in tools even with every feature flag off. In testing it still offered
-  `apply_patch`, sub-agents and image generation, and tried to read `/etc/hostname` with `view_image`. With pi's built-in tools
+  `apply_patch`, sub-agents and image generation, and tried to read `/etc/hostname` with `view_image`. With pi, no tool exists
   turned off, the model can only call what we define.
 - **Spoilers.** The agent can seek to a moment (`seek_to`) and query the session's SQL (`query_session`). Reading past the playhead and
   seeking forward ask `spoilerGate` (`src/agent/spoilerGate.ts`) first, on every call, in the agent's tools, not the host. The gate shows the
@@ -189,8 +194,10 @@ that refuse a call.
   connection changes nothing. Switching provider starts a new conversation. A new model or thinking level applies from the next
   message, in the same conversation.
 - **Only credentials stored through the panel count.** Keys in the environment, like `ANTHROPIC_API_KEY`, are never used.
-- **History.** pi's automatic compaction summarizes old turns when the context nears the model's limit. A turn that read past the playhead is
-  cut down to the viewer's message and the agent's words, both in what's sent to the model and in what's summarized.
+- **History.** Compaction summarizes old turns when the context nears the model's limit. A turn that read past the playhead is cut
+  down to the viewer's message and the agent's words as soon as it ends: one more entry says how each of the turn's entries reads
+  from then on, so later requests and summaries see the cut-down turn, and the stored entries stay as they were. A summary made
+  while a turn is still using what it read ahead is made by the app, from the turn cut down the same way.
 
 ## Sign-in
 
