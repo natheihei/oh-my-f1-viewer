@@ -4,7 +4,7 @@ How a component should look and behave in a tile: the choices we've made, and wh
 mod. [DESIGN.md](DESIGN.md) covers how a component is wired to the host, and [MODS.md](MODS.md) how one is loaded.
 
 > **Changing this file?** The rules here that a mod's author must follow are restated, without their reasons, in
-> `shared/modGuide.ts`. That text is the build agent's instructions and the `AGENTS.md` the app writes into the mods folder. It isn't
+> `shared/modGuide.ts`. That text is the build agent's instructions. It isn't
 > generated from this file: when a rule here is added or changed, adopt it there by hand, in the same change.
 
 Each rule has the date it was decided. One marked **not built yet** is agreed but the app doesn't do it, so it isn't in the mod guide.
@@ -598,7 +598,6 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
 | --- | --- |
 | The rules as a mod's author reads them | `shared/modGuide.ts` |
 | The build agent's prompt, which includes them | `shared/buildPrompt.ts` |
-| Writing `AGENTS.md` into the mods folder | `electron/mods/index.ts` |
 | The host's overflow check and mark | `src/host/overflow.ts`, `src/host/Grid.tsx` |
 | The size declaration | `src/host/components.ts` |
 | Holding and drawing a video, and its title bar slots | `src/host/Video.tsx` |

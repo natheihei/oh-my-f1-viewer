@@ -137,7 +137,7 @@ what adds it, by a click or Enter, or drags it onto the grid.
 The main process owns the mods folder, so it keeps the snapshot:
 
 1. **On entry** it copies `mods/` to `mods-snapshot/files` beside it in the app's data folder, and writes a marker file,
-   `mods-snapshot/complete`, last. It skips what the app regenerates: `.types`, `tsconfig.json`, `mod.error` and `mod.log`. A snapshot
+   `mods-snapshot/complete`, last. It skips what the app regenerates: `.types`, `mod.error` and `mod.log`. A snapshot
    with no marker is a copy that didn't finish, and is ignored and cleared away.
 2. **Save** deletes the snapshot.
 3. **Undo all** removes every file the snapshot doesn't have, copies the snapshot's files back, removes the folders the build made, and
@@ -157,8 +157,7 @@ instructions, and a separate session keeps what the build read out of the viewin
 - **It starts without the viewing conversation.** It gets the usual app state: the session, the playhead and what's on screen, and with
   it what the build has changed so far and every mod there is. That's enough for "make the chart I'm looking at show 12 laps".
 - **Its instructions are its own**, `shared/buildPrompt.ts`: how to work, and the mod guide in `shared/modGuide.ts`, which is what a
-  mod is, a complete example, the host in brief and the rules for a component. The app writes the same guide into the mods folder
-  as `AGENTS.md`. [COMPONENTS.md](COMPONENTS.md) is where those rules are decided.
+  mod is, a complete example, the host in brief and the rules for a component. [COMPONENTS.md](COMPONENTS.md) is where those rules are decided.
   The chart and table lists follow them, as for the viewing agent. The event list doesn't: it can't find or open a session.
 - **It gets file tools for the mods folder.** They run in the main process and reach nothing outside the folder:
 
@@ -170,7 +169,7 @@ instructions, and a separate session keeps what the build read out of the viewin
   | `mod_status` | Whether the latest save loaded, how each of the mod's tiles and its draft is drawing, and the last lines of its log |
   | `look_at` | A picture of the mod's component as it shows now |
 
-  They refuse the app's own files (`tsconfig.json`, `.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
+  They refuse the app's own files (`.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
   All of them are the app's own (`electron/agent/extensions/modFiles.ts`), written over `fs` alone, with the descriptions, parameters and result texts pi's tools of those names had. Every path is resolved the way
   pi resolved it (a leading `@` stripped, `~` expanded) and then checked against the mods folder, so a refusal names the path really
   meant. `read` returns any file as text: a picture of a component comes from `look_at`. `edit` matches as pi's does:

@@ -18,8 +18,7 @@ the same renderer. There's no sandbox: a mod is trusted like anything else the u
 
 ```
 ~/.config/f1a/mods/            the app's data folder: ~/Library/Application Support/f1a on macOS, %APPDATA%\f1a on Windows
-  tsconfig.json                written by the app on every start, so editors and tsc find the types
-  .types/                      written by the app on every start: declarations for f1a and f1a/kit
+  .types/                      written by the app on every start: declarations for f1a and f1a/kit, for the build agent
   <name>/
     main.tsx                   the mod (required; main.ts, main.jsx or main.js also work). It may import other files in its folder
     mod.error                  written by the app while the latest save doesn't load, and removed once one does
@@ -95,7 +94,7 @@ The main process owns the folder, and the renderer imports what main hands it.
 
 1. **Watching.** Main watches `mods/` and everything under it. A folder that gets a `main` file becomes a mod, and a save in it starts
    a build after 120ms of quiet, since editors and agents often write a temp file and rename it, or save several files at once. Files
-   the app writes (`mod.error`, `mod.log`, `tsconfig.json`, `.types`) and anything hidden or in `node_modules` don't start one.
+   the app writes (`mod.error`, `mod.log`, `.types`) and anything hidden or in `node_modules` don't start one.
 2. **Compiling.** esbuild bundles the mod into one ES module with an inline source map. The shared modules are left out and read at
    run time from `globalThis.__f1aShared`, which `src/main.tsx` fills, and `console` inside the mod writes to its log as well as the
    app's.
@@ -126,16 +125,12 @@ this folder and everything it changes can be undone as one. See [BUILD_MODE.md](
 ## Types
 
 `npm run build:electron` also runs `build:types`, which writes declarations for the host and the kit to `dist-types`. On every start
-the app copies them to `mods/.types` and writes `mods/tsconfig.json`, which points `f1a` and `f1a/kit` at them and every package at
-the app's own `node_modules`. `tsc -p ~/.config/f1a/mods` then type-checks every mod without the app running, and editors find the
-same types.
+the app copies them to `mods/.types`, where the build agent reads them. The guide the build agent gets in its prompt is
+`shared/modGuide.ts`. The rules in it are decided, with their reasons, in [COMPONENTS.md](COMPONENTS.md), and adopted into the
+guide by hand.
 
-## The guide for agents
-
-On every start the app also writes `mods/AGENTS.md`: what a mod is, a complete example, the host in brief and the rules a component
-follows, for a coding agent working in the folder. Edits to it are lost. The text is `shared/modGuide.ts`, the same one the app's
-build agent gets in its prompt. The rules in it are decided, with their reasons, in [COMPONENTS.md](COMPONENTS.md), and adopted into
-the guide by hand.
+The app writes nothing for a coding agent or an editor working in the folder from outside: no `AGENTS.md`, no `tsconfig.json`.
+That's for when outside agents are supported (issue 33).
 
 ## Checking it
 
@@ -154,5 +149,5 @@ compiling, imports, errors, logs and waiting for a save.
 | The modules a mod shares with the app | `src/main.tsx` |
 | The error boundary on every tile | `src/host/Grid.tsx` |
 | Status and log types | `shared/mods.ts` |
-| The guide written as `AGENTS.md` | `shared/modGuide.ts` |
+| The guide in the build agent's prompt | `shared/modGuide.ts` |
 | An example | `examples/mods/lap_form/main.tsx` |

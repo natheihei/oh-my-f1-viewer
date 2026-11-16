@@ -1,7 +1,6 @@
 /**
  * What anyone writing a mod needs to know: what a mod is, the host, and the rules for a component. The
- * build agent gets it in its prompt, and the app writes it into the mods folder as AGENTS.md for a coding
- * agent working there in a shell. docs/COMPONENTS.md is where the conventions are decided and explained:
+ * build agent gets it in its prompt. docs/COMPONENTS.md is where the conventions are decided and explained:
  * a change there is adopted here by hand, as a rule without its reasons.
  */
 
@@ -76,14 +75,3 @@ How it looks:
 - When the view can't get any smaller, let its content run past the bottom or right of the tile. The app marks that with a faded edge and "more". Never draw a note or a count of your own for what is hidden.
 - Below the least size it reads at, don't drop rows or columns or shrink text past readable: let the content run on. ChartCanvas takes an extent prop for this, (model, box) => ({ width, height }), the size it draws at in a tile of that box, and the canvas runs past the tile by that much.
 - In a crowded chart, label only what answers its question and name the rest when the pointer is on them. ChartCanvas takes an onPointer prop, (point) => void, with { x, y } in the pixels it draws in or null when the pointer leaves: keep it in the model you draw from, and draw the name of the mark under it.`;
-
-/** The mods folder's AGENTS.md. */
-export const MODS_AGENTS_MD = `# Writing mods for f1a
-
-f1a is a multi-view Formula 1 viewer. This folder holds its mods: each one adds a component a tile can show. f1a writes this file on every start, so edits to it are lost.
-
-${MOD_GUIDE}
-
-Spoilers:
-- The user may not have watched the session that is open. Never write race data into a mod, and never tell them what its data shows.
-`;
