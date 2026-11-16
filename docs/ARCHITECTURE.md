@@ -144,7 +144,9 @@ Both use the host, but neither can call the other.
 
 The app's settings are one JSON file in the profile, `<userData>/f1a-settings.json`, which main owns (`electron/settings.ts`). The
 agent's are under `agent`, and the renderer's small UI state under `ui`. Being in the profile, they're the same for every build that
-runs on it, whatever origin its page is served from. Edit the file by hand only while the app is closed.
+runs on it, whatever origin its page is served from. Edit the file by hand only while the app is closed. One that doesn't parse, or
+holds no JSON object, is read as empty and kept: the first change moves it aside to `f1a-settings.json.bad` (or `.bad.1`, …, never over
+an earlier one), says where in main's log, and then writes the new file.
 
 The UI state, the master volume, the background and the palette's history cap, is kept by the shell, above the host. The host holds
 it while the app runs. Before the first render, `src/main.tsx` reads what was saved through `host.savedState` (`src/data/savedState.ts`),
