@@ -53,9 +53,8 @@ export function credentialStore(file: string, secure: SecureStore = createSecure
   const write = async (stored: Stored): Promise<void> => {
     if (Object.keys(stored).length === 0) return secure.remove(file);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    // Written readable only by this user, for when the OS has no keystore and the store falls back to plain text.
     await secure.writeText(file, JSON.stringify(stored));
-    // Readable only by this user too, for when the OS has no keystore and the store falls back to plain text.
-    await fs.promises.chmod(file, 0o600);
   };
   /** After whatever is already changing the file. */
   const next = <T>(run: () => Promise<T>): Promise<T> => {
