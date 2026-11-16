@@ -77,8 +77,7 @@ names a tile. `live.health` and look-ahead approvals name tiles by id too.
     and `reason`.
   - `revision`: goes up each time what can be seen may have changed.
   - `playheadMs`: the frame on screen, in UTC milliseconds.
-  - The roster and results as they stood at the playhead: `drivers`, `startingGrid` (races and sprints, from the grid on),
-    and `sessionResult` (only once the session has finished at the playhead). The championship is in SQL, below.
+  - `drivers`: the roster as it stood at the playhead. The grid, the result and the championship are in SQL, below.
   - `lapCount`: `{ current, total }`, the leader's lap and the scheduled distance, as of the playhead. `null` in a session
     without them, such as practice or qualifying.
   - `tables`: every table SQL can read, as `{ name, columns, about? }`, in the order of `SQL_TABLES`. It's the same for every
@@ -136,7 +135,7 @@ tile: it lasts until the tile is gone, survives the component reloading, and ano
 [BUILD_MODE.md](BUILD_MODE.md) has the details.
 
 The tables are `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`,
-`overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
+`overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
 can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
 the user must ask first. `useSql` reads as of the playhead unless it asks for the session, as above. Only `SELECT` is allowed. The tables and their columns, as SQLite
 reports them, are in `sessionData.tables`. The stored tables are defined in [shared/sessionTables.ts](../shared/sessionTables.ts), and the

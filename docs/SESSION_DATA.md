@@ -11,10 +11,10 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | Data | Exposed as | Filled |
 | --- | --- | --- |
 | Meetings, sessions | `useLive((s) => s.schedule)` | On every app start and sign-in. The last copy stays readable until then, or if that fails |
-| Drivers, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
+| Drivers | `useLive((s) => s.sessionData)` | When a session opens |
 | Lap count | `useLive((s) => s.sessionData.lapCount)` | When a session opens |
 | Circuit: outline, corners, pit loss | `useLive((s) => s.circuit)` | Each time a session opens, from MultiViewer. The last copy stays readable, with a `reason`, if that fails |
-| `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured. `drivers` is also in `sessionData` |
+| `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured. `drivers` is also in `sessionData` |
 
 Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
 doesn't follow its naming, and `lap_summary` is our own (see below). `laps` also has one column of ours, `is_out`. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's

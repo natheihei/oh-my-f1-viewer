@@ -20,6 +20,8 @@ export const SQL_TABLES = [
   'pit',
   'position',
   'race_control',
+  'session_result',
+  'starting_grid',
   'stints',
   'track_status',
   'weather',
@@ -152,13 +154,9 @@ export interface SessionResultEntry {
   gap_to_leader: number | string | Array<number | null> | null;
 }
 
-/** The roster and results as they stood at the playhead. */
+/** The roster and lap count as they stood at the playhead. Everything else is in SQL. */
 export interface SessionObjects {
   drivers: DriverEntry[];
-  /** Races and sprints only. Hidden until the session reaches the grid. */
-  startingGrid: StartingGridEntry[];
-  /** Hidden until the session has finished at the playhead. */
-  sessionResult: SessionResultEntry[];
   /** The leader's lap and the scheduled distance. Null in a session without them, such as practice. */
   lapCount: LapCount | null;
 }
