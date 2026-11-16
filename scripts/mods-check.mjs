@@ -1,12 +1,12 @@
 // Runs a mod through its life in the real app, over a real replay race, muted: written into the mods
 // folder, put on screen, saved again while playing, saved broken, made to throw, and removed. Saves a
-// screenshot at each step. Uses examples/mods/lap_form and the real profile's mods folder, and removes
-// the mod at the end. Needs the F1 TV sign-in.
+// screenshot at each step. Uses examples/mods/lap_form, in the mods folder of an f1a of its own (see
+// isolated.mjs), and removes the mod at the end. Needs the F1 TV sign-in.
 // Usage: node scripts/mods-check.mjs <screenshot-dir> [sessionKey] [year] [lap]
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startApp } from './harness.mjs';
+import { prepareProfile } from './isolated.mjs';
 
 const outDir = process.argv[2];
 if (!outDir) throw new Error('Usage: node scripts/mods-check.mjs <screenshot-dir> [sessionKey] [year] [lap]');
@@ -14,7 +14,8 @@ const [sessionKey, year, lap] = [Number(process.argv[3] ?? 11396), Number(proces
 mkdirSync(outDir, { recursive: true });
 
 const NAME = 'lap_form';
-const modDir = path.join(os.homedir(), '.config', 'f1a', 'mods', NAME);
+const userData = prepareProfile(mkdtempSync(path.join(path.resolve(outDir), 'user-data-')));
+const modDir = path.join(userData, 'mods', NAME);
 const source = readFileSync(path.resolve('examples/mods/lap_form/main.tsx'), 'utf8');
 const save = (text) => writeFileSync(path.join(modDir, 'main.tsx'), text);
 
@@ -25,7 +26,7 @@ const check = (label, ok, detail = '') => {
 };
 
 rmSync(modDir, { recursive: true, force: true });
-const { page, stop } = await startApp(5194);
+const { page, stop } = await startApp(5194, { userData });
 const fail = async (message) => {
   console.log('FAIL', message);
   rmSync(modDir, { recursive: true, force: true });
