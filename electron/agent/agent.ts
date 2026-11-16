@@ -22,16 +22,15 @@ import type {
   ConnectWay,
   ThinkingLevel,
 } from '../../shared/api';
+import { parseAgentSettings, THINKING_LEVELS, type AgentSettings } from '../../shared/agentSettings';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { SYSTEM_PROMPT } from '../../shared/tools';
 import { sendToRenderer } from '../windows';
-import { fileCredentialStore } from './credentialFile';
-import { installId } from './credentials';
+import { credentialStore, installId } from './credentials';
 import { forgetForSummary, forgetTurn, readAheadIn, SUMMARY_SYSTEM_PROMPT, summaryRequest } from './extensions/forgetReadAhead';
 import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
 import { askForKey } from './keyWindow';
-import { AgentSettings, type StoredSettings } from './settingsFile';
 import { SUPPORTED, supported, type SupportedProvider } from './supported';
 import { Transcript } from './transcript';
 
@@ -44,7 +43,6 @@ const CONNECT_TIMEOUT_MS = 5 * 60_000;
 const PARTIAL_INTERVAL_MS = 40;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
-const LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
 
@@ -84,7 +82,6 @@ interface Runtime {
   durable: Durable;
   context: Context;
   providers: AgentModels;
-  settings: AgentSettings;
   agentDir: string;
   levels: (model: Model<Api>) => ThinkingLevel[];
   clamp: (model: Model<Api>, level: ThinkingLevel) => ThinkingLevel;
@@ -96,7 +93,7 @@ interface Choice {
   way: ConnectWay;
   model: Model<Api>;
   thinking: ThinkingLevel;
-  stored: StoredSettings;
+  stored: AgentSettings;
 }
 
 /** One conversation. Starting over makes a new one. */
@@ -146,7 +143,9 @@ export class Agent {
   private generation = 0;
   private pendingTools = new Map<string, (result: AgentToolResult) => void>();
   private connectAbort: AbortController | null = null;
-  /** The run policy every conversation reads, from settings.json as it stood at the last message. */
+  /** What the renderer keeps for the agent: see shared/agentSettings.ts. */
+  private settings: AgentSettings = {};
+  /** The run policy every conversation reads, from the settings as they stood at the last message. */
   private policy: HarnessSettings = {};
 
   /** `onRuntime` lets tests register a fake model and credentials. */
@@ -168,14 +167,12 @@ export class Agent {
     const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
     const { anthropicProvider } = await import('@earendil-works/pi-ai/providers/anthropic');
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
-    const settings = new AgentSettings(path.join(agentDir, 'settings.json'));
-    await settings.ensure();
     // A test's fakes go in first: its credentials are what the collection is made over, and its providers
     // replace the real ones of the same id.
     const added: Provider[] = [];
     const providers: AgentModels = {
       models: null as unknown as Models,
-      credentials: fileCredentialStore(path.join(agentDir, 'auth.json')),
+      credentials: credentialStore(path.join(app.getPath('userData'), 'f1a-credentials.json')),
       setProvider: (provider) => void added.push(provider),
       login: (...args) => providers.models.login(...args),
       logout: (...args) => providers.models.logout(...args),
@@ -190,14 +187,13 @@ export class Agent {
       durable,
       context: BACKGROUND_CONTEXT,
       providers,
-      settings,
       agentDir,
       levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
       clamp: (model, level) => clampThinkingLevel(model, level) as ThinkingLevel,
     };
   }
 
-  /** The way a provider is connected: its credential in auth.json. Environment variables never count. */
+  /** The way a provider is connected: its stored credential. Environment variables never count. */
   private async connectedWay(entry: SupportedProvider): Promise<ConnectWay | null> {
     const { providers } = await this.runtime();
     const credential = (await providers.credentials.list()).find((c) => c.providerId === entry.provider);
@@ -206,21 +202,21 @@ export class Agent {
   }
 
   /**
-   * What the agent runs on, or null if it isn't set up. The provider is the one in settings.json, and a
+   * What the agent runs on, or null if it isn't set up. The provider is the one in the settings, and a
    * model missing from its supported list falls back to the recommended one.
    */
   private async current(): Promise<Choice | null> {
-    const { providers, settings, clamp } = await this.runtime();
-    const stored = await settings.read();
-    const entry = supported(stored.defaultProvider);
+    const { providers, clamp } = await this.runtime();
+    const stored = this.settings;
+    const entry = supported(stored.provider);
     if (!entry) return null;
     const way = await this.connectedWay(entry);
     if (!way) return null;
-    const saved = stored.defaultModel;
+    const saved = stored.model;
     const id = saved && entry.models.includes(saved) && providers.models.getModel(entry.provider, saved) ? saved : entry.recommended.model;
     const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
     if (!model) return null;
-    const thinking = clamp(model, (stored.defaultThinkingLevel as ThinkingLevel | undefined) ?? entry.recommended.thinking);
+    const thinking = clamp(model, stored.thinking ?? entry.recommended.thinking);
     return { entry, way, model, thinking, stored };
   }
 
@@ -229,8 +225,19 @@ export class Agent {
     this.modFiles = host;
   }
 
-  /** The run policy for a conversation, from what settings.json says. */
-  private policyOf(stored: StoredSettings): HarnessSettings {
+  /** The settings the renderer keeps. It hands them over once, before it asks anything else. */
+  useSettings(settings: unknown): void {
+    this.settings = parseAgentSettings(settings);
+  }
+
+  /** Changes the settings here, and has the renderer keep them. */
+  private changeSettings(values: AgentSettings): void {
+    this.settings = { ...this.settings, ...values };
+    sendToRenderer('ai:settings', this.settings);
+  }
+
+  /** The run policy for a conversation, from what the settings say. */
+  private policyOf(stored: AgentSettings): HarnessSettings {
     const { enabled, reserveTokens, keepRecentTokens } = stored.compaction ?? {};
     return {
       // The renderer's tools change what's on screen: one at a time, in the order the model asked.
@@ -362,7 +369,7 @@ export class Agent {
       {
         models: providers.models,
         registry,
-        // Read at every use, so settings.json as it stood at the last message applies.
+        // Read at every use, so the settings as they stood at the last message apply.
         settings: () => this.policy,
         identity: { attribution: null },
         // A fixed id, passed on to the provider as the prompt cache key.
@@ -428,7 +435,7 @@ export class Agent {
   async connect(providerId: string, way: ConnectWay): Promise<AiStatus> {
     const entry = supported(providerId);
     if (!entry || !entry.ways[way]) throw new Error(`${providerId} can't be connected that way.`);
-    const { providers, settings } = await this.runtime();
+    const { providers } = await this.runtime();
     this.connectAbort?.abort();
     const abort = new AbortController();
     this.connectAbort = abort;
@@ -440,14 +447,14 @@ export class Agent {
       if (this.connectAbort === abort) this.connectAbort = null;
     }
 
-    const stored = await settings.read();
-    const switched = stored.defaultProvider !== entry.provider;
+    const stored = this.settings;
+    const switched = stored.provider !== entry.provider;
     if (switched) await this.reset();
     for (const credential of await providers.credentials.list()) {
       if (credential.providerId !== entry.provider) await providers.logout(credential.providerId);
     }
-    if (switched || !entry.models.includes(stored.defaultModel ?? '')) {
-      await settings.change({ defaultProvider: entry.provider, defaultModel: entry.recommended.model, defaultThinkingLevel: entry.recommended.thinking });
+    if (switched || !entry.models.includes(stored.model ?? '')) {
+      this.changeSettings({ provider: entry.provider, model: entry.recommended.model, thinking: entry.recommended.thinking });
     }
     return this.status();
   }
@@ -494,8 +501,8 @@ export class Agent {
   /** Removes the connected provider. The agent then needs setting up again. */
   async disconnect(): Promise<void> {
     await this.reset();
-    const { providers, settings } = await this.runtime();
-    const provider = (await settings.read()).defaultProvider;
+    const { providers } = await this.runtime();
+    const provider = this.settings.provider;
     if (provider) await providers.logout(provider);
   }
 
@@ -503,12 +510,12 @@ export class Agent {
   async choose(modelId: string, thinking: ThinkingLevel): Promise<AiStatus> {
     const choice = await this.current();
     if (!choice) throw new Error(SETUP_NEEDED);
-    const { providers, settings } = await this.runtime();
-    if (!LEVELS.includes(thinking)) throw new Error(`Unknown thinking level: ${thinking}`);
+    const { providers } = await this.runtime();
+    if (!THINKING_LEVELS.includes(thinking)) throw new Error(`Unknown thinking level: ${thinking}`);
     if (!choice.entry.models.includes(modelId) || !providers.models.getModel(choice.entry.provider, modelId)) {
       throw new Error(`${modelId} isn't offered for ${choice.entry.label}.`);
     }
-    await settings.change({ defaultProvider: choice.entry.provider, defaultModel: modelId, defaultThinkingLevel: thinking });
+    this.changeSettings({ provider: choice.entry.provider, model: modelId, thinking });
     return this.status();
   }
 
@@ -663,7 +670,7 @@ export class Agent {
       if (!choice) throw new Error(SETUP_NEEDED);
       label = choice.entry.label;
       const { context } = await this.runtime();
-      // A provider changed outside connect(), such as a hand edit of settings.json, starts over too.
+      // A provider changed outside connect(), such as a hand edit of the settings, starts over too.
       if (this.conversation && this.conversation.provider !== choice.entry.provider) {
         await this.conversation.close();
         this.conversation = null;

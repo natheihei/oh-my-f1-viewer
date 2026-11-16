@@ -54,7 +54,7 @@ export function profileInUse(dir) {
  * CSS pixels, the room the charts are designed in, at `scale` device pixels each so a shot stays sharp.
  * Returns the page, `log`, `userData` (the user data dir it runs on), and `stop`, which closes only this instance.
  *
- * `mainProfile` runs on ~/.config/f1a itself instead, for the agent: its login (pi-agent/auth.json) is never
+ * `mainProfile` runs on ~/.config/f1a itself instead, for the agent: its login (f1a-credentials.json) is never
  * copied, since a copy refreshes the token on first use, and a refresh token that rotates would sign the
  * main profile out. It refuses while another f1a is using that profile.
  */

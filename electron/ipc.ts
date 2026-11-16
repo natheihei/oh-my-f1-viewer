@@ -261,6 +261,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('data:sql', (_e, sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
 
   // --- Agent ---
+  handle('ai:useSettings', (_e, settings) => agent.useSettings(settings));
   handle('ai:status', () => agent.status());
   handle('ai:providers', () => agent.providers());
   handle('ai:connect', (_e, provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));
