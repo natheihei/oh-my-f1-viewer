@@ -40,15 +40,24 @@ type Stored = Record<string, Credential>;
  */
 export function credentialStore(file: string, secure: SecureStore = createSecureStore(safeStorage)): CredentialStore {
   let turn: Promise<unknown> = Promise.resolve();
-  const read = async (): Promise<Stored> => {
+  /** `unreadable` when the file decrypts but isn't a credentials object: a partial write, say, or a hand edit. */
+  const load = async (): Promise<{ stored: Stored; unreadable: boolean }> => {
     const stored = await secure.readText(file);
-    if (!stored) return {};
+    if (!stored) return { stored: {}, unreadable: false };
     try {
       const parsed = JSON.parse(stored.text) as unknown;
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Stored) : {};
-    } catch {
-      return {};
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { stored: parsed as Stored, unreadable: false };
+      console.warn('[ai] the credentials file is not an object, reading it as signed out:', file);
+    } catch (e) {
+      console.warn("[ai] the credentials file doesn't parse, reading it as signed out:", file, (e as Error).message);
     }
+    return { stored: {}, unreadable: true };
+  };
+  const read = async (): Promise<Stored> => (await load()).stored;
+  /** Moves a file that can't be read to `<file>.bad` before it's written over, so what it held isn't lost. */
+  const setAside = async (): Promise<void> => {
+    await fs.promises.rename(file, `${file}.bad`);
+    console.warn('[ai] moved the unreadable credentials file to', `${file}.bad`);
   };
   const write = async (stored: Stored): Promise<void> => {
     if (Object.keys(stored).length === 0) return secure.remove(file);
@@ -67,9 +76,10 @@ export function credentialStore(file: string, secure: SecureStore = createSecure
     list: async () => Object.entries(await read()).map(([providerId, credential]) => ({ providerId, type: credential.type })),
     modify: (providerId, change) =>
       next(async () => {
-        const stored = await read();
+        const { stored, unreadable } = await load();
         const changed = await change(stored[providerId]);
         if (changed === undefined) return stored[providerId];
+        if (unreadable) await setAside();
         await write({ ...stored, [providerId]: changed });
         return changed;
       }),

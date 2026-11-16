@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,5 +51,31 @@ describe('the credential store', () => {
     await credentialStore(file, createSecureStore(keystore)).modify('openai', async () => ({ type: 'api_key', key: 'sk-secret' }));
     const elsewhere = { ...keystore, decryptStringAsync: async () => Promise.reject(new Error('another machine')) };
     expect(await credentialStore(file, createSecureStore(elsewhere)).list()).toEqual([]);
+  });
+
+  it("keeps a file it can't parse aside instead of writing over it", async () => {
+    const file = path.join(dir, 'f1a-credentials.json');
+    writeFileSync(file, '{"openai": {"type": "api_key", "key": "sk-sec');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = credentialStore(file, createSecureStore(keystore));
+    expect(await store.list()).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    await store.delete('openai');
+    expect(existsSync(`${file}.bad`)).toBe(false);
+    await store.modify('anthropic', async () => ({ type: 'api_key', key: 'sk-other' }));
+    expect(readFileSync(`${file}.bad`, 'utf8')).toBe('{"openai": {"type": "api_key", "key": "sk-sec');
+    expect(await store.list()).toEqual([{ providerId: 'anthropic', type: 'api_key' }]);
+    warn.mockRestore();
+  });
+
+  it('keeps aside a file that parses but holds no credentials object', async () => {
+    const file = path.join(dir, 'f1a-credentials.json');
+    writeFileSync(file, '[1, 2]');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = credentialStore(file, createSecureStore(keystore));
+    await store.modify('openai', async () => ({ type: 'api_key', key: 'sk-secret' }));
+    expect(readFileSync(`${file}.bad`, 'utf8')).toBe('[1, 2]');
+    expect(await store.read('openai')).toEqual({ type: 'api_key', key: 'sk-secret' });
+    warn.mockRestore();
   });
 });
