@@ -1,9 +1,9 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
-import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import { session } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { F1TvStatus } from '../shared/api';
 import type { PlaceHealth } from '../shared/health';
-import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
+import type { Platform } from './platform';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
 import type { Mods } from './mods';
@@ -17,58 +17,19 @@ const livetiming = require('./vendor/f1ov/livetiming');
 const sessionState = require('./vendor/f1ov/session');
 const widevine = require('./vendor/f1ov/widevine');
 const licenseProxy = require('./vendor/f1ov/licenseProxy');
-const { openLoginWindow } = require('./vendor/f1ov/loginWindow');
 const { hasFormula1Host, toPositiveInt, rendererPlayback } = require('./vendor/f1ov/util');
-const { isAppNavigation } = require('./vendor/f1ov/navigationPolicy');
 
 const { memSession } = sessionState;
-
-/** Only the app's own document may use the bridge. */
-function isTrusted(evt: { senderFrame?: { url?: string } | null }): boolean {
-  const url = evt?.senderFrame?.url;
-  return !!url && isAppNavigation(url, getMainAppUrl());
-}
-
-function handle(channel: string, fn: (evt: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
-  ipcMain.handle(channel, (evt, ...args) => {
-    if (!isTrusted(evt)) {
-      console.warn('[ipc] rejected', channel, 'from untrusted sender');
-      throw new Error('Untrusted sender');
-    }
-    return fn(evt, ...args);
-  });
-}
-
-/**
- * A PNG of a component as the window shows it now: its tile if it has one, else its preview in the
- * strip. For the build agent, which may see the session anyway. Null when it's on neither.
- */
-async function pictureOf(name: string): Promise<Buffer | null> {
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return null;
-  const box = (await win.webContents.executeJavaScript(
-    `(() => {
-      const type = ${JSON.stringify(name)};
-      const el = document.querySelector('[data-tile-type="' + CSS.escape(type) + '"]') ?? document.querySelector('[data-draft-type="' + CSS.escape(type) + '"]');
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
-    })()`,
-  )) as { x: number; y: number; width: number; height: number } | null;
-  if (!box) return null;
-  return (await win.webContents.capturePage(box)).toPNG();
-}
 
 const HEALTH_TIMEOUT_MS = 3000;
 const healthWaiting = new Map<string, (places: PlaceHealth[] | null) => void>();
 
 /**
  * How every tile and draft is drawing, as the renderer reports it once each has drawn with its latest
- * code. For the build agent. Null when there's no window, or it didn't answer.
+ * code. For the build agent. Null when there's no renderer, or it didn't answer.
  */
-function healthOfScreen(): Promise<PlaceHealth[] | null> {
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return Promise.resolve(null);
+function healthOfScreen(platform: Platform): Promise<PlaceHealth[] | null> {
+  if (!platform.hasRenderer()) return Promise.resolve(null);
   return new Promise((resolve) => {
     const id = randomUUID();
     const timer = setTimeout(() => {
@@ -80,7 +41,7 @@ function healthOfScreen(): Promise<PlaceHealth[] | null> {
       healthWaiting.delete(id);
       resolve(places);
     });
-    sendToRenderer('mods:healthAsk', id);
+    platform.send('mods:healthAsk', id);
   });
 }
 
@@ -138,7 +99,7 @@ function queueContentPlay(contentId: number, channelId?: number): Promise<unknow
   return contentPlayQueue;
 }
 
-function createTimingDb(file: string): TimingDb {
+function createTimingDb(file: string, platform: Platform): TimingDb {
   return new TimingDb({
     file,
     fetchFeed: (sessionPath, feed) => livetiming.fetchSessionFeedText(sessionPath, feed),
@@ -188,17 +149,18 @@ function createTimingDb(file: string): TimingDb {
         });
     },
     disconnectLive: () => livetiming.disconnectLiveSocket(),
-    send: sendToRenderer,
+    send: (channel, payload) => platform.send(channel, payload),
   });
 }
 
-export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule(): Promise<void> } {
-  const timingDb = createTimingDb(databaseFile);
+export function setupIpc(databaseFile: string, mods: Mods, platform: Platform): { refreshSchedule(): Promise<void> } {
+  const timingDb = createTimingDb(databaseFile, platform);
+  const handle: Platform['handle'] = (channel, fn) => platform.handle(channel, fn);
 
   // --- F1 TV account ---
   handle('f1tv:status', () => f1Status());
   handle('f1tv:login', async () => {
-    const token = await openLoginWindow(async (raw: string) => {
+    const token = await platform.login(async (raw: string) => {
       const { subscriptionToken } = f1tv.loginWithToken(raw);
       await sessionState.initClientWithRetry(subscriptionToken);
       return subscriptionToken;
@@ -215,7 +177,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   });
   sessionState.sessionEvents.on('expired', () => {
     licenseProxy.clearStreams();
-    sendToRenderer('f1tv:expired');
+    platform.send('f1tv:expired');
   });
 
   // --- Catalog ---
@@ -224,15 +186,15 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     f1tv.clearCatalogCache();
     return f1tv.getVodSeasons();
   });
-  handle('f1tv:events', async (_e, pageId) => {
+  handle('f1tv:events', async (pageId) => {
     await ensureF1Client();
     return listEvents(toPositiveInt(pageId, 'pageId'));
   });
-  handle('f1tv:sessions', async (_e, pageId, year) => {
+  handle('f1tv:sessions', async (pageId, year) => {
     await ensureF1Client();
     return listSessions(toPositiveInt(pageId, 'pageId'), year ? Number(year) : undefined);
   });
-  handle('f1tv:channels', async (_e, contentId) => {
+  handle('f1tv:channels', async (contentId) => {
     await ensureF1Client();
     return listChannels(toPositiveInt(contentId, 'contentId'));
   });
@@ -246,48 +208,48 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   });
 
   // --- Playback ---
-  handle('f1tv:play', (_e, rawContentId, rawChannelId) => {
+  handle('f1tv:play', (rawContentId, rawChannelId) => {
     const contentId = toPositiveInt(rawContentId, 'contentId');
     const channelId = rawChannelId == null || rawChannelId === '' ? undefined : toPositiveInt(rawChannelId, 'channelId');
     return queueContentPlay(contentId, channelId);
   });
-  handle('f1tv:lastLicenseError', (_e, key) => licenseProxy.getLastLicenseError(key));
+  handle('f1tv:lastLicenseError', (key) => licenseProxy.getLastLicenseError(key));
 
   // --- Session database ---
   handle('data:schedule', () => timingDb.schedule());
-  handle('data:open', (_e, query, live) => timingDb.open(query ?? {}, live === true));
+  handle('data:open', (query, live) => timingDb.open(query ?? {}, live === true));
   handle('data:close', () => timingDb.close());
-  handle('data:objects', (_e, sessionKey, playheadMs) => timingDb.objects(Number(sessionKey), Number(playheadMs)));
-  handle('data:sql', (_e, sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
+  handle('data:objects', (sessionKey, playheadMs) => timingDb.objects(Number(sessionKey), Number(playheadMs)));
+  handle('data:sql', (sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
 
   // --- Agent ---
   handle('ai:status', () => agent.status());
   handle('ai:providers', () => agent.providers());
-  handle('ai:connect', (_e, provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));
+  handle('ai:connect', (provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));
   handle('ai:cancelConnect', () => agent.cancelConnect());
   handle('ai:disconnect', () => agent.disconnect());
-  handle('ai:choose', (_e, model, thinking) => agent.choose(String(model), thinking));
-  handle('ai:send', (_e, text, context, tools, reference, mode) =>
+  handle('ai:choose', (model, thinking) => agent.choose(String(model), thinking));
+  handle('ai:send', (text, context, tools, reference, mode) =>
     agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? ''), mode === 'build' ? 'build' : 'view'),
   );
   handle('ai:endBuild', () => agent.endBuild());
   handle('ai:cancel', () => agent.cancel());
   handle('ai:reset', () => agent.reset());
-  ipcMain.on('ai:toolResult', (evt, result) => {
-    if (isTrusted(evt)) agent.onToolResult(result);
+  platform.on('ai:toolResult', (result) => {
+    agent.onToolResult(result);
   });
 
   // --- Mods ---
   handle('mods:list', () => mods.list());
-  ipcMain.on('mods:loaded', (evt, name, version, error) => {
-    if (isTrusted(evt)) mods.loaded(String(name), Number(version), error == null ? null : String(error));
+  platform.on('mods:loaded', (name, version, error) => {
+    mods.loaded(String(name), Number(version), error == null ? null : String(error));
   });
-  ipcMain.on('mods:log', (evt, name, line) => {
-    if (isTrusted(evt) && line && typeof line === 'object') mods.log(String(name), line);
+  platform.on('mods:log', (name, line) => {
+    if (line && typeof line === 'object') mods.log(String(name), line);
   });
 
-  ipcMain.on('mods:health', (evt, id, places) => {
-    if (isTrusted(evt)) healthWaiting.get(String(id))?.(Array.isArray(places) ? (places as PlaceHealth[]) : null);
+  platform.on('mods:health', (id, places) => {
+    healthWaiting.get(String(id))?.(Array.isArray(places) ? (places as PlaceHealth[]) : null);
   });
 
   // --- Build mode ---
@@ -295,8 +257,8 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     dir: mods.dir,
     settled: (name) => mods.settled(name),
     logs: (name) => mods.logs(name),
-    picture: (name) => pictureOf(name),
-    health: () => healthOfScreen(),
+    picture: (name) => platform.picture(name),
+    health: () => healthOfScreen(platform),
   });
   handle('build:state', () => mods.buildState());
   handle('build:begin', () => mods.beginBuild());
