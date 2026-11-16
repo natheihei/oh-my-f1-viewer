@@ -194,7 +194,7 @@ What the agent keeps:
   prompt and each change to it, `app_state`, tool calls and results, summaries, the edits that cut down a read-ahead turn, and token
   use. It's for review, and so a crash loses nothing: it's never resumed, so a new conversation or a restart starts empty.
   `node devscripts/conversation.mjs [pick|view|build|<file>]` prints one. They hold whatever the agent read, including race data, stay on
-  this machine, and aren't pruned.
+  this machine. Starting one deletes all but the newest 100 of its kind (`KEPT_CONVERSATIONS` in `agent.ts`).
 - The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 
 `src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the
