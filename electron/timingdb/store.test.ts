@@ -135,9 +135,17 @@ describe('session database', () => {
     });
 
     it('shows standings as they stood, not the final ones', () => {
-      expect(store.sessionObjects(META.sessionKey, at(100_000)).championshipDrivers).toEqual([]);
-      expect(store.sessionObjects(META.sessionKey, at(200_000)).championshipDrivers[0]).toMatchObject({ points_current: 20, position_current: 2 });
-      expect(store.sessionObjects(META.sessionKey, at(300_000)).championshipDrivers[0]).toMatchObject({ points_current: 35, position_current: 1 });
+      const standings = (playhead: number) => sql('SELECT driver_number, points_current, position_current FROM championship_drivers ORDER BY position_current', playhead);
+      expect(standings(at(100_000))).toEqual([]);
+      expect(standings(at(200_000))[0]).toMatchObject({ points_current: 20, position_current: 2 });
+      expect(standings(at(300_000))[0]).toMatchObject({ points_current: 35, position_current: 1 });
+    });
+
+    it('gives the roster through SQL as well as the objects, the same rows', () => {
+      expect(sql('SELECT driver_number, full_name, name_acronym, team_name FROM drivers', at(600_000))).toEqual([
+        { driver_number: 1, full_name: 'Driver One', name_acronym: 'ONE', team_name: 'A' },
+      ]);
+      expect(store.sessionObjects(META.sessionKey, at(600_000)).drivers).toMatchObject([{ driver_number: 1, full_name: 'Driver One' }]);
     });
 
     it("records where the feed's timeline sits, to place video frames on it", () => {
@@ -249,6 +257,11 @@ describe('session database', () => {
 
     it('is the list of tables in SQL_TABLES, in the same order', () => {
       expect(store.tables.map((t) => t.name)).toEqual([...SQL_TABLES]);
+    });
+
+    it('says what the championship columns mean', () => {
+      expect(reported('championship_drivers')?.about).toMatch(/projection/);
+      expect(reported('championship_teams')?.columns).not.toContain('team_key');
     });
 
     it('builds every derived view from the list, after the views it reads', () => {
@@ -502,7 +515,7 @@ describe('session database', () => {
       const capture = new LiveCapture(store, META, BASE);
       capture.append([{ topic: 'SessionInfo', data: { Key: 999, Type: 'Practice' }, receivedAt: BASE }]);
       capture.append([{ topic: 'ChampionshipPrediction', data: { Drivers: { '1': { PredictedPoints: 5 } } }, receivedAt: BASE }]);
-      expect(store.sessionObjects(META.sessionKey, BASE).championshipDrivers).toHaveLength(1);
+      expect(sql('SELECT * FROM championship_drivers', BASE)).toHaveLength(1);
     });
   });
 
@@ -520,10 +533,9 @@ describe('session database', () => {
       denied('SELECT * FROM (SELECT * FROM t_laps)');
     });
 
-    it('offers no way to the roster and results objects through SQL', () => {
+    it('offers no way to the grid and result objects through SQL', () => {
       denied('SELECT * FROM session_result');
       denied('SELECT * FROM starting_grid');
-      denied('SELECT * FROM championship_drivers');
     });
 
     it('refuses every kind of write', () => {

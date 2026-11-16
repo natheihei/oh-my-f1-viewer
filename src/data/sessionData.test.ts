@@ -12,7 +12,7 @@ const BASE = Date.UTC(2026, 0, 1);
 const clock = { feedBaseUtc: BASE, clockStartOffsetMs: 2_000_000, scheduledStartOffsetMs: 1_900_000, durationMs: 9_000_000 };
 const tables = [{ name: 'laps', columns: ['session_key', 'meeting_key', 'lap_number', 'visible_from'] }];
 const ready: DataStatus = { sessionKey: 20, state: 'ready', reason: null, coverage, clock, sessionStartSec: 500, tables };
-const noObjects = { drivers: [], startingGrid: [], sessionResult: [], championshipDrivers: [], championshipTeams: [] };
+const noObjects = { drivers: [], startingGrid: [], sessionResult: [] };
 
 describe('session data', () => {
   let emit: (status: DataStatus) => void;

@@ -12,9 +12,6 @@ export type DerivedTable = (typeof DERIVED_TABLES)[number];
 
 export type RowTable =
   | Exclude<SqlTable, DerivedTable>
-  | 'drivers'
-  | 'championship_drivers'
-  | 'championship_teams'
   | 'starting_grid'
   | 'session_result'
   | 'lap_count';
@@ -35,7 +32,14 @@ export interface TableDefinition {
   hidden?: string[];
   /** Row storage keyed directly on the primary key, for tables with very many rows. */
   compact?: boolean;
+  /** What it's for, when its columns don't say. It reaches SQL's consumers, the agent among them, through `sessionData.tables`. */
+  about?: string;
 }
+
+const CHAMPIONSHIP_ABOUT =
+  'Races and sprints only. points_start and position_start are the standings going into this session. ' +
+  'points_current and position_current are F1\'s projection if the session finished in the current order, so they change as it goes on. ' +
+  'It can list drivers who are not in this session, such as ones who raced earlier in the season.';
 
 export const TABLES: TableDefinition[] = [
   {
@@ -187,6 +191,7 @@ export const TABLES: TableDefinition[] = [
     key: ['driver_number'],
     columns: { position_start: 'INTEGER', position_current: 'INTEGER', points_start: 'REAL', points_current: 'REAL' },
     versioned: true,
+    about: `One row per driver. ${CHAMPIONSHIP_ABOUT}`,
   },
   {
     name: 'championship_teams',
@@ -195,6 +200,7 @@ export const TABLES: TableDefinition[] = [
     columns: { team_name: 'TEXT', position_start: 'INTEGER', position_current: 'INTEGER', points_start: 'REAL', points_current: 'REAL' },
     versioned: true,
     hidden: ['team_key'],
+    about: `One row per team. ${CHAMPIONSHIP_ABOUT}`,
   },
   {
     name: 'starting_grid',
