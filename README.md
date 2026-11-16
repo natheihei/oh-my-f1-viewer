@@ -69,6 +69,10 @@ npm run check
 
 Typecheck and unit tests. The scripts below run the real app in Electron, and all but the first three need both sign-ins:
 
+A check that needs a sign-in runs an f1a of its own, apart from any other on the machine, on a fresh profile with copies of
+the F1 TV sign-in and, when it needs the agent, of the agent's sign-in and settings from `~/.config/f1a`. An agent sign-in the
+run refreshed is written back, so the original stays valid ([scripts/isolated.mjs](scripts/isolated.mjs)).
+
 ```bash
 node scripts/layout-check.mjs
 ```
@@ -97,21 +101,21 @@ node scripts/seek-check.mjs
 npm run build && node scripts/prod-check.mjs
 ```
 
-This one needs only the F1 TV sign-in, and puts a mod in the real profile's mods folder while it runs:
+This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an f1a of its own while it runs:
 
 ```bash
 node scripts/mods-check.mjs /tmp/mods-check
 ```
 
-This one runs [build mode](docs/BUILD_MODE.md) with the real agent: it needs both sign-ins and an empty mods folder, and takes
-about a quarter of an hour:
+This one runs [build mode](docs/BUILD_MODE.md) with the real agent: it needs both sign-ins, and takes about a quarter of an
+hour:
 
 ```bash
 node scripts/build-check.mjs /tmp/build-check
 ```
 
 This one asks the real agent for sessions with nothing open, each request in a fresh conversation, and records which session it
-loads or what it asks. It runs on the main profile for the agent's login, so close f1a first:
+loads or what it asks:
 
 ```bash
 node scripts/picking-check.mjs /tmp/picking-check

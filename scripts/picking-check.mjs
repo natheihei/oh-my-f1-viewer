@@ -1,8 +1,7 @@
 // Asks the real agent for sessions the way a viewer does, with nothing open, each request in a fresh
 // conversation, a few times over: whether it opens the one meant, or asks when the words could mean
 // several. Nothing is played: load_session is stubbed, so the run reads no race and plays no video.
-// Runs on ~/.config/f1a for the agent's login (see scripts/isolated.mjs), and refuses while another f1a
-// is using it.
+// Runs in an f1a of its own with the agent's login copied in (see scripts/isolated.mjs).
 //
 // Usage: node scripts/picking-check.mjs <out-dir> [--runs 3] ["request" ...]
 import path from 'node:path';
@@ -19,7 +18,7 @@ const runs = runsAt > 0 ? Number(argv[runsAt + 1]) : 3;
 const given = argv.slice(1).filter((a, i, all) => a !== '--runs' && all[i - 1] !== '--runs');
 const requests = given.length ? given : ['last race', 'latest quali', '2026', '2025 Mexico'];
 
-const { page, stop } = await startIsolatedApp(path.resolve(outDir), { name: 'picking', mainProfile: true });
+const { page, stop } = await startIsolatedApp(path.resolve(outDir), { name: 'picking', agent: true });
 try {
   await page.evaluate(async () => {
     const { host, read } = await import('/src/host/index.ts');
@@ -35,7 +34,7 @@ try {
     await host.catalog.loadIndex();
     if (read().events.state !== 'ready') throw new Error(`Events didn't load: ${read().events.error}`);
   });
-  if (!(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) throw new Error('The agent is not signed in in ~/.config/f1a.');
+  if (!(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) throw new Error('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
 
   const results = [];
   for (const request of requests) {
