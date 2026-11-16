@@ -1,29 +1,33 @@
-import { expect, test } from 'vitest';
-import { loadUiState, saveUiState, type UiStorage } from './uiState';
+import { expect, test, vi } from 'vitest';
 
-function memoryStorage(): UiStorage & { items: Map<string, string> } {
-  const items = new Map<string, string>();
-  return { items, getItem: (key) => items.get(key) ?? null, setItem: (key, value) => void items.set(key, value) };
+// The host pulls in the browser-only player and grid.
+vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
+vi.mock('gridstack', () => ({ GridStack: {} }));
+
+const { loadUiState, saveUiState } = await import('./uiState');
+type UiStorage = import('./uiState').UiStorage;
+
+function memoryStorage(): UiStorage & { items: Map<string, unknown> } {
+  const items = new Map<string, unknown>();
+  return { items, get: (key) => items.get(key), set: (key, value) => void items.set(key, value) };
 }
 
 const asNumber = (value: unknown) => (typeof value === 'number' ? value : null);
 
-test('a saved value loads back', () => {
+test('a saved value loads back, as itself', () => {
   const storage = memoryStorage();
   saveUiState('level', 0.4, storage);
   expect(loadUiState('level', asNumber, 1, storage)).toBe(0.4);
-  expect([...storage.items.keys()]).toEqual(['f1a.level']);
+  expect([...storage.items]).toEqual([['level', 0.4]]);
 });
 
 test('nothing saved gives the fallback', () => {
   expect(loadUiState('level', asNumber, 1, memoryStorage())).toBe(1);
 });
 
-test('a corrupt or rejected value gives the fallback', () => {
+test('a rejected value gives the fallback', () => {
   const storage = memoryStorage();
-  storage.setItem('f1a.level', '{not json');
-  expect(loadUiState('level', asNumber, 1, storage)).toBe(1);
-  storage.setItem('f1a.level', '"loud"');
+  storage.set('level', 'loud');
   expect(loadUiState('level', asNumber, 1, storage)).toBe(1);
 });
 
@@ -31,10 +35,10 @@ test('no storage, or storage that throws, changes nothing and throws nothing', (
   expect(loadUiState('level', asNumber, 1, null)).toBe(1);
   saveUiState('level', 0.4, null);
   const broken: UiStorage = {
-    getItem: () => {
+    get: () => {
       throw new Error('blocked');
     },
-    setItem: () => {
+    set: () => {
       throw new Error('full');
     },
   };

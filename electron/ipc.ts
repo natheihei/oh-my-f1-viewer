@@ -6,6 +6,7 @@ import type { PlaceHealth } from '../shared/health';
 import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
+import { setUiState, uiState } from './settings';
 import type { Mods } from './mods';
 import { TimingDb } from './timingdb';
 import { circuitUrl } from './timingdb/circuit';
@@ -260,8 +261,13 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('data:objects', (_e, sessionKey, playheadMs) => timingDb.objects(Number(sessionKey), Number(playheadMs)));
   handle('data:sql', (_e, sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
 
+  // --- Settings: the renderer's small UI state, in the app's settings file ---
+  handle('settings:ui', () => uiState());
+  ipcMain.on('settings:setUi', (evt, key, value) => {
+    if (isTrusted(evt) && typeof key === 'string') setUiState(key, value);
+  });
+
   // --- Agent ---
-  handle('ai:useSettings', (_e, settings) => agent.useSettings(settings));
   handle('ai:status', () => agent.status());
   handle('ai:providers', () => agent.providers());
   handle('ai:connect', (_e, provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));

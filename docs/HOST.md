@@ -287,6 +287,8 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 - `host.agent`: the link to the agent loop in the main process (`status`, `send`, `cancel`, `onEvent`, `onToolCall`, `toolResult`), and its
   setup (`providers`, `connect`, `cancelConnect`, `onConnect`, `disconnect`, `choose`). The shell's agent feed, `/settings-agent` and
   `src/agent/bridge.ts` use it. `send` keeps `live.agentBusy` as messages go through it (`src/host/agentTurn.ts`).
+- `host.savedState`: small UI state kept across restarts in the profile's settings file (`load()`, `get(key)`, `set(key, value)`).
+  `src/main.tsx` loads it once before the first render, and only the shell restores and saves through it (`src/shell/uiState.ts`).
 - `startMods(shared)`: starts loading mods, with the modules they share with the app. `src/main.tsx` calls it once, after registering
   the app's own components.
 - `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`

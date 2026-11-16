@@ -26,6 +26,7 @@ import type {
 import { parseAgentSettings, THINKING_LEVELS, type AgentSettings } from '../../shared/agentSettings';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { SYSTEM_PROMPT } from '../../shared/tools';
+import { appSettings, type Settings } from '../settings';
 import { sendToRenderer } from '../windows';
 import { credentialStore, installId } from './credentials';
 import { forgetForSummary, forgetTurn, readAheadIn, SUMMARY_SYSTEM_PROMPT, summaryRequest } from './extensions/forgetReadAhead';
@@ -144,13 +145,19 @@ export class Agent {
   private generation = 0;
   private pendingTools = new Map<string, (result: AgentToolResult) => void>();
   private connectAbort: AbortController | null = null;
-  /** What the renderer keeps for the agent: see shared/agentSettings.ts. */
-  private settings: AgentSettings = {};
   /** The run policy every conversation reads, from the settings as they stood at the last message. */
   private policy: HarnessSettings = {};
 
-  /** `onRuntime` lets tests register a fake model and credentials. */
-  constructor(private readonly onRuntime?: (providers: AgentModels) => void) {}
+  /** `onRuntime` lets tests register a fake model and credentials, and `store` is for their settings. */
+  constructor(
+    private readonly onRuntime?: (providers: AgentModels) => void,
+    private readonly store?: Settings,
+  ) {}
+
+  /** The agent's part of the app's settings file: see shared/agentSettings.ts. Read at each use, so a change applies at once. */
+  private get settings(): AgentSettings {
+    return parseAgentSettings((this.store ?? appSettings()).get('agent'));
+  }
 
   private runtime(): Promise<Runtime> {
     this.runtimePromise ??= this.createRuntime().catch((e) => {
@@ -227,15 +234,9 @@ export class Agent {
     this.modFiles = host;
   }
 
-  /** The settings the renderer keeps. It hands them over once, before it asks anything else. */
-  useSettings(settings: unknown): void {
-    this.settings = parseAgentSettings(settings);
-  }
-
-  /** Changes the settings here, and has the renderer keep them. */
+  /** Changes the settings, in the app's settings file. */
   private changeSettings(values: AgentSettings): void {
-    this.settings = { ...this.settings, ...values };
-    sendToRenderer('ai:settings', this.settings);
+    (this.store ?? appSettings()).set('agent', { ...this.settings, ...values });
   }
 
   /** The run policy for a conversation, from what the settings say. */

@@ -9,26 +9,26 @@ import { parseSavedVolume, restoreVolume, saveVolume } from './persistVolume';
 import type { UiStorage } from './uiState';
 
 function memoryStorage(): UiStorage {
-  const items = new Map<string, string>();
-  return { getItem: (key) => items.get(key) ?? null, setItem: (key, value) => void items.set(key, value) };
+  const items = new Map<string, unknown>();
+  return { get: (key) => items.get(key), set: (key, value) => void items.set(key, value) };
 }
 
 function saved(storage: UiStorage): unknown {
-  return JSON.parse(storage.getItem('f1a.volume') ?? 'null');
+  return storage.get('volume') ?? null;
 }
 
 beforeEach(() => host.audio.setVolume({ volume: 1 }));
 
 test('restores the level the app closed at', () => {
   const storage = memoryStorage();
-  storage.setItem('f1a.volume', JSON.stringify({ level: 0.4, lastHeard: 0.4 }));
+  storage.set('volume', { level: 0.4, lastHeard: 0.4 });
   restoreVolume(storage);
   expect(read().volume).toBe(0.4);
 });
 
 test('restores muted, and unmuting goes back to the level last heard', () => {
   const storage = memoryStorage();
-  storage.setItem('f1a.volume', JSON.stringify({ level: 0, lastHeard: 0.6 }));
+  storage.set('volume', { level: 0, lastHeard: 0.6 });
   restoreVolume(storage);
   expect(read().volume).toBe(0);
   host.audio.toggleMute();
@@ -50,7 +50,7 @@ test('saving a mute keeps the level last heard', () => {
 
 test('a restored mute is saved with the level last heard', () => {
   const storage = memoryStorage();
-  storage.setItem('f1a.volume', JSON.stringify({ level: 0, lastHeard: 0.6 }));
+  storage.set('volume', { level: 0, lastHeard: 0.6 });
   restoreVolume(storage);
   saveVolume(read().volume, storage);
   expect(saved(storage)).toEqual({ level: 0, lastHeard: 0.6 });

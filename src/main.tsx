@@ -11,7 +11,6 @@ import { components } from './components/registry';
 import * as f1a from './host';
 import { host, startBuild, startHealth, startMods } from './host';
 import { App } from './shell/App';
-import { restoreAgentSettings } from './shell/persistAgentSettings';
 import { restoreBackground } from './shell/persistBackground';
 import { restorePaletteHeight } from './shell/persistPaletteHeight';
 import { restoreVolume } from './shell/persistVolume';
@@ -23,15 +22,19 @@ host.backgrounds.register({ backgrounds });
 startMods({ f1a, 'f1a/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });
 startBuild();
 startHealth();
-// Before the first render too, so the volume slider starts at the saved level rather than jumping from 100%.
-restoreVolume();
-// And the background, so the gaps don't flash black first. With nothing saved, the default shows.
-host.appearance.setBackground({ style: DEFAULT_BACKGROUND });
-restoreBackground();
-// And the palette's history cap, so it opens at the height last chosen.
-restorePaletteHeight();
-// And the agent's settings, before anything asks main about the agent.
-restoreAgentSettings();
+async function start(): Promise<void> {
+  // What was saved, read once before anything is restored from it.
+  await host.savedState.load();
+  // Before the first render too, so the volume slider starts at the saved level rather than jumping from 100%.
+  restoreVolume();
+  // And the background, so the gaps don't flash black first. With nothing saved, the default shows.
+  host.appearance.setBackground({ style: DEFAULT_BACKGROUND });
+  restoreBackground();
+  // And the palette's history cap, so it opens at the height last chosen.
+  restorePaletteHeight();
 
-// No StrictMode: effects own real streams, and a double mount would start each one twice.
-createRoot(document.getElementById('root')!).render(<App />);
+  // No StrictMode: effects own real streams, and a double mount would start each one twice.
+  createRoot(document.getElementById('root')!).render(<App />);
+}
+
+void start();

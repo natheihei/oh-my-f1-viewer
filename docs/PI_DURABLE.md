@@ -19,7 +19,7 @@ three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helpe
 | On pi-coding-agent | On pi-durable |
 | --- | --- |
 | `ModelRuntime`, over `auth.json` | pi-ai's `createModels()` with only the supported providers, and a `CredentialStore` of the app's (`credentials.ts`) on `<userData>/f1a-credentials.json`, encrypted with the OS keystore like F1 TV's sign-in |
-| `SettingsManager`, over `settings.json` | The renderer's UI state, in `localStorage` under `f1a.agent`, handed to main (`shared/agentSettings.ts`) |
+| `SettingsManager`, over `settings.json` | `agent` in the app's settings file, `<userData>/f1a-settings.json` (`electron/settings.ts`, `shared/agentSettings.ts`) |
 | `createAgentSession`, `SessionManager` and its `.jsonl` | A `Harness` per conversation, on pi-durable's SQLite storage: one database per conversation in `<userData>/conversations`, never resumed |
 | The prompt extension, over `SYSTEM.md` | One prompt `section()`, from `SYSTEM_PROMPT` in code. `SYSTEM.md` is no longer written |
 | The tools extension | `defineTool()` tools in an extension that's installed again to replace the set, also from inside a call |
@@ -38,8 +38,8 @@ What the agent does is the same. These are the differences someone could notice:
   prompt sent and each change to it, summaries (`pi.compaction`) and the `f1a.forget` edits that cut down a read-ahead turn.
   `node devscripts/conversation.mjs` prints one. Nothing is left in `pi-agent`.
 - **Sign in again, and choose the model again.** The credential moved out of `pi-agent/auth.json` and the settings out of
-  `pi-agent/settings.json`, and neither is carried over. The settings' keys are the app's own now: `provider`, `model`, `thinking`,
-  `compaction` and `retry`.
+  `pi-agent/settings.json`, and neither is carried over. The settings are under `agent` in the app's own settings file,
+  `f1a-settings.json`, with the app's own keys: `provider`, `model`, `thinking`, `compaction` and `retry`.
 - **`SYSTEM.md`, `models.json` and `models-store.json`** in `pi-agent` are no longer written or read: pi-coding-agent read its prompt
   from the first and kept its own model settings in the others, which the app never used.
 - **The mods folder** no longer gets an `AGENTS.md` or a `tsconfig.json`. Nothing in the app read them: they were for a coding

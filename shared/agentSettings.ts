@@ -1,11 +1,9 @@
 /**
  * The agent's settings: the provider, model and thinking level `/settings-agent` chose, and a run policy
- * that's only changed by hand. The renderer keeps them with the rest of the app's UI state (localStorage,
- * `f1a.agent`, src/shell/persistAgentSettings.ts) and hands them to the main process, which runs the agent. From devtools:
+ * that's only changed by hand. They're under `agent` in the app's settings file, `<userData>/f1a-settings.json`
+ * (electron/settings.ts). To change the policy, edit it while the app is closed, for example:
  *
- *   localStorage.setItem('f1a.agent', JSON.stringify({ ...JSON.parse(localStorage.getItem('f1a.agent')), compaction: { reserveTokens: 2000 } }))
- *
- * applies from the next start, or a reload.
+ *   "agent": { "provider": "openai", "model": "gpt-6.1-terra", "thinking": "medium", "compaction": { "reserveTokens": 2000 } }
  */
 import type { ThinkingLevel } from './api';
 

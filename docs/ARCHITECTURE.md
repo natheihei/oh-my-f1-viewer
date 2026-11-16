@@ -140,11 +140,17 @@ changes.
 
 Both use the host, but neither can call the other.
 
-## UI state across restarts
+## Settings and UI state across restarts
 
-Small UI state that should survive a restart, so far only the master volume, is kept by the shell, above the host. The host holds it
-while the app runs. `src/shell/uiState.ts` saves it to `localStorage`. At start, before the first render, the shell gives it back to
-the host through the host's ordinary writes (`src/shell/persistVolume.ts`). The host doesn't know any of this happens.
+The app's settings are one JSON file in the profile, `<userData>/f1a-settings.json`, which main owns (`electron/settings.ts`). The
+agent's are under `agent`, and the renderer's small UI state under `ui`. Being in the profile, they're the same for every build that
+runs on it, whatever origin its page is served from. Edit the file by hand only while the app is closed.
+
+The UI state, the master volume, the background and the palette's history cap, is kept by the shell, above the host. The host holds
+it while the app runs. Before the first render, `src/main.tsx` reads what was saved through `host.savedState` (`src/data/savedState.ts`),
+and the shell gives it back to the host through the host's ordinary writes (`src/shell/persistVolume.ts` and beside it). Each change
+the shell saves through `src/shell/uiState.ts` goes to main, which writes the file a moment later, and at once on quit. The host
+doesn't know any of this happens.
 
 ## Agent
 
@@ -162,10 +168,9 @@ per message is the conversation's `maxTurns`. Nothing of pi's own is in the prom
 
 What the agent keeps:
 
-- **Its settings** live in the renderer with the rest of the UI state, in `localStorage` under `f1a.agent`
-  (`shared/agentSettings.ts`): the provider, model and thinking level `/settings-agent` chose, and the compaction and retry policy,
-  which is changed by hand. The renderer hands them to main before it asks anything about the agent, and keeps what main changes
-  when a provider is connected or a model chosen.
+- **Its settings** are under `agent` in the app's settings file (`shared/agentSettings.ts`): the provider, model and thinking level
+  `/settings-agent` chose, and the compaction and retry policy, which is changed by hand. The agent reads them from main at each use,
+  and writes them when a provider is connected or a model chosen.
 - **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
   keystore (`credentials.ts`), in the shape pi-ai gives it.
 - **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_view.sqlite`, or `<time>_build.sqlite`
