@@ -108,6 +108,13 @@ about a quarter of an hour:
 node scripts/build-check.mjs /tmp/build-check
 ```
 
+This one asks the real agent for sessions with nothing open, each request in a fresh conversation, and records which session it
+loads or what it asks. It runs on the main profile for the agent's login, so close f1a first:
+
+```bash
+node scripts/picking-check.mjs /tmp/picking-check
+```
+
 ```bash
 node scripts/stream-soak.mjs 10
 ```
