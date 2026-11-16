@@ -5,8 +5,7 @@
 //
 // By default it calls the agent's own tools, suggest_tiles and edit_tile, with the arguments a model would
 // send: everything the agent does after the model, with no agent sign-in. With --agent it types each step
-// into the palette as a user would, and the real model answers. That runs on ~/.config/f1a itself, so the
-// agent's login is never copied, and refuses while another f1a is using it.
+// into the palette as a user would, and the real model answers, with the agent's login copied in.
 // Needs the F1 TV sign-in. Prints race data: use a race you've watched.
 // Usage: node scripts/props-check.mjs <out-dir> [--agent] [--session <key>] [--year 2026] [--lap 30]
 import { mkdirSync } from 'node:fs';
@@ -24,7 +23,7 @@ if (!outDir) throw new Error('Usage: node scripts/props-check.mjs <out-dir> [--a
 const agent = argv.includes('--agent');
 mkdirSync(outDir, { recursive: true });
 
-const { page, log, stop } = await startIsolatedApp(outDir, { name: 'props', mainProfile: agent });
+const { page, log, stop } = await startIsolatedApp(outDir, { name: 'props', agent });
 const fail = async (message) => {
   log('FAIL', message);
   await stop();
@@ -65,7 +64,7 @@ await page.evaluate(async (agent) => {
     await window.f1a.ai.reset();
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not signed in in ~/.config/f1a.');
+if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
 
 let step = 0;
 const shot = async (name) => {

@@ -4,8 +4,8 @@
 // By default there's no agent sign-in: it offers build mode as offer_build would, with no tiles, catches what
 // would go to the build agent, and switches. With --agent the real models answer. A request a chart covers
 // gets the chart and no offer. A request none covers gets an offer with a reason and a handoff note, and the
-// check switches and waits for the build agent's turn. That runs on ~/.config/f1a itself, so the agent's
-// login is never copied, and refuses while another f1a is using it. It puts the mods folder back with Undo all.
+// check switches and waits for the build agent's turn, with the agent's login copied in. It puts the mods
+// folder back with Undo all.
 // Needs the F1 TV sign-in. Prints race data: use a race you've watched.
 // Usage: node scripts/offer-check.mjs <out-dir> [--agent] [--session <key>] [--year 2026] [--lap 30]
 import { mkdirSync } from 'node:fs';
@@ -23,7 +23,7 @@ if (!outDir) throw new Error('Usage: node scripts/offer-check.mjs <out-dir> [--a
 const agent = argv.includes('--agent');
 mkdirSync(outDir, { recursive: true });
 
-const { page, log, stop } = await startIsolatedApp(outDir, { name: 'offer', mainProfile: agent });
+const { page, log, stop } = await startIsolatedApp(outDir, { name: 'offer', agent });
 const cleanUp = async () => {
   await page.evaluate(async () => {
     const { host, read } = await import('/src/host/index.ts');
@@ -83,7 +83,7 @@ await page.evaluate(async (agent) => {
     host.agent.send = async (text) => void window.__sent.push(text);
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not signed in in ~/.config/f1a.');
+if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
 
 /** Sends a message as the viewer, waits for the turn to end, and returns the tool calls and the reply. */
 async function say(text) {

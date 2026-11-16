@@ -177,7 +177,8 @@ to `f1a-credentials.json`, the settings to `f1a-settings.json` and each conversa
   `f1a.forget` entries of its read-ahead turns. `node devscripts/conversation.mjs` prints it.
 - **The settings** are shared by every build on the profile: the checks, each on a Vite port of its own, found the agent set up from
   the file. The volume saved in one launch came back after a reload, and a change made just before quitting was written.
-- **Build mode wasn't run again**: `scripts/build-check.mjs` needs an empty mods folder, and the main profile's has mods in it.
+- **`scripts/build-check.mjs`** passed in full, all 99 checks, in an f1a of its own with the agent's login and settings copied in,
+  which is how every check that needs the agent now runs. The main profile's login and mods were left as they were.
 
 **A ChatGPT sign-in by a person** (2026-11-16), on a profile of its own with no login in it: "Sign in with ChatGPT" opened
 OpenAI's page in the default browser, the callback came back, the provider showed as "OpenAI (ChatGPT subscription)" with GPT-6.1

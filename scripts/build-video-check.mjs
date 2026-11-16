@@ -1,12 +1,12 @@
 // Build mode case 27, in the real app with the real agent over a real replay race, muted: asked for a mod with
 // two onboards picked in the tile, the build agent writes one that holds its videos with useStream, names what
 // it shows in the title bar with useTileHeader and streamSlots, and keeps the pick with useTileState, and its
-// tile plays both. Then Undo all leaves the mods folder as it was. Runs on the main profile for the agent's
-// login, so it refuses while another f1a uses it. Prints what the agent says, which could give the race away.
+// tile plays both. Then Undo all leaves the mods folder as it was. Runs in an f1a of its own with the agent's
+// login copied in (see isolated.mjs). Prints what the agent says, which could give the race away.
 // Usage: node scripts/build-video-check.mjs <screenshot-dir> [lap] [session key]
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { MAIN_PROFILE, openRace, seekToLap, startIsolatedApp } from './isolated.mjs';
+import { openRace, seekToLap, startIsolatedApp } from './isolated.mjs';
 import { typeInPalette } from './harness.mjs';
 
 const outDir = process.argv[2];
@@ -16,12 +16,10 @@ const SESSION = process.argv[4] ? Number(process.argv[4]) : null;
 const NAME = 'twin_onboards';
 mkdirSync(outDir, { recursive: true });
 
-const modsDir = path.join(MAIN_PROFILE, 'mods');
+const { page, log, stop, userData } = await startIsolatedApp(outDir, { name: 'build-video', agent: true });
+const modsDir = path.join(userData, 'mods');
 const folders = () => (existsSync(modsDir) ? readdirSync(modsDir).filter((n) => !n.startsWith('.') && statSync(path.join(modsDir, n)).isDirectory()).sort() : []);
 const before = folders();
-if (before.includes(NAME)) throw new Error(`The mods folder already has ${NAME}: this check writes it.`);
-
-const { page, log, stop } = await startIsolatedApp(outDir, { name: 'build-video', mainProfile: true });
 let failed = 0;
 const check = (what, ok, detail = '') => {
   if (!ok) failed += 1;
