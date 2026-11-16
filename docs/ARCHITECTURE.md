@@ -185,7 +185,8 @@ What the agent keeps:
   `/settings-agent` chose, and the compaction and retry policy, which is changed by hand. The agent reads them from main at each use,
   and writes them when a provider is connected or a model chosen.
 - **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
-  keystore (`credentials.ts`), in the shape pi-ai gives it.
+  keystore (`credentials.ts`), in the shape pi-ai gives it. A file that decrypts but doesn't parse reads as signed out, with a
+  warning, and the next write moves it to `f1a-credentials.json.bad` first instead of writing over it.
 - **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_pick.sqlite`, `<time>_view.sqlite`,
   or `<time>_build.sqlite` for build mode's agent ([BUILD_MODE.md](BUILD_MODE.md)): pi-durable's own storage, holding every entry as the model saw it, the
   prompt and each change to it, `app_state`, tool calls and results, summaries, the edits that cut down a read-ahead turn, and token
