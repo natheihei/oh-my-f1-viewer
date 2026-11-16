@@ -157,12 +157,11 @@ for (const session of sessions) {
     const overtakes = await api('overtakes', session.key);
     console.log(`  overtakes      ours ${String(sql('SELECT COUNT(*) AS n FROM overtakes')[0].n).padStart(6)}  openf1 ${String(overtakes.length).padStart(6)}`);
 
-    const objects = store.sessionObjects(session.key, ALL_VISIBLE);
     const drivers = await api('drivers', session.key);
-    report('drivers', compare(objects.drivers, drivers, (r) => r.driver_number, { name_acronym: null, team_name: null, team_colour: null, full_name: null }));
+    report('drivers', compare(sql('SELECT * FROM drivers'), drivers, (r) => r.driver_number, { name_acronym: null, team_name: null, team_colour: null, full_name: null }));
 
     const champ = await api('championship_drivers', session.key);
-    report('championship', compare(objects.championshipDrivers, champ, (r) => r.driver_number, { position_start: null, position_current: null, points_start: null, points_current: null }));
+    report('championship', compare(sql('SELECT * FROM championship_drivers'), champ, (r) => r.driver_number, { position_start: null, position_current: null, points_start: null, points_current: null }));
     console.log();
   } catch (e) {
     console.log(`  failed: ${e.message}\n`);
