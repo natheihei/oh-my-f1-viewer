@@ -207,11 +207,13 @@ export interface F1aApi {
     objects(sessionKey: number, playheadMs: number): Promise<import('./sessionData').SessionObjects>;
     sql(sessionKey: number, playheadMs: number, sql: string, params: unknown[]): Promise<import('./sessionData').SqlRows>;
   };
+  /** The renderer's small UI state, such as the volume, kept by main in the app's settings file (electron/settings.ts). */
+  settings: {
+    ui(): Promise<Record<string, unknown>>;
+    /** Undefined removes it. */
+    setUi(key: string, value: unknown): void;
+  };
   ai: {
-    /** Hands main the settings the renderer keeps (shared/agentSettings.ts), before anything else asks about the agent. */
-    useSettings(settings: import('./agentSettings').AgentSettings): Promise<void>;
-    /** Main changed the settings, by connecting or choosing: the renderer keeps them. */
-    onSettings(cb: (settings: import('./agentSettings').AgentSettings) => void): () => void;
     status(): Promise<AiStatus>;
     /** The providers `/settings-agent` offers, each with its ways to connect and its models. */
     providers(): Promise<AgentProviderOption[]>;
