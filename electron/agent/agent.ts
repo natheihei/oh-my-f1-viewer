@@ -6,10 +6,11 @@
  */
 import { app, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type { Context } from '@earendil-works/chord/context' with { 'resolution-mode': 'import' };
 import type { Api, AuthInteraction, CredentialStore, Message, Model, Models, Provider } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
-import type { Conversation as DurableConversation, EntryRecord, Harness, HarnessSettings } from '@earendil-works/pi-durable' with { 'resolution-mode': 'import' };
+import type { Conversation as DurableConversation, EntryRecord, Harness, HarnessSettings, Storage } from '@earendil-works/pi-durable' with { 'resolution-mode': 'import' };
 import type {
   AgentConnectEvent,
   AgentEvent,
@@ -32,7 +33,6 @@ import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
 import { askForKey } from './keyWindow';
 import { SUPPORTED, supported, type SupportedProvider } from './supported';
-import { Transcript } from './transcript';
 
 const MAX_TOOL_ROUNDS = 10;
 /** Building takes more steps than viewing: reading the types, writing, fixing, looking. */
@@ -82,7 +82,10 @@ interface Runtime {
   durable: Durable;
   context: Context;
   providers: AgentModels;
-  agentDir: string;
+  /** Opens a conversation's storage. */
+  open: (file: string) => Promise<Storage>;
+  /** Where each conversation is kept, for review. */
+  conversationsDir: string;
   levels: (model: Model<Api>) => ThinkingLevel[];
   clamp: (model: Model<Api>, level: ThinkingLevel) => ThinkingLevel;
 }
@@ -107,8 +110,6 @@ interface Conversation {
   reference: string;
   provider: string;
   model: Model<Api>;
-  /** The conversation's `.jsonl`, for reviewing it later. */
-  transcript: Transcript;
   /** Model requests made for the message being answered. */
   rounds: number;
   maxRounds: number;
@@ -166,7 +167,7 @@ export class Agent {
     const { createModels } = await import('@earendil-works/pi-ai/models');
     const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
     const { anthropicProvider } = await import('@earendil-works/pi-ai/providers/anthropic');
-    const agentDir = path.join(app.getPath('userData'), 'pi-agent');
+    const { openNodeSqliteStorage } = await import('@earendil-works/pi-durable/storage/sqlite/node');
     // A test's fakes go in first: its credentials are what the collection is made over, and its providers
     // replace the real ones of the same id.
     const added: Provider[] = [];
@@ -187,7 +188,8 @@ export class Agent {
       durable,
       context: BACKGROUND_CONTEXT,
       providers,
-      agentDir,
+      open: (file) => openNodeSqliteStorage(file),
+      conversationsDir: path.join(app.getPath('userData'), 'conversations'),
       levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
       clamp: (model, level) => clampThinkingLevel(model, level) as ThinkingLevel,
     };
@@ -255,17 +257,14 @@ export class Agent {
   }
 
   private async createConversation(choice: Choice, mode: AgentMode = 'view'): Promise<Conversation> {
-    const { durable, context, providers, agentDir } = await this.runtime();
-    const { createRegistry, defineExtension, defineTool, hook, section, CompactionTask, GenerationTask, Harness: HarnessClass, MemoryStorage, ProviderDoc } = durable;
+    const { durable, context, providers, open, conversationsDir } = await this.runtime();
+    const { createRegistry, defineExtension, defineTool, hook, section, CompactionTask, GenerationTask, Harness: HarnessClass, ProviderDoc } = durable;
     const build = mode === 'build';
     const id = build ? 'f1a-build' : 'f1a';
-    // Stored for review but never resumed: each conversation gets its own timestamped file, and lives in memory.
-    const transcript = new Transcript(
-      path.join(agentDir, build ? 'build-sessions' : 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}_${id}.jsonl`),
-      id,
-      path.join(app.getPath('userData'), 'mods'),
-    );
-    await transcript.start();
+    // Kept for review, and so a crash loses nothing, but never resumed: each conversation has a database of its own,
+    // and a new conversation or a restart starts empty.
+    await fsp.mkdir(conversationsDir, { recursive: true });
+    const storage = await open(path.join(conversationsDir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${build ? 'build' : 'view'}.sqlite`));
 
     const registry = createRegistry();
     const check = build ? renderCheck(() => this.modFiles?.health() ?? Promise.resolve(null)) : null;
@@ -277,7 +276,6 @@ export class Agent {
       reference: '',
       provider: choice.entry.provider,
       model: choice.model,
-      transcript,
       rounds: 0,
       maxRounds: build ? MAX_BUILD_ROUNDS : MAX_TOOL_ROUNDS,
       readAhead: new Set(),
@@ -365,7 +363,7 @@ export class Agent {
     registry.install(rules);
 
     const harness = await HarnessClass.open(
-      new MemoryStorage(),
+      storage,
       {
         models: providers.models,
         registry,
@@ -623,7 +621,6 @@ export class Agent {
   private async streamText(turn: Turn, conversation: Conversation, context: Context): Promise<{ flush(): Promise<void> }> {
     const { durable } = await this.runtime();
     const seen = new Set<EntryRecord['id']>();
-    const before = new Set<EntryRecord['id']>();
     let sent = '';
     const say = (full: string, done: boolean) => {
       const delta = full.startsWith(sent) ? full.slice(sent.length) : full;
@@ -631,7 +628,6 @@ export class Agent {
       if (delta && !turn.cancelled) emit({ type: 'text_delta', turnId: turn.id, delta });
     };
     const take = (entries: readonly EntryRecord[]) => {
-      conversation.transcript.add(entries.filter((entry) => !before.has(entry.id)));
       for (const entry of entries) {
         if (seen.has(entry.id)) continue;
         seen.add(entry.id);
@@ -640,10 +636,7 @@ export class Agent {
     };
     const watch = await conversation.root.watch(context);
     // What's already there belongs to earlier messages.
-    for (const entry of watch.value.entries) {
-      seen.add(entry.id);
-      before.add(entry.id);
-    }
+    for (const entry of watch.value.entries) seen.add(entry.id);
     watch.start(async (call) => {
       if (call.kind !== 'value') return;
       take(call.value.entries);
@@ -689,7 +682,6 @@ export class Agent {
       // A model or thinking level chosen since the last message, and the rounds this message may take.
       await root.configure({ model: { provider: choice.model.provider, modelId: choice.model.id }, thinkingLevel: choice.thinking, maxTurns: conversation.maxRounds }, context);
       conversation.model = choice.model;
-      conversation.transcript.runsOn(choice.model.provider, choice.model.id, choice.thinking);
       conversation.reference = reference;
       conversation.register(definitions);
       conversation.rounds = 0;
@@ -704,7 +696,6 @@ export class Agent {
       } finally {
         await stream.flush().catch(() => {});
         await this.forget(conversation).catch((e: Error) => console.warn('[ai] forgetting a read ahead:', e.message));
-        await this.record(conversation).catch((e: Error) => console.warn('[ai] writing the conversation:', e.message));
       }
       if (turn.cancelled) return;
 
@@ -718,14 +709,6 @@ export class Agent {
       if (turn.cancelled) return;
       emit({ type: 'error', turnId: turn.id, message: friendlyError(e, label) });
     }
-  }
-
-  /** Writes what the conversation gained to its `.jsonl`: whatever the stream didn't pass by, such as a cut-down turn. */
-  private async record(conversation: Conversation): Promise<void> {
-    const { context } = await this.runtime();
-    const page = await conversation.root.entries({ order: 'descending' }, 200, undefined, context);
-    conversation.transcript.add([...page.items].reverse());
-    await conversation.transcript.flush();
   }
 
   /** A summary of `messages`, from the conversation's own model. Throws if the model gives none. */
