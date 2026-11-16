@@ -162,8 +162,7 @@ per message is the conversation's `maxTurns`. Nothing of pi's own is in the prom
 
 Everything the agent keeps is under `<userData>/pi-agent`:
 
-- `auth.json` holds the connected provider's credential, in the shape pi-ai gives it (`credentialFile.ts`). `SYSTEM.md` is the
-  viewing agent's prompt, written on every start to read beside the conversations: nothing reads it back. `settings.json` is written
+- `auth.json` holds the connected provider's credential, in the shape pi-ai gives it (`credentialFile.ts`). `settings.json` is written
   only if missing, so it can be edited, and `/settings-agent` saves the provider, model and thinking level there. It's read at every
   message (`settingsFile.ts`).
 - `sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and

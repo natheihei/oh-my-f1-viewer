@@ -7,7 +7,6 @@ import { existsSync, promises as fsp, statSync, watch, type FSWatcher } from 'no
 import path from 'node:path';
 import * as esbuild from 'esbuild';
 import { SHARED_MODULES, type BuildState, type ModLogLine, type ModStatus } from '../../shared/mods';
-import { MODS_AGENTS_MD } from '../../shared/modGuide';
 import { BuildSnapshot, describeChanges } from './snapshot';
 
 export const MOD_SCHEME = 'f1a-mod';
@@ -75,11 +74,10 @@ async function formatErrors(e: unknown): Promise<string> {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Where the app keeps what a mod's types come from: the host's and kit's declarations, and its packages. */
+/** Where the app keeps what a mod's types come from: the host's and kit's declarations. */
 export interface TypeSources {
   /** `dist-types`, from `npm run build:types`. */
   declarations: string;
-  nodeModules: string;
 }
 
 export class Mods {
@@ -110,8 +108,6 @@ export class Mods {
       console.log('[mods] undid an unfinished build');
     }
     if (this.types) await this.writeTypes(this.types).catch((e: Error) => console.warn('[mods] types:', e.message));
-    // App-owned, like tsconfig.json: what a coding agent working in the folder reads first.
-    await fsp.writeFile(path.join(this.dir, 'AGENTS.md'), MODS_AGENTS_MD).catch((e: Error) => console.warn('[mods] guide:', e.message));
     await this.scan();
     this.watcher = watch(this.dir, { recursive: true }, (_event, file) => this.changed(file ? String(file) : null));
     this.watcher.on('error', (e) => console.warn('[mods] watcher:', e.message));
@@ -125,39 +121,12 @@ export class Mods {
     await esbuild.stop();
   }
 
-  /**
-   * Copies the declarations into `.types` and writes a `tsconfig.json` that finds them, and React and
-   * TypeBox in the app's packages, so `tsc -p <mods folder>` checks every mod without the app running.
-   */
-  private async writeTypes({ declarations, nodeModules }: TypeSources): Promise<void> {
+  /** Copies the declarations into `.types`, where the build agent reads them. */
+  private async writeTypes({ declarations }: TypeSources): Promise<void> {
     const target = path.join(this.dir, '.types');
     await fsp.rm(target, { recursive: true, force: true });
     if (existsSync(declarations)) await fsp.cp(declarations, target, { recursive: true });
     else console.warn('[mods] no declarations at', declarations, ': run npm run build:types');
-    const config = {
-      '//': 'Written by f1a on every start: edits are lost. See docs/MODS.md.',
-      compilerOptions: {
-        target: 'ES2022',
-        lib: ['ES2023', 'DOM', 'DOM.Iterable'],
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        jsx: 'react-jsx',
-        strict: true,
-        noEmit: true,
-        skipLibCheck: true,
-        esModuleInterop: true,
-        isolatedModules: true,
-        types: [],
-        paths: {
-          f1a: ['./.types/src/host/index.d.ts'],
-          'f1a/kit': ['./.types/src/components/charts/kit/index.d.ts'],
-          // Type packages first: `react` itself ships JavaScript only.
-          '*': [path.join(nodeModules, '@types', '*'), path.join(nodeModules, '*')],
-        },
-      },
-      include: ['*/**/*.ts', '*/**/*.tsx'],
-    };
-    await fsp.writeFile(path.join(this.dir, 'tsconfig.json'), JSON.stringify(config, null, 2) + '\n');
   }
 
   /** Starts a build: from here until `saveBuild` or `undoBuild`, the folder can be put back as it is now. */

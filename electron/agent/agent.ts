@@ -6,7 +6,6 @@
  */
 import { app, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type { Context } from '@earendil-works/chord/context' with { 'resolution-mode': 'import' };
 import type { Api, AuthInteraction, CredentialStore, Message, Model, Models, Provider } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
@@ -171,8 +170,6 @@ export class Agent {
     const agentDir = path.join(app.getPath('userData'), 'pi-agent');
     const settings = new AgentSettings(path.join(agentDir, 'settings.json'));
     await settings.ensure();
-    // The viewing agent's prompt as this version has it, to read beside its conversations. App-owned: hand edits are lost.
-    await fsp.writeFile(path.join(agentDir, 'SYSTEM.md'), SYSTEM_PROMPT);
     // A test's fakes go in first: its credentials are what the collection is made over, and its providers
     // replace the real ones of the same id.
     const added: Provider[] = [];

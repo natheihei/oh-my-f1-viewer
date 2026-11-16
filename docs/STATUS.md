@@ -101,7 +101,6 @@ On Linux, in the real app, over replay races (2026-11-09):
 - The mark checking only the tile's frame, with `scripts/overflow-check.mjs` (2026-11-12): a table mod whose content ran past its
   400px tile was marked "more ▾", "more ▸" or "more ▾▸" by which way it ran, and not marked when it fit or in a 1200px tile; the same
   in the suggestion strip. A list scrolling 40 rows of its own wasn't marked, nor with its scroll area squeezed to 16px.
-- The example mod and the one in MODS.md type-checking with `tsc -p` against the written `tsconfig.json`.
 
 ## Verified for agent setup
 

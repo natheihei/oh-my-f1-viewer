@@ -51,15 +51,15 @@ describe('a build snapshot', () => {
     write({ 'one/main.tsx': MOD });
     const snapshot = new BuildSnapshot(mods, snap);
     await snapshot.take();
-    write({ 'one/mod.log': 'log', 'one/mod.error': 'error', 'tsconfig.json': '{}', '.types/index.d.ts': 'x', 'half/notes.txt': 'no main yet' });
+    write({ 'one/mod.log': 'log', 'one/mod.error': 'error', '.types/index.d.ts': 'x', 'half/notes.txt': 'no main yet' });
     expect(await snapshot.changes()).toEqual([]);
   });
 
   it('puts everything back on restore, and leaves what the app wrote', async () => {
-    write({ 'edit/main.tsx': 'old', 'gone/main.tsx': MOD, 'gone/deep/more.ts': 'kept', 'tsconfig.json': '{"app":1}', '.types/a.d.ts': 'types' });
+    write({ 'edit/main.tsx': 'old', 'gone/main.tsx': MOD, 'gone/deep/more.ts': 'kept', '.types/a.d.ts': 'types' });
     const snapshot = new BuildSnapshot(mods, snap);
     await snapshot.take();
-    write({ 'edit/main.tsx': 'new', 'edit/extra.ts': 'extra', 'made/main.tsx': MOD, 'made/mod.log': 'log', 'tsconfig.json': '{"app":2}' });
+    write({ 'edit/main.tsx': 'new', 'edit/extra.ts': 'extra', 'made/main.tsx': MOD, 'made/mod.log': 'log' });
     rmSync(path.join(mods, 'gone'), { recursive: true });
 
     expect(await snapshot.restore()).toBe(true);
@@ -68,7 +68,6 @@ describe('a build snapshot', () => {
     expect(has('made')).toBe(false);
     expect(read('gone/main.tsx')).toBe(MOD);
     expect(read('gone/deep/more.ts')).toBe('kept');
-    expect(read('tsconfig.json')).toBe('{"app":2}');
     expect(read('.types/a.d.ts')).toBe('types');
     expect(snapshot.active).toBe(false);
     expect(existsSync(snap)).toBe(false);

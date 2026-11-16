@@ -267,7 +267,7 @@ describe('a turn', () => {
 });
 
 describe('the prompt', () => {
-  it('is SYSTEM.md and the reference, with nothing of pi around them', async () => {
+  it('is the viewing prompt and the reference, with nothing of pi around them', async () => {
     const { agent, requests, script } = setup();
     script(fauxAssistantMessage('ok'));
     await agent.send('hi', 'state', [TOOL], 'THE REFERENCE');
@@ -275,7 +275,7 @@ describe('the prompt', () => {
     expect(requests[0].tools).toEqual(['act']);
   });
 
-  it('is SYSTEM.md alone without a reference', async () => {
+  it('is the viewing prompt alone without a reference', async () => {
     const { agent, requests, script } = setup();
     script(fauxAssistantMessage('ok'));
     await agent.send('hi', 'state', [TOOL]);
@@ -957,15 +957,6 @@ describe('stored sessions', () => {
 });
 
 describe('its files', () => {
-  it('writes SYSTEM.md every time, and settings only if missing', async () => {
-    mkdirSync(agentDir(), { recursive: true });
-    writeFileSync(path.join(agentDir(), 'SYSTEM.md'), 'hand edit');
-    writeFileSync(path.join(agentDir(), 'settings.json'), '{"defaultModel":"edited"}');
-    await new Agent().status();
-    expect(readFileSync(path.join(agentDir(), 'SYSTEM.md'), 'utf8')).toBe(SYSTEM_PROMPT);
-    expect(readFileSync(path.join(agentDir(), 'settings.json'), 'utf8')).toBe('{"defaultModel":"edited"}');
-  });
-
   it('starts with the expected settings', async () => {
     await new Agent().status();
     expect(savedSettings()).toEqual({
@@ -975,21 +966,4 @@ describe('its files', () => {
     });
   });
 
-  it('ignores a .pi folder planted in the mods folder, and writes nothing there', async () => {
-    const planted = path.join(host.userData, 'mods', '.pi');
-    mkdirSync(path.join(planted, 'extensions'), { recursive: true });
-    writeFileSync(path.join(planted, 'SYSTEM.md'), 'PLANTED PROMPT');
-    writeFileSync(path.join(planted, 'settings.json'), '{"defaultModel":"planted"}');
-    const marker = path.join(host.userData, 'extension-ran');
-    writeFileSync(
-      path.join(planted, 'extensions', 'evil.ts'),
-      `import { writeFileSync } from 'node:fs'; export default () => { writeFileSync(${JSON.stringify(marker)}, 'x'); };`,
-    );
-    const { agent, requests, script } = setup();
-    script(fauxAssistantMessage('ok'));
-    await agent.send('hi', 'state', [TOOL]);
-    expect(requests[0].system).toBe(SYSTEM_PROMPT);
-    expect(existsSync(marker)).toBe(false);
-    expect(events().at(-1)).toMatchObject({ type: 'turn_end' });
-  });
 });

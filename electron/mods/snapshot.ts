@@ -9,8 +9,7 @@ import path from 'node:path';
 import type { BuildChange } from '../../shared/mods';
 
 const ENTRIES = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'];
-/** What the app writes into the mods folder itself: never copied, compared or removed. */
-const APP_TOP_LEVEL = new Set(['tsconfig.json', 'AGENTS.md']);
+/** What the app writes into a mod's folder itself: never copied, compared or removed. */
 const APP_IN_MOD = new Set(['mod.error', 'mod.log']);
 const FILES = 'files';
 /** Written last: a snapshot without it is a copy that didn't finish. */
@@ -26,7 +25,6 @@ async function filesIn(dir: string, base = ''): Promise<string[]> {
     if (skipped(entry.name)) continue;
     const rel = path.join(base, entry.name);
     const depth = rel.split(path.sep).length;
-    if (depth === 1 && APP_TOP_LEVEL.has(entry.name)) continue;
     if (depth === 2 && APP_IN_MOD.has(entry.name)) continue;
     if (entry.isDirectory()) out.push(...(await filesIn(dir, rel)));
     else if (entry.isFile()) out.push(rel);
