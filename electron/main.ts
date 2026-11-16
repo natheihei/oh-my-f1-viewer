@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
+import { appSettings } from './settings';
 import { MOD_SCHEME, Mods } from './mods';
 import { createMainWindow, getMainWindow, sendToRenderer } from './windows';
 
@@ -100,6 +101,8 @@ app
     );
     protocol.handle(MOD_SCHEME, (request) => mods.serve(request));
     app.on('will-quit', () => void mods.stop());
+    // A change still waiting to be written, such as the volume just set.
+    app.on('will-quit', () => appSettings().flush());
     const data = setupIpc(path.join(app.getPath('userData'), 'timing.sqlite'), mods);
     void mods.start().catch((e: Error) => console.warn('[mods] start:', e.message));
 

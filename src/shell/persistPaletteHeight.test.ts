@@ -1,4 +1,8 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+
+// The host, which keeps the saved state, pulls in the browser-only player and grid.
+vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
+vi.mock('gridstack', () => ({ GridStack: {} }));
 import {
   clampHistoryHeight,
   minHistoryHeight,
@@ -10,8 +14,8 @@ import {
 import type { UiStorage } from './uiState';
 
 function memoryStorage(): UiStorage {
-  const items = new Map<string, string>();
-  return { getItem: (key) => items.get(key) ?? null, setItem: (key, value) => void items.set(key, value) };
+  const items = new Map<string, unknown>();
+  return { get: (key) => items.get(key), set: (key, value) => void items.set(key, value) };
 }
 
 beforeEach(() => usePaletteHeight.setState({ height: null }));
@@ -55,7 +59,7 @@ test('with nothing saved, or junk saved, the built-in cap stays', () => {
   const storage = memoryStorage();
   restorePaletteHeight(storage);
   expect(usePaletteHeight.getState().height).toBeNull();
-  storage.setItem('f1a.paletteHeight', '"tall"');
+  storage.set('paletteHeight', 'tall');
   restorePaletteHeight(storage);
   expect(usePaletteHeight.getState().height).toBeNull();
 });
