@@ -63,14 +63,17 @@ await page.keyboard.press('ArrowRight');
 check('arrow keys move focus', (await focused()) === '1:101');
 check(
   'focusing a duplicate outlines the tile it duplicates',
-  await page.locator('.stage-host-highlight[data-tile-key="1:101"]').isVisible(),
+  await page.evaluate(() => {
+    const id = document.querySelector('.stage-host[data-tile-key="1:101"]')?.dataset.tile;
+    return id != null && document.querySelector(`.grid-stack-item[gs-id="${id}"]`)?.classList.contains('tile-pointed');
+  }),
 );
 await page.screenshot({ path: path.join(outDir, 'suggestions-duplicate.png') });
 await page.keyboard.press('Enter');
 await settle();
 check('enter on a duplicate only takes it out of the strip', JSON.stringify(await labels()) === '["HAM","VER"]' && (await onScreen()).length === 1);
 check('focus moves to the neighbour', (await focused()) === '1:1', String(await focused()));
-check('the outline goes away', (await page.locator('.stage-host-highlight').count()) === 0);
+check('the outline goes away', (await page.locator('.tile-pointed, .tile-dimmed').count()) === 0);
 
 await page.keyboard.press('h');
 check('typing goes to the input', (await focused()) === 'palette-input' && (await page.locator('[data-testid=palette-input]').textContent()) === 'h');

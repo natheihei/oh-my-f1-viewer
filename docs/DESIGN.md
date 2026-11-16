@@ -140,7 +140,7 @@ once F1 TV has it live.
 
 `suggest_tiles` puts streams and charts in a strip between the palette's history and its input, and returns at once: the turn doesn't wait for the user.
 Each suggestion is a live preview, unless that tile is already on screen. Then it shows its title with an "on screen" badge, and hovering or
-focusing it outlines the tile in the layout. The layout never holds the same component twice, so adding one of those only takes it out of the
+focusing it puts that tile in the spotlight (see "Mentions"). The layout never holds the same component twice, so adding one of those only takes it out of the
 strip.
 
 - Click or Enter adds a suggestion where auto-layout puts it. Dragging one onto the grid splits the tile under the pointer across its longer
@@ -188,8 +188,12 @@ misfired. Teams and tiles came 2026-11-16.)
 - Keys: ↑ ↓ move, wrapping at the ends and skipping the headings; Enter or Tab picks, and never sends. Esc closes the picker and leaves
   the text, which stays text until the `@` is edited again. Prose after an `@` that matches nothing closes it too. Backspace just after
   a tag turns it back into the `@` text that found it, with the picker open. ← → step over a tag as one piece.
-- Pointing at a tile outlines it on the grid: its row selected in the picker, by keys or under the mouse, or its tag under the mouse in
-  the prompt or the history. It goes through `host.layout.point`, and a suggestion in the strip that duplicates a tile wins over it.
+- Pointing at a tile puts it in the spotlight: its row selected in the picker, by keys or under the mouse, or its tag under the mouse in
+  the prompt or the history. Every other tile dims, and this one gets a 2px ink frame round it, title bar included, with its title bar lit:
+  ink, with black text. It goes through `host.layout.point`, and a suggestion in the strip that duplicates a tile wins over it, with the
+  same spotlight. (2026-11-16. A 1px outline round the tile's content came first. It was too faint on a dark chart or a stream still
+  syncing, and the title bar, the part that matches the tag, stayed as it was. A frame and lit bar alone, without the dimming, was the
+  other option.)
 - What the tags name can change while the viewer types, since the agent opens and closes tiles during its turn. The picker searches
   again, keeping its row while that's still there, and each tag in the prompt is drawn again. A tile's tag follows its title while it's
   on screen. Once it closes, the tag goes dashed and grey, in the prompt and the history, and keeps the title it last had; sent like
