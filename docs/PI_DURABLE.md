@@ -18,8 +18,8 @@ three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helpe
 
 | On pi-coding-agent | On pi-durable |
 | --- | --- |
-| `ModelRuntime` | pi-ai's `createModels()` with only the supported providers, and `auth.json` through a `CredentialStore` of the app's (`credentialFile.ts`). The file's shape is the same, so a login made before still works |
-| `SettingsManager` | `settingsFile.ts`, on the same `settings.json` and keys |
+| `ModelRuntime`, over `auth.json` | pi-ai's `createModels()` with only the supported providers, and a `CredentialStore` of the app's (`credentials.ts`) on `<userData>/f1a-credentials.json`, encrypted with the OS keystore like F1 TV's sign-in |
+| `SettingsManager`, over `settings.json` | The renderer's UI state, in `localStorage` under `f1a.agent`, handed to main (`shared/agentSettings.ts`) |
 | `createAgentSession`, `SessionManager` | A `Harness` per conversation on pi-durable's `MemoryStorage`, since nothing is resumed, and `transcript.ts`, which writes the same one `.jsonl` per conversation with pi's line types |
 | The prompt extension, over `SYSTEM.md` | One prompt `section()`, from `SYSTEM_PROMPT` in code. `SYSTEM.md` is no longer written |
 | The tools extension | `defineTool()` tools in an extension that's installed again to replace the set, also from inside a call |
@@ -36,6 +36,9 @@ What the agent does is the same. These are the differences someone could notice:
 - **Stored conversations** are still one `.jsonl` each, with pi's `session`, `model_change`, `thinking_level_change` and `message`
   lines. A line's `id` and `parentId` are the file's own, a summary's message carries `"kind": "pi.compaction"`, and a cut-down turn
   adds a `custom` line of type `f1a.forget` that lists what was cut. Lines pi wrote for things the app never used are gone.
+- **Sign in again, and choose the model again.** The credential moved out of `pi-agent/auth.json` and the settings out of
+  `pi-agent/settings.json`, and neither is carried over. The settings' keys are the app's own now: `provider`, `model`, `thinking`,
+  `compaction` and `retry`.
 - **`SYSTEM.md`, `models.json` and `models-store.json`** in `pi-agent` are no longer written or read: pi-coding-agent read its prompt
   from the first and kept its own model settings in the others, which the app never used.
 - **The mods folder** no longer gets an `AGENTS.md` or a `tsconfig.json`. Nothing in the app read them: they were for a coding

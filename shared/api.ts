@@ -208,6 +208,10 @@ export interface F1aApi {
     sql(sessionKey: number, playheadMs: number, sql: string, params: unknown[]): Promise<import('./sessionData').SqlRows>;
   };
   ai: {
+    /** Hands main the settings the renderer keeps (shared/agentSettings.ts), before anything else asks about the agent. */
+    useSettings(settings: import('./agentSettings').AgentSettings): Promise<void>;
+    /** Main changed the settings, by connecting or choosing: the renderer keeps them. */
+    onSettings(cb: (settings: import('./agentSettings').AgentSettings) => void): () => void;
     status(): Promise<AiStatus>;
     /** The providers `/settings-agent` offers, each with its ways to connect and its models. */
     providers(): Promise<AgentProviderOption[]>;

@@ -11,6 +11,7 @@ import { components } from './components/registry';
 import * as f1a from './host';
 import { host, startBuild, startHealth, startMods } from './host';
 import { App } from './shell/App';
+import { restoreAgentSettings } from './shell/persistAgentSettings';
 import { restoreBackground } from './shell/persistBackground';
 import { restorePaletteHeight } from './shell/persistPaletteHeight';
 import { restoreVolume } from './shell/persistVolume';
@@ -29,6 +30,8 @@ host.appearance.setBackground({ style: DEFAULT_BACKGROUND });
 restoreBackground();
 // And the palette's history cap, so it opens at the height last chosen.
 restorePaletteHeight();
+// And the agent's settings, before anything asks main about the agent.
+restoreAgentSettings();
 
 // No StrictMode: effects own real streams, and a double mount would start each one twice.
 createRoot(document.getElementById('root')!).render(<App />);
