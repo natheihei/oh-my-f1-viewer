@@ -152,7 +152,7 @@ export class TimingStore {
     const columns = this.reader.prepare("SELECT name FROM pragma_table_info(?, 'temp') ORDER BY cid");
     const views = this.reader.prepare("SELECT name FROM sqlite_temp_master WHERE type = 'view' ORDER BY name").all() as Array<{ name: string }>;
     const tables = views.map(({ name }) => {
-      const about = derived.get(name)?.about;
+      const about = derived.get(name)?.about ?? TABLE_BY_NAME.get(name as RowTable)?.about;
       return { name, columns: (columns.all(name) as Array<{ name: string }>).map((column) => column.name), ...(about ? { about } : {}) };
     });
     this.reader.setAuthorizer((action, a, b, database, view) => {
@@ -209,8 +209,6 @@ export class TimingStore {
       drivers: this.objects('drivers', sessionKey, playheadMs, 'driver_number'),
       startingGrid: this.objects('starting_grid', sessionKey, playheadMs, 'position IS NULL, position, driver_number'),
       sessionResult: this.objects('session_result', sessionKey, playheadMs, 'position IS NULL, position, driver_number'),
-      championshipDrivers: this.objects('championship_drivers', sessionKey, playheadMs, 'position_current IS NULL, position_current, driver_number'),
-      championshipTeams: this.objects('championship_teams', sessionKey, playheadMs, 'position_current IS NULL, position_current, team_key'),
       lapCount: this.lapCount(sessionKey, playheadMs),
     };
   }

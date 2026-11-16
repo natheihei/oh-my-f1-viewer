@@ -9,6 +9,9 @@ export const FIRST_SUPPORTED_YEAR = 2023;
 /** Tables reachable through SQL. Each one only shows what the feed had revealed by the playhead. */
 export const SQL_TABLES = [
   'car_data',
+  'championship_drivers',
+  'championship_teams',
+  'drivers',
   'intervals',
   'lap_summary',
   'laps',
@@ -149,22 +152,6 @@ export interface SessionResultEntry {
   gap_to_leader: number | string | Array<number | null> | null;
 }
 
-export interface ChampionshipDriverEntry {
-  driver_number: number;
-  position_start: number | null;
-  position_current: number | null;
-  points_start: number | null;
-  points_current: number | null;
-}
-
-export interface ChampionshipTeamEntry {
-  team_name: string | null;
-  position_start: number | null;
-  position_current: number | null;
-  points_start: number | null;
-  points_current: number | null;
-}
-
 /** The roster and results as they stood at the playhead. */
 export interface SessionObjects {
   drivers: DriverEntry[];
@@ -172,8 +159,6 @@ export interface SessionObjects {
   startingGrid: StartingGridEntry[];
   /** Hidden until the session has finished at the playhead. */
   sessionResult: SessionResultEntry[];
-  championshipDrivers: ChampionshipDriverEntry[];
-  championshipTeams: ChampionshipTeamEntry[];
   /** The leader's lap and the scheduled distance. Null in a session without them, such as practice. */
   lapCount: LapCount | null;
 }
