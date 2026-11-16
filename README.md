@@ -46,6 +46,8 @@ blank page with the command palette, which tells you what to sign in to.
 | Drag a tile's edge | Resize it |
 | `/auto-layout` | Re-tile the grid, undoing moves and resizes |
 
+`/build` and `/auto-layout` work on an open session, so the command list leaves them out until there is one.
+
 Everything else goes to the agent in plain words. Before it looks ahead of where you are, by reading ahead or moving playback forward, the palette
 shows a spoiler check: answer Allow once, Allow for this session or Don't allow. The timeline goes anywhere without asking.
 

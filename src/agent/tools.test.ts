@@ -14,7 +14,7 @@ const { spoilerGate, sessionSql } = vi.hoisted(() => ({
 vi.mock('./spoilerGate', () => ({ spoilerGate }));
 vi.mock('../data/sessionData', async (original) => ({ ...(await original<object>()), sessionSql }));
 
-const { AGENT_TOOLS, BUILD_TOOLS, readsPastPlayhead, runTool, toolDefinitions } = await import('./tools');
+const { AGENT_TOOLS, BUILD_TOOLS, PICKING_TOOLS, readsPastPlayhead, runTool, toolDefinitions } = await import('./tools');
 const { resolveChannel } = await import('./matching');
 const { closeViewingSession, startCountdown, useCountdown } = await import('../host/viewing');
 const { useSession } = await import('../data/session');
@@ -104,6 +104,19 @@ describe('agent tools', () => {
     const { host } = await import('../host');
     const live = toolDefinitions().find((t) => t.name === 'list_live');
     expect(live?.parameters).toEqual(JSON.parse(JSON.stringify(host.catalog.live.info.args)));
+  });
+
+  it('show only finding and opening a session until one is open', () => {
+    const shown = () => toolDefinitions().map((t) => t.name);
+    expect(shown()).toEqual(PICKING_TOOLS);
+    useSession.setState({ session: { contentId: 1, title: 'x', type: 'race', status: 'replay' } as SessionInfo, channels });
+    expect(shown()).toEqual(AGENT_TOOLS.map((t) => t.name));
+    useSession.setState({ session: null, channels: [] });
+    expect(shown()).toEqual(PICKING_TOOLS);
+  });
+
+  it('show the build agent its own, with or without a session', () => {
+    expect(toolDefinitions('build').map((t) => t.name)).toEqual(BUILD_TOOLS.map((t) => t.name));
   });
 
   it('reject an unknown tool', async () => {
