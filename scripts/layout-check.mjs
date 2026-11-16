@@ -154,7 +154,22 @@ const afterClose = await hostRects();
 check('closing leaves the other tiles where they were', JSON.stringify(afterClose.HAM) === JSON.stringify(placed.HAM), JSON.stringify([placed.HAM, afterClose.HAM]));
 await page.screenshot({ path: path.join(outDir, 'layout-closed.png') });
 
-// /auto-layout re-tiles with the main tile largest again, undoing the drag and resize.
+// /auto-layout works on a session: typed with none open, it only says to open one, and the layout stays.
+await page.locator('[data-testid=palette-input]').fill('/auto-layout');
+await page.keyboard.press('Enter');
+await settle();
+check('/auto-layout without a session says to open one', await page.evaluate(() =>
+  [...document.querySelectorAll('[data-testid=palette-history] .palette-system')].some((l) => l.textContent.includes('/auto-layout works on a session')),
+));
+check('/auto-layout without a session leaves the manual layout', (await page.evaluate(() => window.layoutStore.layout.snapshot())).manual === true);
+
+// With a session open (faked, as there's no sign-in here), /auto-layout re-tiles with the main tile largest
+// again, undoing the drag and resize.
+await page.evaluate(async () => {
+  const { useSession } = await import('/src/data/session.ts');
+  useSession.setState({ session: { title: 'x' } });
+});
+await page.waitForTimeout(100);
 await page.locator('[data-testid=palette-input]').fill('/auto-layout');
 await page.keyboard.press('Enter');
 await settle();
@@ -174,12 +189,7 @@ const small = await page.evaluate(() => {
 });
 check('tiles stay inside a resized window', small.maxBottom <= small.bottom + 2 && small.maxRight <= small.right + 2, JSON.stringify(small));
 
-// Palette keyboard behaviour.
-await page.evaluate(async () => {
-  const { useSession } = await import('/src/data/session.ts');
-  useSession.setState({ session: { title: 'x' } });
-});
-await page.waitForTimeout(100);
+// Palette keyboard behaviour, with the session from above still open.
 const openBefore = await page.locator('[data-testid=palette]').isVisible();
 await page.keyboard.press('Control+Shift+P');
 await page.waitForTimeout(100);
