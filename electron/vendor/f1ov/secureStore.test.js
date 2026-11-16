@@ -32,6 +32,24 @@ test('encrypts at rest and round-trips', async () => {
   assert.deepEqual(await store.readText(file), { text: TOKEN_JSON, encrypted: true, shouldReEncrypt: false });
 });
 
+test('writes a file only its user can read, plain text included', async () => {
+  const file = tmpFile();
+  // The temp file is made 0600, so the text is never readable by others, even before the rename.
+  const opened = [];
+  const writeFileSync = fs.writeFileSync;
+  fs.writeFileSync = (target, body, options) => {
+    opened.push(options?.mode);
+    return writeFileSync(target, body, options);
+  };
+  try {
+    await ss.createSecureStore(fakeSafeStorage(false)).writeText(file, TOKEN_JSON);
+  } finally {
+    fs.writeFileSync = writeFileSync;
+  }
+  assert.deepEqual(opened, [0o600]);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
 test('reads a file written by the sync version (encryptString)', async () => {
   const file = tmpFile();
   // Exactly what the sync store wrote: the same envelope around safeStorage.encryptString's bytes.
