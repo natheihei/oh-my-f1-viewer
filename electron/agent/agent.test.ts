@@ -21,6 +21,7 @@ const host = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: { getPath: () => host.userData },
   shell: { openExternal: vi.fn() },
+  safeStorage: { isAsyncEncryptionAvailable: async () => false },
 }));
 vi.mock('../windows', () => ({
   sendToRenderer: (channel: string, payload: unknown) => {
@@ -68,7 +69,8 @@ const text = (content: unknown): string =>
   typeof content === 'string' ? content : (content as { text?: string }[]).map((b) => b.text ?? '').join('');
 
 const agentDir = () => path.join(host.userData, 'pi-agent');
-const savedSettings = () => JSON.parse(readFileSync(path.join(agentDir(), 'settings.json'), 'utf8')) as Record<string, unknown>;
+/** The settings the agent last had the renderer keep, if it changed any. */
+const savedSettings = () => (host.sent.filter((s) => (s as unknown[])[0] === 'ai:settings').at(-1) as unknown[] | undefined)?.[1];
 
 /**
  * An agent on a faux `openai`, connected the way `credentials` says. Credentials live in memory, and
@@ -80,20 +82,10 @@ function setup(
     model?: string;
     thinking?: string;
     credentials?: [string, Way][];
-    /** More of settings.json, such as compaction. */
+    /** More of the settings, such as compaction. */
     settings?: Record<string, unknown>;
   } = {},
 ) {
-  mkdirSync(agentDir(), { recursive: true });
-  writeFileSync(
-    path.join(agentDir(), 'settings.json'),
-    JSON.stringify({
-      defaultProvider: options.provider ?? 'openai',
-      defaultModel: options.model ?? 'gpt-6-luna',
-      defaultThinkingLevel: options.thinking ?? 'medium',
-      ...options.settings,
-    }),
-  );
   const faux = fauxProvider({
     provider: 'openai',
     models: [
@@ -124,6 +116,7 @@ function setup(
       credentials.delete(id);
     }) as never;
   });
+  agent.useSettings({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...options.settings });
   /** A scripted reply that records the request it answers. */
   const reply =
     (message: ReturnType<typeof fauxAssistantMessage>) =>
@@ -692,9 +685,8 @@ describe('failures', () => {
 
   it('refuses when not set up, even with the chosen provider set up in the environment', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'not-a-real-key');
-    mkdirSync(agentDir(), { recursive: true });
-    writeFileSync(path.join(agentDir(), 'settings.json'), '{"defaultProvider":"anthropic","defaultModel":"claude-sonnet-5-5"}');
     const agent = new Agent();
+    agent.useSettings({ provider: 'anthropic', model: 'claude-sonnet-5-5' });
     await agent.send('go', 'state', [TOOL]);
     expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
     expect(events().at(-1)).toMatchObject({ message: 'The agent needs setting up first: /settings-agent' });
@@ -739,7 +731,7 @@ describe('setup', () => {
     script(fauxAssistantMessage('one'));
     await agent.send('first', 'state', [TOOL]);
     expect(await agent.choose('gpt-6.1-terra', 'high')).toMatchObject({ model: 'gpt-6.1-terra', thinking: 'high' });
-    expect(savedSettings()).toMatchObject({ defaultModel: 'gpt-6.1-terra', defaultThinkingLevel: 'high' });
+    expect(savedSettings()).toEqual({ provider: 'openai', model: 'gpt-6.1-terra', thinking: 'high' });
     script(fauxAssistantMessage('two'));
     await agent.send('second', 'state', [TOOL]);
     expect(requests.map((r) => [r.model, r.reasoning])).toEqual([
@@ -752,7 +744,7 @@ describe('setup', () => {
   it('refuses a model the supported list does not offer', async () => {
     const { agent } = setup();
     await expect(agent.choose('gpt-4', 'medium')).rejects.toThrow(/isn't offered/);
-    expect(savedSettings()).toMatchObject({ defaultModel: 'gpt-6-luna' });
+    expect(savedSettings()).toBeUndefined();
   });
 
   it('switches provider: removes the old one only after the new one connects, with its recommended settings', async () => {
@@ -761,11 +753,7 @@ describe('setup', () => {
     expect(ops).toEqual(['login anthropic', 'logout openai']);
     expect([...credentials]).toEqual([['anthropic', 'api_key']]);
     expect(status).toMatchObject({ ready: true, provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' });
-    expect(savedSettings()).toMatchObject({
-      defaultProvider: 'anthropic',
-      defaultModel: 'claude-sonnet-5-5',
-      defaultThinkingLevel: 'medium',
-    });
+    expect(savedSettings()).toEqual({ provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' });
   });
 
   it('asks for a key in the key window, and never sends it to the renderer', async () => {
@@ -956,14 +944,11 @@ describe('stored sessions', () => {
   });
 });
 
-describe('its files', () => {
-  it('starts with the expected settings', async () => {
-    await new Agent().status();
-    expect(savedSettings()).toEqual({
-      compaction: { enabled: true },
-      retry: { enabled: false },
-      cacheWarming: 'off',
-    });
+describe('its settings', () => {
+  it('come from the renderer, and anything they get wrong is left out', async () => {
+    const agent = new Agent();
+    agent.useSettings({ provider: 'openai', model: 7, thinking: 'loud', compaction: { enabled: false, reserveTokens: -1 }, extra: 1 });
+    expect(await agent.status()).toMatchObject({ ready: false });
+    expect(readdirSync(host.userData)).toEqual([]);
   });
-
 });
