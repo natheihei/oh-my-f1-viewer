@@ -29,6 +29,11 @@ export interface TileState {
   ahead?: boolean;
   /** What build mode did to this tile's mod: "draft" or "edited". */
   mark?: string;
+  /**
+   * The spotlight: 'pointed' for the tile the viewer is pointing at, which is framed and its header lit,
+   * and 'dimmed' for every other tile while one is. Neither when none is.
+   */
+  spot?: 'pointed' | 'dimmed';
 }
 
 const NO_STATES: Record<string, TileState> = {};
@@ -40,6 +45,9 @@ function signature(tiles: Tile[]): string {
 /** Fills a header's state slots in place, so a change of audio or sync doesn't rebuild the grid. */
 function applyState(bar: Element, state: TileState = {}): void {
   bar.classList.toggle('tile-titlebar-audio', state.audio != null);
+  const item = bar.closest('.grid-stack-item');
+  item?.classList.toggle('tile-pointed', state.spot === 'pointed');
+  item?.classList.toggle('tile-dimmed', state.spot === 'dimmed');
   const slot = (name: string, text: string | null, cls = '') => {
     const el = bar.querySelector<HTMLElement>(`:scope .tile-slot-${name}`);
     if (!el) return;

@@ -13,16 +13,14 @@ export type TileComponent = ComponentType<{ spec: ComponentSpec; tileId: string 
 const NO_MARKS: Record<string, string> = {};
 
 /**
- * `highlight` outlines the tile with that component key. `marks` holds a word for some component types,
+ * `marks` holds a word for some component types,
  * such as "edited": their tiles get a dashed outline. The word itself is a slot in the tile's header.
  */
 export function Stage({
   registry,
-  highlight = null,
   marks = NO_MARKS,
 }: {
   registry: Record<string, TileComponent>;
-  highlight?: string | null;
   marks?: Record<string, string>;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +68,7 @@ export function Stage({
             data-tile-key={tile.component.key}
             data-tile-type={tile.component.type}
             data-tile-mark={mark}
-            className={`stage-host ${tile.component.key === highlight ? 'stage-host-highlight' : ''} ${mark ? 'stage-host-marked' : ''}`}
+            className={`stage-host ${mark ? 'stage-host-marked' : ''}`}
             ref={(el) => {
               if (el) hostsRef.current.set(tile.id, el);
               else hostsRef.current.delete(tile.id);

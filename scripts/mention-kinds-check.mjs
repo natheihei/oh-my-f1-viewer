@@ -67,7 +67,9 @@ const rows = () => page.locator('[data-testid=mention-option]').allInnerTexts();
 const groups = () => page.locator('[data-testid=mention-group]').allTextContents();
 const pickerOpen = () => page.locator('[data-testid=mention-picker]').isVisible();
 const pointed = () => page.evaluate(async () => (await import('/src/host/index.ts')).read().pointed);
-const outlined = () => page.evaluate(() => document.querySelectorAll('.stage-host-highlight').length);
+/** Tiles in the spotlight: pointed at, and dimmed around it. */
+const outlined = () => page.evaluate(() => document.querySelectorAll('.tile-pointed').length);
+const dimmed = () => page.evaluate(() => document.querySelectorAll('.tile-dimmed').length);
 /** The prompt as the box holds it: text, and each tag as [kind:text]. */
 const prompt = () =>
   page.evaluate(() =>
@@ -92,7 +94,8 @@ await page.keyboard.type('compare @');
 check('a bare @ heads on screen, drivers, teams', JSON.stringify(await groups()) === JSON.stringify(['On screen', 'Drivers', 'Teams']), JSON.stringify(await groups()));
 const bare = await rows();
 check('every tile, driver and team is a row', bare.length >= setup.tiles.length + 20 + 10, `${bare.length} rows`);
-check('the selected tile is outlined', (await pointed()) === setup.tiles[0].id && (await outlined()) === 1, `${await pointed()}`);
+check('the selected tile is in the spotlight', (await pointed()) === setup.tiles[0].id && (await outlined()) === 1, `${await pointed()}`);
+check('every other tile dims', (await dimmed()) === setup.tiles.length - 1, `${await dimmed()} dimmed`);
 await snap('bare-at');
 await page.keyboard.press('ArrowDown');
 check('↓ moves the outline to the next tile', (await pointed()) === setup.tiles[1].id, `${await pointed()}`);
@@ -106,7 +109,7 @@ check('no headings for a typed query', (await groups()).length === 0);
 check('it is outlined', (await pointed()) === gapTile);
 await page.keyboard.press('Enter');
 check('Enter puts the tile tag in', /^compare \[tile:Gap[^\]]*\] $/.test(await prompt()), JSON.stringify(await prompt()));
-check('closing the picker clears the outline', (await pointed()) === null);
+check('closing the picker clears the spotlight', (await pointed()) === null && (await outlined()) === 0 && (await dimmed()) === 0);
 
 // A team. "fer" also starts Fernando; as good a match, the driver keeps the kinds' order and comes first.
 await page.keyboard.type('with @fer');
@@ -164,6 +167,21 @@ await page.locator(`.palette-user .palette-text [data-tile="${gapTile}"]`).last(
 check('hovering a tile tag in the history outlines its tile', (await pointed()) === gapTile);
 await snap('hover-history-tag');
 await page.mouse.move(5, 5);
+
+// A suggestion that duplicates a tile takes the spotlight over pointing, and gives it back.
+const spotOn = () => page.evaluate(() => document.querySelector('.grid-stack-item.tile-pointed')?.getAttribute('gs-id') ?? null);
+const mainKey = await page.evaluate(async (id) => (await import('/src/host/index.ts')).read().layout.tiles.find((t) => t.id === id)?.component.key, setup.tiles[0].id);
+await page.evaluate(async ({ gap, key }) => {
+  const { host } = await import('/src/host/index.ts');
+  host.layout.point({ tile: gap });
+  host.suggestions.highlight({ key });
+}, { gap: gapTile, key: mainKey });
+await page.waitForTimeout(200);
+check('a duplicate suggestion wins the spotlight', (await spotOn()) === setup.tiles[0].id, `${await spotOn()}`);
+await page.evaluate(async () => (await import('/src/host/index.ts')).host.suggestions.highlight({ key: null }));
+await page.waitForTimeout(200);
+check('and gives it back to the tile pointed at', (await spotOn()) === gapTile, `${await spotOn()}`);
+await page.evaluate(async () => (await import('/src/host/index.ts')).host.layout.point({ tile: null }));
 
 // No session: no picker.
 await page.evaluate(async () => (await import('/src/host/index.ts')).host.session.close());
