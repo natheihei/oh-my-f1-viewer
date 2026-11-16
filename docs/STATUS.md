@@ -47,11 +47,15 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
 
 ## Verified for finding a session
 
-Three fresh conversations per request, against the real agent at medium reasoning, with the event list in its prompt:
+With nothing open, the real agent at medium reasoning, with the event list in its prompt, on 2026-11-15, each request in a fresh
+conversation (`scripts/picking-check.mjs`, which records the session the agent loads instead of playing it). Three runs each:
 
-- "2026" and "2025" alone: asked which event every time. At low reasoning it picked the weekend nearest today's date, São Paulo, in most
-  runs, with either wording of the prompt.
+- "last race" and "latest quali": loaded the 2026 São Paulo race and qualifying, every time, without asking.
+- "2026" alone: asked which event and session every time.
 - "2025 Mexico": asked which session every time.
+
+Once each: "next race" loaded Las Vegas, which hasn't started, "last sprint" Singapore's sprint, "2025 Mexico race" that race, and
+"the race before Brazil" Mexico City's. "Vegas" alone asked which session.
 
 ## Verified for session data
 
