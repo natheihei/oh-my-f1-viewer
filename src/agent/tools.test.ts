@@ -433,8 +433,6 @@ describe('seeking to a moment', () => {
     drivers: [driver('VER', 1), driver('HAM', 44)],
     startingGrid: [],
     sessionResult: [],
-    championshipDrivers: [],
-    championshipTeams: [],
     lapCount: null,
     tables: [],
   });

@@ -11,10 +11,10 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | Data | Exposed as | Filled |
 | --- | --- | --- |
 | Meetings, sessions | `useLive((s) => s.schedule)` | On every app start and sign-in. The last copy stays readable until then, or if that fails |
-| Drivers, championship, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
+| Drivers, starting grid, session result | `useLive((s) => s.sessionData)` | When a session opens |
 | Lap count | `useLive((s) => s.sessionData.lapCount)` | When a session opens |
 | Circuit: outline, corners, pit loss | `useLive((s) => s.circuit)` | Each time a session opens, from MultiViewer. The last copy stays readable, with a `reason`, if that fails |
-| `car_data`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured |
+| `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured. `drivers` is also in `sessionData` |
 
 Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
 doesn't follow its naming, and `lap_summary` is our own (see below). `laps` also has one column of ours, `is_out`. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
@@ -58,6 +58,17 @@ start their laps there, give or take a few metres. The outline runs anticlockwis
   - `track_status` is the worst status during the lap, counting the one it started under: `Red`, then `SCDeployed`, `VSCDeployed`,
     `VSCEnding`, `Yellow`, and `AllClear`. Null when there's no status yet. Lap 1 often has no start: it then runs back from its end by its time.
   - `is_out` is the lap a car retired on, from `laps`. See below.
+
+## Championship
+
+`championship_drivers` and `championship_teams` come from F1's `ChampionshipPrediction` feed, one row per driver or team, stored as versions.
+`points_start` and `position_start` are the standings going into the session. `points_current` and `position_current` are F1's projection if
+it finished in the current order, so they move as the race goes on, and at the end they're the standings after it. The processor drops the feed
+outside races, as other sessions have been seen carrying wrong predictions. Sprints count as races: F1's season indexes give all 22 sprints from 2023
+on the type `Race`, and the app maps F1 TV's sprint to `race` too. On sprints 11383 (2026), 9654 (2024) and 9204 (2023), opened in the app
+on 2026-11-15, each had a row for every driver, and by the end the 8 that changed had gained 8 points down to 1 between them, as sprint points
+go. A table can hold more drivers than the session's roster (23 against 22 on 11383): ones who raced earlier in the season. Each session's
+rows are its own: SQL can't read across sessions.
 
 ## Retirements
 
