@@ -204,7 +204,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
       return subscriptionToken;
     });
     memSession.accessToken = token;
-    sessionState.persistSession(token);
+    await sessionState.persistSession(token);
     void timingDb.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
     return f1Status();
   });

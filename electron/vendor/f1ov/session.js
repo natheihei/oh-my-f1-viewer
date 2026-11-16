@@ -4,7 +4,6 @@
  */
 
 const path = require('path');
-const fs = require('fs');
 const { EventEmitter } = require('events');
 const { app, session, BrowserWindow, safeStorage } = require('electron');
 const f1tv = require('./f1tv-bridge');
@@ -64,27 +63,27 @@ function clearPersistedSettings() {
 // keystore (safeStorage). Plain files from older versions are read once and re-written encrypted.
 const secure = createSecureStore(safeStorage);
 
-function loadPersistedSession() {
+async function loadPersistedSession() {
   try {
     const p = getSessionFilePath();
-    const stored = secure.readText(p);
+    const stored = await secure.readText(p);
     if (!stored) return null;
     const obj = JSON.parse(stored.text);
     if (obj && typeof obj.accessToken === 'string' && obj.accessToken.length > 50) {
-      if (!stored.encrypted && secure.isEncryptionAvailable()) persistSession(obj.accessToken); // upgrade legacy file
+      if ((!stored.encrypted || stored.shouldReEncrypt) && (await secure.isEncryptionAvailable())) await persistSession(obj.accessToken); // upgrade legacy file
       return obj.accessToken;
     }
   } catch (_) {}
   return null;
 }
 
-function persistSession(token) {
+async function persistSession(token) {
   try {
     const p = getSessionFilePath();
     if (token) {
-      secure.writeText(p, JSON.stringify({ accessToken: token }));
+      await secure.writeText(p, JSON.stringify({ accessToken: token }));
     } else {
-      if (fs.existsSync(p)) fs.unlinkSync(p);
+      await secure.remove(p);
     }
   } catch (e) {
     // Not fatal now, but the user would silently be signed out on the next launch.
@@ -93,10 +92,10 @@ function persistSession(token) {
 }
 
 /** Saves cookies to disk so they can be restored on next launch (F1 TV window already logged in). */
-function persistCookies(cookieList) {
+async function persistCookies(cookieList) {
   if (!Array.isArray(cookieList) || !cookieList.length) return;
   try {
-    secure.writeText(getCookiesFilePath(), JSON.stringify(cookieList));
+    await secure.writeText(getCookiesFilePath(), JSON.stringify(cookieList));
     console.log('[session] saved', cookieList.length, 'cookies to disk');
   } catch (e) {
     console.warn('[session] persist cookies:', e?.message);
@@ -106,11 +105,11 @@ function persistCookies(cookieList) {
 /** Restores saved cookies into defaultSession (so the F1 TV window is already logged in). */
 async function restorePersistedCookies() {
   try {
-    const stored = secure.readText(getCookiesFilePath());
+    const stored = await secure.readText(getCookiesFilePath());
     if (!stored) return;
     const list = JSON.parse(stored.text);
     if (!Array.isArray(list) || !list.length) return;
-    if (!stored.encrypted && secure.isEncryptionAvailable()) persistCookies(list); // upgrade legacy file
+    if ((!stored.encrypted || stored.shouldReEncrypt) && (await secure.isEncryptionAvailable())) await persistCookies(list); // upgrade legacy file
     const defaultCookies = session.defaultSession.cookies;
     for (const c of list) {
       if (!c.url || !c.name) continue;
@@ -149,7 +148,7 @@ async function snapshotAndPersistCookies() {
         });
       }
     }
-    persistCookies(toPersist);
+    await persistCookies(toPersist);
   } catch (e) {
     console.warn('[session] snapshot cookies:', e?.message);
   }
@@ -227,7 +226,7 @@ function silentTokenRefresh() {
         await f1tv.initClient(candidate);
         if (signedOut()) return null;
         memSession.accessToken = candidate;
-        persistSession(candidate);
+        await persistSession(candidate);
         await snapshotAndPersistCookies();
         console.log('[session] silent refresh: token recovered from login-session cookie');
         return candidate;
@@ -258,7 +257,7 @@ function silentTokenRefresh() {
             await f1tv.initClient(token);
             if (signedOut()) return null;
             memSession.accessToken = token;
-            persistSession(token);
+            await persistSession(token);
             await snapshotAndPersistCookies();
             console.log('[session] silent refresh: fresh token from hidden window');
             return token;
@@ -294,7 +293,7 @@ async function refreshSessionBeforePlayback() {
     console.warn('[session] token expired (jwt exp), attempting silent refresh…');
     const fresh = await silentTokenRefresh();
     if (fresh) return;
-    persistSession(null);
+    await persistSession(null);
     memSession.accessToken = undefined;
     sessionEvents.emit('expired');
     throw new Error('Session expired or invalid. Please sign in again (e.g. "Sign in with browser") and retry.');
@@ -323,11 +322,8 @@ async function refreshSessionBeforePlayback() {
 async function clearSessionAndCookies() {
   sessionGen += 1;
   memSession.accessToken = undefined;
-  persistSession(null);
-  try {
-    const p = getCookiesFilePath();
-    if (fs.existsSync(p)) fs.unlinkSync(p);
-  } catch (_) {}
+  await persistSession(null);
+  await secure.remove(getCookiesFilePath()).catch(() => {});
   f1tv.clearSession();
   await removeFormula1Cookies();
 }
@@ -376,7 +372,7 @@ function dropSessionUnlessRecoverable(err) {
     console.warn('[session] network problem, keeping the saved session for the next launch');
     return false;
   }
-  persistSession(null);
+  void persistSession(null);
   memSession.accessToken = undefined;
   sessionEvents.emit('expired');
   return true;
@@ -384,7 +380,7 @@ function dropSessionUnlessRecoverable(err) {
 
 /** Restores the persisted token on startup: try it directly, else fall back to silent refresh. */
 async function restoreSessionOnStartup() {
-  const savedToken = loadPersistedSession();
+  const savedToken = await loadPersistedSession();
   await restorePersistedCookies();
   if (!savedToken) return;
   memSession.accessToken = savedToken;

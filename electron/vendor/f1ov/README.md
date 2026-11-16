@@ -8,6 +8,9 @@ the replay functions in `livetiming.js`, so that updates from upstream are easy 
 Local changes:
 
 - `session.js`: profile file names use `f1a-` instead of `f1openviewer-`.
+- `secureStore.js`, `session.js`: use the async `safeStorage` methods, since Electron 45 deprecates the sync ones and 46 removes them.
+  Writes and removals of a file are queued in call order, so a slow encrypt can't let older text overwrite newer, and the
+  persistence functions are async.
 - `livetiming.js`: the User-Agent for the public sync API says `f1a`. Live records carry the feed's timestamp and mark a snapshot, and `fetchSessionFeedText` is new, all for the session database.
 - `liveConnection.js`: `onRecord` also gets the whole record.
 - `durableSettings.test.js`: removed the check against a renderer file that f1a doesn't have.
