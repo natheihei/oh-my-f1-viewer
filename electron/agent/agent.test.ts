@@ -357,6 +357,31 @@ describe('forgetting a read ahead', () => {
     expect(requests[2].tools).toEqual(['act']);
   });
 
+  it('cuts a read ahead it failed to cut before the next message', async () => {
+    const { agent, requests, script } = setup();
+    answerReadAhead(agent);
+    vi.spyOn(agent as unknown as { forget(): Promise<void> }, 'forget').mockRejectedValueOnce(new Error('disk full'));
+    script(...readAhead(), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    expect(requests[2].history).not.toContain('SECRET ROWS');
+    expect(requests[2].history).toContain('Jumped to lap 30.');
+    expect(requests[2].history).toContain('<app_note>');
+  });
+
+  it('starts over when a read ahead still cannot be cut', async () => {
+    const { agent, requests, script } = setup();
+    answerReadAhead(agent);
+    vi.spyOn(agent as unknown as { forget(): Promise<void> }, 'forget').mockRejectedValue(new Error('disk full'));
+    script(...readAhead(), fauxAssistantMessage('ok'));
+    await agent.send('go', 'state', [TOOL]);
+    await agent.send('next', 'state', [TOOL]);
+    expect(requests[2].history).not.toContain('SECRET ROWS');
+    expect(requests[2].history).not.toContain('Jumped to lap 30.');
+    expect(requests[2].roles.filter((r) => r !== 'system')).toEqual(['user']);
+    expect(types()).not.toContain('error');
+  });
+
   it('remembers a turn that read nothing past the playhead', async () => {
     const { agent, requests, script } = setup();
     answerTools(agent);
