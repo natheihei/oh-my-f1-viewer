@@ -149,10 +149,34 @@ A second script, not in the repo, built a list of race control penalties the sam
 the strip preview took the list's tall shape (260 by 179), and the newest message showed there, in the tile, and in a tile 2 rows high.
 The same mod with a 62px heading of its own still hid its message at 2 rows: see issue 44.
 
+## Verified for the agent on pi-durable
+
+On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1 Terra (2026-11-16):
+
+- **Viewing**, over the 2025 Mexico City race: a turn opened the session with `list_sessions`, `load_session` and `suggest_tiles`, and
+  its reply streamed.
+- **Reading ahead.** `scripts/seek-check.mjs` passed in full: the spoiler check before a peek, Don't allow and Allow once, seeking by
+  lap and by what happened, and a lap that doesn't exist. After a read-ahead turn the conversation had its `f1a.forget` entry, the
+  stored tool results stayed, and the next turns worked on the cut-down history.
+- **Build mode.** `scripts/build-check.mjs` passed in full, over the 2026 United States race, once it followed two earlier changes
+  to the app: the "not drawing" note names a tile by its id, and `/build` needs a session open.
+- **Compaction**, with the threshold lowered to a few thousand tokens, in the desktop app: three to five
+  summaries were made over five turns, each turn carried on, the agent could say what had been asked so far, and no summary held
+  what a read-ahead turn had read. A summary does hold the playhead from app state, which is what the viewer is looking at.
+  These runs found one fault, since fixed: a summary placed in the middle of a read-ahead turn was taken for the turn's start, and
+  the turn wasn't cut down when it ended.
+- **The key window**, on a profile of its own: a key typed there is stored in `auth.json`, readable only by the user, and connects the
+  provider. The renderer never sees it, Cancel changes nothing, and disconnecting removes it.
+- **Stored conversations**: one `.jsonl` each, the build's apart from the viewing one.
+
+**A ChatGPT sign-in by a person** (2026-11-16), on a profile of its own with no login in it: "Sign in with ChatGPT" opened
+OpenAI's page in the default browser, the callback came back, the provider showed as "OpenAI (ChatGPT subscription)" with GPT-6.1
+Terra at medium, and a real turn replied on the new login.
+
 ## Not verified
 
-- **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key or a
-  ChatGPT sign-in from the panel hasn't run either: the ChatGPT flow is the same pi call as before, now started from the panel.
+- **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key from
+  the panel hasn't run either. A ChatGPT sign-in from the panel has (above).
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 
