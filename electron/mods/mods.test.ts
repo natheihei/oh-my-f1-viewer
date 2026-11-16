@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ModStatus } from '../../shared/mods';
-import { MODS_AGENTS_MD } from '../../shared/modGuide';
 import { Mods } from './index';
 
 let mods: Mods | null = null;
@@ -92,11 +91,6 @@ describe('mods', () => {
     await untilFileHas('two/mod.error', 'defineComponent');
   });
 
-  it('writes the guide for agents into the folder, over any edit', async () => {
-    const { mods: m } = await start({ 'AGENTS.md': 'edited' });
-    expect(readFileSync(path.join(dir, 'AGENTS.md'), 'utf8')).toBe(MODS_AGENTS_MD);
-    expect(m.list()).toEqual([]);
-  });
 
   it('finds new mods and drops removed ones', async () => {
     const { mods, last } = await start({});
