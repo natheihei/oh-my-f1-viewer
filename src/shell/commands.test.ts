@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionInfo } from '../../shared/api';
 
 // The host pulls in the browser-only player and grid.
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
@@ -6,10 +7,15 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { matchCommands, parseCommand, SLASH_COMMANDS } = await import('./commands');
 const { layout } = await import('../layout/store');
+const { useSession } = await import('../data/session');
 
 const names = (input: string) => matchCommands(input).map((c) => c.name);
+const openSession = () => useSession.setState({ session: { contentId: 1, title: 'x', type: 'race', status: 'replay' } as SessionInfo, channels: [] });
 
 describe('/ commands', () => {
+  beforeEach(openSession);
+  afterEach(() => useSession.setState({ session: null, channels: [] }));
+
   it('splits a line into the command and what follows it', () => {
     expect(parseCommand('/build a lap stepper')).toEqual({ name: '/build', rest: 'a lap stepper' });
     expect(parseCommand('  /Build   two  words ')).toEqual({ name: '/build', rest: 'two  words' });
@@ -21,6 +27,17 @@ describe('/ commands', () => {
     expect(names('/login')).toEqual(['/login-f1tv']);
     expect(names('hello')).toEqual([]);
     expect(names('/')).toHaveLength(SLASH_COMMANDS.length);
+  });
+
+  it('leaves out the ones that work on a session until one is open', () => {
+    useSession.setState({ session: null, channels: [] });
+    expect(names('/b')).toEqual([]);
+    expect(names('/a')).toEqual([]);
+    expect(names('/build a controller')).toEqual([]);
+    expect(names('/')).toEqual(SLASH_COMMANDS.filter((c) => !c.needsSession).map((c) => c.name));
+    expect(SLASH_COMMANDS.filter((c) => c.needsSession).map((c) => c.name)).toEqual(['/build', '/auto-layout']);
+    openSession();
+    expect(names('/b')).toEqual(['/build']);
   });
 
   it('keeps matching a command that takes text once the text starts, and no other', () => {

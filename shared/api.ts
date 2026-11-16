@@ -149,6 +149,8 @@ export interface AgentToolResult {
   content: string;
   /** It read past the playhead, so the agent forgets it after this turn. See docs/SPOILER_PREVENTION.md. */
   pastPlayhead?: boolean;
+  /** The tools the model has from the next request on, when the call changed them, as opening a session does. */
+  tools?: AgentToolDefinition[];
 }
 
 /** Which of the app's two agents a message goes to: the one that drives viewing, or the one that builds mods. */

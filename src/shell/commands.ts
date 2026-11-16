@@ -3,7 +3,7 @@
  * who they're talking to. They're a separate set, and the agent's tools (shared/tools.ts) are another: neither can
  * call the other, and anything to do with viewing goes to the agent.
  */
-import { FIRST_SEASON, host } from '../host';
+import { FIRST_SEASON, host, read } from '../host';
 import { enterBuild } from './buildMode';
 import { palette } from './palette';
 
@@ -14,6 +14,8 @@ export interface SlashCommand {
   takesText?: boolean;
   /** What running it means that the viewer should know first. Shown in red beside it, after "! spoiler". */
   warning?: string;
+  /** It works on an open session, so it isn't offered without one. */
+  needsSession?: boolean;
   /** `text` is what followed the name, for a command that `takesText`. */
   run(text: string): Promise<void>;
 }
@@ -57,11 +59,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     takesText: true,
     // The build agent reads the open session past the playhead without asking: see docs/BUILD_MODE.md.
     warning: 'the agent looks ahead without asking',
+    // The build agent checks what it writes against the open session's data and video.
+    needsSession: true,
     run: (text) => enterBuild(text),
   },
   {
     name: '/auto-layout',
     description: 'Re-tile the grid, undoing moves and resizes',
+    needsSession: true,
     async run() {
       host.layout.autoLayout();
       palette.push('system', 'Grid re-tiled.');
@@ -119,10 +124,14 @@ export function parseCommand(input: string): { name: string; rest: string } {
   return space < 0 ? { name: text.toLowerCase(), rest: '' } : { name: text.slice(0, space).toLowerCase(), rest: text.slice(space).trim() };
 }
 
+/** The commands that do something now: with no session open, not the ones that work on it. */
+export const availableCommands = (): SlashCommand[] => SLASH_COMMANDS.filter((c) => !c.needsSession || read().session != null);
+
 /** The commands the input could become. Once something follows the name, only one that takes it. */
 export function matchCommands(input: string): SlashCommand[] {
   if (!input.trimStart().startsWith('/')) return [];
   const { name, rest } = parseCommand(input);
-  if (rest || /\s$/.test(input)) return SLASH_COMMANDS.filter((c) => c.name === name && c.takesText);
-  return SLASH_COMMANDS.filter((c) => c.name.startsWith(name));
+  const available = availableCommands();
+  if (rest || /\s$/.test(input)) return available.filter((c) => c.name === name && c.takesText);
+  return available.filter((c) => c.name.startsWith(name));
 }

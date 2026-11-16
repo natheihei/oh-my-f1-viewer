@@ -31,6 +31,10 @@ editor and no separate preview. The draft is the real component, on the open ses
   palette such as "back to 0:42:10". It's an offer, and the playhead doesn't move by itself.
 - Quitting the app mid-build undoes anything unsaved on the next start, without asking.
 
+With no session open, the command list leaves `/build` out: the build agent checks what it writes against the open session's data
+and video. Typed in full, it says to open a session first. The viewing agent can't offer build mode then either, since `offer_build`
+is one of the tools it isn't shown until a session is open.
+
 The other `/` commands take no arguments. `/build` is the only one that accepts text after it, and the only one with a warning
 beside it.
 

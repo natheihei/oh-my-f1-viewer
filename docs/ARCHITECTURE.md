@@ -150,7 +150,10 @@ the host through the host's ordinary writes (`src/shell/persistVolume.ts`). The 
 
 `electron/agent/agent.ts` runs a session on [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), on the
 provider, model and thinking level chosen in `/settings-agent`. It lives in main because it holds the credentials. Tools run in the renderer because it owns
-layout and playback, so their definitions come with each message and each call goes over IPC. Three small pi extensions in
+layout and playback, so their definitions come with each message and each call goes over IPC. With no session open the viewing agent
+is shown only what finds and opens one: `list_sessions`, `list_live`, `list_upcoming` and `load_session`. When a call opens or closes a
+session, its result carries the new set, and pi uses it from the next request in the same turn, so "2025 Mexico race with Norris" can
+open the race and suggest his onboard in one turn. Three small pi extensions in
 `electron/agent/extensions/` do the f1a-specific parts: the prompt, the renderer's tools, and the cap on tool rounds per message.
 
 pi gets two folders, passed in code, and never reads or writes `~/.pi`:
