@@ -624,10 +624,23 @@ export const BUILD_TOOLS: AgentTool[] = [
   seekTo(false),
 ];
 
+/**
+ * What the viewing agent has with no session open, as on a countdown: finding a session and opening it.
+ * Everything else acts on an open one, so the model isn't shown it until there is one.
+ */
+export const PICKING_TOOLS = ['list_sessions', 'list_live', 'list_upcoming', 'load_session'];
+
 const toolsFor = (mode: AgentMode): AgentTool[] => (mode === 'build' ? BUILD_TOOLS : AGENT_TOOLS);
 
+/**
+ * The tools the model is shown now. The viewing agent's follow whether a session is open, and the bridge
+ * sends the new set mid-turn when a call opens or closes one. A tool that isn't shown still runs if called,
+ * from an older turn, and its gate refuses it.
+ */
 export const toolDefinitions = (mode: AgentMode = 'view'): AgentToolDefinition[] =>
-  toolsFor(mode).map(({ name, description, parameters }) => ({ name, description, parameters }));
+  toolsFor(mode)
+    .filter((t) => mode === 'build' || read().session != null || PICKING_TOOLS.includes(t.name))
+    .map(({ name, description, parameters }) => ({ name, description, parameters }));
 
 /** Only the viewing agent forgets what it read ahead: the build agent's whole conversation ends with the build. */
 export const readsPastPlayhead = (name: string, args: Record<string, unknown>, mode: AgentMode = 'view'): boolean =>

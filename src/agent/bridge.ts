@@ -1,5 +1,5 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
-import type { AgentMode, AgentToolCall } from '../../shared/api';
+import type { AgentMode, AgentToolCall, AgentToolDefinition } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
 import type { SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, labelText, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
@@ -79,18 +79,31 @@ export function describeAppState(note: string | null = null, build: string | nul
 
 /** Which agent the turn in progress belongs to: its tool calls arrive without saying. */
 let turnMode: AgentMode = 'view';
+/** The names of the tools the model has now, to tell when a call changed them. */
+let shownTools = '';
+
+const namesOf = (tools: AgentToolDefinition[]): string => tools.map((t) => t.name).join(',');
+
+/** The tools to send with a call's result: the new set, when the call opened or closed a session. */
+function changedTools(mode: AgentMode): AgentToolDefinition[] | undefined {
+  const tools = toolDefinitions(mode);
+  if (namesOf(tools) === shownTools) return undefined;
+  shownTools = namesOf(tools);
+  return tools;
+}
 
 async function handleToolCall(call: AgentToolCall): Promise<void> {
   const mode = turnMode;
   try {
     const content = await runTool(call.name, call.args, mode);
-    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead: readsPastPlayhead(call.name, call.args, mode) });
+    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead: readsPastPlayhead(call.name, call.args, mode), tools: changedTools(mode) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     host.agent.toolResult({
       callId: call.callId,
       ok: false,
       content: message.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, ''),
+      tools: changedTools(mode),
     });
   }
 }
@@ -191,12 +204,16 @@ export function askAgent(text: string): Promise<void> {
   if (build.active) {
     turnMode = 'build';
     const reference = [describeComponents(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
-    return host.agent.send(text, describeAppState(note, describeBuild()), toolDefinitions('build'), reference, 'build');
+    const tools = toolDefinitions('build');
+    shownTools = namesOf(tools);
+    return host.agent.send(text, describeAppState(note, describeBuild()), tools, reference, 'build');
   }
   turnMode = 'view';
   const fromBuild = buildNote ? `build mode: the user left it having saved this. ${buildNote}` : null;
   buildNote = null;
   // Least likely to change last: opening a session only changes what follows the events.
   const reference = [describeEvents(events), describeComponents(offeredComponents()), describeTables(sessionData)].filter(Boolean).join('\n\n');
-  return host.agent.send(text, describeAppState(note, fromBuild), toolDefinitions(), reference);
+  const tools = toolDefinitions();
+  shownTools = namesOf(tools);
+  return host.agent.send(text, describeAppState(note, fromBuild), tools, reference);
 }

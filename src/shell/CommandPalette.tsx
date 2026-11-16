@@ -12,7 +12,7 @@ import { BackgroundPanel } from './BackgroundPanel';
 import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPrompt';
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
-import { matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
+import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { MentionParts, renderMention, sayMention } from './mentionKinds';
@@ -241,10 +241,12 @@ export function CommandPalette() {
       const command = SLASH_COMMANDS.find((c) => c.name === name) ?? (rest ? undefined : suggestions[selected]);
       if (command && (!rest || command.takesText)) {
         palette.push('user', rest ? `${command.name} ${rest}` : command.name);
-        void command.run(rest);
+        // Typed in full, since the list doesn't offer it without a session.
+        if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
+        else void command.run(rest);
       } else {
         palette.push('user', text);
-        palette.push('error', `Unknown command. Available: ${SLASH_COMMANDS.map((c) => c.name).join(', ')}`);
+        palette.push('error', `Unknown command. Available: ${availableCommands().map((c) => c.name).join(', ')}`);
       }
       return;
     }
