@@ -39,6 +39,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
 | `headers` | `Record<tileId, TileHeader>` | What each tile's component says its title bar shows, where it says: `label`, `drivers`, `status` (`load`, `sync` or `error`) and `audio` (`on` or `muted`). See `useTileHeader` below |
 | `layout` | `LayoutState` | `tiles` (each tile's `id`, `component` spec and grid rect, in the order they were added), `manual` (whether the mouse has moved something), `main` (the id of the tile with the main place in auto-layout, or null) |
+| `pointed` | `string \| null` | The tile the viewer is pointing at from the prompt, by id, which the grid outlines: a tile row selected in the mention picker, or a tile's tag under the mouse. See `host.layout.point` |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
 | `events` | `EventIndex` | F1 TV's events from `FIRST_SEASON` (2023) on, grouped by season and loaded at start, plus `state` (`idle`, `loading`, `ready`, `error`) and `error` |
@@ -205,6 +206,7 @@ Every function that acts on a tile on screen takes its id. A video tile's label 
 | `setMain` | `tile: string \| null` | Gives a tile the main place in auto-layout, top left and as large as the others allow, or with `null` takes it away. Returns whether the tile is on screen. `layout.main` holds its id. Opening a session gives it to the main feed's tile, and nothing else assigns it |
 | `move` | `tile: string`, `rect: { x, y, w, h }` | Moves or resizes a tile, in grid cells (24 × 24) |
 | `swap` | `a: string`, `b: string` | Swaps the places of two tiles |
+| `point` | `tile: string \| null` | Outlines the tile, as the viewer points at it from the prompt, or with `null` clears the outline. Returns whether the tile is on screen. `pointed` holds its id. An outline from the suggestion strip's `highlight` wins over it. The agent isn't given it |
 
 `<Grid>` sends mouse moves, swaps and closes through `move`, `swap` and `remove`, the same functions any other caller uses.
 
