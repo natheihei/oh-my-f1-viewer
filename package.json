@@ -40,7 +40,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.4",
     "concurrently": "^9.2.1",
-    "electron": "github:castlabs/electron-releases#v42.11.18+wvcus",
+    "electron": "github:castlabs/electron-releases#v45.2.1+wvcus",
     "playwright": "^1.56.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
