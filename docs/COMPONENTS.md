@@ -150,7 +150,8 @@ and dim text in race control.)
   line draws it as a bold `bar` code in the line's own colour, so a quiet line stays quiet. Race control reads F1's
   "CAR 23 (ALB)" and "CARS 23 (ALB) AND 10 (GAS)", a restart order's numbers, and a roster code standing alone.
 - **A mention in the palette's prompt is a code too.** `@` picks a driver and the prompt shows it as a bold `bar` code in the text's
-  colour, as a line of text does, and so does the history once it's sent. See DESIGN.md, "Mentions".
+  colour, as a line of text does, and so does the history once it's sent. A team is two bars in its colour and its short name in
+  capitals, so it never reads as a code. See DESIGN.md, "Mentions".
 - **Teammates share a bar.** Both cars' bars are solid, as the tower always had them. Charts still dash a team's second car's line.
 - **No tile accent.** A team-colour edge or a tinted title bar was tried and left out: the code in the title says whose tile it is.
 

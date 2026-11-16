@@ -7,9 +7,13 @@
  * It's a contenteditable box, not a textarea, so a tag can be drawn as the code library draws a driver.
  * React renders the box once and leaves what's in it to the browser; the prompt is read back from the DOM.
  * The palette draws the picker, from what `onPicker` reports, and drives it through the handle.
+ *
+ * What a mention names can change while it's being typed or sits in the prompt: the agent opens and closes
+ * tiles during its turn. The picker searches again, keeping its row while that's still there, and each tag
+ * is drawn again, so a tile that has closed shows as closed.
  */
 import { forwardRef, useEffect, useImperativeHandle, useRef, type ClipboardEvent, type KeyboardEvent } from 'react';
-import { mentionElement, searchMentions } from './mentionKinds';
+import { mentionElement, searchMentions, updateTags, useMentionSources } from './mentionKinds';
 import { mentionQuery, type Mention, type MentionOption, type PromptPart } from './mentions';
 
 export interface PromptInputHandle {
@@ -23,6 +27,8 @@ export interface PromptInputHandle {
 export interface Picker {
   options: MentionOption[];
   selected: number;
+  /** A bare `@`: the rows go by kind, under each kind's heading. */
+  grouped: boolean;
 }
 
 interface Props {
@@ -99,7 +105,7 @@ export const PromptInput = forwardRef<PromptInputHandle, Props>(function PromptI
     const prev = picker.current;
     picker.current = next;
     if (prev == null && next == null) return;
-    callbacks.current.onPicker(next ? { options: next.options, selected: next.selected } : null);
+    callbacks.current.onPicker(next ? { options: next.options, selected: next.selected, grouped: next.grouped } : null);
   };
 
   /** The `@` the caret is in, if any: only within one run of text, and not in a `/` command. */
@@ -121,8 +127,12 @@ export const PromptInput = forwardRef<PromptInputHandle, Props>(function PromptI
     if (!at || dismissed.current) return setPicker(null);
     const options = searchMentions(at.query);
     if (options.length === 0) return setPicker(null);
-    const same = picker.current && picker.current.at.node === at.node && picker.current.at.start === at.start && picker.current.at.query === at.query;
-    setPicker({ options, selected: same ? Math.min(picker.current!.selected, options.length - 1) : 0, at });
+    // The same `@` keeps its row, wherever the row has moved to, as rows come and go.
+    const prev = picker.current;
+    const same = prev && prev.at.node === at.node && prev.at.start === at.start && prev.at.query === at.query;
+    const row = same ? prev.options[prev.selected] : undefined;
+    const kept = row ? options.findIndex((o) => o.kind === row.kind && o.id === row.id) : -1;
+    setPicker({ options, selected: Math.max(kept, 0), grouped: at.query === '', at });
   };
 
   const changed = () => {
@@ -203,6 +213,13 @@ export const PromptInput = forwardRef<PromptInputHandle, Props>(function PromptI
     }),
     [],
   );
+
+  // What the mentions name changing: tags draw it, and an open picker searches again.
+  const sources = useMentionSources();
+  useEffect(() => {
+    if (box.current) updateTags(box.current);
+    if (picker.current) refreshPicker();
+  }, sources);
 
   // The caret moving into or out of an `@`, by arrow keys or a click, opens or closes the picker.
   useEffect(() => {

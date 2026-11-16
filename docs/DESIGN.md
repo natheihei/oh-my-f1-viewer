@@ -161,23 +161,43 @@ strip.
 
 ### Mentions
 
-Typing `@` in the palette's prompt opens a picker above the input, and picking a row puts a tag in the prompt: `▌HAM`, drawn as the
-driver code library draws a driver. A tag is that driver, not the text that found it, so nothing has to be guessed. Typing a name without
-`@` stays plain text, and the agent resolves it as before. (2026-11-13. Turning names into tags as they're typed was the first idea. It was
-dropped because bare numbers ("lap 44", "top 10"), codes that are words (PER, CAM) and "max speed" would each have needed a rule, and still
-misfired.)
+Typing `@` in the palette's prompt opens a picker above the input, and picking a row puts a tag in the prompt: a tile on screen, a
+driver or a team. A tag is that thing, not the text that found it, so nothing has to be guessed. Typing a name without `@` stays plain
+text, and the agent resolves it as before. (2026-11-13. Turning names into tags as they're typed was the first idea. It was dropped
+because bare numbers ("lap 44", "top 10"), codes that are words (PER, CAM) and "max speed" would each have needed a rule, and still
+misfired. Teams and tiles came 2026-11-16.)
 
-- The picker matches a car number (`@44`, `@#4`), a code (`@ham`), a first name, a surname or the full name (`@lewis ham`), each from its
-  start, ignoring case and accents. An exact number or code comes first, then names, then numbers or codes that start with the query, so
-  `@1` lists #1, then #10, #11... A bare `@` offers the roster by car number. Two drivers with the same name would both be rows; the viewer
-  picks one.
-- Keys: ↑ ↓ move, Enter or Tab picks, Esc closes the picker and leaves the text, which stays text until the `@` is edited again. Prose after
-  an `@` that matches nothing closes it too. Backspace just after a tag turns it back into the `@` text that found it, with the picker open.
-- The tag is the code alone: no name beside it and no tooltip. The history keeps the tags; the agent reads each as `HAM (#44)`, code and car
-  number, so it is never mistaken.
-- No session, no picker: there's no roster to pick from. `/` commands don't take mentions.
-- What can be mentioned is a list of kinds (`src/shell/mentionKinds.tsx`): each searches what it has, draws its tag and says it as text for
-  the agent. Drivers are the first; a team, a feed or a tile on screen would each be one more kind.
+- What can be mentioned:
+  - **A tile on screen**, drawn as its title bar reads it, framed: `ONBOARD ▌HAM`. It names the tile by id, so it's that tile even if
+    another comes to show the same thing. The agent reads `tile "Onboard HAM" (tile-3)`, the id its tools take.
+  - **A driver**, drawn as the driver code library draws one: `▌HAM`. The tag is the code alone: no name beside it and no tooltip. The
+    agent reads `HAM (#44)`, code and car number, so it is never mistaken.
+  - **A team**, drawn as two bars in its colour and its short name in capitals (`▌▌FERRARI`; "Racing", "F1 Team" and "Team" are dropped
+    from the end, so Red Bull Racing is `RED BULL`), so it never reads as a driver. The agent reads `team Ferrari (LEC #16, HAM #44)`,
+    with its drivers, so it needs no lookup. A logo was considered and not used: nothing in the data has one, most are unreadable at
+    the size of a line of text, they change with sponsors, and nothing else in the app draws one.
+  - None of them says what kind of component a tile is, such as a video or a chart: one component can draw both.
+- A bare `@` lists every kind under a heading: the tiles on screen in the order they were added, then the roster by car number, then the
+  teams in the order of their first driver. The tiles come first since there are few and they're what's most often meant.
+- A typed query lists rows of every kind together, best match first, with no headings, and a tile's row says "on screen". A driver
+  matches by car number (`@44`, `@#4`), code (`@ham`), first name, surname or full name (`@lewis ham`); a tile by any word of its label,
+  codes included (`@gap` finds "Gap to leader", `@ham` "Onboard HAM"); a team by any word of its name (`@red`, `@bull`). Each matches
+  from the start of a word, ignoring case and accents. An exact number or code comes first, then whole words, then numbers or codes that
+  start with the query, then words that do, so `@1` lists #1, then #10, #11..., and `@ham` lists the driver before the onboard. Rows that
+  match as well keep the kinds' order: tiles, drivers, teams. Two drivers with the same name would both be rows; the viewer picks one.
+- Keys: ↑ ↓ move, wrapping at the ends and skipping the headings; Enter or Tab picks, and never sends. Esc closes the picker and leaves
+  the text, which stays text until the `@` is edited again. Prose after an `@` that matches nothing closes it too. Backspace just after
+  a tag turns it back into the `@` text that found it, with the picker open. ← → step over a tag as one piece.
+- Pointing at a tile outlines it on the grid: its row selected in the picker, by keys or under the mouse, or its tag under the mouse in
+  the prompt or the history. It goes through `host.layout.point`, and a suggestion in the strip that duplicates a tile wins over it.
+- What the tags name can change while the viewer types, since the agent opens and closes tiles during its turn. The picker searches
+  again, keeping its row while that's still there, and each tag in the prompt is drawn again. A tile's tag follows its title while it's
+  on screen. Once it closes, the tag goes dashed and grey, in the prompt and the history, and keeps the title it last had; sent like
+  that, the agent reads `tile "Onboard HAM" (tile-3, closed)`.
+- No session, no picker: there's no roster, and no tiles. A team named before a session is plain text, which `load_session` reads as
+  before. `/` commands don't take mentions.
+- What can be mentioned is a list of kinds (`src/shell/mentionKinds.tsx`): each searches what it has, draws its tag and says it as text
+  for the agent. A feed would be one more kind.
 - The input is a contenteditable box (`src/shell/PromptInput.tsx`) so a tag can be drawn as a code and stepped over as one piece. React
   renders it once; the prompt is read back from the DOM. Pasted text comes in plain, on one line.
 
