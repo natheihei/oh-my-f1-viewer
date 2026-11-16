@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation as DurableConversation, Harness } from '@earendil-works/pi-durable';
@@ -69,6 +70,24 @@ const text = (content: unknown): string =>
   typeof content === 'string' ? content : (content as { text?: string }[]).map((b) => b.text ?? '').join('');
 
 const agentDir = () => path.join(host.userData, 'pi-agent');
+/** The stored conversations of one kind, oldest first: one database each. */
+const conversationsDir = () => path.join(host.userData, 'conversations');
+const conversationFiles = (kind: 'view' | 'build') =>
+  existsSync(conversationsDir()) ? readdirSync(conversationsDir()).filter((f) => f.endsWith(`_${kind}.sqlite`)).sort() : [];
+type StoredEntry = { kind: string; model?: Message[]; edits?: unknown[] };
+/** A stored conversation's entries, in order. */
+function records(file: string): StoredEntry[] {
+  const db = new DatabaseSync(path.join(conversationsDir(), file), { readOnly: true });
+  try {
+    return (db.prepare('SELECT record FROM entries ORDER BY id').all() as { record: string }[]).map((row) => JSON.parse(row.record) as StoredEntry);
+  } finally {
+    db.close();
+  }
+}
+/** Its messages, as "role: text", without the system ones. */
+const stored = (file: string) =>
+  records(file).flatMap((r) => (r.model ?? []).filter((m) => m.role !== 'system').map((m) => `${m.role}: ${text(m.content)}`));
+
 /** The settings the agent last had the renderer keep, if it changed any. */
 const savedSettings = () => (host.sent.filter((s) => (s as unknown[])[0] === 'ai:settings').at(-1) as unknown[] | undefined)?.[1];
 
@@ -395,10 +414,7 @@ describe('summarizing a turn that is still reading ahead', () => {
 
 describe('build mode', () => {
   const modsDir = () => path.join(host.userData, 'mods');
-  const sessions = (folder: string) => {
-    const dir = path.join(host.userData, 'pi-agent', folder);
-    return existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(path.join(dir, f), 'utf8')) : [];
-  };
+  const sessions = (kind: 'view' | 'build') => conversationFiles(kind).map((f) => stored(f).join('\n'));
   /** The mods folder as the build agent's tools see it, with every save loading at once. */
   /** What the screen reports each time it's asked: the last answer repeats. */
   let screen: (PlaceHealth[] | null)[] = [[]];
@@ -450,10 +466,10 @@ describe('build mode', () => {
     script(fauxAssistantMessage('Viewing.'), fauxAssistantMessage('Building.'));
     await agent.send('ham', 'state', [TOOL]);
     await agent.send('a lap stepper', 'state', [TOOL], '', 'build');
-    expect(sessions('sessions')).toHaveLength(1);
-    expect(sessions('sessions')[0]).not.toContain('a lap stepper');
-    expect(sessions('build-sessions')).toHaveLength(1);
-    expect(sessions('build-sessions')[0]).toContain('a lap stepper');
+    expect(sessions('view')).toHaveLength(1);
+    expect(sessions('view')[0]).not.toContain('a lap stepper');
+    expect(sessions('build')).toHaveLength(1);
+    expect(sessions('build')[0]).toContain('a lap stepper');
   });
 
   it('starts a new build conversation after leaving, and leaves the viewing one alone', async () => {
@@ -467,7 +483,7 @@ describe('build mode', () => {
     await agent.send('view again', 'state', [TOOL]);
     expect(requests[2].history).not.toContain('first build');
     expect(requests[3].history).toContain('view');
-    expect(sessions('build-sessions')).toHaveLength(2);
+    expect(sessions('build')).toHaveLength(2);
   });
 
   it('writes, edits and deletes inside the mods folder, and says what it did', async () => {
@@ -847,31 +863,20 @@ describe('starting over', () => {
   });
 });
 
-describe('stored sessions', () => {
-  const dir = () => path.join(host.userData, 'pi-agent', 'sessions');
-  const files = () => (existsSync(dir()) ? readdirSync(dir()).sort() : []);
-  const entries = (file: string) =>
-    readFileSync(path.join(dir(), file), 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as { type: string; id: string; customType?: string; message?: Message });
-  const stored = (file: string) =>
-    entries(file).flatMap((e) =>
-      e.message && e.message.role !== 'system' ? [`${e.message.role}: ${text(e.message.content)}`] : [],
-    );
+describe('stored conversations', () => {
+  const files = () => conversationFiles('view');
 
-  it('writes the conversation to a .jsonl, keeping the id used as the cache key', async () => {
+  it('keeps each conversation in a database of its own', async () => {
     const { agent, script } = setup();
     script(fauxAssistantMessage('Hello.'));
     await agent.send('hi', 'state', [TOOL]);
     expect(files()).toHaveLength(1);
-    expect(files()[0]).toMatch(/_f1a\.jsonl$/);
-    expect(entries(files()[0])[0]).toMatchObject({ type: 'session', id: 'f1a' });
-    expect(entries(files()[0]).slice(1, 3).map((e) => e.type)).toEqual(['model_change', 'thinking_level_change']);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\nhi', 'assistant: Hello.']);
+    // The prompt as the model got it, for review.
+    expect(records(files()[0]).find((r) => r.model?.[0]?.role === 'system')?.model?.[0]?.sections).toEqual({ f1a: SYSTEM_PROMPT });
   });
 
-  it('adds later turns to the same file', async () => {
+  it('adds later turns to the same one', async () => {
     const { agent, script } = setup();
     script(fauxAssistantMessage('one'));
     await agent.send('first', 'state', [TOOL]);
@@ -881,21 +886,21 @@ describe('stored sessions', () => {
     expect(stored(files()[0])).toHaveLength(4);
   });
 
-  it('starts a new file on reset, leaving the old one', async () => {
+  it('starts a new one on reset, leaving the old one', async () => {
     const { agent, requests, script } = setup();
     script(fauxAssistantMessage('one'));
     await agent.send('first', 'state', [TOOL]);
     const [first] = files();
-    const before = readFileSync(path.join(dir(), first), 'utf8');
+    const before = stored(first);
     await agent.reset();
     script(fauxAssistantMessage('two'));
     await agent.send('second', 'state', [TOOL]);
     expect(files()).toHaveLength(2);
-    expect(readFileSync(path.join(dir(), first), 'utf8')).toBe(before);
+    expect(stored(first)).toEqual(before);
     expect(requests[1].roles.filter((r) => r === 'user')).toHaveLength(1);
   });
 
-  it('never resumes a stored session after a restart', async () => {
+  it('never resumes a stored conversation after a restart', async () => {
     const before = setup();
     before.script(fauxAssistantMessage('one'));
     await before.agent.send('first', 'state', [TOOL]);
@@ -920,23 +925,22 @@ describe('stored sessions', () => {
     expect(stored(files()[0])[0]).toContain('go');
   });
 
-  it('records a cut-down turn, and keeps what the turn read', async () => {
+  it('keeps what a cut-down turn read, with the edit that cuts it', async () => {
     const { agent, script } = setup();
     host.onToolCall = (call) => agent.onToolResult({ callId: (call as AgentToolCall).callId, ok: true, content: 'SECRET ROWS', pastPlayhead: true });
     script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Jumped to lap 30.'));
     await agent.send('go', 'state', [TOOL]);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\ngo', 'assistant: ', 'toolResult: SECRET ROWS', 'assistant: Jumped to lap 30.']);
-    expect(entries(files()[0]).at(-1)).toMatchObject({ type: 'custom', customType: 'f1a.forget' });
+    expect(records(files()[0]).at(-1)).toMatchObject({ kind: 'f1a.forget' });
   });
 
   it('writes nothing until there is a message', async () => {
     await new Agent().status();
-    expect(files()).toEqual([]);
+    expect(existsSync(conversationsDir())).toBe(false);
   });
 
-  it('reports an error, rather than hanging, when the session cannot be written', async () => {
-    mkdirSync(path.join(host.userData, 'pi-agent'), { recursive: true });
-    writeFileSync(dir(), 'a file where the folder should be');
+  it('reports an error, rather than hanging, when the conversation cannot be stored', async () => {
+    writeFileSync(conversationsDir(), 'a file where the folder should be');
     const { agent, script } = setup();
     script(fauxAssistantMessage('Not reached.'));
     await agent.send('hi', 'state', [TOOL]);

@@ -197,8 +197,8 @@ instructions, and a separate session keeps what the build read out of the viewin
 - **On exit, the viewing agent gets one line**, such as "Built lap_stepper, edited lap_form." The app writes it from the folder
   comparison. The model doesn't, so the line can't carry anything the build read. It arrives in the `app_state` of the viewer's next
   message, once. Undo all sends nothing.
-- **Each build is stored** as its own `.jsonl` under `pi-agent/build-sessions`, apart from the viewing conversations in
-  `pi-agent/sessions`, for reviewing what the build agent did.
+- **Each build is stored** as its own `<time>_build.sqlite` in `<userData>/conversations`, beside the viewing conversations'
+  `<time>_view.sqlite`, for reviewing what the build agent did: `node devscripts/conversation.mjs build`.
 
 ## Spoilers
 
@@ -316,13 +316,13 @@ and `/build` itself (`src/shell/commands.test.ts`).
 **Spoilers**
 
 19. During a build at 0:00 of a replay, the agent reads the whole session with no check, and its replies don't mention results.
-20. After leaving, the viewing agent's next request, read from the session's `.jsonl`, holds only the app's one line.
+20. After leaving, the viewing agent's next request, read from its stored conversation, holds only the app's one line.
 21. After leaving, "go to lap 30" in view mode asks "The agent wants to look ahead of where you are." again.
 22. The saved mod's source has no race data written into it. This is a read of the file, not of the screen.
 
 **The picture**
 
-23. After "give the buttons a 3px white border", the build session's `.jsonl` shows it took a picture of the draft, and the screen matches.
+23. After "give the buttons a 3px white border", the build's stored conversation shows it took a picture of the draft, and the screen matches.
 24. Asked for a mod about one driver with nobody named, the agent hears that its draft needs a driver, the strip's card says so, and
     the agent asks whose without picking.
 25. Asked to change a mod on screen from two drivers to one, the agent hears that the tile's props no longer fit, and gives the tile its
