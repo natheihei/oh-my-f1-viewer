@@ -272,10 +272,10 @@ describe('suggesting charts', () => {
       await askAgent('charts?');
       expect(offered()).toEqual(['test_field', 'test_gap', 'test_pit', 'test_weather']);
 
-      // With no session open, nothing is ruled out.
+      // With no session open, the message goes to the picking agent, which suggests nothing.
       useSession.setState({ session: null });
       await askAgent('charts?');
-      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
+      expect(offered()).toEqual([]);
 
       // The build agent writes and edits charts, so it sees them all.
       useSession.setState({ session: { ...race, type: 'qualifying' } });

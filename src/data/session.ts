@@ -455,11 +455,14 @@ function toggleMute(): void {
   setVolume(toggledVolume(volume, lastHeardVolume));
 }
 
-/** Opens a session: resolves its channels. Streams start only when something acquires them. */
+/**
+ * Opens a session: resolves its channels. Streams start only when something acquires them. The session is
+ * a new object each time, even for the same one again, so an opening can be told from the last.
+ */
 export async function openSession(session: SessionInfo, options: { fromStart?: boolean } = {}): Promise<Channel[]> {
   closeSession();
   const channels = await window.f1a.f1tv.channels(session.contentId);
-  useSession.setState({ ...INITIAL, session, channels });
+  useSession.setState({ ...INITIAL, session: { ...session }, channels });
   runtime = new SessionRuntime(session, options.fromStart ?? false);
   return channels;
 }

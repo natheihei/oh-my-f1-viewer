@@ -1,7 +1,7 @@
 /** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
-import type { F1TvStatus } from '../shared/api';
+import type { AgentMode, F1TvStatus } from '../shared/api';
 import type { PlaceHealth } from '../shared/health';
 import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
@@ -59,6 +59,8 @@ async function pictureOf(name: string): Promise<Buffer | null> {
   if (!box) return null;
   return (await win.webContents.capturePage(box)).toPNG();
 }
+
+const agentMode = (mode: unknown): AgentMode => (mode === 'build' || mode === 'pick' ? mode : 'view');
 
 const HEALTH_TIMEOUT_MS = 3000;
 const healthWaiting = new Map<string, (places: PlaceHealth[] | null) => void>();
@@ -274,8 +276,8 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('ai:cancelConnect', () => agent.cancelConnect());
   handle('ai:disconnect', () => agent.disconnect());
   handle('ai:choose', (_e, model, thinking) => agent.choose(String(model), thinking));
-  handle('ai:send', (_e, text, context, tools, reference, mode) =>
-    agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? ''), mode === 'build' ? 'build' : 'view'),
+  handle('ai:send', (_e, text, context, tools, reference, mode, scope) =>
+    agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? ''), agentMode(mode), String(scope ?? mode ?? 'view')),
   );
   handle('ai:endBuild', () => agent.endBuild());
   handle('ai:cancel', () => agent.cancel());

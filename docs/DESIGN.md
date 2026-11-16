@@ -128,7 +128,9 @@ asks for something no chart does, with a reason the offer asks and a note for th
 ### Finding a session
 
 The app supports seasons from 2023 on. At start it loads F1 TV's events for those seasons, one page per season, and every message to the
-agent carries them at the end of its system prompt: one line per event with its pageId, round, name and dates, so nothing that could spoil
+picking and viewing agents carries them at the end of its system prompt. With no session open, a message goes to the picking agent, whose
+prompt is about this alone, and once a session opens, the same message goes on in a new viewing conversation (see
+[ARCHITECTURE.md](ARCHITECTURE.md#agent)). The list has one line per event with its pageId, round, name and dates, so nothing that could spoil
 a result. The agent works out with the user which weekend they mean from that list, and asks when it isn't clear. A weekend's sessions still
 come from `list_sessions`, since their status changes. If the events don't load, the palette says so and `/reload-events` retries; the
 agent isn't asked anything until they're there.
