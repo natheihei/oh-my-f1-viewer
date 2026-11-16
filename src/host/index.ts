@@ -31,7 +31,7 @@ export {
   type BackgroundView,
 } from './backgrounds';
 export { defineComponent, fitting, misfit, specOf, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
-export { ComponentView, Grid } from './Grid';
+export { ComponentView, Grid, tileTitle } from './Grid';
 export {
   CODE_BAR,
   CODE_WEIGHT,
@@ -39,6 +39,7 @@ export {
   DriverCode,
   driverCodeElement,
   driverStyles,
+  fillTitle,
   labelText,
   Parts,
   partsText,

@@ -9,7 +9,7 @@ import { useBuild } from './build';
 import { fillTitle, labelText, useDriverStyles } from './drivers';
 import { componentOf, useComponents } from './components';
 import { fitProps, health, healthOps, type PlaceHealth } from './health';
-import { layoutOps } from './layoutOps';
+import { layoutOps, usePointed } from './layoutOps';
 import { previewScope, tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { useHiddenPast } from './overflow';
@@ -212,6 +212,11 @@ function titleOf(header: TileHeader): Partial<Pick<ComponentSpec, 'label' | 'tit
   return {};
 }
 
+/** What a tile's title bar shows: its spec's label and drivers, as its component's header overrides them. */
+export function tileTitle(spec: ComponentSpec, header: TileHeader | undefined): Pick<ComponentSpec, 'label' | 'title'> {
+  return { label: spec.label, title: spec.title, ...(header ? titleOf(header) : {}) };
+}
+
 // One wrapper per component name for good, because a new one would remount every tile showing it.
 const wrappers = new Map<string, TileComponent>();
 function wrapperOf(name: string): TileComponent {
@@ -227,7 +232,9 @@ function wrapperOf(name: string): TileComponent {
 export function Grid() {
   const components = useComponents((s) => s.list);
   const registry = useMemo(() => Object.fromEntries(components.map(({ name }) => [name, wrapperOf(name)])), [components]);
-  const highlight = useSuggestions((s) => s.highlight);
+  // A suggestion under the mouse outlines the tile it duplicates; a tile pointed at from the prompt, itself.
+  const suggested = useSuggestions((s) => s.highlight);
+  const pointed = usePointed((s) => s.tile);
   const building = useBuild((s) => s.active);
   const changes = useBuild((s) => s.changes);
   // What build mode changed, by component name: a new mod's tile is a draft, a changed one is edited.
@@ -237,6 +244,7 @@ export function Grid() {
   );
   const approved = useTileLookAhead((s) => s.approved);
   const tiles = useLayout((s) => s.tiles);
+  const highlight = suggested ?? tiles.find((t) => t.id === pointed)?.component.key ?? null;
   const headers = useTileHeaders((s) => s.headers);
   // What each header's slots say: the stream slots are the component's to say, through useTileHeader.
   // An approval outlives an edit that drops `looksAhead`, but the header only says so while it applies.

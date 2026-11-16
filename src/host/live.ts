@@ -7,6 +7,7 @@ import { useCircuit, useSchedule, useSessionData } from '../data/sessionData';
 import { specFor, type Spec } from '../data/spec';
 import type { LayoutState } from '../layout/model';
 import { useLayout } from '../layout/store';
+import { usePointed } from './layoutOps';
 import { useBackground, useBackgrounds, type BackgroundInfo, type BackgroundView } from './backgrounds';
 import { useAgentTurn } from './agentTurn';
 import { useBuild, type BuildView } from './build';
@@ -29,6 +30,8 @@ export interface Live {
   volume: number;
   clock: ClockState;
   layout: LayoutState;
+  /** The tile the viewer is pointing at from the prompt, by id, outlined on the grid; or null. */
+  pointed: string | null;
   /** What each tile's component says its title bar shows, by tile id, where it says. See `useTileHeader`. */
   headers: Record<string, TileHeader>;
   countdown: Countdown | null;
@@ -72,6 +75,7 @@ export function read(): Live {
     volume,
     clock,
     layout: useLayout.getState(),
+    pointed: usePointed.getState().tile,
     headers: useTileHeaders.getState().headers,
     countdown: useCountdown.getState().countdown,
     suggestions: useSuggestions.getState(),
@@ -95,6 +99,7 @@ function subscribe(onChange: () => void): () => void {
   const stops = [
     useSession.subscribe(onChange),
     useLayout.subscribe(onChange),
+    usePointed.subscribe(onChange),
     useTileHeaders.subscribe(onChange),
     useCountdown.subscribe(onChange),
     useSuggestions.subscribe(onChange),

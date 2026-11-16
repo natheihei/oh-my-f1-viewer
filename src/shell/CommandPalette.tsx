@@ -15,7 +15,7 @@ import { leaveBuild } from './buildMode';
 import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
-import { MentionParts, renderMention, sayMention } from './mentionKinds';
+import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
 import { palette, usePalette, type EntryRole } from './palette';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
@@ -49,6 +49,8 @@ export function CommandPalette() {
   const [parts, setParts] = useState<PromptPart[]>([]);
   const value = promptText(parts, sayMention);
   const [picker, setPicker] = useState<Picker | null>(null);
+  /** The picker's row under the mouse, which outlines its tile in place of the selected row's. */
+  const [hovered, setHovered] = useState<number | null>(null);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<PromptInputHandle | null>(null);
   const historyRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +77,12 @@ export function CommandPalette() {
   // Attached errors and an offer of build mode wait on the viewer, so the palette stays for them too.
   const showing = open || blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
   const suggestions = matchCommands(value);
+
+  // The picker's row outlines its tile, if it's one: the row under the mouse, else the selected row.
+  const pointed = picker ? picker.options[hovered ?? picker.selected] : null;
+  useEffect(() => pointAt(pointed), [pointed?.kind, pointed?.id]);
+  useEffect(() => () => pointAt(null), []);
+  useEffect(() => setHovered(null), [picker?.options]);
 
   useEffect(() => {
     if (showing && !hasTiles) inputRef.current?.focus();
@@ -230,7 +238,8 @@ export function CommandPalette() {
   }
 
   const submit = () => {
-    const text = value.trim();
+    // Said now, not as of the last render: a tile mentioned may have closed since.
+    const text = promptText(parts, sayMention).trim();
     // Attached errors can go on their own, with no words.
     if (!text && attached.length === 0) return;
     const said = trimParts(parts);
@@ -324,21 +333,32 @@ export function CommandPalette() {
       ) : null}
       {attached.length > 0 ? <AttachTray attached={attached} busy={busy} /> : null}
       {picker ? (
-        <div className="palette-suggestions palette-mentions" data-testid="mention-picker">
+        <div
+          className={`palette-suggestions palette-mentions ${picker.options.some((o) => o.kind !== 'driver') ? 'palette-mentions-wide' : ''}`}
+          data-testid="mention-picker"
+          onMouseLeave={() => setHovered(null)}
+        >
           {picker.options.map((option, i) => (
-            <div
-              key={`${option.kind}:${option.id}`}
-              className={`palette-suggestion palette-mention ${i === picker.selected ? 'palette-suggestion-active' : ''}`}
-              data-testid="mention-option"
-              ref={i === picker.selected ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                inputRef.current?.pick(i);
-              }}
-            >
-              <span>{renderMention(option, { variant: 'bar' })}</span>
-              <span className="palette-suggestion-desc">{option.detail}</span>
-            </div>
+            <Fragment key={`${option.kind}:${option.id}`}>
+              {picker.grouped && option.kind !== picker.options[i - 1]?.kind ? (
+                <div className="palette-mention-group" data-testid="mention-group">
+                  {groupOf(option.kind)}
+                </div>
+              ) : null}
+              <div
+                className={`palette-suggestion palette-mention ${i === picker.selected ? 'palette-suggestion-active' : ''}`}
+                data-testid="mention-option"
+                ref={i === picker.selected ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                onMouseEnter={() => setHovered(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  inputRef.current?.pick(i);
+                }}
+              >
+                <span className="palette-mention-tag">{renderMention(option, { variant: 'bar' })}</span>
+                <span className="palette-suggestion-desc">{option.detail}</span>
+              </div>
+            </Fragment>
           ))}
         </div>
       ) : suggestions.length > 0 ? (

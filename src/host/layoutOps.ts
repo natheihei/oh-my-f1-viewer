@@ -3,12 +3,16 @@
  * are named by type and props, and matching "Hamilton" to a feed is up to the caller.
  */
 import Type from 'typebox';
+import { create } from 'zustand';
 import { allTiles, findTile, tileWithKey } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
 import { Item, specOf } from './components';
 import { write } from './op';
 
 const TileId = Type.String({ description: 'A tile id, such as "tile-3"' });
+
+/** The tile the viewer is pointing at from the prompt, by id, which the grid outlines. */
+export const usePointed = create<{ tile: string | null }>(() => ({ tile: null }));
 
 export const layoutOps = {
   add: write(
@@ -75,6 +79,18 @@ export const layoutOps = {
   swap: write(
     { description: 'Swap the places of two tiles.', args: Type.Object({ a: TileId, b: TileId }) },
     ({ a, b }) => layout.swap(a, b),
+  ),
+  point: write(
+    {
+      description: 'Outline a tile on screen, as the viewer points at it from the prompt, or nothing. Returns whether the tile is on screen.',
+      args: Type.Object({ tile: Type.Union([TileId, Type.Null()]) }),
+    },
+    ({ tile }) => {
+      const on = tile !== null && findTile(useLayout.getState(), tile) != null;
+      const next = on ? tile : null;
+      if (usePointed.getState().tile !== next) usePointed.setState({ tile: next });
+      return on;
+    },
   ),
 };
 
