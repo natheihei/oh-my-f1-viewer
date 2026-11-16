@@ -673,6 +673,19 @@ export class Agent {
         await this.building.close();
         this.building = null;
       }
+      // A read ahead the last turn couldn't cut is cut now. If it still can't be, the conversation starts over:
+      // what it read past the playhead must not reach another request, or a summary.
+      if (this.conversation?.readAhead.size) {
+        const left = this.conversation;
+        const cut = await this.forget(left).then(
+          () => true,
+          (e: Error) => (console.warn('[ai] forgetting a read ahead, again:', e.message), false),
+        );
+        if (!cut) {
+          this.conversation = null;
+          await left.close();
+        }
+      }
       this.policy = this.policyOf(choice.stored);
       if (turn.mode === 'build') this.building ??= await this.createConversation(choice, 'build');
       else this.conversation ??= await this.createConversation(choice);
@@ -686,7 +699,6 @@ export class Agent {
       conversation.reference = reference;
       conversation.register(definitions);
       conversation.rounds = 0;
-      conversation.readAhead.clear();
       check?.start();
 
       const stream = await this.streamText(turn, conversation, context);
@@ -731,6 +743,9 @@ export class Agent {
    * An approved read ahead is usable only in the turn that asked for it. Once the turn is over, its tool calls
    * and results are taken out of what the model sees, leaving the viewer's message and the agent's words.
    * The stored entries stay as they are. See docs/SPOILER_PREVENTION.md.
+   *
+   * The calls stay in `readAhead` until the cut is written, so a cut that fails is tried again before the
+   * next message, and compaction still sees them meanwhile.
    */
   private async forget(conversation: Conversation): Promise<void> {
     if (!conversation.readAhead.size) return;
@@ -738,10 +753,12 @@ export class Agent {
     await conversation.root.waitForIdle(context);
     const page = await conversation.root.entries({ order: 'descending' }, 500, undefined, context);
     const edits = forgetTurn([...page.items].reverse(), conversation.readAhead);
+    if (edits.length) {
+      const written = await conversation.root.submit({ type: 'write', entry: { kind: 'f1a.forget', edits } }, context);
+      const settled = await written.wait(context);
+      if (settled.status !== 'done') throw new Error(`the cut was not written (${settled.status})`);
+    }
     conversation.readAhead.clear();
-    if (!edits.length) return;
-    const written = await conversation.root.submit({ type: 'write', entry: { kind: 'f1a.forget', edits } }, context);
-    await written.wait(context);
   }
 }
 

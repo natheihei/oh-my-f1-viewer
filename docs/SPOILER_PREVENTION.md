@@ -83,6 +83,8 @@ How it works, in `electron/agent/extensions/forgetReadAhead.ts`:
 - **When the turn ends**, however it ends, one more entry is written to the conversation (`f1a.forget`). It holds an edit for each
   entry of the turn: replace the user message with the noted one, replace the last reply with everything the agent said, and omit the
   rest. pi-durable applies those edits whenever it builds what the model sees, so every later request reads the cut-down turn.
+  If writing it fails, the turn's calls stay marked and it's tried again before the next message; if that fails too, the
+  conversation starts over, so the rows never reach another request.
 - **Compaction** summarizes what the model sees, so it reads the cut-down turn too. A turn that read ahead and is still running
   has its rows in the context it needs, and a summary would outlive the turn. So a `beforeCompact` hook makes that summary itself:
   from the same messages with the running turn cut down the same way, by the conversation's own model. If that fails, compaction
