@@ -47,7 +47,8 @@ What the agent does is the same. These are the differences someone could notice:
   for the build agent.
 - **The build agent's file tools** are the app's own now, with the names, descriptions, parameters and results pi's had: the same
   words for each success, notice and error, naming a path the same way. That includes `read` handing the model an image or a binary
-  file as text, as the wrapped tool did: sending a picture instead is left for a change of its own.
+  file as text, as the wrapped tool did: sending a picture instead is left for a change of its own. Its description doesn't keep
+  pi's claim that images are sent as attachments, which the wrapped tool never did.
 - **A summary made during a turn that is still reading ahead** is made with the app's own short prompt, not pi's. Every other
   summary is pi-durable's.
 - **Installing** needs `legacy-peer-deps` (set in `.npmrc`): chord, which pi-durable is built on, names an exact React as an optional
