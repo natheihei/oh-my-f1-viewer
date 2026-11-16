@@ -13,10 +13,10 @@ import { changedParams, parseSavedBackground, restoreBackground, saveBackground 
 import type { UiStorage } from './uiState';
 
 function memoryStorage(): UiStorage {
-  const items = new Map<string, string>();
+  const items = new Map<string, unknown>();
   return {
-    getItem: (key) => items.get(key) ?? null,
-    setItem: (key, value) => void items.set(key, value),
+    get: (key) => items.get(key),
+    set: (key, value) => void items.set(key, value),
   };
 }
 

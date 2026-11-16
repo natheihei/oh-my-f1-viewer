@@ -12,7 +12,6 @@ import type {
   F1TvStatus,
   ThinkingLevel,
 } from '../../shared/api';
-import type { AgentSettings } from '../../shared/agentSettings';
 
 const NOT_READY: AiStatus = { ready: false, provider: null, model: null, modelName: null, thinking: null };
 
@@ -35,10 +34,6 @@ export const account = {
 };
 
 export const agentLink = {
-  /** Hands main the agent's settings the renderer keeps. IPC keeps order, so whatever is asked after this sees them. */
-  useSettings: (settings: AgentSettings): Promise<void> => window.f1a.ai.useSettings(settings),
-  /** Main changed the settings, by connecting or choosing. */
-  onSettings: (cb: (settings: AgentSettings) => void): (() => void) => window.f1a.ai.onSettings(cb),
   status: (): Promise<AiStatus> => window.f1a.ai.status().catch(() => NOT_READY),
   providers: (): Promise<AgentProviderOption[]> => window.f1a.ai.providers(),
   connect: (provider: string, way: ConnectWay): Promise<AiStatus> => window.f1a.ai.connect(provider, way),

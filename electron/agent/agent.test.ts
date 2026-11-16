@@ -88,8 +88,22 @@ function records(file: string): StoredEntry[] {
 const stored = (file: string) =>
   records(file).flatMap((r) => (r.model ?? []).filter((m) => m.role !== 'system').map((m) => `${m.role}: ${text(m.content)}`));
 
-/** The settings the agent last had the renderer keep, if it changed any. */
-const savedSettings = () => (host.sent.filter((s) => (s as unknown[])[0] === 'ai:settings').at(-1) as unknown[] | undefined)?.[1];
+/** The app's settings file, in memory, with what the agent wrote to it. */
+function memoryStore(agent: Record<string, unknown> = {}) {
+  const values = new Map<string, unknown>([['agent', agent]]);
+  const written: unknown[] = [];
+  return {
+    written,
+    get: (key: string) => values.get(key),
+    set: (key: string, value: unknown) => {
+      values.set(key, value);
+      if (key === 'agent') written.push(value);
+    },
+  };
+}
+let store = memoryStore();
+/** The settings the agent last wrote, if it changed any. */
+const savedSettings = () => store.written.at(-1);
 
 /**
  * An agent on a faux `openai`, connected the way `credentials` says. Credentials live in memory, and
@@ -115,6 +129,7 @@ function setup(
   const credentials = new Map<string, Way>(options.credentials ?? [['openai', 'oauth']]);
   const ops: string[] = [];
   const requests: Request[] = [];
+  store = memoryStore({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...options.settings });
   const agent = new Agent((providers) => {
     providers.setProvider(faux.provider);
     providers.credentials = {
@@ -134,8 +149,7 @@ function setup(
       ops.push(`logout ${id}`);
       credentials.delete(id);
     }) as never;
-  });
-  agent.useSettings({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...options.settings });
+  }, store);
   /** A scripted reply that records the request it answers. */
   const reply =
     (message: ReturnType<typeof fauxAssistantMessage>) =>
@@ -701,8 +715,7 @@ describe('failures', () => {
 
   it('refuses when not set up, even with the chosen provider set up in the environment', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'not-a-real-key');
-    const agent = new Agent();
-    agent.useSettings({ provider: 'anthropic', model: 'claude-sonnet-5-5' });
+    const agent = new Agent(undefined, memoryStore({ provider: 'anthropic', model: 'claude-sonnet-5-5' }));
     await agent.send('go', 'state', [TOOL]);
     expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
     expect(events().at(-1)).toMatchObject({ message: 'The agent needs setting up first: /settings-agent' });
@@ -935,7 +948,7 @@ describe('stored conversations', () => {
   });
 
   it('writes nothing until there is a message', async () => {
-    await new Agent().status();
+    await new Agent(undefined, memoryStore()).status();
     expect(existsSync(conversationsDir())).toBe(false);
   });
 
@@ -949,9 +962,8 @@ describe('stored conversations', () => {
 });
 
 describe('its settings', () => {
-  it('come from the renderer, and anything they get wrong is left out', async () => {
-    const agent = new Agent();
-    agent.useSettings({ provider: 'openai', model: 7, thinking: 'loud', compaction: { enabled: false, reserveTokens: -1 }, extra: 1 });
+  it('come from the settings file, and anything they get wrong is left out', async () => {
+    const agent = new Agent(undefined, memoryStore({ provider: 'openai', model: 7, thinking: 'loud', compaction: { enabled: false, reserveTokens: -1 }, extra: 1 }));
     expect(await agent.status()).toMatchObject({ ready: false });
     expect(readdirSync(host.userData)).toEqual([]);
   });

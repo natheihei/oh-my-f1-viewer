@@ -7,6 +7,7 @@
 import Type from 'typebox';
 import type { Channel, SessionInfo } from '../../shared/api';
 import { account } from '../data/account';
+import { savedState } from '../data/savedState';
 import { agent } from './agentTurn';
 import { catalog, FIRST_SEASON } from '../data/catalog';
 import { sessionControl, useSession } from '../data/session';
@@ -206,4 +207,6 @@ export const host = {
   account,
   /** The link to the agent loop in the main process. */
   agent,
+  /** Small UI state kept across restarts, in the profile's settings file. The shell restores and saves it. */
+  savedState,
 };
