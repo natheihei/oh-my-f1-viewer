@@ -42,7 +42,8 @@ function createSecureStore(safeStorage) {
           ? JSON.stringify({ format: FORMAT, data: (await safeStorage.encryptStringAsync(String(text))).toString('base64') })
           : String(text);
         const tmp = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.tmp`);
-        fs.writeFileSync(tmp, body, 'utf8');
+        // Readable only by this user from the start: without a keystore, body is the plain text.
+        fs.writeFileSync(tmp, body, { encoding: 'utf8', mode: 0o600 });
         fs.renameSync(tmp, filePath);
       });
     },
