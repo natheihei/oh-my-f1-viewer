@@ -439,7 +439,8 @@ export default defineComponent({
   await until('26 its tile stops', async () => (await placesOf('stopped'))[0]?.state === 'error');
   await shot('build-09c-stopped.png');
   r = await say('is everything on screen drawing? fix what is not');
-  check('26 the app state named the tile that stopped', heard('not drawing: Tile \\"Stopped\\" (stopped): render error'), r.names.join(' '));
+  // The note names a tile by its id, then its label.
+  check('26 the app state named the tile that stopped', /not drawing: Tile \S+ \\"Stopped\\" \(stopped\): render error/.test(newest(sessionsDir('build'))), r.names.join(' '));
   check('26 and the agent fixed its code', (r.names.includes('edit') || r.names.includes('write')) && (await placesOf('stopped'))[0]?.state === 'drawn', `${r.names.join(' ')} ${JSON.stringify((await placesOf('stopped'))[0])}`);
   await shot('build-09d-stopped-fixed.png');
 
@@ -567,7 +568,7 @@ async function partUndo(stepper) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Part c: quitting in the middle of a build. No session or agent needed.
+// Part c: quitting in the middle of a build. No agent needed, but /build is only offered with a session open.
 async function partQuit() {
   if (!existsSync(path.join(modsDir, 'lap_form'))) {
     mkdirSync(path.join(modsDir, 'lap_form'), { recursive: true });
@@ -578,6 +579,7 @@ async function partQuit() {
 
   section('Quitting mid-build');
   await launch(5189);
+  await openRace();
   await typeInPalette(page, '/build');
   await until('the build tag shows', async () => (await tagText()).includes('build ×'));
   check('2 /build alone enters with a plain "build ×"', (await tagText()).trim() === 'build ×', await tagText());
