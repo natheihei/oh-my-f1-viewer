@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Conversation as DurableConversation, Harness } from '@earendil-works/pi-durable';
 import type { AgentEvent, AgentToolCall, AgentToolDefinition } from '../../shared/api';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import type { PlaceHealth } from '../../shared/health';
@@ -36,7 +37,12 @@ vi.mock('./keyWindow', () => ({
 }));
 
 const { Agent } = await import('./agent');
-const { fauxAssistantMessage, fauxProvider, fauxToolCall } = await import('@earendil-works/pi-ai');
+const { BACKGROUND_CONTEXT } = await import('@earendil-works/chord/context');
+const pi = await import('@earendil-works/pi-ai');
+const { fauxProvider, fauxToolCall } = pi;
+/** A scripted reply. One that calls tools stops for them, as a real provider's does. */
+const fauxAssistantMessage: typeof pi.fauxAssistantMessage = (content, options = {}) =>
+  pi.fauxAssistantMessage(content, { ...(Array.isArray(content) && content.some((block) => block.type === 'toolCall') ? { stopReason: 'toolUse' as const } : {}), ...options });
 
 const TOOL: AgentToolDefinition = {
   name: 'act',
@@ -55,7 +61,7 @@ interface Request {
   reasoning: string | undefined;
 }
 
-type Message = { role: string; content: unknown; toolsAdded?: { name: string }[]; stopReason?: string };
+type Message = { role: string; content: unknown; sections?: Record<string, string | null>; toolsAdded?: { name: string }[]; toolsRemoved?: (string | { name: string })[]; stopReason?: string };
 type Way = 'oauth' | 'api_key';
 
 const text = (content: unknown): string =>
@@ -98,17 +104,22 @@ function setup(
   const credentials = new Map<string, Way>(options.credentials ?? [['openai', 'oauth']]);
   const ops: string[] = [];
   const requests: Request[] = [];
-  const agent = new Agent((models) => {
-    models.registerNativeProvider(faux.provider);
-    models.checkAuth = (async () => ({ type: 'oauth' })) as never;
-    models.listCredentials = (async () => [...credentials].map(([providerId, type]) => ({ providerId, type }))) as never;
-    models.login = (async (id: string, type: Way, interaction: { prompt(p: { type: string; message: string }): Promise<string> }) => {
+  const agent = new Agent((providers) => {
+    providers.setProvider(faux.provider);
+    providers.credentials = {
+      // Whatever way it says it's connected, the faux provider is reached with a key.
+      read: async (id: string) => (credentials.has(id) ? { type: 'api_key', key: 'test' } : undefined),
+      list: async () => [...credentials].map(([providerId, type]) => ({ providerId, type })),
+      modify: async (id: string) => (credentials.has(id) ? { type: 'api_key', key: 'test' } : undefined),
+      delete: async (id: string) => void credentials.delete(id),
+    } as never;
+    providers.login = (async (id: string, type: Way, interaction: { prompt(p: { type: string; message: string }): Promise<string> }) => {
       if (type === 'api_key') await interaction.prompt({ type: 'secret', message: 'Enter key' });
       ops.push(`login ${id}`);
       credentials.set(id, type);
       return { type };
     }) as never;
-    models.logout = (async (id: string) => {
+    providers.logout = (async (id: string) => {
       ops.push(`logout ${id}`);
       credentials.delete(id);
     }) as never;
@@ -118,10 +129,17 @@ function setup(
     (message: ReturnType<typeof fauxAssistantMessage>) =>
     (context: { messages: unknown[] }, streamOptions: { reasoning?: string } | undefined, _state: unknown, model: { id: string }) => {
       const messages = context.messages as Message[];
-      const system = messages.filter((m) => m.role === 'system');
+      // The prompt arrives as named sections, and a later system message carries only what changed since.
+      const sections = new Map<string, string>();
+      const tools = new Set<string>();
+      for (const m of messages.filter((m) => m.role === 'system')) {
+        for (const [key, value] of Object.entries(m.sections ?? {})) value === null ? sections.delete(key) : sections.set(key, value);
+        for (const t of m.toolsRemoved ?? []) tools.delete(typeof t === 'string' ? t : t.name);
+        for (const t of m.toolsAdded ?? []) tools.add(t.name);
+      }
       requests.push({
-        system: system.map((m) => text(m.content)).join('\n---\n'),
-        tools: system.flatMap((m) => (m.toolsAdded ?? []).map((t) => t.name)),
+        system: [...sections.values()].join('\n---\n'),
+        tools: [...tools],
         roles: messages.map((m) => m.role + (m.stopReason === 'error' || m.stopReason === 'aborted' ? `:${m.stopReason}` : '')),
         lastUser: text(messages.filter((m) => m.role === 'user').at(-1)?.content ?? ''),
         history: JSON.stringify(messages.filter((m) => m.role !== 'system')),
@@ -204,6 +222,27 @@ describe('a turn', () => {
     expect(types().filter((t) => t.startsWith('tool_'))).toEqual(['tool_start', 'tool_end', 'tool_start', 'tool_end']);
     expect(events().find((e) => e.type === 'tool_start')).toMatchObject({ name: 'act', args: { n: 1 } });
     expect(events().at(-1)).toMatchObject({ type: 'turn_end', acted: true });
+  });
+
+  it('gives the model the tools a call opened up, from its next request in the same turn', async () => {
+    const { agent, requests, script } = setup();
+    const more: AgentToolDefinition = { ...TOOL, name: 'more' };
+    host.onToolCall = (raw) => {
+      const call = raw as AgentToolCall;
+      agent.onToolResult({ callId: call.callId, ok: true, content: 'opened', ...(call.name === 'act' ? { tools: [more] } : {}) });
+    };
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage([fauxToolCall('more', { n: 2 })]), fauxAssistantMessage('Done.'));
+    await agent.send('go', 'state', [TOOL]);
+    expect(requests.map((r) => r.tools)).toEqual([['act'], ['more'], ['more']]);
+    expect(events().filter((e) => e.type === 'tool_end').map((e) => [e.name, e.ok])).toEqual([['act', true], ['more', true]]);
+  });
+
+  it('passes on what the model says before it calls a tool, and after', async () => {
+    const { agent, script } = setup();
+    answerTools(agent);
+    script(fauxAssistantMessage([{ type: 'text', text: 'Looking. ' }, fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Found it.'));
+    await agent.send('go', 'state', [TOOL]);
+    expect(said()).toBe('Looking. Found it.');
   });
 
   it('does not count a failed tool as acting', async () => {
@@ -317,13 +356,47 @@ describe('forgetting a read ahead', () => {
     script(...readAhead(), fauxAssistantMessage('ok'), fauxAssistantMessage('THE SUMMARY'), fauxAssistantMessage('THE TURN SO FAR'));
     await agent.send('go', 'state', [TOOL]);
     await agent.send('next', 'state', [TOOL]);
-    const { session } = (agent as unknown as { conversation: { session: { compact(): Promise<unknown>; messages: unknown[] } } }).conversation;
-    expect(JSON.stringify(session.messages)).toContain('SECRET ROWS');
-    await session.compact();
+    const { root, harness } = (agent as unknown as { conversation: { root: DurableConversation; harness: Harness } }).conversation;
+    const all = await root.entries({ order: 'ascending' }, 100, undefined, BACKGROUND_CONTEXT);
+    expect(JSON.stringify(all.items)).toContain('SECRET ROWS');
+    await harness.waitForTask(await root.compact(undefined, BACKGROUND_CONTEXT), BACKGROUND_CONTEXT);
     const summarized = requests.slice(3).map((r) => r.history).join('');
     expect(summarized).toContain('Jumped to lap 30.');
     expect(summarized).not.toContain('SECRET ROWS');
     expect(summarized).not.toContain('12345');
+  });
+});
+
+describe('summarizing a turn that is still reading ahead', () => {
+  it('leaves what it read out of the summary, and lets the turn go on', async () => {
+    const { agent, requests, script } = setup({ settings: { compaction: { enabled: true, keepRecentTokens: 1 } } });
+    let held: AgentToolCall | null = null;
+    let reached!: () => void;
+    const second = new Promise<void>((resolve) => (reached = resolve));
+    host.onToolCall = (raw) => {
+      const call = raw as AgentToolCall;
+      if ((call.args as { n: number }).n === 1) return agent.onToolResult({ callId: call.callId, ok: true, content: 'SECRET ROWS', pastPlayhead: true });
+      held = call;
+      reached();
+    };
+    script(
+      fauxAssistantMessage([{ type: 'text', text: 'Looking it up.' }, fauxToolCall('act', { n: 1 })]),
+      fauxAssistantMessage([fauxToolCall('act', { n: 2 })]),
+      fauxAssistantMessage('THE SUMMARY'),
+      fauxAssistantMessage('Jumped to lap 30.'),
+    );
+    const turn = agent.send('go', 'state', [TOOL]);
+    await second;
+    const { root, harness } = (agent as unknown as { conversation: { root: DurableConversation; harness: Harness } }).conversation;
+    await harness.waitForTask(await root.compact(undefined, BACKGROUND_CONTEXT), BACKGROUND_CONTEXT);
+    const summarizing = requests[2];
+    expect(summarizing.history).toContain('Looking it up.');
+    expect(summarizing.history).toContain('<app_note>');
+    expect(summarizing.history).not.toContain('SECRET ROWS');
+    agent.onToolResult({ callId: held!.callId, ok: true, content: 'done' });
+    await turn;
+    expect(said()).toContain('Jumped to lap 30.');
+    expect(events().at(-1)).toMatchObject({ type: 'turn_end' });
   });
 });
 
@@ -793,7 +866,7 @@ describe('stored sessions', () => {
     readFileSync(path.join(dir(), file), 'utf8')
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line) as { type: string; id: string; message?: Message });
+      .map((line) => JSON.parse(line) as { type: string; id: string; customType?: string; message?: Message });
   const stored = (file: string) =>
     entries(file).flatMap((e) =>
       e.message && e.message.role !== 'system' ? [`${e.message.role}: ${text(e.message.content)}`] : [],
@@ -806,6 +879,7 @@ describe('stored sessions', () => {
     expect(files()).toHaveLength(1);
     expect(files()[0]).toMatch(/_f1a\.jsonl$/);
     expect(entries(files()[0])[0]).toMatchObject({ type: 'session', id: 'f1a' });
+    expect(entries(files()[0]).slice(1, 3).map((e) => e.type)).toEqual(['model_change', 'thinking_level_change']);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\nhi', 'assistant: Hello.']);
   });
 
@@ -856,6 +930,15 @@ describe('stored sessions', () => {
     await agent.cancel();
     await turn;
     expect(stored(files()[0])[0]).toContain('go');
+  });
+
+  it('records a cut-down turn, and keeps what the turn read', async () => {
+    const { agent, script } = setup();
+    host.onToolCall = (call) => agent.onToolResult({ callId: (call as AgentToolCall).callId, ok: true, content: 'SECRET ROWS', pastPlayhead: true });
+    script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Jumped to lap 30.'));
+    await agent.send('go', 'state', [TOOL]);
+    expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\ngo', 'assistant: ', 'toolResult: SECRET ROWS', 'assistant: Jumped to lap 30.']);
+    expect(entries(files()[0]).at(-1)).toMatchObject({ type: 'custom', customType: 'f1a.forget' });
   });
 
   it('writes nothing until there is a message', async () => {

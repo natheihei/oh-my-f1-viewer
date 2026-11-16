@@ -2,9 +2,16 @@
 // reach app modules. Shared by the scripts that need F1 TV or the agent.
 import path from 'node:path';
 import { createServer } from 'vite';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import os from 'node:os';
 import { _electron as electron } from 'playwright';
+import { MAIN_PROFILE, startIsolatedApp } from './isolated.mjs';
 
 export async function startApp(port = 5198) {
+  // Under Hyprland the window must open silently on workspace 3, which Playwright's own launch can't do:
+  // the same real profile, started the way scripts/isolated.mjs starts it.
+  if (process.env.HYPRLAND_INSTANCE_SIGNATURE) return startSilently();
   const server = await createServer({ server: { port, strictPort: true }, logLevel: 'error' });
   await server.listen();
   const { CHROME_DESKTOP: _ignored, ...env } = process.env;
@@ -54,4 +61,30 @@ export async function waitForPalette(page, pattern, timeoutMs) {
     await page.waitForTimeout(500);
   }
   throw new Error(`Timed out waiting for ${pattern}. Palette:\n${await paletteText(page)}`);
+}
+
+/** The real profile on an isolated launch. `app` stands in for Playwright's: it can only kill the app's process. */
+async function startSilently() {
+  const { page, stop } = await startIsolatedApp(mkdtempSync(path.join(os.tmpdir(), 'f1a-harness-')), { name: 'harness', scale: 1, mainProfile: true });
+  const pids = () => {
+    try {
+      return execFileSync('pgrep', ['-f', '--', `^\\S*electron\\S* .*--user-data-dir=${MAIN_PROFILE}( |$)`], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().split('\n').map(Number).filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+  const app = {
+    evaluate: () => Promise.reject(new Error("The main process can't be reached on this launch.")),
+    process: () => ({
+      kill: (signal) => {
+        for (const pid of pids()) {
+          try {
+            process.kill(pid, signal);
+          } catch {}
+        }
+      },
+    }),
+    close: stop,
+  };
+  return { app, page, stop };
 }
