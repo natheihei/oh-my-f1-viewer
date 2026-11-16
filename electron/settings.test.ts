@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,13 +28,41 @@ describe('the settings file', () => {
     expect(readdirSync(dir)).toEqual([]);
   });
 
-  it('starts empty from a file it cannot read, and replaces it at the first change', () => {
-    writeFileSync(file(), '{not json');
+  it('starts empty from a file it cannot parse, and moves it aside at the first change', () => {
+    writeFileSync(file(), '{ "agent": { "provider": "openai", }, }');
     const settings = new SettingsFile(file());
     expect(settings.get('agent')).toBeUndefined();
+    expect(readFileSync(file(), 'utf8')).toBe('{ "agent": { "provider": "openai", }, }');
+    settings.set('ui', { volume: 0.4 });
+    settings.flush();
+    expect(onDisk()).toEqual({ ui: { volume: 0.4 } });
+    expect(readFileSync(`${file()}.bad`, 'utf8')).toBe('{ "agent": { "provider": "openai", }, }');
+    expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining(`moved to ${file()}.bad`));
+    settings.set('ui', { volume: 0.5 });
+    settings.flush();
+    expect(readdirSync(dir).sort()).toEqual(['f1a-settings.json', 'f1a-settings.json.bad']);
+  });
+
+  it('moves aside a file that holds no object, without losing an earlier one', () => {
+    writeFileSync(`${file()}.bad`, 'earlier');
+    writeFileSync(file(), '[1, 2]');
+    const settings = new SettingsFile(file());
     settings.set('agent', { provider: 'openai' });
     settings.flush();
     expect(onDisk()).toEqual({ agent: { provider: 'openai' } });
+    expect(readFileSync(`${file()}.bad`, 'utf8')).toBe('earlier');
+    expect(readFileSync(`${file()}.bad.1`, 'utf8')).toBe('[1, 2]');
+  });
+
+  it('writes nothing over a file it cannot parse or move aside', () => {
+    writeFileSync(file(), '{not json');
+    const settings = new SettingsFile(file());
+    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    });
+    settings.set('agent', { provider: 'openai' });
+    settings.flush();
+    expect(readFileSync(file(), 'utf8')).toBe('{not json');
   });
 
   it('keeps changes, writing them together, and reads them back', async () => {
