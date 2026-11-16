@@ -168,11 +168,12 @@ What the agent keeps:
   when a provider is connected or a model chosen.
 - **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
   keystore (`credentials.ts`), in the shape pi-ai gives it.
-- `<userData>/pi-agent/sessions` holds one `.jsonl` per conversation, for reviewing what the agent did: its prompts, `app_state`, tool calls and
-  results, and token use (`transcript.ts`). The lines are the ones pi's own sessions had. It's a record only: the conversation
-  itself is in memory, in pi-durable's `MemoryStorage`, so a new conversation or a restart starts empty. The files hold whatever
-  the agent read, including race data, stay on this machine, and aren't pruned.
-- `<userData>/pi-agent/build-sessions` holds the same for build mode's own agent, one `.jsonl` per build. See [BUILD_MODE.md](BUILD_MODE.md).
+- **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_view.sqlite`, or `<time>_build.sqlite`
+  for build mode's agent ([BUILD_MODE.md](BUILD_MODE.md)): pi-durable's own storage, holding every entry as the model saw it, the
+  prompt and each change to it, `app_state`, tool calls and results, summaries, the edits that cut down a read-ahead turn, and token
+  use. It's for review, and so a crash loses nothing: it's never resumed, so a new conversation or a restart starts empty.
+  `node devscripts/conversation.mjs [view|build|<file>]` prints one. They hold whatever the agent read, including race data, stay on
+  this machine, and aren't pruned.
 - The build agent's file tools reach only the mods folder. Nothing in that folder is loaded as configuration or run in main.
 
 `src/agent/tools.ts` builds each tool from the host function it calls, with one `expose` entry. A tool with no arguments of its own takes the

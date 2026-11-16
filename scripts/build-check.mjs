@@ -8,6 +8,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import os from 'node:os';
 import path from 'node:path';
 import { startApp, typeInPalette } from './harness.mjs';
+import { newestConversationText } from './conversations.mjs';
 
 const outDir = process.argv[2];
 if (!outDir) throw new Error('Usage: node scripts/build-check.mjs <screenshot-dir> [sessionKey] [year] [lap]');
@@ -18,7 +19,6 @@ mkdirSync(outDir, { recursive: true });
 const profile = path.join(os.homedir(), '.config', 'f1a');
 const modsDir = path.join(profile, 'mods');
 const snapshotDir = path.join(profile, 'mods-snapshot');
-const sessionsDir = (kind) => path.join(profile, 'pi-agent', kind === 'build' ? 'build-sessions' : 'sessions');
 const LAP_FORM = readFileSync(path.resolve('examples/mods/lap_form/main.tsx'), 'utf8');
 
 const modFolders = () =>
@@ -28,10 +28,8 @@ const source = (name) => {
   const entry = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'].find((f) => existsSync(path.join(dir, f)));
   return entry ? readFileSync(path.join(dir, entry), 'utf8') : null;
 };
-const newest = (dir) => {
-  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort() : [];
-  return files.length ? readFileSync(path.join(dir, files.at(-1)), 'utf8') : '';
-};
+/** The newest stored conversation of a kind, as its entries' JSON. */
+const newest = (kind) => newestConversationText(path.join(profile, 'conversations'), kind);
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -357,7 +355,7 @@ async function partSave() {
 
   section('The picture');
   r = await say('give the buttons a 3px white border, and check how it looks');
-  const buildLog = newest(sessionsDir('build'));
+  const buildLog = newest('build');
   check('23 the build agent took a picture of the draft', r.names.includes('look_at') && buildLog.includes('"look_at"') && buildLog.includes('"image"'), r.names.join(' '));
   const borders = await tile(stepper)
     .locator('button')
@@ -395,7 +393,7 @@ async function partSave() {
   }
   section('Not drawing');
   const placesOf = async (type, where = 'tile') => (await live(() => window.host.health.settled())).filter((p) => p.type === type && p.where === where);
-  const heard = (text) => newest(sessionsDir('build')).includes(text);
+  const heard = (text) => newest('build').includes(text);
 
   // A mod about one driver, with nobody named: the save says its draft can't draw yet.
   r = await say("build a new mod called solo: one driver's last five lap times, as a list. It takes the driver as a required prop named driver. I haven't decided whose yet, so don't pick one");
@@ -440,7 +438,7 @@ export default defineComponent({
   await shot('build-09c-stopped.png');
   r = await say('is everything on screen drawing? fix what is not');
   // The note names a tile by its id, then its label.
-  check('26 the app state named the tile that stopped', /not drawing: Tile \S+ \\"Stopped\\" \(stopped\): render error/.test(newest(sessionsDir('build'))), r.names.join(' '));
+  check('26 the app state named the tile that stopped', /not drawing: Tile \S+ \\"Stopped\\" \(stopped\): render error/.test(newest('build')), r.names.join(' '));
   check('26 and the agent fixed its code', (r.names.includes('edit') || r.names.includes('write')) && (await placesOf('stopped'))[0]?.state === 'drawn', `${r.names.join(' ')} ${JSON.stringify((await placesOf('stopped'))[0])}`);
   await shot('build-09d-stopped-fixed.png');
 
@@ -476,12 +474,12 @@ export default defineComponent({
 
   section('Spoilers');
   r = await say('pause');
-  const viewLog = newest(sessionsDir('view'));
+  const viewLog = newest('view');
   const line = viewLog.match(/build mode: the user left it having saved this\. [^\\"]*/)?.[0] ?? '';
   console.log(`  ${line}`);
   check("20 the viewing agent's next request holds the app's one line", built.every((c) => line.includes(c.name)), line);
   check('20 and nothing else of the build', !/"toolName":"(write|edit)"|look_at|go back and forward laps|lap number bigger/.test(viewLog));
-  check('20 the build is stored apart', newest(sessionsDir('build')).includes('"toolName":"write"'));
+  check('20 the build is stored apart', newest('build').includes('"toolName":"write"'));
   spoilerSeen = 0;
   spoilerAnswer = 'no';
   const held = await where();
