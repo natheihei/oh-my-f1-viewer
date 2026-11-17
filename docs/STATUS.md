@@ -118,9 +118,26 @@ race" called `list_sessions` then `load_session` and opened the race in 8.3s, an
 into a line naming `/login-f1tv`. On a profile with both signed in it didn't show at start, and `/reset-onboarding` brought it back
 with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block.
 
-**The rename to oh-my-f1-viewer** (2026-11-16), in an isolated instance on an empty profile: the window is titled
-oh-my-f1-viewer, onboarding shows the logo's mark, the page has the favicon, and the renderer's API is `window.omfv`. The copy from
-`~/.config/f1a` is covered by unit tests on folders made for them (`electron/oldProfile.test.ts`).
+**The rename to oh-my-f1-viewer** (2026-11-16). The first start on the default profile copied the real `~/.config/f1a`:
+mods, conversations, settings, the 538 MB timing database, the caches and the DRM module. `scripts/login.mjs` then signed in to F1
+TV and the agent again under the new name; the agent kept the copied model and thinking. In isolated instances with those logins
+copied in:
+- `drm-check`: four DRM streams ready and within 0.039s, pause, seek, the clock without the main feed, and data lined up with lights
+  out. Its stream lookup used `channelId`, which streams no longer have, so it had printed no drift since components could show
+  video: it uses `feed` now.
+- `mods-check`, `seek-check` and `overflow-check` passed in full. `seek-check` failed "playback moved" once, when the model picked a
+  moment 3.8s ahead, and passed on the next run.
+- `picking-check`, three runs each, the same as on the commit before the rename: "2025 Mexico" asked which session every time, and
+  "2025 Mexico race" opened it every time.
+- `build-check` passed 115 of 116. Case 6 expects a new mod's title in the grey of any title, but build mode now marks that tile in
+  yellow with a black title.
+- `journey` fails 8 checks, the same 8 as on the commit before the rename: it predates battle tiles and the spoiler check. It now
+  asks for "2025 Mexico race", since the pick agent asks about a bare event.
+- `layout-check` and `suggestions-check` fail the same 3 and 4 checks as on the commit before the rename (edge and corner resizing,
+  closing a tile).
+- The build agent, driven through `window.omfv` without a session, called the app OMFV and wrote a mod importing `'omfv'` and
+  `'omfv/kit'`, which loaded over `omfv-mod:`. The production build, from `dist/` with its CSP, is titled oh-my-f1-viewer, loads
+  the favicon and imports a copied mod with nothing refused. Onboarding shows the logo's mark.
 
 Its second pass (2026-11-16), in isolated instances: the card held 390px through every step, opened or closed, on an empty
 profile, one signed in to F1 TV, and one with both; "Open a session" lit the palette with its example. With main's sign-in
@@ -205,8 +222,8 @@ Terra at medium, and a real turn replied on the new login.
 
 ## Not verified
 
-- **Copying the f1a profile.** It runs on the first start with the default profile, and hasn't yet on the real `~/.config/f1a`:
-  the mods it renames, a 538 MB timing database, and the conversations. The window icon hasn't been seen, since Hyprland shows none.
+- **The window icon.** Hyprland shows none, so it hasn't been seen.
+- **`journey` and `build-check` case 6** are out of date, as above.
 - **Fixing a sign-in from onboarding or a fix block.** Neither has completed an F1 TV or ChatGPT sign-in in the real app, F1 TV
   ending a sign-in hasn't been seen, and no turn has failed for a rejected connection or a usage limit, so sending the message again
   after the fix hasn't run.
