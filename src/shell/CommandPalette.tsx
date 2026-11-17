@@ -49,8 +49,12 @@ export function CommandPalette() {
   const [parts, setParts] = useState<PromptPart[]>([]);
   const value = promptText(parts, sayMention);
   const [picker, setPicker] = useState<Picker | null>(null);
-  /** The picker's row under the mouse, which outlines its tile in place of the selected row's. */
-  const [hovered, setHovered] = useState<number | null>(null);
+  /**
+   * The picker's row under the mouse, which outlines its tile in place of the selected row's, and the
+   * picker as it was when the mouse last moved onto it. Keys moving the selection after that make a new
+   * picker, and take over until the mouse moves again.
+   */
+  const [hover, setHover] = useState<{ row: number; picker: Picker } | null>(null);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<PromptInputHandle | null>(null);
   const historyRef = useRef<HTMLDivElement | null>(null);
@@ -78,11 +82,13 @@ export function CommandPalette() {
   const showing = open || blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
   const suggestions = matchCommands(value);
 
-  // The picker's row outlines its tile, if it's one: the row under the mouse, else the selected row.
+  // The picker's row outlines its tile, if it's one: the row the mouse last moved onto, unless keys have
+  // moved the selection since, else the selected row.
+  const hovered = picker && hover && hover.picker === picker ? hover.row : null;
   const pointed = picker ? picker.options[hovered ?? picker.selected] : null;
   useEffect(() => pointAt(pointed), [pointed?.kind, pointed?.id]);
   useEffect(() => () => pointAt(null), []);
-  useEffect(() => setHovered(null), [picker?.options]);
+  useEffect(() => setHover(null), [picker?.options]);
 
   useEffect(() => {
     if (showing && !hasTiles) inputRef.current?.focus();
@@ -336,7 +342,7 @@ export function CommandPalette() {
         <div
           className={`palette-suggestions palette-mentions ${picker.options.some((o) => o.kind !== 'driver') ? 'palette-mentions-wide' : ''}`}
           data-testid="mention-picker"
-          onMouseLeave={() => setHovered(null)}
+          onMouseLeave={() => setHover(null)}
         >
           {picker.options.map((option, i) => (
             <Fragment key={`${option.kind}:${option.id}`}>
@@ -346,10 +352,13 @@ export function CommandPalette() {
                 </div>
               ) : null}
               <div
-                className={`palette-suggestion palette-mention ${i === picker.selected ? 'palette-suggestion-active' : ''}`}
+                className={`palette-suggestion palette-mention ${i === picker.selected ? 'palette-suggestion-active' : ''} ${i === hovered ? 'palette-mention-hovered' : ''}`}
                 data-testid="mention-option"
                 ref={i === picker.selected ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
-                onMouseEnter={() => setHovered(i)}
+                // On a move, not on entering: a row scrolled under a still mouse by the keys isn't hovered.
+                onMouseMove={() => {
+                  if (hovered !== i) setHover({ row: i, picker });
+                }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   inputRef.current?.pick(i);
