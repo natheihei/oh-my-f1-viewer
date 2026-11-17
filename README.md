@@ -142,6 +142,11 @@ verified and what isn't.
 
 ## Credits and legal
 
-The F1 TV, DRM and timing code comes from [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer) (MIT), kept in
-`electron/vendor/f1ov` and `src/data/vendor`. Unofficial and not affiliated with Formula 1. It does not bypass anything:
-you sign in with your own subscription, and F1 TV enforces its own access and regional rules.
+OMFV is unofficial and not affiliated with, endorsed by or connected to Formula 1, F1 TV or the Formula One group of
+companies. F1, Formula 1 and F1 TV are their trademarks.
+
+An active F1 TV subscription is required. OMFV does not bypass anything: you sign in with your own account, and F1 TV
+enforces its own access and regional rules.
+
+Parts of the F1 TV sign-in, playback and replay code come from [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer)
+(MIT), kept in `electron/vendor/f1ov` and `src/data/vendor`.
