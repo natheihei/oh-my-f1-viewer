@@ -1,4 +1,4 @@
-// Checks the viewing agent's offer of build mode for something no chart does, in an f1a of its own (see
+// Checks the viewing agent's offer of build mode for something no chart does, in an OMFV of its own (see
 // isolated.mjs), over a real replay race, muted, and saves a screenshot at each step.
 //
 // By default there's no agent sign-in: it offers build mode as offer_build would, with no tiles, catches what
@@ -75,15 +75,15 @@ await page.evaluate(async (agent) => {
   window.events = [];
   const send = host.agent.send;
   if (agent) {
-    window.f1a.ai.onEvent((e) => window.events.push(e));
-    await window.f1a.ai.reset();
+    window.omfv.ai.onEvent((e) => window.events.push(e));
+    await window.omfv.ai.reset();
     host.agent.send = async (...a) => (window.__sent.push(a[0]), send(...a));
   } else {
     host.agent.status = async () => ({ ready: true });
     host.agent.send = async (text) => void window.__sent.push(text);
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
+if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
 
 /** Sends a message as the viewer, waits for the turn to end, and returns the tool calls and the reply. */
 async function say(text) {

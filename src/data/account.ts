@@ -22,32 +22,32 @@ export type Service = 'f1tv';
 export const account = {
   async status(): Promise<{ f1tv: F1TvStatus; agent: AiStatus }> {
     const [f1tv, agent] = await Promise.all([
-      window.f1a.f1tv.status().catch(() => ({ signedIn: false, ready: false })),
-      window.f1a.ai.status().catch(() => NOT_READY),
+      window.omfv.f1tv.status().catch(() => ({ signedIn: false, ready: false })),
+      window.omfv.ai.status().catch(() => NOT_READY),
     ]);
     return { f1tv, agent };
   },
   login: async (_service: Service): Promise<void> => {
-    await window.f1a.f1tv.login();
+    await window.omfv.f1tv.login();
   },
-  logout: (_service: Service): Promise<void> => window.f1a.f1tv.logout(),
-  onExpired: (cb: () => void): (() => void) => window.f1a.f1tv.onExpired(cb),
+  logout: (_service: Service): Promise<void> => window.omfv.f1tv.logout(),
+  onExpired: (cb: () => void): (() => void) => window.omfv.f1tv.onExpired(cb),
 };
 
 export const agentLink = {
-  status: (): Promise<AiStatus> => window.f1a.ai.status().catch(() => NOT_READY),
-  providers: (): Promise<AgentProviderOption[]> => window.f1a.ai.providers(),
-  connect: (provider: string, way: ConnectWay): Promise<AiStatus> => window.f1a.ai.connect(provider, way),
-  cancelConnect: (): Promise<void> => window.f1a.ai.cancelConnect(),
-  onConnect: (cb: (event: AgentConnectEvent) => void): (() => void) => window.f1a.ai.onConnect(cb),
-  disconnect: (): Promise<void> => window.f1a.ai.disconnect(),
-  choose: (model: string, thinking: ThinkingLevel): Promise<AiStatus> => window.f1a.ai.choose(model, thinking),
+  status: (): Promise<AiStatus> => window.omfv.ai.status().catch(() => NOT_READY),
+  providers: (): Promise<AgentProviderOption[]> => window.omfv.ai.providers(),
+  connect: (provider: string, way: ConnectWay): Promise<AiStatus> => window.omfv.ai.connect(provider, way),
+  cancelConnect: (): Promise<void> => window.omfv.ai.cancelConnect(),
+  onConnect: (cb: (event: AgentConnectEvent) => void): (() => void) => window.omfv.ai.onConnect(cb),
+  disconnect: (): Promise<void> => window.omfv.ai.disconnect(),
+  choose: (model: string, thinking: ThinkingLevel): Promise<AiStatus> => window.omfv.ai.choose(model, thinking),
   send: (text: string, context: string, tools: AgentToolDefinition[], reference: string, mode: AgentMode = 'view', scope: AgentScope = mode): Promise<void> =>
-    window.f1a.ai.send(text, context, tools, reference, mode, scope),
+    window.omfv.ai.send(text, context, tools, reference, mode, scope),
   /** Ends build mode's conversation. */
-  endBuild: (): Promise<void> => window.f1a.ai.endBuild(),
-  cancel: (): Promise<void> => window.f1a.ai.cancel(),
-  onEvent: (cb: (event: AgentEvent) => void): (() => void) => window.f1a.ai.onEvent(cb),
-  onToolCall: (cb: (call: AgentToolCall) => void): (() => void) => window.f1a.ai.onToolCall(cb),
-  toolResult: (result: AgentToolResult): void => window.f1a.ai.toolResult(result),
+  endBuild: (): Promise<void> => window.omfv.ai.endBuild(),
+  cancel: (): Promise<void> => window.omfv.ai.cancel(),
+  onEvent: (cb: (event: AgentEvent) => void): (() => void) => window.omfv.ai.onEvent(cb),
+  onToolCall: (cb: (call: AgentToolCall) => void): (() => void) => window.omfv.ai.onToolCall(cb),
+  toolResult: (result: AgentToolResult): void => window.omfv.ai.toolResult(result),
 };

@@ -27,7 +27,7 @@ function page(title: string, message: string): string {
   button[type=button] { color: #8a8a8a; }
 </style></head>
 <body><form id="form">
-  <label for="key">${escapeHtml(message)} f1a stores it on this computer.</label>
+  <label for="key">${escapeHtml(message)} OMFV stores it on this computer.</label>
   <input id="key" type="password" autocomplete="off" spellcheck="false" autofocus>
   <div class="actions"><button type="button" id="cancel">Cancel</button><button type="submit">Save</button></div>
 </form>

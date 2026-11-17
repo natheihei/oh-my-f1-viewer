@@ -6,7 +6,7 @@ const { agent, useAgentTurn } = await import('./agentTurn');
 let turns: (() => void)[];
 beforeEach(() => {
   turns = [];
-  vi.stubGlobal('window', { f1a: { ai: { send: () => new Promise<void>((resolve) => turns.push(resolve)) } } });
+  vi.stubGlobal('window', { omfv: { ai: { send: () => new Promise<void>((resolve) => turns.push(resolve)) } } });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -39,7 +39,7 @@ describe('whether the agent is busy', () => {
   });
 
   it('is not, once a send fails', async () => {
-    vi.stubGlobal('window', { f1a: { ai: { send: () => Promise.reject(new Error('no agent')) } } });
+    vi.stubGlobal('window', { omfv: { ai: { send: () => Promise.reject(new Error('no agent')) } } });
     await expect(send()).rejects.toThrow('no agent');
     expect(busy()).toBe(false);
   });

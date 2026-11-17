@@ -461,7 +461,7 @@ function toggleMute(): void {
  */
 export async function openSession(session: SessionInfo, options: { fromStart?: boolean } = {}): Promise<Channel[]> {
   closeSession();
-  const channels = await window.f1a.f1tv.channels(session.contentId);
+  const channels = await window.omfv.f1tv.channels(session.contentId);
   useSession.setState({ ...INITIAL, session: { ...session }, channels });
   runtime = new SessionRuntime(session, options.fromStart ?? false);
   return channels;

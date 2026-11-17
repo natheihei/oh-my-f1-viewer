@@ -1,7 +1,7 @@
 /** Mods: plugins that live in a folder and reload on save. For now each defines one tile component. See docs/MODS.md. */
 
 /** The modules a mod may import, which it shares with the app. */
-export const SHARED_MODULES = ['f1a', 'f1a/kit', 'react', 'react/jsx-runtime', 'typebox'] as const;
+export const SHARED_MODULES = ['omfv', 'omfv/kit', 'react', 'react/jsx-runtime', 'typebox'] as const;
 export type SharedModule = (typeof SHARED_MODULES)[number];
 
 export interface ModStatus {

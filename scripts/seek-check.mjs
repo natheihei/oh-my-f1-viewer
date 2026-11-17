@@ -3,11 +3,11 @@
 // give away the race: use a session you've watched. It answers the spoiler check itself: Don't allow first,
 // to check that a refusal leaves the video where it was, then Allow once.
 // Usage: node scripts/seek-check.mjs [lap]
-//   F1A_YEAR and F1A_EVENT pick the race (2025, mexic).
+//   OMFV_YEAR and OMFV_EVENT pick the race (2025, mexic).
 import { startApp, typeInPalette } from './harness.mjs';
 
-const YEAR = Number(process.env.F1A_YEAR ?? 2025);
-const EVENT = process.env.F1A_EVENT ?? 'mexic';
+const YEAR = Number(process.env.OMFV_YEAR ?? 2025);
+const EVENT = process.env.OMFV_EVENT ?? 'mexic';
 const LAP = Number(process.argv[2] ?? 30);
 
 const { page, stop } = await startApp(5191);
@@ -32,7 +32,7 @@ const opened = await page.evaluate(
     const re = new RegExp(EVENT, 'i');
     const { host, read } = await import('/src/host/index.ts');
     window.events = [];
-    window.f1a.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
+    window.omfv.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
     Object.assign(window, { host, read });
     const events = await host.catalog.events({ year: YEAR });
     const event = events.find((e) => re.test(e.name) || re.test(e.shortName));

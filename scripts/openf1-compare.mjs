@@ -13,7 +13,7 @@ const { TimingStore } = require('../dist-electron/electron/timingdb/store.js');
 const { ingestTiming } = require('../dist-electron/electron/timingdb/ingest.js');
 const { TIMING_FEEDS } = require('../dist-electron/electron/timingdb/processors.js');
 
-const CACHE = path.join(os.homedir(), '.config/f1a/livetiming-cache');
+const CACHE = path.join(os.homedir(), '.config/oh-my-f1-viewer/livetiming-cache');
 const API = 'https://api.openf1.org/v1';
 const STATIC = 'https://livetiming.formula1.com/static';
 const ALL_VISIBLE = Number.MAX_SAFE_INTEGER;
@@ -49,7 +49,7 @@ function cachedSessions() {
 
 async function api(endpoint, sessionKey) {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const res = await fetch(`${API}/${endpoint}?session_key=${sessionKey}`, { headers: { 'User-Agent': 'f1a-compare' } });
+    const res = await fetch(`${API}/${endpoint}?session_key=${sessionKey}`, { headers: { 'User-Agent': 'omfv-compare' } });
     await new Promise((r) => setTimeout(r, 700));
     if (res.status === 404) return [];
     if (res.status === 429) {
@@ -91,7 +91,7 @@ if (!only.length) sessions = sessions.filter((s, i) => i % 3 === 0).slice(0, 6);
 console.log(`Comparing ${sessions.length} cached sessions with OpenF1\n`);
 
 for (const session of sessions) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-compare-'));
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'omfv-compare-'));
   const store = new TimingStore(path.join(dir, 'c.sqlite'));
   try {
     const files = {};

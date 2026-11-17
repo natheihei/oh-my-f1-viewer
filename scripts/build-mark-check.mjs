@@ -2,7 +2,7 @@
 // tile is framed with its header lit, as a tile pointed at with @ is but in build mode's yellow, and doesn't dim
 // the others; pointing at another tile lights that one white and still dims the edited one; pointing at the
 // edited tile itself turns it white. The mod is edited on disk by hand, since the marks follow the folder.
-// Runs an isolated f1a (scripts/isolated.mjs). Saves a screenshot at each step.
+// Runs an isolated OMFV (scripts/isolated.mjs). Saves a screenshot at each step.
 // Usage: node scripts/build-mark-check.mjs <screenshot-dir> [--keep]
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

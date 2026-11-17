@@ -36,7 +36,7 @@ const settle = () => vi.advanceTimersByTime(1);
 
 beforeEach(async () => {
   vi.useFakeTimers();
-  (globalThis as { window?: unknown }).window = { f1a: { f1tv: { channels: async () => channels } } };
+  (globalThis as { window?: unknown }).window = { omfv: { f1tv: { channels: async () => channels } } };
   await openSession(session);
 });
 

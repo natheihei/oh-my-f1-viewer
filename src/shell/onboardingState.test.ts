@@ -78,7 +78,7 @@ describe('onboarding', () => {
 });
 
 describe('errorText', () => {
-  it("names f1a's own command where F1 TV's code names a button f1a doesn't have", () => {
+  it("names OMFV's own command where F1 TV's code names a button OMFV doesn't have", () => {
     const e = new Error(`Error invoking remote method 'f1tv:play': Error: Session expired or invalid. Please sign in again (e.g. "Sign in with browser") and retry.`);
     expect(errorText(e)).toBe('Session expired or invalid. Sign in again with /login-f1tv.');
   });

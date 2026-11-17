@@ -5,6 +5,7 @@ import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
 import { appSettings } from './settings';
 import { MOD_SCHEME, Mods } from './mods';
+import { copyOldProfile, OLD_NAME } from './oldProfile';
 import { createMainWindow, getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 
 // Vendored F1OpenViewer modules are plain CommonJS.
@@ -46,7 +47,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: MOD_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
-const cacheRoot = path.join(os.tmpdir(), 'f1a-cache');
+const cacheRoot = path.join(os.tmpdir(), 'omfv-cache');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(cacheRoot, String(process.pid)));
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
@@ -78,6 +79,15 @@ if (!gotLock) {
     if (win.isMinimized()) win.restore();
     win.focus();
   });
+  // The default profile only: one given with --user-data-dir is someone's own.
+  if (app.getPath('userData') === path.join(app.getPath('appData'), app.getName())) {
+    try {
+      const copied = copyOldProfile(app.getPath('appData'), app.getPath('userData'));
+      if (copied.length) console.log(`[main] copied from the ${OLD_NAME} profile: ${copied.join(', ')}`);
+    } catch (e) {
+      console.warn(`[main] copying the ${OLD_NAME} profile:`, (e as Error).message);
+    }
+  }
 }
 
 app

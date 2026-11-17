@@ -1,4 +1,4 @@
-// Exercises the real grid surface in an f1a of its own (see isolated.mjs), without needing any sign-in:
+// Exercises the real grid surface in an OMFV of its own (see isolated.mjs), without needing any sign-in:
 // rects line up with the layout, hosts survive re-tiling, mouse edits reach the layout by tile id, and only
 // title bars take the mouse.
 // Usage: node scripts/layout-check.mjs [screenshot-dir]
@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startIsolatedApp } from './isolated.mjs';
 
-const outDir = path.resolve(process.argv[2] ?? mkdtempSync(path.join(tmpdir(), 'f1a-layout-')));
+const outDir = path.resolve(process.argv[2] ?? mkdtempSync(path.join(tmpdir(), 'omfv-layout-')));
 mkdirSync(outDir, { recursive: true });
 const { page, stop } = await startIsolatedApp(outDir, { name: 'layout', scale: 1 });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));

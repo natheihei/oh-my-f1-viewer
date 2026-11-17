@@ -1,7 +1,7 @@
 // Build mode case 27, in the real app with the real agent over a real replay race, muted: asked for a mod with
 // two onboards picked in the tile, the build agent writes one that holds its videos with useStream, names what
 // it shows in the title bar with useTileHeader and streamSlots, and keeps the pick with useTileState, and its
-// tile plays both. Then Undo all leaves the mods folder as it was. Runs in an f1a of its own with the agent's
+// tile plays both. Then Undo all leaves the mods folder as it was. Runs in an OMFV of its own with the agent's
 // login copied in (see isolated.mjs). Prints what the agent says, which could give the race away.
 // Usage: node scripts/build-video-check.mjs <screenshot-dir> [lap] [session key]
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -45,7 +45,7 @@ try {
   await page.evaluate(async () => {
     const { host, read } = await import('/src/host/index.ts');
     window.events = [];
-    window.f1a.ai.onEvent((e) => window.events.push(e));
+    window.omfv.ai.onEvent((e) => window.events.push(e));
     Object.assign(window, { host, read });
   });
   const race = await openRace(page, { sessionKey: SESSION });

@@ -25,15 +25,15 @@ const F1_LOGIN_URL = 'https://account.formula1.com/';
 const FORMULA1_URLS = ['https://formula1.com', 'https://account.formula1.com', 'https://f1tv.formula1.com'];
 
 function getSessionFilePath() {
-  return path.join(app.getPath('userData'), 'f1a-session.json');
+  return path.join(app.getPath('userData'), 'omfv-session.json');
 }
 
 function getCookiesFilePath() {
-  return path.join(app.getPath('userData'), 'f1a-cookies.json');
+  return path.join(app.getPath('userData'), 'omfv-cookies.json');
 }
 
 function getSettingsFilePath() {
-  return path.join(app.getPath('userData'), 'f1a-settings.json');
+  return path.join(app.getPath('userData'), 'omfv-settings.json');
 }
 
 // Renderer settings worth surviving a manual reinstall to a new folder. localStorage is scoped to

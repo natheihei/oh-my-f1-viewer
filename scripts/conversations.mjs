@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-export const MAIN_CONVERSATIONS = path.join(os.homedir(), '.config', 'f1a', 'conversations');
+export const MAIN_CONVERSATIONS = path.join(os.homedir(), '.config', 'oh-my-f1-viewer', 'conversations');
 
 /** The stored conversations of a kind ('pick', 'view' or 'build', or every kind when omitted), oldest first, as full paths. */
 export function conversationFiles(dir = MAIN_CONVERSATIONS, kind) {

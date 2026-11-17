@@ -1,4 +1,4 @@
-// Walks through charts' props in an f1a of its own (see isolated.mjs) over a real replay race, muted, and
+// Walks through charts' props in an OMFV of its own (see isolated.mjs) over a real replay race, muted, and
 // saves a screenshot of the window at each step: a chart suggested with its drivers filled in, a one-driver
 // chart asked about rather than picked, the same chart on screen for two drivers, and the props of charts on
 // screen changed in place. It checks what landed.
@@ -60,11 +60,11 @@ await page.evaluate(async (agent) => {
   Object.assign(window, { host, read, tilesOf, runTool, describeAppState });
   window.events = [];
   if (agent) {
-    window.f1a.ai.onEvent((e) => window.events.push(e));
-    await window.f1a.ai.reset();
+    window.omfv.ai.onEvent((e) => window.events.push(e));
+    await window.omfv.ai.reset();
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) await fail('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
+if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
 
 let step = 0;
 const shot = async (name) => {

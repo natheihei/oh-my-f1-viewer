@@ -1,5 +1,5 @@
-// Runs an f1a of its own for checks and screenshots, apart from any other f1a on the machine: a fresh
-// user data dir with copies of what it needs from ~/.config/f1a (see prepareProfile), its own Vite and
+// Runs an OMFV of its own for checks and screenshots, apart from any other OMFV on the machine: a fresh
+// user data dir with copies of what it needs from ~/.config/oh-my-f1-viewer (see prepareProfile), its own Vite and
 // devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
 // the devtools protocol, since Playwright's own Electron launch would spawn the window where it pleases.
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
@@ -34,10 +34,10 @@ const until = async (what, ok, ms = 60_000) => {
   throw new Error(what);
 };
 
-/** The main profile, ~/.config/f1a. */
-export const MAIN_PROFILE = path.join(os.homedir(), '.config', 'f1a');
+/** The main profile, ~/.config/oh-my-f1-viewer. */
+export const MAIN_PROFILE = path.join(os.homedir(), '.config', 'oh-my-f1-viewer');
 
-/** Whether an f1a is running on a user data dir: its single-instance lock names a live process. */
+/** Whether an OMFV is running on a user data dir: its single-instance lock names a live process. */
 export function profileInUse(dir) {
   try {
     const pid = Number(readlinkSync(path.join(dir, 'SingletonLock')).split('-').at(-1));
@@ -48,22 +48,22 @@ export function profileInUse(dir) {
   }
 }
 
-const CREDENTIALS = 'f1a-credentials.json';
-const SETTINGS = 'f1a-settings.json';
+const CREDENTIALS = 'omfv-credentials.json';
+const SETTINGS = 'omfv-settings.json';
 /** The agent's login as each prepared profile got it, to tell whether a run refreshed it. */
 const copiedLogins = new Map();
 
 const readOrNull = (file) => (existsSync(file) ? readFileSync(file) : null);
 
 /**
- * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from ~/.config/f1a, and with
+ * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from ~/.config/oh-my-f1-viewer, and with
  * `agent`, of the agent's login and its settings too (not the rest of the settings: the run's volume and
  * background start from the defaults). The originals are never moved. The agent's login is written back after
  * the run if it was refreshed: see syncAgentLogin. Returns `dir`.
  */
 export function prepareProfile(dir, { agent = false } = {}) {
   mkdirSync(dir, { recursive: true });
-  for (const file of ['f1a-session.json', 'f1a-cookies.json']) {
+  for (const file of ['omfv-session.json', 'omfv-cookies.json']) {
     if (existsSync(path.join(MAIN_PROFILE, file))) copyFileSync(path.join(MAIN_PROFILE, file), path.join(dir, file));
   }
   // The DRM module, so the fresh dir doesn't fetch it again before the video can play.
@@ -86,8 +86,8 @@ export function prepareProfile(dir, { agent = false } = {}) {
 
 /**
  * A sign-in like ChatGPT's refreshes its token when it expires, and the refresh token can change with it, which
- * leaves the one in ~/.config/f1a no longer valid. So once a run's app has quit, a login it refreshed is
- * written back there, unless something changed that one meanwhile, such as an f1a running on it.
+ * leaves the one in ~/.config/oh-my-f1-viewer no longer valid. So once a run's app has quit, a login it refreshed is
+ * written back there, unless something changed that one meanwhile, such as an OMFV running on it.
  */
 export function syncAgentLogin(dir, log = console.log) {
   const copied = copiedLogins.get(dir);
@@ -119,7 +119,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   const log = (...a) => console.log(`[${name}]`, ...a);
   // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
   const userData = given ?? prepareProfile(mkdtempSync(path.join(outDir, 'user-data-')), { agent });
-  if (profileInUse(userData)) throw new Error(`Another f1a is using ${userData}.`);
+  if (profileInUse(userData)) throw new Error(`Another OMFV is using ${userData}.`);
 
   const vitePort = await freePort();
   const cdpPort = await freePort();
@@ -245,10 +245,10 @@ export async function openRace(page, { sessionKey = null, year = 2026, telemetry
   const opened = await page.evaluate(
     async ({ sessionKey, year }) => {
       const { host, read } = await import('/src/host/index.ts');
-      if (!(await host.account.status()).f1tv.signedIn) return { error: 'F1 TV is not signed in in ~/.config/f1a: sign in in the app, then run this again.' };
+      if (!(await host.account.status()).f1tv.signedIn) return { error: 'F1 TV is not signed in in ~/.config/oh-my-f1-viewer: sign in in the app, then run this again.' };
       host.audio.setVolume({ volume: 0 });
       let start = null;
-      window.f1a.data.onStatus((status) => {
+      window.omfv.data.onStatus((status) => {
         if (status.sessionStartSec != null) start = status.sessionStartSec;
       });
       const events = (await host.catalog.events({ year })).filter((e) => e.endMs < Date.now() && !e.isTest).reverse();
