@@ -190,7 +190,7 @@ misfired. Teams and tiles came 2026-11-16.)
 - Keys: ↑ ↓ move, wrapping at the ends and skipping the headings; Enter or Tab picks, and never sends. Esc closes the picker and leaves
   the text, which stays text until the `@` is edited again. Prose after an `@` that matches nothing closes it too. Backspace just after
   a tag turns it back into the `@` text that found it, with the picker open. ← → step over a tag as one piece.
-- Pointing at a tile puts it in the spotlight: its row selected in the picker, by keys or under the mouse, or its tag under the mouse in
+- Pointing at a tile puts it in the spotlight: its row selected in the picker, by keys or under the mouse (the latest wins: keys take over from a still mouse until it moves again), or its tag under the mouse in
   the prompt or the history. Every other tile dims, and this one gets a 2px ink frame round it, title bar included, with its title bar lit:
   ink, with black text. It goes through `host.layout.point`, and a suggestion in the strip that duplicates a tile wins over it, with the
   same spotlight. (2026-11-16. A 1px outline round the tile's content came first. It was too faint on a dark chart or a stream still
