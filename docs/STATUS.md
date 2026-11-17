@@ -118,6 +118,11 @@ race" called `list_sessions` then `load_session` and opened the race in 8.3s, an
 into a line naming `/login-f1tv`. On a profile with both signed in it didn't show at start, and `/reset-onboarding` brought it back
 with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block.
 
+Its second pass (2026-11-16), in isolated instances: the card held 390px through every step, opened or closed, on an empty
+profile, one signed in to F1 TV, and one with both; "Open a session" lit the palette with its example. With main's sign-in
+handlers swapped for ones that never finish, F1 TV's step kept a disabled "Waiting for F1 TV…" button, and a device code
+showed set apart with Copy code and Cancel. Copy wasn't pressed, and a step finishing by itself to hand on wasn't seen.
+
 ## Verified for build mode
 
 On Linux, in the real app with the real agent, over the 2026 United States race, with `scripts/build-check.mjs` (2026-11-11). It runs
