@@ -38,3 +38,9 @@ export interface BuildState {
   active: boolean;
   changes: BuildChange[];
 }
+
+/**
+ * The renderer's answer when the build agent asks for a picture of a component: the PNG, null when it's on
+ * neither the grid nor the strip, or why it couldn't be taken.
+ */
+export type PictureResult = { png: Uint8Array | null } | { error: string };

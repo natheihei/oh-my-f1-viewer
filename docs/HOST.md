@@ -293,6 +293,9 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   the app's own components.
 - `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`
   calls it once.
+- `startPictures()`: answers the main process when it asks for a picture of a component, for the build agent's `look_at`. It takes
+  it with Element Capture, restricted to the tile or draft, so nothing drawn over it is in it (`src/host/picture.ts`). `src/main.tsx`
+  calls it once.
 
 ## Primitives
 

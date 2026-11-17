@@ -52,6 +52,7 @@ export {
   type DriverStyle,
   type Part,
 } from './drivers';
+export { startPictures } from './picture';
 export { startHealth, type Attachment, type ErrorReport, type PlaceHealth } from './health';
 export { startMods } from './mods';
 export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
