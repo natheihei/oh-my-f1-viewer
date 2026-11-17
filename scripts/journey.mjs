@@ -88,8 +88,8 @@ let s = await state();
 check('clarifies instead of acting', s.session == null && !r.tools.includes('load_session') && r.reply.includes('?'), r.reply.slice(0, 120));
 check('palette stays open while asking', await paletteVisible());
 
-// A finished weekend is clear.
-r = await say('2025 Mexico');
+// Naming the session is clear. A bare event could mean any of its sessions, so the pick agent asks.
+r = await say('2025 Mexico race');
 s = await state();
 check('loads the session', r.tools.includes('load_session') && /2025.*Mexico/i.test(s.session ?? ''), s.session ?? 'none');
 check('starts with just the main broadcast', s.tiles.length === 1, JSON.stringify(s.tiles));
