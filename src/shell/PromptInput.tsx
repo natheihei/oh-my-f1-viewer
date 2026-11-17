@@ -22,6 +22,8 @@ export interface PromptInputHandle {
   setText(text: string): void;
   /** Puts the picker's row in place of the `@` being typed. */
   pick(index: number): void;
+  /** Selects the picker's row, as the arrow keys do. */
+  select(index: number): void;
 }
 
 export interface Picker {
@@ -210,6 +212,10 @@ export const PromptInput = forwardRef<PromptInputHandle, Props>(function PromptI
         changed();
       },
       pick,
+      select(index) {
+        const open = picker.current;
+        if (open && open.selected !== index && index >= 0 && index < open.options.length) setPicker({ ...open, selected: index });
+      },
     }),
     [],
   );
