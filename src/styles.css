@@ -1694,18 +1694,21 @@
 }
 
 /*
- * Onboarding, over the empty screen above the palette (z-20, under the palette's z-30). An accordion of steps on
- * the left, the open one's picture on the right. Black like a tile, so it stands off the ground.
+ * Onboarding, over the empty screen above the palette (z-20, under the palette's z-30), centred in the space
+ * above it. Numbered steps as an accordion on the left, the open one's picture on the right. Both columns have
+ * one least height, the tallest step's, so the card keeps its size as the steps open. Black like a tile, so it
+ * stands off the ground.
  */
 .onboarding {
   @apply absolute z-20 grid bg-black;
-  top: max(24px, 7vh);
+  --onboarding-body: 304px;
+  top: calc(50% - 28px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   width: min(940px, calc(100% - 32px));
-  max-height: calc(100% - 140px);
+  max-height: calc(100% - 96px);
   overflow-y: auto;
-  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
   gap: 16px 28px;
   padding: 18px 24px 22px 20px;
   border: 1px solid var(--color-line);
@@ -1720,22 +1723,8 @@
   line-height: 28px;
 }
 
-.onboarding-progress {
-  @apply flex items-center gap-1;
-  flex: 0 0 160px;
-}
-
-.onboarding-progress i {
-  @apply flex-1 bg-line;
-  height: 3px;
-}
-
-.onboarding-progress i.onboarding-progress-done {
-  @apply bg-ink;
-}
-
-.onboarding-progress span {
-  @apply ml-2 text-dim tabular-nums;
+.onboarding-sub {
+  @apply text-mute;
   font-size: var(--text-s);
 }
 
@@ -1746,6 +1735,7 @@
 
 .onboarding-steps {
   @apply grid content-start border-t border-line;
+  min-height: var(--onboarding-body);
 }
 
 .onboarding-step {
@@ -1757,8 +1747,8 @@
 }
 
 .onboarding-step-head {
-  @apply grid w-full cursor-pointer items-center gap-2 text-left hover:bg-select;
-  grid-template-columns: 2ch minmax(0, 1fr) auto;
+  @apply grid w-full cursor-pointer items-center gap-2.5 text-left hover:bg-select;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   padding: 8px 10px;
 }
 
@@ -1771,26 +1761,36 @@
   font-size: var(--text-s);
 }
 
+/* The step's number, or ✓ once done and ! when it needs attention. */
 .onboarding-mark {
-  width: 8px;
-  height: 8px;
+  @apply grid place-items-center text-dim;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-rule);
+  font-size: var(--text-s);
+  font-weight: 700;
+  line-height: 1;
 }
 
-.onboarding-mark-todo {
-  border: 1px solid var(--color-dim);
+.onboarding-step-open .onboarding-mark-todo {
+  @apply border-ink text-ink;
 }
 
 .onboarding-mark-busy {
-  border: 1px solid var(--color-ink);
+  @apply border-ink text-ink;
   animation: palette-pulse 1s steps(2) infinite;
 }
 
 .onboarding-mark-done {
-  @apply bg-ink;
+  @apply border-ink bg-ink text-black;
 }
 
 .onboarding-mark-error {
-  @apply bg-accent;
+  @apply border-accent bg-accent text-black;
+}
+
+.onboarding-step .onboarding-mark-locked {
+  @apply border-line text-faint;
 }
 
 .onboarding-dim {
@@ -1798,8 +1798,8 @@
 }
 
 .onboarding-step-body {
-  @apply grid gap-2.5;
-  padding: 0 10px 12px calc(2ch + 18px);
+  @apply grid gap-3;
+  padding: 0 12px 16px 40px;
 }
 
 .onboarding-step-body p {
@@ -1814,33 +1814,51 @@
   @apply text-accent;
 }
 
+/* A device code to type in on the provider's page. */
+.onboarding-code {
+  @apply justify-self-start border border-dashed border-rule text-ink;
+  padding: 4px 12px;
+  font-size: var(--text-l);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  user-select: all;
+}
+
 .onboarding-actions {
-  @apply flex flex-wrap items-center gap-2.5;
+  @apply flex flex-wrap items-center gap-2;
 }
 
 .onboarding-action {
-  @apply cursor-pointer border border-rule bg-transparent px-1.5 text-ink hover:border-ink;
-  line-height: 18px;
+  @apply cursor-pointer border border-rule bg-transparent text-ink hover:border-ink;
+  padding: 3px 10px;
+  line-height: 20px;
 }
 
 .onboarding-action-main {
-  @apply border-ink bg-ink text-black hover:bg-white;
+  @apply border-ink bg-ink font-medium text-black hover:bg-white;
+}
+
+.onboarding-action:disabled {
+  @apply cursor-default border-line bg-transparent font-normal text-dim hover:border-line;
 }
 
 .onboarding-command {
   @apply text-mute;
+  font-size: var(--text-s);
 }
 
 .onboarding-command kbd {
-  @apply border border-line px-1 font-mono;
+  @apply border border-line px-1 font-mono text-dim;
 }
 
 .onboarding-media {
   @apply min-w-0;
+  min-height: var(--onboarding-body);
 }
 
 .onboarding-preview {
-  @apply grid gap-1.5 border border-line bg-ground p-2 text-dim;
+  @apply grid h-full gap-2 border border-line bg-ground p-2 text-mute;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   font-size: var(--text-s);
   line-height: 16px;
 }
@@ -1852,10 +1870,9 @@
 }
 
 .onboarding-preview-tiles {
-  @apply grid gap-1;
+  @apply grid min-h-0 gap-1;
   grid-template-columns: 2fr 1fr;
   grid-template-rows: 1fr 1fr;
-  height: 200px;
 }
 
 .onboarding-preview-tile {
@@ -1867,7 +1884,7 @@
 }
 
 .onboarding-preview-bar {
-  @apply bg-raised px-1.5 text-dim uppercase;
+  @apply shrink-0 bg-raised px-1.5 text-dim uppercase;
   height: 14px;
   font-size: 9px;
   line-height: 14px;
@@ -1879,19 +1896,93 @@
   background: radial-gradient(120% 90% at 30% 40%, #1c2622 0%, #0b0e0d 55%, #000 100%);
 }
 
+/* A tower's rows as bars, with no names or times in them. */
 .onboarding-preview-tower {
-  @apply grid content-start text-faint;
-  padding: 3px 5px;
+  @apply grid content-start gap-[3px] text-mute;
+  padding: 5px 6px;
   font-size: 9px;
-  line-height: 13px;
+  line-height: 9px;
+}
+
+.onboarding-preview-tower div {
+  @apply grid items-center gap-[5px];
+  grid-template-columns: 10px minmax(0, 1fr) 26px;
+}
+
+.onboarding-preview-tower i {
+  @apply block bg-faint;
+  height: 5px;
+}
+
+.onboarding-preview-tower i.onboarding-preview-gap {
+  @apply bg-line;
+}
+
+.onboarding-preview-chart {
+  @apply min-h-0 w-full flex-1;
+}
+
+.onboarding-preview-chart line {
+  stroke: var(--color-line);
+}
+
+.onboarding-preview-chart polyline {
+  fill: none;
+  stroke: var(--color-dim);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
 }
 
 .onboarding-preview-chat {
-  @apply border border-rule bg-panel py-1;
+  @apply self-start border border-rule bg-panel py-1;
 }
 
-.onboarding-preview-examples {
-  @apply flex flex-wrap gap-1.5;
+.onboarding-preview-build {
+  box-shadow: inset 2px 0 0 var(--color-medium);
+}
+
+.onboarding-preview-build b {
+  @apply font-normal text-medium;
+}
+
+/* The last step: a session named in the palette, and below it the tiles it opens. */
+.onboarding-preview-flow {
+  @apply grid min-h-0 gap-1;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.onboarding-preview-sent {
+  @apply justify-self-start border border-ink bg-raised text-ink;
+  padding: 4px 8px;
+}
+
+.onboarding-preview-arrow {
+  @apply text-mute;
+  padding-left: 9px;
+  line-height: 12px;
+}
+
+/* The palette while onboarding's last step is open: that step is done here. */
+.palette-pointing {
+  border-color: var(--color-ink);
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 4px rgb(231 231 231 / 0.08);
+}
+
+.palette-pointing::after {
+  @apply absolute whitespace-nowrap text-ink;
+  content: '← type here';
+  left: calc(100% + 12px);
+  bottom: 6px;
+  font-size: var(--text-s);
+  pointer-events: none;
+}
+
+@media (max-width: 1000px) {
+  .palette-pointing::after {
+    content: none;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1900,6 +1991,9 @@
   }
   .onboarding-head {
     @apply col-span-1 flex-wrap;
+  }
+  .onboarding-steps {
+    min-height: 0;
   }
   .onboarding-media {
     @apply hidden;
