@@ -58,7 +58,7 @@ const sample = () =>
       audio: state.channels.find((c) => c.id === state.streams[state.audioVideoId]?.feed)?.label ?? null,
       streams: Object.values(state.streams).map((s) => {
         const channel = state.channels.find((c) => c.id === s.feed);
-        const v = videos.find((x) => x.dataset.channel === s.channelId);
+        const v = videos.find((x) => x.dataset.channel === s.feed);
         const q = v?.getVideoPlaybackQuality();
         return {
           label: channel?.label,
