@@ -193,7 +193,7 @@ Any component can show feeds: `video` is just the one that shows one feed and no
 
 ## Charts
 
-Components drawn on a canvas with the kit, `src/components/charts/kit`.
+Components drawn on a canvas with the kit, `src/kit`.
 
 - **Every chart is for races to start with: `sessions: ['race', 'sprint']`.** The agent is only offered what fits the open session,
   so a chart reaches qualifying or practice once it's been made to make sense there. (2026-11-12)
@@ -240,7 +240,7 @@ Polished 2026-11-13.
 - **No props.** A run of blue flags between other lines is always counted on one. (A `blue_flags` prop that put each on its own
   line was taken out in #77.)
 - **Fewer words, read from F1's wording.** The feed fills its structured columns only for flags. Deleted laps, the stewards'
-  cases, penalties, the red flag and the restart order are plain text, so `raceControlMessages.ts` reads them with a pattern for
+  cases, penalties, the red flag and the restart order are plain text, so `kit/raceControl.ts` reads them with a pattern for
   each: "ALB lap 34 deleted · T1 limits" for "CAR 23 (ALB) TIME 1:18.737 DELETED - TRACK LIMITS AT TURN 1 LAP 34 14:50:00". A
   message no pattern knows is shown as sent, less car numbers and clock times. The patterns are tested on real messages from São
   Paulo and Mexico City 2026.
@@ -399,7 +399,7 @@ Added 2026-11-13, from direction A of the race control proposals.
 
 - **Its question: what race control has in force now, and who has what against them.** `race_control` is what was said and
   when; this gives up the order and the wording for where things stand. Each description points at the other.
-- **The same reading as the log.** It extends `standing()` in `raceControlMessages.ts` rather than reading the messages again,
+- **The same reading as the log.** It extends `standing()` in `kit/raceControl.ts` rather than reading the messages again,
   so the two never disagree about a red flag, a case or a deleted lap.
 - **A red flag, safety car or VSC takes the top of the board:** a band across the tile in the flag's toned colour (`brake` for
   red, `flagYellow` for yellow) with black text, "RED FLAG · since lap 45". The lap is the one it began on; a safety car's end
@@ -602,16 +602,16 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
 | The size declaration | `src/host/components.ts` |
 | Holding and drawing a video, and its title bar slots | `src/host/Video.tsx` |
 | What a component says its title bar shows, and the state it keeps with its tile | `src/host/tile.ts` |
-| Who is fighting whom, and the car ahead | `src/components/fights.ts` |
+| Who is fighting whom, and the car ahead | `src/kit/fights.ts` |
 | The battle and the chase in the real app, with one feed in two tiles and where the sound goes | `scripts/battle-check.mjs` |
 | Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
-| Every built-in chart at its least size in common arrangements | `src/components/charts/charts.test.ts` |
-| A chart drawing past its tile | `src/components/charts/kit/ChartCanvas.tsx` (`extent`) |
-| The pointer over a chart, for naming what's under it | `src/components/charts/kit/ChartCanvas.tsx` (`onPointer`) |
-| A click on a chart | `src/components/charts/kit/ChartCanvas.tsx` (`onClick`) |
+| Every built-in chart at its least size in common arrangements | `src/components/charts.test.ts` |
+| A chart drawing past its tile | `src/kit/ChartCanvas.tsx` (`extent`) |
+| The pointer over a chart, for naming what's under it | `src/kit/ChartCanvas.tsx` (`onPointer`) |
+| A click on a chart | `src/kit/ChartCanvas.tsx` (`onClick`) |
 | The timing tower in the real app, fitted and squeezed | `scripts/tower-check.mjs` |
-| Reading race control's messages | `src/components/charts/raceControlMessages.ts` |
+| Reading race control's messages | `src/kit/raceControl.ts` |
 | The race status board in the real app, at chosen messages, at its least size and squeezed | `scripts/status-check.mjs` |
 | Car telemetry in the real app, beside its onboard and squeezed | `scripts/telemetry-check.mjs` |
 | The pedal barcode in the real app, fitted, at its least size and squeezed | `scripts/pedal-check.mjs` |
