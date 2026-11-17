@@ -45,13 +45,13 @@ The app compares the mods folder with how it stood on entry. That one comparison
 | Change | What happens |
 | --- | --- |
 | A new mod | Its component appears in the suggestion strip as a live preview, marked "draft". Enter adds it, and dragging places it |
-| A new mod, once added to the grid | Its tile is framed with its title bar lit, as a tile pointed at with `@` is, and "draft" is in the title bar |
+| A new mod, once added to the grid | Its tile is framed with its title bar lit in yellow, as a tile pointed at with `@` is in white, and "draft" is in the title bar |
 | An edited mod with a tile on screen | The tile reloads in place, framed and lit the same way, with "edited" in the title bar |
 | An edited mod with no tile | It appears in the strip, like a new one |
 | A deleted mod | Its tiles leave the screen, as they do today |
 
-A marked tile looks like a tile pointed at with `@` (see Mentions in [DESIGN.md](DESIGN.md)), but it doesn't dim the others, and the
-spotlight still dims it when another tile is pointed at. (2026-11-16. A 1px dashed grey outline round the content and a grey word came
+A marked tile looks like a tile pointed at with `@` (see Mentions in [DESIGN.md](DESIGN.md)), in build mode's yellow where that one is
+white. It doesn't dim the others, and the spotlight still dims it when another tile is pointed at. Pointed at itself, it's white. (2026-11-16. A 1px dashed grey outline round the content and a grey word came
 first, which looked nothing like the spotlight.)
 
 The tag's count is the number of mods that differ. The agent's file writes show as lines in the palette's history ("wrote
@@ -301,7 +301,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 **An edit**
 
 8. "Show the lap number bigger" reloads the tile in place, in the same position and still approved.
-9. Editing a mod that's on screen (lap form to 12 laps) frames it with its title bar lit and "edited", and the tag counts 2 changes.
+9. Editing a mod that's on screen (lap form to 12 laps) frames it with its title bar lit in yellow and "edited", and the tag counts 2 changes.
 10. A save that doesn't compile keeps the last good version on screen, and the agent fixes it from `mod.error` unasked.
 
 **Props**

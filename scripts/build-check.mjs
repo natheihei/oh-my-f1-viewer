@@ -343,9 +343,9 @@ async function partSave() {
   const lit = await tile('lap_form').evaluate((el) => {
     const item = document.querySelector(`.grid-stack-item[gs-id="${el.dataset.tile}"]`);
     const frame = item && getComputedStyle(item.querySelector('.grid-stack-item-content'), '::before');
-    return { marked: item?.classList.contains('tile-marked'), frame: frame && `${frame.borderTopWidth} ${frame.borderTopStyle}` };
+    return { marked: item?.classList.contains('tile-marked'), frame: frame && `${frame.borderTopWidth} ${frame.borderTopStyle} ${frame.borderTopColor}` };
   });
-  check('9 framed with its header lit, as a pointed tile is', lit.marked === true && lit.frame === '2px solid', JSON.stringify(lit));
+  check('9 framed with its header lit, as a pointed tile is, in yellow', lit.marked === true && lit.frame === '2px solid rgb(255, 209, 46)', JSON.stringify(lit));
   check('9 the tag reads "build · 2 changes"', (await tagText()).includes('build · 2 changes'), await tagText());
   check('9 it is not in the strip, being on screen', (await draft('lap_form').count()) === 0);
   await shot('build-06-edited.png');

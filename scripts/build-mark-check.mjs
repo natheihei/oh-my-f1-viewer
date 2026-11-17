@@ -1,6 +1,7 @@
 // Checks how build mode marks a tile in the real app, over a real replay race, with no agent: an edited mod's
-// tile is framed with its header lit, as a tile pointed at with @ is, and doesn't dim the others; pointing at
-// another tile still dims it. The mod is edited on disk by hand, since the marks follow the folder.
+// tile is framed with its header lit, as a tile pointed at with @ is but in build mode's yellow, and doesn't dim
+// the others; pointing at another tile lights that one white and still dims the edited one; pointing at the
+// edited tile itself turns it white. The mod is edited on disk by hand, since the marks follow the folder.
 // Runs an isolated f1a (scripts/isolated.mjs). Saves a screenshot at each step.
 // Usage: node scripts/build-mark-check.mjs <screenshot-dir> [--keep]
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -90,7 +91,10 @@ const edited = await looks();
 const lap = edited.find((t) => t.type === 'lap_form');
 const others = edited.filter((t) => t.type !== 'lap_form');
 check('the edited tile says "edited"', lap.slot === 'edited', lap.slot);
-check('the edited tile has a 2px solid frame', /^2px solid/.test(lap.frame ?? ''), lap.frame);
+const YELLOW = 'rgb(255, 209, 46)';
+const WHITE = 'rgb(231, 231, 231)';
+check('the edited tile has a 2px solid yellow frame', lap.frame === `2px solid ${YELLOW}`, lap.frame);
+check('and a yellow title bar', lap.bar === YELLOW, lap.bar);
 check('its content has no dashed outline', lap.outline !== 'dashed', lap.outline);
 check('the other tiles stay unmarked and undimmed', others.every((t) => !t.marked && !t.dimmed && t.frame == null), JSON.stringify(others));
 await page.screenshot({ path: path.join(outDir, 'mark-02-edited.png') });
@@ -102,9 +106,16 @@ await page.waitForTimeout(800);
 const pointing = await looks();
 const pt = pointing.find((t) => t.id === tower.id);
 const lap2 = pointing.find((t) => t.type === 'lap_form');
-check('the pointed tile looks like the edited one did', pt.pointed && pt.frame === lap.frame && pt.bar === lap.bar, `${pt.frame} ${pt.bar}`);
+check('the pointed tile is framed and lit white', pt.pointed && pt.frame === `2px solid ${WHITE}` && pt.bar === WHITE, `${pt.frame} ${pt.bar}`);
 check('the edited tile is dimmed under the spotlight, still marked', lap2.dimmed && lap2.marked, JSON.stringify(lap2));
 await page.screenshot({ path: path.join(outDir, 'mark-03-pointed.png') });
+
+// Pointing at the edited tile itself: white wins.
+await page.evaluate(async (id) => (await import('/src/host/index.ts')).host.layout.point({ tile: id }), lap.id);
+await page.waitForTimeout(800);
+const self = (await looks()).find((t) => t.id === lap.id);
+check('pointing at the edited tile turns it white', self.pointed && self.marked && self.frame === `2px solid ${WHITE}` && self.bar === WHITE, `${self.frame} ${self.bar}`);
+await page.screenshot({ path: path.join(outDir, 'mark-04-pointed-edited.png') });
 await page.evaluate(async () => (await import('/src/host/index.ts')).host.layout.point({ tile: null }));
 
 await finish();

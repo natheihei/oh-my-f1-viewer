@@ -154,9 +154,9 @@ the strip preview took the list's tall shape (260 by 179), and the newest messag
 The same mod with a 62px heading of its own still hid its message at 2 rows: see issue 44.
 
 The mark on a draft or edited tile has since changed from the dashed outline to the frame and lit title bar of a tile pointed at with
-`@`. `scripts/build-mark-check.mjs` checked it without the agent, over the 2026 São Paulo race (2026-11-16): lap form, edited on disk
-during a build, got the 2px frame, the lit bar and "edited", the other tiles stayed as they were, and pointing at the tower lit it the
-same way and dimmed the rest, lap form included. `build-check.mjs` case 9 now checks the frame, and hasn't been run since.
+`@`, in yellow where that one is white. `scripts/build-mark-check.mjs` checked it without the agent, over the 2026 São Paulo race (2026-11-16): lap form, edited on disk
+during a build, got the yellow 2px frame and lit bar and "edited", and the other tiles stayed as they were. Pointing at the tower lit it
+white and dimmed the rest, lap form included, and pointing at lap form turned it white. `build-check.mjs` case 9 now checks the frame, and hasn't been run since.
 
 ## Verified for the agent on pi-durable
 
