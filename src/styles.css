@@ -1180,7 +1180,8 @@
 /*
  * The spotlight on a tile the viewer points at, from the prompt or a duplicate suggestion: every other
  * tile dims, and this one is framed with its header lit, so it's plain on a bright feed or a dark chart.
- * A tile whose mod the build added or changed is framed and lit the same way, without dimming the rest.
+ * A tile whose mod the build added or changed is framed and lit the same way in build mode's yellow,
+ * without dimming the rest. Pointed at too, it's white like any pointed tile.
  */
 .grid-surface .grid-stack-item.tile-dimmed > .grid-stack-item-content::before {
   @apply pointer-events-none absolute inset-0 bg-black;
@@ -1226,6 +1227,16 @@
 .tile-pointed .tile-titlebar-audio .tile-title::before,
 .tile-marked .tile-titlebar-audio .tile-title::before {
   @apply bg-black;
+}
+
+.grid-surface .grid-stack-item.tile-marked:not(.tile-pointed) > .grid-stack-item-content::before {
+  border-color: var(--color-medium);
+}
+
+.tile-marked:not(.tile-pointed) .tile-titlebar,
+.tile-marked:not(.tile-pointed) .tile-titlebar:hover {
+  background-color: var(--color-medium);
+  border-bottom-color: var(--color-medium);
 }
 
 /* The spoiler check: between the palette's history and the suggested tiles. */
