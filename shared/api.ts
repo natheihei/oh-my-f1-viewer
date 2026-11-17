@@ -185,7 +185,13 @@ export type AgentEvent =
   | { type: 'tool_start'; turnId: string; name: string; args: Record<string, unknown> }
   | { type: 'tool_end'; turnId: string; name: string; ok: boolean; /** A line for the palette, such as a file the build agent wrote. */ note?: string }
   | { type: 'turn_end'; turnId: string; acted: boolean }
-  | { type: 'error'; turnId: string; message: string };
+  | { type: 'error'; turnId: string; message: string; /** What fixes it, when the viewer can: the palette offers that. */ fix?: AgentErrorFix };
+
+/**
+ * What fixes a failed turn: `setup` connects a provider for the first time, `connect` connects it again (a sign-in
+ * or key it no longer accepts), and `limit` picks another model or provider while a usage limit lasts.
+ */
+export type AgentErrorFix = 'setup' | 'connect' | 'limit';
 
 export type {
   Circuit,

@@ -5,12 +5,19 @@ import { setSpoilerAsker } from '../agent/spoilerGate';
 import { errorBlock } from '../../shared/health';
 import { host, read, type Attachment } from '../host';
 import { loadEvents } from './commands';
+import { agentFix, f1tvFix } from './fixes';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
 import { palette, usePalette, type AttachedTag } from './palette';
 
 // Long enough to read the reply before the palette goes.
 const AUTO_HIDE_MS = 10_000;
+
+/**
+ * The last message sent to the agent, as it went: what a fix sends again once the agent can answer. Only the
+ * viewing agent's: build mode's conversation may have moved on by then.
+ */
+let lastSent: string | null = null;
 
 export function connectAgent(): () => void {
   let streaming: number | null = null;
@@ -49,11 +56,17 @@ export function connectAgent(): () => void {
         if (event.acted && !asking && session != null && suggestions.items.length === 0 && !build.active) palette.hideAfter(AUTO_HIDE_MS);
         break;
       }
-      case 'error':
+      case 'error': {
         lookAhead.endTurn();
         palette.setBusy(false);
-        palette.push('error', event.message);
+        if (!event.fix) {
+          palette.push('error', event.message);
+          break;
+        }
+        const message = lastSent;
+        palette.pushFix(event.message, agentFix(event.fix, message != null && !read().build.active ? () => askAgent(message) : undefined));
         break;
+      }
     }
   };
 
@@ -84,25 +97,29 @@ export async function sendToAgent(text: string, { echo = true, parts, attach = t
   const tagged = parts?.some((p) => typeof p !== 'string');
   const attached = attach ? read().attached : [];
   if (echo) palette.push('user', text, undefined, tagged ? parts : undefined, attached.map(tagOf));
+  // Once whatever's missing is fixed, the same message goes again, without echoing it a second time.
+  const again = () => sendToAgent(text, { echo: false, parts, attach });
   const status = await host.agent.status();
   if (!status.ready) {
-    palette.push('system', 'The agent needs setting up first: /settings-agent');
+    palette.pushFix("The agent isn't set up yet.", agentFix('setup', again));
     return;
   }
   // The viewing agent finds sessions from the event list: without it, it would only guess.
   if (!read().build.active && read().events.state !== 'ready') {
     const { f1tv } = await host.account.status();
     if (!f1tv.signedIn) {
-      palette.push('system', 'The agent needs F1 TV signed in first: /login-f1tv');
+      palette.pushFix("F1 TV isn't signed in.", f1tvFix('missing', again));
       return;
     }
-    if (!(await loadEvents())) return;
+    if (!(await loadEvents(again))) return;
   }
   if (attach) host.build.dismissOffer();
   // Taken only now: a message that couldn't go leaves them in the tray for the next one.
   const blocks = attach ? host.health.takeAttached().map((a) => errorBlock(a.report)) : [];
   if (usePalette.getState().busy) await host.agent.cancel();
-  await askAgent([...blocks, text].filter(Boolean).join('\n\n'));
+  const message = [...blocks, text].filter(Boolean).join('\n\n');
+  lastSent = message;
+  await askAgent(message);
 }
 
 /** Stops the agent mid-turn. A stopped turn never reports its end, so the palette stops waiting here. */

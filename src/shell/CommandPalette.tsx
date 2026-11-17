@@ -13,11 +13,12 @@ import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPromp
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
 import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
+import { useOnboarding } from './onboardingState';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
-import { palette, usePalette, type EntryRole } from './palette';
+import { palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
@@ -45,6 +46,7 @@ function trimParts(parts: PromptPart[]): PromptPart[] {
 export function CommandPalette() {
   const { open, busy, entries, panel } = usePalette();
   const blank = useLive((s) => s.session == null);
+  const onboardingActive = useOnboarding((s) => s.active);
   /** The prompt, with its mentions, and as text: a mention as the agent reads it. */
   const [parts, setParts] = useState<PromptPart[]>([]);
   const value = promptText(parts, sayMention);
@@ -219,8 +221,9 @@ export function CommandPalette() {
 
   if (panel === 'agent') {
     const closePanel = () => {
-      palette.closePanel();
       requestAnimationFrame(() => inputRef.current?.focus());
+      // A fix or onboarding that opened it says what changed itself.
+      if (palette.closePanel()) return;
       void host.agent.status().then((status) => {
         const line = describeAgent(status);
         if (line) palette.push('system', line);
@@ -261,7 +264,7 @@ export function CommandPalette() {
 
   return (
     <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
-      {blank && entries.length <= 1 ? (
+      {blank && entries.length <= 1 && !onboardingActive ? (
         <div className="palette-intro" data-testid="palette-intro">
           <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>
           <div className="palette-intro-try">
@@ -287,11 +290,16 @@ export function CommandPalette() {
           style={
             {
               ...(historyCap != null ? { '--palette-history-cap': `${historyCap}px` } : {}),
+              // Each fix still waiting on the viewer makes room for itself, so two never push each other out of view.
+              '--palette-fixes': entries.filter((e) => e.fix).length,
               ...(dragHeight != null ? { height: dragHeight, maxHeight: dragHeight } : {}),
             } as CSSProperties
           }
         >
-          {entries.map((entry) => (
+          {entries.map((entry) =>
+            entry.fix ? (
+              <FixBlock key={entry.id} entry={entry} />
+            ) : (
             <div key={entry.id} className={`palette-line palette-${entry.role}`}>
               <span className="palette-mark">{ROLE_MARK[entry.role]}</span>
               <span className="palette-text">
@@ -311,7 +319,8 @@ export function CommandPalette() {
                 ) : null}
               </span>
             </div>
-          ))}
+            ),
+          )}
         </div>
       ) : null}
       {asking ? <LookAheadPrompt ref={promptRef} /> : null}
@@ -458,6 +467,33 @@ export function CommandPalette() {
             looks ahead · ×
           </button>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** An error with its fix: what broke, what fixing it does, the button and the command that does the same. */
+function FixBlock({ entry }: { entry: PaletteEntry }) {
+  const fix = entry.fix!;
+  return (
+    <div className={`palette-fix ${fix.running ? 'palette-fix-running' : ''}`} data-testid="palette-fix" role="group" aria-label={entry.text}>
+      <div className="palette-fix-head">
+        <span className="palette-fix-mark" />
+        <span>{fix.running ? fix.busy : entry.text}</span>
+      </div>
+      {fix.running ? null : <div className={`palette-fix-detail ${fix.failed ? 'palette-fix-failed' : ''}`}>{fix.failed ?? fix.detail}</div>}
+      <div className="palette-fix-actions">
+        {fix.running ? null : (
+          <>
+            <button type="button" className="palette-fix-button" data-testid="palette-fix-run" onClick={() => void palette.runFix(entry.id)}>
+              {fix.label}
+            </button>
+            <span className="palette-fix-command">{fix.command}</span>
+            <button type="button" className="palette-fix-dismiss" data-testid="palette-fix-dismiss" onClick={() => palette.dismissFix(entry.id)}>
+              Dismiss
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

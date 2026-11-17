@@ -13,6 +13,7 @@ import type { Api, AuthInteraction, CredentialStore, Message, Model, Models, Pro
 import type { Conversation as DurableConversation, EntryRecord, Harness, HarnessSettings, Storage } from '@earendil-works/pi-durable' with { 'resolution-mode': 'import' };
 import type {
   AgentConnectEvent,
+  AgentErrorFix,
   AgentEvent,
   AgentHandoff,
   AgentMode,
@@ -779,7 +780,7 @@ export class Agent {
       emit({ type: 'turn_end', turnId: turn.id, acted: turn.acted });
     } catch (e) {
       if (turn.cancelled) return;
-      emit({ type: 'error', turnId: turn.id, message: friendlyError(e, label) });
+      emit({ type: 'error', turnId: turn.id, ...friendlyError(e, label) });
     }
   }
 
@@ -843,15 +844,16 @@ export class Agent {
   }
 }
 
-function friendlyError(e: unknown, label = 'The provider'): string {
+/** A failed turn's error in the viewer's words, and what fixes it, so the palette can offer that. */
+function friendlyError(e: unknown, label = 'The provider'): { message: string; fix?: AgentErrorFix } {
   const message = e instanceof Error ? e.message : String(e);
-  if (message === SETUP_NEEDED) return message;
-  if (/usage_limit|usage limit|rate_limit|rate limit/i.test(message)) return `${label} usage limit reached. Try again later.`;
-  if (/not_eligible/i.test(message)) return `This ${label} account cannot use its plan in other apps.`;
+  if (message === SETUP_NEEDED) return { message: "The agent isn't set up yet.", fix: 'setup' };
+  if (/usage_limit|usage limit|rate_limit|rate limit/i.test(message)) return { message: `${label} usage limit reached.`, fix: 'limit' };
+  if (/not_eligible/i.test(message)) return { message: `This ${label} account can't use its plan in other apps.`, fix: 'connect' };
   if (/No API key|not configured|unauthor|invalid_grant|invalid x-api-key|authentication_error|incorrect api key|token/i.test(message)) {
-    return `${label} didn't accept the connection. Connect it again in /settings-agent.`;
+    return { message: `${label} didn't accept the connection.`, fix: 'connect' };
   }
-  return message;
+  return { message };
 }
 
 export const agent = new Agent();
