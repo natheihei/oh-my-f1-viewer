@@ -307,9 +307,13 @@ async function partSave() {
   const aheadSlot = page.locator(`.grid-stack-item[gs-id="${tileId}"] .tile-slot-ahead`);
   const ahead = (await aheadSlot.isVisible()) ? plain(await aheadSlot.innerText()) : '(hidden)';
   check('6 its header says "ahead"', ahead === 'ahead', ahead);
+  // A draft's header is lit in build mode's yellow with a black title, as a pointed tile's is in white; others keep theirs.
   const formId = (await tilesNow()).find((t) => t.type === 'lap_form').id;
-  const [mine, other] = await Promise.all([tileId, formId].map((id) => titleOf(id).evaluate((el) => getComputedStyle(el).color)));
-  check('6 in the same grey as any title', mine === other, `${mine} vs ${other}`);
+  const headerOf = (id) =>
+    titleOf(id).evaluate((el) => ({ bar: getComputedStyle(el.closest('.tile-titlebar')).backgroundColor, title: getComputedStyle(el).color }));
+  const [mine, other] = await Promise.all([tileId, formId].map(headerOf));
+  check('6 its header is lit in yellow, with a black title', mine.bar === 'rgb(255, 209, 46)' && mine.title === 'rgb(0, 0, 0)', JSON.stringify(mine));
+  check('6 a tile the build left alone keeps its header', other.bar !== mine.bar && other.title !== mine.title, JSON.stringify(other));
   check('6 the tile is marked a draft', (await tile(stepper).getAttribute('data-tile-mark')) === 'draft');
   await shot('build-05-added.png');
 

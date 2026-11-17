@@ -1,25 +1,15 @@
-// Exercises the suggestion strip in Electron without any sign-in: a session with channels but no
-// streams, suggestions offered the way the agent's tool offers them, and the user answering them by
-// keyboard, click, and drag.
+// Exercises the suggestion strip in an OMFV of its own (see isolated.mjs), without any sign-in: a session
+// with channels but no streams, suggestions offered the way the agent's tool offers them, and the user
+// answering them by keyboard, click, and drag.
 // Usage: node scripts/suggestions-check.mjs [screenshot-dir]
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from 'vite';
-import { _electron as electron } from 'playwright';
+import { startIsolatedApp } from './isolated.mjs';
 
-const outDir = process.argv[2] ?? tmpdir();
-const server = await createServer({ server: { port: 5197, strictPort: true }, logLevel: 'error' });
-await server.listen();
-
-const { CHROME_DESKTOP: _ignored, ...env } = process.env;
-const app = await electron.launch({
-  executablePath: path.resolve('node_modules/electron/dist/electron'),
-  args: ['.', `--user-data-dir=${mkdtempSync(path.join(tmpdir(), 'omfv-suggest-'))}`],
-  env: { ...env, ELECTRON_START_URL: 'http://127.0.0.1:5197' },
-});
-const page = await app.firstWindow();
-page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+const outDir = path.resolve(process.argv[2] ?? mkdtempSync(path.join(tmpdir(), 'omfv-suggest-')));
+mkdirSync(outDir, { recursive: true });
+const { page, stop } = await startIsolatedApp(outDir, { name: 'suggestions', scale: 1 });
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -55,7 +45,8 @@ await page.evaluate(() => window.host.suggestions.offer({ items: window.videos([
 await settle();
 check('strip shows every suggestion', (await page.locator('[data-testid=suggestion]').count()) === 3);
 check('the first suggestion has focus', (await focused()) === '1:44', String(await focused()));
-check('one already on screen is marked', (await page.locator('[data-testid=suggestion][data-on-screen=true]').innerText()).includes('on screen'));
+// textContent: the badge is drawn in capitals, which innerText would return.
+check('one already on screen is marked', (await page.locator('[data-testid=suggestion][data-on-screen=true] .strip-badge').textContent()) === 'on screen');
 await page.screenshot({ path: path.join(outDir, 'suggestions-strip.png') });
 
 await page.keyboard.press('ArrowRight');
@@ -189,7 +180,6 @@ await nor.click();
 await settle();
 check('a click on the preview still adds it', (await onScreen()).includes('NOR'));
 
-await app.close();
-await server.close();
+await stop();
 console.log(failures ? `${failures} failed` : 'all ok');
 process.exit(failures ? 1 : 0);
