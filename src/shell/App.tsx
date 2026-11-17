@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Backdrop, Grid, host, useLive } from '../host';
 import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
+import { f1tvFix } from './fixes';
+import { Onboarding } from './Onboarding';
+import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 import { usePersistBackground } from './persistBackground';
 import { usePersistVolume } from './persistVolume';
@@ -37,16 +40,25 @@ function Countdown() {
 
 export function App() {
   const hasSession = useLive((s) => s.session != null);
+  const onboardingActive = useOnboarding((s) => s.active);
   usePersistVolume();
   usePersistBackground();
 
+  // Opening a session is onboarding's last step: once one opens, or its countdown starts, it's over.
+  const opened = useLive((s) => s.session != null || s.countdown != null);
+  const wasOpen = useRef(opened);
+  useEffect(() => {
+    if (opened && !wasOpen.current) onboarding.finish('done');
+    wasOpen.current = opened;
+  }, [opened]);
+
   useEffect(() => {
     const offAgent = connectAgent();
-    void reportReadiness();
+    void onboarding.start().then(reportReadiness);
     const offExpired = host.account.onExpired(() => {
       host.session.close();
       palette.show();
-      palette.push('error', 'F1 TV session expired. Run /login-f1tv.');
+      palette.pushFix('F1 TV ended your sign-in.', f1tvFix('expired'));
     });
     return () => {
       offAgent();
@@ -59,6 +71,7 @@ export function App() {
       <div className="surface">
         <Backdrop />
         <Grid />
+        {onboardingActive && !opened ? <Onboarding /> : null}
         <Countdown />
         <CommandPalette />
       </div>

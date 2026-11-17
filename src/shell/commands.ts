@@ -5,6 +5,8 @@
  */
 import { FIRST_SEASON, host, read } from '../host';
 import { enterBuild } from './buildMode';
+import { agentFix, eventsFix, f1tvFix } from './fixes';
+import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 
 export interface SlashCommand {
@@ -23,32 +25,38 @@ export interface SlashCommand {
 /** An error's message, without Electron's wrapping around errors from main. */
 export function errorText(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
-  return raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim();
+  return (
+    raw
+      .replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '')
+      // The vendored F1 TV code names a button from its own app, which f1a doesn't have.
+      .replace(/Please sign in again \(e\.g\. "Sign in with browser"\) and retry\./, 'Sign in again with /login-f1tv.')
+      .trim()
+  );
 }
 
 /**
- * Loads F1 TV's events, which the agent needs to find anything, and says so if that fails. Returns
- * whether they're loaded. Needs F1 TV signed in.
+ * Loads F1 TV's events, which the agent needs to find anything, and offers to retry if that fails. Returns
+ * whether they're loaded. Needs F1 TV signed in. `then` runs once a retry loads them, such as a message to send.
+ * While onboarding shows, its own step says so instead.
  */
-export async function loadEvents(): Promise<boolean> {
+export async function loadEvents(then?: () => Promise<void>): Promise<boolean> {
   const index = await host.catalog.loadIndex();
   if (index.state === 'ready') return true;
-  palette.push('error', `Couldn't load F1 TV's events: ${index.error ?? 'unknown error'}. Retry with /reload-events.`);
+  if (!useOnboarding.getState().active) palette.pushFix(`Couldn't load F1 TV's events: ${index.error ?? 'unknown error'}.`, eventsFix(then));
   return false;
 }
 
-/** Tells the user what still needs doing, or loads the events and says they can start. */
+/**
+ * Says what still needs doing, each as a fix, or loads the events and says the viewer can start. While
+ * onboarding shows, it says all of that itself.
+ */
 export async function reportReadiness(): Promise<void> {
+  if (useOnboarding.getState().active) return;
   const { f1tv: f1, agent } = await host.account.status();
-  const missing: string[] = [];
-  if (!f1.signedIn) missing.push('/login-f1tv');
-  if (!agent.ready) missing.push('/settings-agent');
+  if (!f1.signedIn) palette.pushFix("F1 TV isn't signed in.", f1tvFix('missing'));
+  if (!agent.ready) palette.pushFix("The agent isn't set up yet.", agentFix('setup'));
   if (f1.signedIn && !(await loadEvents())) return;
-  if (missing.length) {
-    palette.push('system', `Get started: ${missing.join(', ')}`);
-  } else {
-    palette.push('system', `Ready. Name a session from ${FIRST_SEASON} on, like "2025 Mexico race".`);
-  }
+  if (f1.signedIn && agent.ready) palette.push('system', `Ready. Name a session from ${FIRST_SEASON} on, like "2025 Mexico race".`);
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
@@ -105,6 +113,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: "Load F1 TV's events again",
     async run() {
       if (await loadEvents()) palette.push('system', "F1 TV's events loaded.");
+    },
+  },
+  {
+    name: '/reset-onboarding',
+    description: 'Show the steps to get started again',
+    async run() {
+      onboarding.reset();
+      if (read().session != null) palette.push('system', 'Onboarding shows once no session is open.');
     },
   },
   {
