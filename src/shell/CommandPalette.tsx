@@ -47,6 +47,8 @@ export function CommandPalette() {
   const { open, busy, entries, panel } = usePalette();
   const blank = useLive((s) => s.session == null);
   const onboardingActive = useOnboarding((s) => s.active);
+  // Onboarding's last step is done here, so the palette lights up and offers an example while it's open.
+  const pointing = useOnboarding((s) => s.active && s.pointing) && blank;
   /** The prompt, with its mentions, and as text: a mention as the agent reads it. */
   const [parts, setParts] = useState<PromptPart[]>([]);
   const value = promptText(parts, sayMention);
@@ -263,7 +265,7 @@ export function CommandPalette() {
   };
 
   return (
-    <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
+    <div className={`palette ${building ? 'palette-building' : ''} ${pointing ? 'palette-pointing' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
       {blank && entries.length <= 1 && !onboardingActive ? (
         <div className="palette-intro" data-testid="palette-intro">
           <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>
@@ -398,7 +400,9 @@ export function CommandPalette() {
         <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
         <PromptInput
           ref={inputRef}
-          placeholder={building ? 'ask for a mod, or a change to one' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'}
+          placeholder={
+            building ? 'ask for a mod, or a change to one' : pointing ? 'name a session, like 2025 Mexico race' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'
+          }
           onChange={(next) => {
             setParts(next);
             setSelected(0);

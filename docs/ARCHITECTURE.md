@@ -235,7 +235,9 @@ that refuse a call.
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
 - **Onboarding** (`src/shell/Onboarding.tsx`) leads a first launch through both, then opening a session, over the empty screen. It
   shows until a session opens or it's skipped, and not at all for a profile already set up; `/reset-onboarding` shows it again.
-  The `onboarded` flag is kept with the UI state (`src/shell/onboardingState.ts`).
+  The `onboarded` flag is kept with the UI state (`src/shell/onboardingState.ts`). Its numbered steps keep one height as they
+  open, a finished step hands on to the next one not done, and on the last the palette lights up (`pointing`), since a
+  session is named there. A device code from a model's sign-in shows set apart, with Copy.
 - **Fixes.** After onboarding, anything that needs signing in or setting up again comes to the palette as a fix block
   (`src/shell/fixes.ts`): the error, what fixing it does, a button and the `/` command that does the same. That covers F1 TV
   ending its sign-in, F1 TV's events failing to load, the agent not set up, and a turn failing because the provider rejected
