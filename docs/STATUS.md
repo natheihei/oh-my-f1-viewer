@@ -7,7 +7,11 @@ What has actually been verified, and what hasn't. Last updated 2026-11-16.
 On Linux with an RTX 4080, against real F1 TV streams and the real agent:
 
 - The full journey: blank start, sign-ins, clarifying "2026 Brazil", loading "2025 Mexico", adding Hamilton and a Norris/Leclerc
-  group, then closing the group. That was before groups were taken out (#101).
+  group, then closing the group. That was before groups were taken out (#101). `scripts/journey.mjs` passed in full again
+  (2026-11-16), rewritten for the strip and the spoiler check: clarifying the next weekend, loading "2025 Mexico
+  race" (a weekend alone now gets "which session?"), the palette hiding, the agent suggesting HAM, NOR, LEC and a NOR · LEC gap chart
+  and all four added from the strip and in sync (0.074s), closing the battle with Hamilton's `<video>` kept, pause, sound to Hamilton,
+  ten minutes ahead after Allow once, 30 s back, resume, and "who won" answered with nothing after Don't allow.
 - Four streams in sync, with the widest spread seen once settled under 0.07s, on the 2024 Mexico, 2025 Saudi Arabia, 2025 Mexico and 2026 Mexico races. None of these replays use DRM.
 - Components that show video, on the 2026 São Paulo race at lap 12 with `scripts/battle-check.mjs` (2026-11-15). The battle started on
   the closest fight with both onboards playing and listed six fights; the same onboard played in a video tile of its own at the same
@@ -130,11 +134,11 @@ copied in:
 - `picking-check`, three runs each, the same as on the commit before the rename: "2025 Mexico" asked which session every time, and
   "2025 Mexico race" opened it every time.
 - `build-check` passed 115 of 116. Case 6 expects a new mod's title in the grey of any title, but build mode now marks that tile in
-  yellow with a black title.
-- `journey` fails 8 checks, the same 8 as on the commit before the rename: it predates battle tiles and the spoiler check. It now
-  asks for "2025 Mexico race", since the pick agent asks about a bare event.
-- `layout-check` and `suggestions-check` fail the same 3 and 4 checks as on the commit before the rename (edge and corner resizing,
-  closing a tile).
+  yellow with a black title. It checks the yellow header now: see Build mode below.
+- `journey` failed 8 checks, the same 8 as on the commit before the rename: it predates battle tiles and the spoiler check. It now
+  asks for "2025 Mexico race", since the pick agent asks about a bare event. It was rewritten for the strip and passes: see above.
+- `layout-check` and `suggestions-check` failed the same 3 and 4 checks as on the commit before the rename (edge and corner resizing,
+  closing a tile). Onboarding covered layout-check's tiles, and a preview's width couldn't be resized: both pass now, see Build mode below.
 - The build agent, driven through `window.omfv` without a session, called the app OMFV and wrote a mod importing `'omfv'` and
   `'omfv/kit'`, which loaded over `omfv-mod:`. The production build, from `dist/` with its CSP, is titled oh-my-f1-viewer, loads
   the favicon and imports a copied mod with nothing refused. Onboarding shows the logo's mark.
@@ -182,7 +186,12 @@ The same mod with a 62px heading of its own still hid its message at 2 rows: see
 The mark on a draft or edited tile has since changed from the dashed outline to the frame and lit title bar of a tile pointed at with
 `@`, in yellow where that one is white. `scripts/build-mark-check.mjs` checked it without the agent, over the 2026 São Paulo race (2026-11-16): lap form, edited on disk
 during a build, got the yellow 2px frame and lit bar and "edited", and the other tiles stayed as they were. Pointing at the tower lit it
-white and dimmed the rest, lap form included, and pointing at lap form turned it white. `build-check.mjs` case 9 now checks the frame, and hasn't been run since.
+white and dimmed the rest, lap form included, and pointing at lap form turned it white. `build-check.mjs` cases 6 and 9 now check the
+lit header and the frame. Its part a, 73 checks through case 19, passed over the 2026 United States race on 2026-11-16; parts b and c haven't run since.
+
+Resizing a preview's width by hand had stopped working when the strip's cards got a flex basis (b22d0e0): the card's own width was
+ignored, so only the height followed the grip. A hand-picked size now takes the card out of the flex sizing, and
+`scripts/suggestions-check.mjs` passes again (2026-11-16).
 
 ## Verified for the agent on pi-durable
 
@@ -223,7 +232,6 @@ Terra at medium, and a real turn replied on the new login.
 ## Not verified
 
 - **The window icon.** Hyprland shows none, so it hasn't been seen.
-- **`journey` and `build-check` case 6** are out of date, as above.
 - **Fixing a sign-in from onboarding or a fix block.** Neither has completed an F1 TV or ChatGPT sign-in in the real app, F1 TV
   ending a sign-in hasn't been seen, and no turn has failed for a rejected connection or a usage limit, so sending the message again
   after the fix hasn't run.

@@ -297,7 +297,7 @@ and `/build` itself (`src/shell/commands.test.ts`).
 4. The stepper appears in the strip marked "draft", without the agent calling `suggest_tiles`.
 5. The agent set `looksAhead` on it, and the preview shows the look-ahead warning. After Allow, clicking "lap ›" moves the real playback to the start of the next lap, by the
    session database.
-6. Enter adds it to the grid already approved, and its header carries an "ahead" slot.
+6. Enter adds it to the grid already approved, its header lit in yellow with "draft" and an "ahead" slot.
 7. A second tile of the same mod asks again.
 
 **An edit**

@@ -193,7 +193,8 @@ export const SuggestionStrip = forwardRef<
             data-draft={draft}
             data-on-screen={present}
             data-resized={manual ? true : undefined}
-            style={manual ? { width: manual.width } : undefined}
+            // A hand-picked width holds over the strip's flex basis and least width, which only shape automatic cards.
+            style={manual ? { flex: 'none', width: manual.width, minWidth: 0 } : undefined}
             onFocus={() => {
               setIndex(i);
               host.suggestions.highlight({ key: spec.key });
