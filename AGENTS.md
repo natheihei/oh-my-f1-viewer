@@ -1,7 +1,10 @@
-# f1a
+# oh-my-f1-viewer
 
-An agent-driven, multi-view F1 TV player, built on Electron and React. The viewer tells an agent what to watch, and it opens the
+OMFV (oh-my-f1-viewer) is an agent-driven, multi-view F1 TV player, built on Electron and React. The viewer tells an agent what to watch, and it opens the
 session and suggests tiles: video feeds and charts. The agent can also build mods in build mode, including components a tile can show.
+
+It was called f1a until 2026-11-16. Use OMFV or oh-my-f1-viewer in what people read and `omfv` in code. `f1a` is left only where it
+names the old profile, `~/.config/f1a`, or reads what the old name wrote. The logo and icons are in `icons/`.
 
 ## Docs
 

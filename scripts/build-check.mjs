@@ -1,11 +1,11 @@
 // Runs build mode in the real app, over a real replay race, muted, with the real agent: the cases in
-// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up in ~/.config/f1a.
-// It runs in an f1a of its own, with both logins copied in (see isolated.mjs), launched more than once on the same
+// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up in ~/.config/oh-my-f1-viewer.
+// It runs in an OMFV of its own, with both logins copied in (see isolated.mjs), launched more than once on the same
 // profile, whose mods folder starts empty. Prints what the agent says, which could give the race away: use a
 // session you've watched.
 // Usage: node scripts/build-check.mjs <screenshot-dir> [sessionKey] [year] [lap]
-//   F1A_BUILD_PARTS picks parts to run, like "a" or "bc": a saves a build, b undoes one, c quits in one.
-//   F1A_BUILD_PROFILE runs on that profile instead of a fresh one, so a later run can pick up what an earlier left.
+//   OMFV_BUILD_PARTS picks parts to run, like "a" or "bc": a saves a build, b undoes one, c quits in one.
+//   OMFV_BUILD_PROFILE runs on that profile instead of a fresh one, so a later run can pick up what an earlier left.
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startApp, typeInPalette } from './harness.mjs';
@@ -15,10 +15,10 @@ import { prepareProfile } from './isolated.mjs';
 const outDir = process.argv[2];
 if (!outDir) throw new Error('Usage: node scripts/build-check.mjs <screenshot-dir> [sessionKey] [year] [lap]');
 const [sessionKey, year, LAP] = [Number(process.argv[3] ?? 11396), Number(process.argv[4] ?? 2026), Number(process.argv[5] ?? 25)];
-const PARTS = process.env.F1A_BUILD_PARTS ?? 'abc';
+const PARTS = process.env.OMFV_BUILD_PARTS ?? 'abc';
 mkdirSync(outDir, { recursive: true });
 
-const profile = prepareProfile(process.env.F1A_BUILD_PROFILE ?? mkdtempSync(path.join(path.resolve(outDir), 'user-data-')), { agent: true });
+const profile = prepareProfile(process.env.OMFV_BUILD_PROFILE ?? mkdtempSync(path.join(path.resolve(outDir), 'user-data-')), { agent: true });
 console.log(`profile: ${profile}`);
 const modsDir = path.join(profile, 'mods');
 const snapshotDir = path.join(profile, 'mods-snapshot');
@@ -41,7 +41,7 @@ const check = (label, ok, detail = '') => {
 };
 const section = (title) => console.log(`\n== ${title}`);
 
-if (modFolders().length && !process.env.F1A_BUILD_KEEP) throw new Error(`The mods folder already has mods (${modFolders().join(', ')}): this check needs it empty.`);
+if (modFolders().length && !process.env.OMFV_BUILD_KEEP) throw new Error(`The mods folder already has mods (${modFolders().join(', ')}): this check needs it empty.`);
 rmSync(snapshotDir, { recursive: true, force: true });
 
 let app = null;
@@ -61,7 +61,7 @@ async function launch(port) {
   await page.evaluate(async () => {
     const { host, read } = await import('/src/host/index.ts');
     window.events = [];
-    window.f1a.ai.onEvent((e) => window.events.push(e));
+    window.omfv.ai.onEvent((e) => window.events.push(e));
     Object.assign(window, { host, read });
   });
   // Counts every spoiler check, and answers it when told how.
@@ -424,7 +424,7 @@ async function partSave() {
   writeFileSync(
     path.join(modsDir, 'stopped', 'main.tsx'),
     `import Type from 'typebox';
-import { defineComponent } from 'f1a';
+import { defineComponent } from 'omfv';
 
 const lap = undefined as unknown as { number: number };
 
@@ -625,14 +625,14 @@ async function partQuit() {
   await close();
 }
 
-let stepper = process.env.F1A_BUILD_STEPPER ?? null;
+let stepper = process.env.OMFV_BUILD_STEPPER ?? null;
 if (PARTS.includes('a')) ({ stepper } = await partSave());
 if (PARTS.includes('b')) {
-  if (!stepper || source(stepper) == null) await fail('Part b needs the mods part a saved: run them together, or set F1A_BUILD_STEPPER and F1A_BUILD_KEEP.');
+  if (!stepper || source(stepper) == null) await fail('Part b needs the mods part a saved: run them together, or set OMFV_BUILD_STEPPER and OMFV_BUILD_KEEP.');
   await partUndo(stepper);
 }
 if (PARTS.includes('c')) await partQuit();
 
-if (!process.env.F1A_BUILD_KEEP || PARTS.includes('c')) await cleanUp();
+if (!process.env.OMFV_BUILD_KEEP || PARTS.includes('c')) await cleanUp();
 console.log(`\n${failures ? `${failures} check(s) failed` : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);

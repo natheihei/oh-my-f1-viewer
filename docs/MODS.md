@@ -4,7 +4,7 @@ A mod is a plugin: a folder, outside the app's source, that adds something to th
 it and reloads it on every save, while the session and the streams keep playing. Anyone can write one: you in an editor, or a coding
 agent in a shell. Agreed on 2026-11-09 and built the same day. [STATUS.md](STATUS.md) says what's verified.
 
-This is Herdr's mod system adapted to f1a. [DESIGN.md](DESIGN.md) explains why components use only the host, which is what lets one
+This is Herdr's mod system adapted to OMFV. [DESIGN.md](DESIGN.md) explains why components use only the host, which is what lets one
 come from a mod.
 
 - **Mod:** a plugin, one folder the app loads and reloads. For now it defines one component.
@@ -17,12 +17,12 @@ A mod's component is like the app's own. It declares itself with `defineComponen
 the same renderer. There's no sandbox: a mod is trusted like anything else the user chooses to run.
 
 ```
-~/.config/f1a/mods/            the app's data folder: ~/Library/Application Support/f1a on macOS, %APPDATA%\f1a on Windows
-  .types/                      written by the app on every start: declarations for f1a and f1a/kit, for the build agent
+~/.config/oh-my-f1-viewer/mods/   the app's data folder: ~/Library/Application Support/oh-my-f1-viewer on macOS, %APPDATA%\oh-my-f1-viewer on Windows
+  .types/                         written by the app on every start: declarations for omfv and omfv/kit, for the build agent
   <name>/
-    main.tsx                   the mod (required; main.ts, main.jsx or main.js also work). It may import other files in its folder
-    mod.error                  written by the app while the latest save doesn't load, and removed once one does
-    mod.log                    written by the app: the mod's last 300 lines of console output and render errors
+    main.tsx                      the mod (required; main.ts, main.jsx or main.js also work). It may import other files in its folder
+    mod.error                     written by the app while the latest save doesn't load, and removed once one does
+    mod.log                       written by the app: the mod's last 300 lines of console output and render errors
 ```
 
 The folder's name is the mod's: lower-case letters, digits, `_` and `-`, starting with a letter. While a mod defines one component, the
@@ -32,8 +32,8 @@ component's name must match it, and can't be the name of one of the app's own co
 ```tsx
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from 'f1a';
-import { ChartCanvas, ChartFrame, text, type Box } from 'f1a/kit';
+import { defineComponent, useSql } from 'omfv';
+import { ChartCanvas, ChartFrame, text, type Box } from 'omfv/kit';
 
 const SQL = 'SELECT COUNT(*) AS laps FROM laps';
 
@@ -66,8 +66,8 @@ A mod may import:
 
 | Module | What it is |
 | --- | --- |
-| `f1a` | The host, the same `src/host` the app's components use: `useLive`, `read`, `useSql`, `host`, `defineComponent`, `Video` and the rest. [HOST.md](HOST.md) lists it |
-| `f1a/kit` | The kit the app's charts are drawn with, and optional for a mod: `ChartFrame`, `ChartCanvas`, `colors`, `tyreColour`, `useDriverStyles`, `drawCode` and `drawParts` for driver codes, scales and drawing helpers |
+| `omfv` | The host, the same `src/host` the app's components use: `useLive`, `read`, `useSql`, `host`, `defineComponent`, `Video` and the rest. [HOST.md](HOST.md) lists it |
+| `omfv/kit` | The kit the app's charts are drawn with, and optional for a mod: `ChartFrame`, `ChartCanvas`, `colors`, `tyreColour`, `useDriverStyles`, `drawCode` and `drawParts` for driver codes, scales and drawing helpers |
 | `react`, `react/jsx-runtime` | The app's own React |
 | `typebox` | The app's own TypeBox, for `args` |
 | `./anything` | Other files in the mod's folder |
@@ -96,10 +96,10 @@ The main process owns the folder, and the renderer imports what main hands it.
    a build after 120ms of quiet, since editors and agents often write a temp file and rename it, or save several files at once. Files
    the app writes (`mod.error`, `mod.log`, `.types`) and anything hidden or in `node_modules` don't start one.
 2. **Compiling.** esbuild bundles the mod into one ES module with an inline source map. The shared modules are left out and read at
-   run time from `globalThis.__f1aShared`, which `src/main.tsx` fills, and `console` inside the mod writes to its log as well as the
+   run time from `globalThis.__omfvShared`, which `src/main.tsx` fills, and `console` inside the mod writes to its log as well as the
    app's.
-3. **Serving.** Main serves the latest build from memory at `f1a-mod://mods/<name>/main.js?v=<version>`. The production build's
-   content security policy allows `f1a-mod:` for scripts.
+3. **Serving.** Main serves the latest build from memory at `omfv-mod://mods/<name>/main.js?v=<version>`. The production build's
+   content security policy allows `omfv-mod:` for scripts.
 4. **Loading.** Main sends the renderer every mod's status (`mods:changed`). For each new version, the renderer imports it, checks its
    default export (a name matching the folder, a title, a description, a TypeBox object for `args`, `spec` and `View`) and calls
    `host.components.register`, which replaces the last version by name. Tiles showing it redraw with the new code, and their state
@@ -143,7 +143,7 @@ compiling, imports, errors, logs and waiting for a save.
 | Piece | File |
 | --- | --- |
 | Watching, compiling, serving, `mod.error`, `mod.log` and the types | `electron/mods/index.ts` |
-| The `f1a-mod` scheme and starting it | `electron/main.ts` |
+| The `omfv-mod` scheme and starting it | `electron/main.ts` |
 | The bridge to main | `src/data/mods.ts` |
 | Importing, checking, registering and `live.mods` | `src/host/mods.ts` |
 | The modules a mod shares with the app | `src/main.tsx` |

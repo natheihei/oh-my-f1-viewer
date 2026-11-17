@@ -20,9 +20,9 @@ const SESSION = String(process.argv[3] ?? 11412);
 const PORT = Number(process.argv[4] ?? 5221);
 const CDP = Number(process.argv[5] ?? 9361);
 mkdirSync(outDir, { recursive: true });
-const scratch = process.env.F1A_SCRATCH ?? tmpdir();
-const userData = mkdtempSync(path.join(scratch, 'f1a-track-'));
-for (const f of ['f1a-session.json', 'f1a-cookies.json']) copyFileSync(path.join(homedir(), '.config/f1a', f), path.join(userData, f));
+const scratch = process.env.OMFV_SCRATCH ?? tmpdir();
+const userData = mkdtempSync(path.join(scratch, 'omfv-track-'));
+for (const f of ['omfv-session.json', 'omfv-cookies.json']) copyFileSync(path.join(homedir(), '.config/oh-my-f1-viewer', f), path.join(userData, f));
 
 const server = await createServer({ server: { port: PORT, strictPort: true }, cacheDir: path.join(userData, 'vite'), logLevel: 'error' });
 await server.listen();
@@ -43,7 +43,7 @@ for (let i = 0; i < 120 && !page; i++) {
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.waitForSelector('[data-testid=palette]', { timeout: 60_000 });
 // A hidden workspace stops producing frames once nothing moves: a tiny animation keeps screenshots working.
-await page.addStyleTag({ content: '@keyframes f1a-tick{to{opacity:.99}} body::after{content:"";position:fixed;width:1px;height:1px;animation:f1a-tick 1s infinite alternate}' });
+await page.addStyleTag({ content: '@keyframes omfv-tick{to{opacity:.99}} body::after{content:"";position:fixed;width:1px;height:1px;animation:omfv-tick 1s infinite alternate}' });
 
 const done = async (code = 0) => {
   await page.evaluate(async () => (await import('/src/host/index.ts')).host.session.close()).catch(() => {});

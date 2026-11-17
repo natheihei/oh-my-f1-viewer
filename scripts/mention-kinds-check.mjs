@@ -5,7 +5,7 @@
 // the mouse and going dashed once the tile closes; what the agent reads; and no picker with no session.
 // Saves a screenshot at each step.
 //
-// Runs an isolated f1a (scripts/isolated.mjs). Sending the line goes to the agent, which may not be signed in
+// Runs an isolated OMFV (scripts/isolated.mjs). Sending the line goes to the agent, which may not be signed in
 // on the fresh profile: only the line as sent is checked.
 // Usage: node scripts/mention-kinds-check.mjs <screenshot-dir> [--keep]
 import { mkdirSync } from 'node:fs';

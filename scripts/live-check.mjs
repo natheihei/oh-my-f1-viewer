@@ -25,10 +25,10 @@ const check = (name, ok, detail = '') => {
 await page.waitForTimeout(2500);
 await page.evaluate(async () => {
   window.events = [];
-  window.f1a.ai.onEvent((e) => window.events.push(e));
+  window.omfv.ai.onEvent((e) => window.events.push(e));
   // The capture's source and gaps only travel in the status message, not in `sessionData`.
   window.lastStatus = null;
-  window.f1a.data.onStatus((s) => { window.lastStatus = s; });
+  window.omfv.data.onStatus((s) => { window.lastStatus = s; });
   window.m = {
     session: await import('/src/data/session.ts'),
     sessionData: await import('/src/data/sessionData.ts'),
@@ -36,7 +36,7 @@ await page.evaluate(async () => {
   };
 });
 
-const live = await page.evaluate(() => window.f1a.f1tv.liveNow());
+const live = await page.evaluate(() => window.omfv.f1tv.liveNow());
 console.log('F1 TV live now:', JSON.stringify(live.map((i) => ({ contentId: i.contentId, title: i.title, meetingKey: i.meetingKey, sessionKey: i.sessionKey }))));
 check('F1 TV reports something live', live.length > 0);
 
@@ -172,7 +172,7 @@ check('a live capture is not marked complete', captured.timing === 'partial');
 const delay = await page.evaluate(async () => {
   const { useSessionData, sessionSql } = window.m.sessionData;
   const key = useSessionData.getState().sessionKey;
-  const everything = async () => (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT COUNT(*) AS n FROM intervals', [])).rows[0].n;
+  const everything = async () => (await window.omfv.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT COUNT(*) AS n FROM intervals', [])).rows[0].n;
   const first = await everything();
   await new Promise((r) => setTimeout(r, 8000));
   const last = await everything();

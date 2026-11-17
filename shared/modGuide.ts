@@ -6,7 +6,7 @@
 
 export const MOD_GUIDE = `What a mod is:
 - One folder in the mods folder, named in lower-case letters, digits, _ and -, starting with a letter. Its main.tsx default-exports defineComponent({ ... }), and the component's name must be the folder's name. It may import other files in its own folder.
-- A mod may import only: "f1a" (the host), "f1a/kit" (what the app's charts are drawn with), "react", "typebox", and its own files. Anything else fails to compile.
+- A mod may import only: "omfv" (the host), "omfv/kit" (what the app's charts are drawn with), "react", "typebox", and its own files. Anything else fails to compile.
 - The app compiles a mod on every save and reloads it while the session keeps playing. A save that does not compile leaves the last version running and writes the error to mod.error in the mod's folder. What the component logs or throws goes to mod.log there.
 - Paths here are relative to the mods folder: "lap_stepper/main.tsx". The types are there to read: ".types/src/host/index.d.ts" for the host and ".types/src/components/charts/kit/index.d.ts" for the kit. Read them before using something you are not sure of. Existing mods are there to read too.
 
@@ -14,8 +14,8 @@ A complete mod:
 
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from 'f1a';
-import { ChartCanvas, ChartFrame, text, type Box } from 'f1a/kit';
+import { defineComponent, useSql } from 'omfv';
+import { ChartCanvas, ChartFrame, text, type Box } from 'omfv/kit';
 
 const SQL = 'SELECT COUNT(*) AS laps FROM laps';
 
@@ -44,7 +44,7 @@ export default defineComponent({
   View: LapCount,
 });
 
-The host, from "f1a":
+The host, from "omfv":
 - useLive((s) => s.clock.timeSec) re-renders when the selected value changes; read() returns the same state once. The selector must return a value or an existing reference, never a new object. State includes session, clock (timeSec, playing), sessionData (state, and when 'ready': drivers, playheadMs, lapCount), feeds, layout.
 - useSql(sql, params?) runs a SELECT on the open session and again as the playhead moves. It returns { state: 'loading' | 'failed' | 'ready' }, with rows and columns when ready. It reads only what the feed had revealed at the frame on screen.
 - useSql(sql, params, { asOf: 'session' }) reads the whole session, including what the viewer has not watched. Use it only when the tile cannot work otherwise, like a control that jumps to the next lap, which has not happened yet at the playhead.
@@ -57,9 +57,9 @@ The host, from "f1a":
 
 Rules for what you build:
 - Declare the props the component needs, and never pick a driver from the data yourself: the app's agent fills the props in from what the user said when it suggests the tile. Only a component whose job is to follow someone, like the leader, picks them, and then its label says so.
-- Driver props are named for what they hold, and the agent fills them in by name. driver: the one driver it is about, as a car number, Driver('The driver'). driver_a and driver_b: the two a comparison is about. drivers: those to highlight among everyone drawn, Highlighted(). drivers_to_display: those to draw, when it can show just some, Displayed(); left out, everyone. Driver, DriverList, Highlighted and Displayed come from "f1a". Make a prop required when the component is about that driver, and optional otherwise. Another prop about drivers starts its name with driver_ (one) or drivers_ (a list).
+- Driver props are named for what they hold, and the agent fills them in by name. driver: the one driver it is about, as a car number, Driver('The driver'). driver_a and driver_b: the two a comparison is about. drivers: those to highlight among everyone drawn, Highlighted(). drivers_to_display: those to draw, when it can show just some, Displayed(); left out, everyone. Driver, DriverList, Highlighted and Displayed come from "omfv". Make a prop required when the component is about that driver, and optional otherwise. Another prop about drivers starts its name with driver_ (one) or drivers_ (a list).
 - What the viewer picks inside the tile, like which fight to show, is state from useTileState, not props, and the component names what it shows with useTileHeader.
-- Put every prop in spec's key, like "duel:44-4", so two tiles with different props can be on screen together. keyPart(value) from "f1a" writes a driver prop for a key.
+- Put every prop in spec's key, like "duel:44-4", so two tiles with different props can be on screen together. keyPart(value) from "omfv" writes a driver prop for a key.
 - A tile already has a title bar showing the spec's label, so never draw a title, heading or caption of your own. The first thing in the view is the content.
 - Always declare size: { aspect, min: { width, height } }. aspect is the shape it reads best in, its width over its height. min is the least room its content reads in, in pixels, not counting the tile's title bar: the smallest size at which everything it draws is still legible. The app arranges tiles by these: a tall one goes beside the main video and a wide one below it, and each stays at its least size while there is room. A list or table is tall, like { aspect: 0.7, min: { width: 300, height: 320 } }. A chart over time is { aspect: 16 / 9, min: { width: 400, height: 220 } }. A row of buttons is wide and low, like { aspect: 3, min: { width: 300, height: 90 } }. Do not ask for more than it needs: a least size much over 480 by 400 cannot be met beside a video. Change it when an edit changes what the component needs.
 - Tiles get small. The preview in the strip is 260 pixels wide and between 100 and 180 high, following aspect, and the user can drag a tile below its min, or put more tiles on screen than fit at theirs. At that size the view must still show its most important thing, like the newest row of a list: keep padding tight, and put what matters most at the top.

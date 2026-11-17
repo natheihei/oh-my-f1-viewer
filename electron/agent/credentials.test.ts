@@ -17,13 +17,13 @@ const keystore = {
 
 let dir = '';
 beforeEach(() => {
-  dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-credentials-'));
+  dir = mkdtempSync(path.join(os.tmpdir(), 'omfv-credentials-'));
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('the credential store', () => {
   it('keeps one credential per provider, encrypted, readable only by the user', async () => {
-    const file = path.join(dir, 'f1a-credentials.json');
+    const file = path.join(dir, 'omfv-credentials.json');
     const store = credentialStore(file, createSecureStore(keystore));
     await store.modify('openai', async () => ({ type: 'api_key', key: 'sk-secret' }));
     await store.modify('anthropic', async () => ({ type: 'api_key', key: 'sk-other' }));
@@ -38,7 +38,7 @@ describe('the credential store', () => {
   });
 
   it('removes the file with the last credential', async () => {
-    const file = path.join(dir, 'f1a-credentials.json');
+    const file = path.join(dir, 'omfv-credentials.json');
     const store = credentialStore(file, createSecureStore(keystore));
     await store.modify('openai', async () => ({ type: 'api_key', key: 'sk-secret' }));
     await store.delete('openai');
@@ -47,14 +47,14 @@ describe('the credential store', () => {
   });
 
   it("reads a file it can't decrypt as empty", async () => {
-    const file = path.join(dir, 'f1a-credentials.json');
+    const file = path.join(dir, 'omfv-credentials.json');
     await credentialStore(file, createSecureStore(keystore)).modify('openai', async () => ({ type: 'api_key', key: 'sk-secret' }));
     const elsewhere = { ...keystore, decryptStringAsync: async () => Promise.reject(new Error('another machine')) };
     expect(await credentialStore(file, createSecureStore(elsewhere)).list()).toEqual([]);
   });
 
   it("keeps a file it can't parse aside instead of writing over it", async () => {
-    const file = path.join(dir, 'f1a-credentials.json');
+    const file = path.join(dir, 'omfv-credentials.json');
     writeFileSync(file, '{"openai": {"type": "api_key", "key": "sk-sec');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const store = credentialStore(file, createSecureStore(keystore));
@@ -69,7 +69,7 @@ describe('the credential store', () => {
   });
 
   it('keeps aside a file that parses but holds no credentials object', async () => {
-    const file = path.join(dir, 'f1a-credentials.json');
+    const file = path.join(dir, 'omfv-credentials.json');
     writeFileSync(file, '[1, 2]');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const store = credentialStore(file, createSecureStore(keystore));

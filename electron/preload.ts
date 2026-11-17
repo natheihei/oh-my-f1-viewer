@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, F1aApi } from '../shared/api';
+import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, OmfvApi } from '../shared/api';
 import type { BuildState, ModStatus } from '../shared/mods';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
@@ -16,7 +16,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 
 const invoke = <T>(channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args) as Promise<T>;
 
-const api: F1aApi = {
+const api: OmfvApi = {
   f1tv: {
     status: () => invoke('f1tv:status'),
     login: () => invoke('f1tv:login'),
@@ -80,4 +80,4 @@ const api: F1aApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('f1a', api);
+contextBridge.exposeInMainWorld('omfv', api);

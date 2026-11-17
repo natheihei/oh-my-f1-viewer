@@ -28,7 +28,7 @@ export function errorText(e: unknown): string {
   return (
     raw
       .replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '')
-      // The vendored F1 TV code names a button from its own app, which f1a doesn't have.
+      // The vendored F1 TV code names a button from its own app, which OMFV doesn't have.
       .replace(/Please sign in again \(e\.g\. "Sign in with browser"\) and retry\./, 'Sign in again with /login-f1tv.')
       .trim()
   );

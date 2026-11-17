@@ -9,7 +9,7 @@ const seasons = [
 
 function stub(events: (pageId: number) => Promise<unknown[]>) {
   const f1tv = { seasons: vi.fn(async () => seasons), events: vi.fn(events) };
-  vi.stubGlobal('window', { f1a: { f1tv } });
+  vi.stubGlobal('window', { omfv: { f1tv } });
   return f1tv;
 }
 

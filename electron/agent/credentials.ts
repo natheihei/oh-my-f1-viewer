@@ -19,7 +19,7 @@ interface SecureStore {
 
 /** OpenAI's login asks for a stable id for this installation. */
 export function installId(): string {
-  const file = path.join(app.getPath('userData'), 'f1a-install-id');
+  const file = path.join(app.getPath('userData'), 'omfv-install-id');
   try {
     const existing = fs.readFileSync(file, 'utf8').trim().replace(/^urn:uuid:/, '');
     if (existing) return existing;

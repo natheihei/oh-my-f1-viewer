@@ -5,7 +5,7 @@ import { FORGOTTEN_NOTE, forgetForSummary, forgetTurn, readAheadIn } from './for
 let nextId = 1;
 const entry = (kind: string, message: Record<string, unknown>): EntryRecord => ({ id: nextId++, conversationId: 1, kind, model: [message] }) as unknown as EntryRecord;
 const user = (text: string) => entry('pi.user', { role: 'user', content: text });
-const system = () => entry('pi.system', { role: 'system', content: '', sections: { f1a: 'PROMPT' } });
+const system = () => entry('pi.system', { role: 'system', content: '', sections: { omfv: 'PROMPT' } });
 const calls = (text: string, ...ids: string[]) =>
   entry('pi.assistant', {
     role: 'assistant',

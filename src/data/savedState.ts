@@ -5,7 +5,7 @@
 
 let saved: Record<string, unknown> = {};
 
-const main = () => (globalThis as { window?: Window }).window?.f1a?.settings;
+const main = () => (globalThis as { window?: Window }).window?.omfv?.settings;
 
 export const savedState = {
   /** Reads what was saved. Call it once, before anything is restored. Nothing saved, or no main process, is empty. */

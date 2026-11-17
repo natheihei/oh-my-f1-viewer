@@ -1,4 +1,4 @@
-// Opens a replay race in an isolated f1a (see isolated.mjs) and puts every registered chart on screen, each
+// Opens a replay race in an isolated OMFV (see isolated.mjs) and puts every registered chart on screen, each
 // with its driver props filled in, so every chart can be seen at once. Each chart is shot on its own as a
 // tile, and manifest.json lists every chart with its args, the props it was given and its screenshot. With
 // --keep, it then leaves every chart on screen and the app running, for a person to look at.

@@ -16,9 +16,9 @@ await page.evaluate(async () => {
   };
 });
 const race = await page.evaluate(async () => {
-  const season = (await window.f1a.f1tv.seasons()).find((s) => s.year === 2025);
-  const event = (await window.f1a.f1tv.events(season.pageId)).find((e) => /mexic/i.test(e.shortName));
-  return (await window.f1a.f1tv.sessions(event.pageId, 2025)).find((s) => s.type === 'race' && s.series === 'FORMULA 1');
+  const season = (await window.omfv.f1tv.seasons()).find((s) => s.year === 2025);
+  const event = (await window.omfv.f1tv.events(season.pageId)).find((e) => /mexic/i.test(e.shortName));
+  return (await window.omfv.f1tv.sessions(event.pageId, 2025)).find((s) => s.type === 'race' && s.series === 'FORMULA 1');
 });
 const statuses = () => page.evaluate(() => Object.values(window.m.session.useSession.getState().streams).map((s) => s.status));
 const times = [];

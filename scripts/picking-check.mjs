@@ -1,7 +1,7 @@
 // Asks the real agent for sessions the way a viewer does, with nothing open, each request in a fresh
 // conversation, a few times over: whether it opens the one meant, or asks when the words could mean
 // several. Nothing is played: load_session is stubbed, so the run reads no race and plays no video.
-// Runs in an f1a of its own with the agent's login copied in (see scripts/isolated.mjs).
+// Runs in an OMFV of its own with the agent's login copied in (see scripts/isolated.mjs).
 //
 // Usage: node scripts/picking-check.mjs <out-dir> [--runs 3] ["request" ...]
 import path from 'node:path';
@@ -24,7 +24,7 @@ try {
     const { host, read } = await import('/src/host/index.ts');
     const { AGENT_TOOLS } = await import('/src/agent/tools.ts');
     window.events = [];
-    window.f1a.ai.onEvent((e) => window.events.push(e));
+    window.omfv.ai.onEvent((e) => window.events.push(e));
     // Opening the session isn't what's checked, only which one: record it and play nothing.
     window.opened = [];
     AGENT_TOOLS.find((t) => t.name === 'load_session').run = async (args) => {
@@ -34,7 +34,7 @@ try {
     await host.catalog.loadIndex();
     if (read().events.state !== 'ready') throw new Error(`Events didn't load: ${read().events.error}`);
   });
-  if (!(await page.evaluate(async () => (await window.f1a.ai.status()).ready))) throw new Error('The agent is not set up in ~/.config/f1a: connect it in /settings-agent.');
+  if (!(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) throw new Error('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
 
   const results = [];
   for (const request of requests) {
@@ -42,7 +42,7 @@ try {
       await page.evaluate(async () => {
         window.events.length = 0;
         window.opened.length = 0;
-        await window.f1a.ai.reset();
+        await window.omfv.ai.reset();
       });
       await typeInPalette(page, request);
       await page.waitForFunction(() => window.events.some((e) => e.type === 'turn_end' || e.type === 'error'), null, { timeout: 180_000 });

@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-15.
+What has actually been verified, and what hasn't. Last updated 2026-11-16.
 
 ## Verified on real sessions
 
@@ -118,6 +118,10 @@ race" called `list_sessions` then `load_session` and opened the race in 8.3s, an
 into a line naming `/login-f1tv`. On a profile with both signed in it didn't show at start, and `/reset-onboarding` brought it back
 with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block.
 
+**The rename to oh-my-f1-viewer** (2026-11-16), in an isolated instance on an empty profile: the window is titled
+oh-my-f1-viewer, onboarding shows the logo's mark, the page has the favicon, and the renderer's API is `window.omfv`. The copy from
+`~/.config/f1a` is covered by unit tests on folders made for them (`electron/oldProfile.test.ts`).
+
 Its second pass (2026-11-16), in isolated instances: the card held 390px through every step, opened or closed, on an empty
 profile, one signed in to F1 TV, and one with both; "Open a session" lit the palette with its example. With main's sign-in
 handlers swapped for ones that never finish, F1 TV's step kept a disabled "Waiting for F1 TV…" button, and a device code
@@ -170,7 +174,7 @@ On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1
 - **Viewing**, over the 2025 Mexico City race: a turn opened the session with `list_sessions`, `load_session` and `suggest_tiles`, and
   its reply streamed.
 - **Reading ahead.** `scripts/seek-check.mjs` passed in full: the spoiler check before a peek, Don't allow and Allow once, seeking by
-  lap and by what happened, and a lap that doesn't exist. After a read-ahead turn the conversation had its `f1a.forget` entry, the
+  lap and by what happened, and a lap that doesn't exist. After a read-ahead turn the conversation had its `omfv.forget` entry, the
   stored tool results stayed, and the next turns worked on the cut-down history.
 - **Build mode.** `scripts/build-check.mjs` passed in full, over the 2026 United States race, once it followed two earlier changes
   to the app: the "not drawing" note names a tile by its id, and `/build` needs a session open.
@@ -181,18 +185,18 @@ On Linux, in the desktop app on the main profile, on a ChatGPT plan with GPT-6.1
   the turn wasn't cut down when it ended.
 - **The key window**, on a profile of its own: a key typed there is stored, readable only by the user, and connects the provider. The
   renderer never sees it, Cancel changes nothing, and disconnecting removes it. This ran while the credential was still in
-  `pi-agent/auth.json`, before it moved to the encrypted `f1a-credentials.json`.
+  `pi-agent/auth.json`, before it moved to the encrypted `omfv-credentials.json`.
 
 **After the files of pi-coding-agent's conventions went** (no `SYSTEM.md`, mods `AGENTS.md` or `tsconfig.json`), the credential moved
-to `f1a-credentials.json`, the settings to `f1a-settings.json` and each conversation to a SQLite database, on the main profile
+to `omfv-credentials.json`, the settings to `omfv-settings.json` and each conversation to a SQLite database, on the main profile
 (2026-11-16):
 
 - **A ChatGPT sign-in from `/settings-agent`** stored the encrypted credential, and every turn below used it.
 - **`scripts/seek-check.mjs`** passed in full again, and its viewing conversation was stored as `<time>_view.sqlite`, with the
-  `f1a.forget` entries of its read-ahead turns. `node devscripts/conversation.mjs` prints it.
+  `omfv.forget` entries of its read-ahead turns. `node devscripts/conversation.mjs` prints it.
 - **The settings** are shared by every build on the profile: the checks, each on a Vite port of its own, found the agent set up from
   the file. The volume saved in one launch came back after a reload, and a change made just before quitting was written.
-- **`scripts/build-check.mjs`** passed in full, all 99 checks, in an f1a of its own with the agent's login and settings copied in,
+- **`scripts/build-check.mjs`** passed in full, all 99 checks, in an OMFV of its own with the agent's login and settings copied in,
   which is how every check that needs the agent now runs. The main profile's login and mods were left as they were.
 
 **A ChatGPT sign-in by a person** (2026-11-16), on a profile of its own with no login in it: "Sign in with ChatGPT" opened
@@ -201,6 +205,8 @@ Terra at medium, and a real turn replied on the new login.
 
 ## Not verified
 
+- **Copying the f1a profile.** It runs on the first start with the default profile, and hasn't yet on the real `~/.config/f1a`:
+  the mods it renames, a 538 MB timing database, and the conversations. The window icon hasn't been seen, since Hyprland shows none.
 - **Fixing a sign-in from onboarding or a fix block.** Neither has completed an F1 TV or ChatGPT sign-in in the real app, F1 TV
   ending a sign-in hasn't been seen, and no turn has failed for a rejected connection or a usage limit, so sending the message again
   after the fix hasn't run.

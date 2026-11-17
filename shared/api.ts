@@ -1,5 +1,5 @@
 /**
- * The contract between the main process and the renderer: everything `window.f1a` exposes.
+ * The contract between the main process and the renderer: everything `window.omfv` exposes.
  * Account tokens never cross this boundary; the renderer only learns whether a login exists.
  */
 
@@ -204,7 +204,7 @@ export type {
   SqlRows,
 } from './sessionData';
 
-export interface F1aApi {
+export interface OmfvApi {
   f1tv: {
     status(): Promise<F1TvStatus>;
     login(): Promise<F1TvStatus>;
@@ -298,6 +298,6 @@ export interface F1aApi {
 
 declare global {
   interface Window {
-    f1a: F1aApi;
+    omfv: OmfvApi;
   }
 }

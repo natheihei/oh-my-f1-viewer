@@ -1,3 +1,5 @@
+<img src="../icons/omfv-logo-build.svg" alt="omfv /build" width="320">
+
 # Build mode
 
 The app's agent normally drives viewing: it finds sessions, suggests tiles and seeks. In build mode it writes mods instead. The viewer

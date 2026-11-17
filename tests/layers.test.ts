@@ -67,7 +67,7 @@ describe('layer boundaries', () => {
   it('only the data layer talks to the main process', () => {
     const offenders = ['src/layout', 'src/host', 'src/components', 'src/agent', 'src/shell']
       .flatMap(sourceFiles)
-      .filter((file) => /window\.f1a\b/.test(readFileSync(file, 'utf8')));
+      .filter((file) => /window\.omfv\b/.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);
   });
 });

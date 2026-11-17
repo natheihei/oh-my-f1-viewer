@@ -34,7 +34,7 @@ describe('session data', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('window', { f1a: { data } });
+    vi.stubGlobal('window', { omfv: { data } });
   });
   afterEach(() => vi.unstubAllGlobals());
 

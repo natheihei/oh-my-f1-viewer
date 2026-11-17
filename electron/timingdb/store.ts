@@ -136,15 +136,15 @@ export class TimingStore {
   private setUpReader(): SqlTableInfo[] {
     // Marked deterministic so SQLite reads each once per query instead of once per row. They only
     // change between queries.
-    this.reader.function('f1a_session', { deterministic: true }, () => this.querySession);
-    this.reader.function('f1a_playhead', { deterministic: true }, () => this.queryPlayhead);
+    this.reader.function('omfv_session', { deterministic: true }, () => this.querySession);
+    this.reader.function('omfv_playhead', { deterministic: true }, () => this.queryPlayhead);
     // One view per stored table, limited to the session and the playhead.
     const derived = new Map(DERIVED_VIEWS.map((view) => [view.name as string, view]));
     for (const name of SQL_TABLES) {
       if (derived.has(name)) continue;
       const table = TABLE_BY_NAME.get(name as RowTable)!;
       const columns = sqlColumns(table).map(quote).join(', ');
-      this.reader.exec(`CREATE TEMP VIEW ${quote(name)} AS SELECT ${columns} FROM (${asOfSql(table, 'f1a_session()', 'f1a_playhead()')})`);
+      this.reader.exec(`CREATE TEMP VIEW ${quote(name)} AS SELECT ${columns} FROM (${asOfSql(table, 'omfv_session()', 'omfv_playhead()')})`);
     }
     // Built on the views above, so they're limited to the playhead just as those are.
     for (const view of DERIVED_VIEWS) this.reader.exec(`CREATE TEMP VIEW ${quote(view.name)} AS ${view.sql}`);

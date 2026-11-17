@@ -83,7 +83,7 @@ describe('session database', () => {
   const at = (ms: number) => BASE + ms;
 
   beforeEach(() => {
-    dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-timingdb-'));
+    dir = mkdtempSync(path.join(os.tmpdir(), 'omfv-timingdb-'));
     store = new TimingStore(path.join(dir, 'test.sqlite'));
   });
 
