@@ -191,7 +191,7 @@ Terra at medium, and a real turn replied on the new login.
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 
-- **Build mode on a live session, on macOS or Windows, or in the production build.** `look_at` captures the window, which hasn't been
+- **Build mode on a live session, on macOS or Windows, or in the production build.** `look_at` records the window, which hasn't been
   tried with DRM video on screen.
 - **A build that runs long enough to compact.** The build conversation isn't collapsed, so nothing depends on it, but it hasn't run.
 - **Dragging a draft from the strip onto the grid.** Enter and the host's add are checked. The drag is the same code as any suggestion's.

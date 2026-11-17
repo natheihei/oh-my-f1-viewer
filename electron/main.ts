@@ -5,7 +5,7 @@ import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
 import { appSettings } from './settings';
 import { MOD_SCHEME, Mods } from './mods';
-import { createMainWindow, getMainWindow, sendToRenderer } from './windows';
+import { createMainWindow, getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 
 // Vendored F1OpenViewer modules are plain CommonJS.
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -13,7 +13,13 @@ const widevine = require('./vendor/f1ov/widevine');
 const sessionState = require('./vendor/f1ov/session');
 const licenseProxy = require('./vendor/f1ov/licenseProxy');
 const livetiming = require('./vendor/f1ov/livetiming');
-const { isPermissionAllowed } = require('./vendor/f1ov/navigationPolicy');
+const { isAppNavigation, isPermissionAllowed } = require('./vendor/f1ov/navigationPolicy');
+
+/** Whether `wc` is the app's own window showing the app's own document. */
+function isAppWindow(wc: Electron.WebContents | null): boolean {
+  const win = getMainWindow();
+  return !!wc && !!win && !win.isDestroyed() && wc === win.webContents && isAppNavigation(wc.getURL(), getMainAppUrl());
+}
 
 process.on('uncaughtException', (e) => console.error('[main] uncaught exception:', e?.stack ?? e));
 process.on('unhandledRejection', (e) => console.error('[main] unhandled rejection:', e));
@@ -78,10 +84,20 @@ app
   .whenReady()
   .then(async () => {
     if (!gotLock) return;
-    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) =>
-      callback(isPermissionAllowed(permission)),
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
+      callback(isPermissionAllowed(permission) || (permission === 'display-capture' && isAppWindow(wc))),
     );
-    session.defaultSession.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
+    session.defaultSession.setPermissionCheckHandler(
+      (wc, permission) => isPermissionAllowed(permission) || (permission === 'display-capture' && isAppWindow(wc)),
+    );
+    // The build agent's look_at records the app's window, restricted to one tile: src/host/picture.ts. The app's
+    // own document may record itself, and nothing else: not the screen, not another window.
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+      const win = getMainWindow();
+      const own = win && !win.isDestroyed() && request.frame && request.frame === win.webContents.mainFrame && isAppNavigation(request.frame.url, getMainAppUrl());
+      // Electron denies when the callback gets no video.
+      callback(own ? { video: request.frame! } : {});
+    });
 
     // Don't hold the window for the CDM: playback awaits it instead.
     widevine.whenCdmReady();
