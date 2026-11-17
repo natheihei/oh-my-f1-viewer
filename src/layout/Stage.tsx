@@ -13,8 +13,8 @@ export type TileComponent = ComponentType<{ spec: ComponentSpec; tileId: string 
 const NO_MARKS: Record<string, string> = {};
 
 /**
- * `marks` holds a word for some component types,
- * such as "edited": their tiles get a dashed outline. The word itself is a slot in the tile's header.
+ * `marks` holds a word for some component types, such as "edited", kept on their hosts as `data-tile-mark`.
+ * The grid draws the mark itself: the word in a slot in the tile's header, and the tile framed with its header lit.
  */
 export function Stage({
   registry,
@@ -68,7 +68,7 @@ export function Stage({
             data-tile-key={tile.component.key}
             data-tile-type={tile.component.type}
             data-tile-mark={mark}
-            className={`stage-host ${mark ? 'stage-host-marked' : ''}`}
+            className="stage-host"
             ref={(el) => {
               if (el) hostsRef.current.set(tile.id, el);
               else hostsRef.current.delete(tile.id);
