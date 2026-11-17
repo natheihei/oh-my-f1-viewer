@@ -272,11 +272,6 @@
   @apply border-ink text-ink;
 }
 
-.tile-slot-build {
-  border-color: var(--color-medium);
-  color: var(--color-medium);
-}
-
 .tile-slot-warn,
 .tile-slot-error {
   @apply border-accent text-accent;
@@ -1186,6 +1181,7 @@
 /*
  * The spotlight on a tile the viewer points at, from the prompt or a duplicate suggestion: every other
  * tile dims, and this one is framed with its header lit, so it's plain on a bright feed or a dark chart.
+ * A tile whose mod the build added or changed is framed and lit the same way, without dimming the rest.
  */
 .grid-surface .grid-stack-item.tile-dimmed > .grid-stack-item-content::before {
   @apply pointer-events-none absolute inset-0 bg-black;
@@ -1194,14 +1190,17 @@
   z-index: 6;
 }
 
-.grid-surface .grid-stack-item.tile-pointed > .grid-stack-item-content::before {
+.grid-surface .grid-stack-item.tile-pointed > .grid-stack-item-content::before,
+.grid-surface .grid-stack-item.tile-marked > .grid-stack-item-content::before {
   @apply pointer-events-none absolute inset-0 border-2 border-ink;
   content: '';
   z-index: 6;
 }
 
 .tile-pointed .tile-titlebar,
-.tile-pointed .tile-titlebar:hover {
+.tile-pointed .tile-titlebar:hover,
+.tile-marked .tile-titlebar,
+.tile-marked .tile-titlebar:hover {
   @apply bg-ink text-black;
   border-bottom-color: var(--color-ink);
 }
@@ -1210,16 +1209,23 @@
 .tile-pointed .tile-titlebar .tile-title,
 .tile-pointed .tile-titlebar .driver-code,
 .tile-pointed .tile-titlebar .tile-close,
-.tile-pointed .tile-titlebar .tile-slot:not(.tile-slot-error):not(.tile-slot-warn) {
+.tile-pointed .tile-titlebar .tile-slot:not(.tile-slot-error):not(.tile-slot-warn),
+.tile-marked .tile-titlebar .tile-title,
+.tile-marked .tile-titlebar .driver-code,
+.tile-marked .tile-titlebar .tile-close,
+.tile-marked .tile-titlebar .tile-slot:not(.tile-slot-error):not(.tile-slot-warn) {
   @apply text-black;
 }
 
 .tile-pointed .tile-titlebar .tile-slot,
-.tile-pointed .tile-titlebar .tile-close {
+.tile-pointed .tile-titlebar .tile-close,
+.tile-marked .tile-titlebar .tile-slot,
+.tile-marked .tile-titlebar .tile-close {
   border-color: rgb(0 0 0 / 0.35);
 }
 
-.tile-pointed .tile-titlebar-audio .tile-title::before {
+.tile-pointed .tile-titlebar-audio .tile-title::before,
+.tile-marked .tile-titlebar-audio .tile-title::before {
   @apply bg-black;
 }
 
@@ -1453,13 +1459,6 @@
 .strip-item-draft:hover .strip-add,
 .strip-item-draft:focus-visible .strip-add {
   @apply text-ink;
-}
-
-/* A tile whose mod the build added or changed. */
-.stage-host-marked::after {
-  @apply pointer-events-none absolute inset-0 border border-dashed;
-  border-color: var(--color-medium);
-  content: '';
 }
 
 /* What a component draws in, in a tile or a strip preview: the host checks whether its content runs past it. */

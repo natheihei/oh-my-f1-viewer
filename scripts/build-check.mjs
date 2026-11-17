@@ -340,8 +340,12 @@ async function partSave() {
   r = await say('make lap form show the last 12 laps instead of 8');
   check('9 lap_form was edited on disk', source('lap_form') !== LAP_FORM && /12/.test(source('lap_form') ?? ''));
   check('9 its tile is marked edited', (await tile('lap_form').getAttribute('data-tile-mark')) === 'edited');
-  const outline = await tile('lap_form').evaluate((el) => getComputedStyle(el, '::after').borderTopStyle);
-  check('9 with a dashed outline', outline === 'dashed', outline);
+  const lit = await tile('lap_form').evaluate((el) => {
+    const item = document.querySelector(`.grid-stack-item[gs-id="${el.dataset.tile}"]`);
+    const frame = item && getComputedStyle(item.querySelector('.grid-stack-item-content'), '::before');
+    return { marked: item?.classList.contains('tile-marked'), frame: frame && `${frame.borderTopWidth} ${frame.borderTopStyle}` };
+  });
+  check('9 framed with its header lit, as a pointed tile is', lit.marked === true && lit.frame === '2px solid', JSON.stringify(lit));
   check('9 the tag reads "build · 2 changes"', (await tagText()).includes('build · 2 changes'), await tagText());
   check('9 it is not in the strip, being on screen', (await draft('lap_form').count()) === 0);
   await shot('build-06-edited.png');
