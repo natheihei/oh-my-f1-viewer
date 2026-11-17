@@ -10,7 +10,8 @@ import { loadUiState, saveUiState, type UiStorage } from './uiState';
 
 const KEY = 'onboarded';
 
-export const useOnboarding = create<{ active: boolean }>(() => ({ active: false }));
+/** `pointing`: its last step is open, which is done in the palette, so the palette lights up. */
+export const useOnboarding = create<{ active: boolean; pointing: boolean }>(() => ({ active: false, pointing: false }));
 
 /**
  * Whether to show onboarding at start. Once finished or skipped, never again on its own. Before that, a
