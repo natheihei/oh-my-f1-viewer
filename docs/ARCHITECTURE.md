@@ -233,6 +233,15 @@ that refuse a call.
 - Both sign-ins are encrypted with the OS keyring: F1 TV's in `f1a-session.json` and `f1a-cookies.json`, the agent provider's in
   `f1a-credentials.json`. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
+- **Onboarding** (`src/shell/Onboarding.tsx`) leads a first launch through both, then opening a session, over the empty screen. It
+  shows until a session opens or it's skipped, and not at all for a profile already set up; `/reset-onboarding` shows it again.
+  The `onboarded` flag is kept with the UI state (`src/shell/onboardingState.ts`).
+- **Fixes.** After onboarding, anything that needs signing in or setting up again comes to the palette as a fix block
+  (`src/shell/fixes.ts`): the error, what fixing it does, a button and the `/` command that does the same. That covers F1 TV
+  ending its sign-in, F1 TV's events failing to load, the agent not set up, and a turn failing because the provider rejected
+  the connection, its plan isn't eligible, or a usage limit was reached. Main says which fix a failed turn needs (`fix` on the
+  agent's error event). The message that failed is sent again once the fix works. F1 TV ending its sign-in still closes the
+  session, so it has to be opened again.
 
 ## What sessions exist
 

@@ -814,7 +814,7 @@ describe('failures', () => {
     const { agent, script } = setup();
     script(fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'usage_limit_reached' }));
     await agent.send('go', 'state', [TOOL]);
-    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'OpenAI usage limit reached. Try again later.' });
+    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'OpenAI usage limit reached.', fix: 'limit' });
     host.events.length = 0;
     script(fauxAssistantMessage('Fine now.'));
     await agent.send('again', 'state', [TOOL]);
@@ -827,7 +827,7 @@ describe('failures', () => {
     const agent = new Agent(undefined, memoryStore({ provider: 'anthropic', model: 'claude-sonnet-5-5' }));
     await agent.send('go', 'state', [TOOL]);
     expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
-    expect(events().at(-1)).toMatchObject({ message: 'The agent needs setting up first: /settings-agent' });
+    expect(events().at(-1)).toMatchObject({ message: "The agent isn't set up yet.", fix: 'setup' });
     expect(await agent.status()).toMatchObject({ ready: false });
   });
 });

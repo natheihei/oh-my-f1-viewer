@@ -29,8 +29,9 @@ node node_modules/electron/install.js
 npm run dev
 ```
 
-The first two commands install the dependencies and the castLabs Electron build with Widevine. The app then opens to a
-blank page with the command palette, which tells you what to sign in to.
+The first two commands install the dependencies and the castLabs Electron build with Widevine. The app then opens to
+onboarding: sign in to F1 TV, connect the agent's model, then open a session. `/reset-onboarding` shows it again. After
+that, when a sign-in needs doing again, the palette says so with a button that fixes it.
 
 ## Using it
 
@@ -41,6 +42,7 @@ blank page with the command palette, which tells you what to sign in to.
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
 | `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
+| `/reset-onboarding` | Show the steps to get started again |
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |

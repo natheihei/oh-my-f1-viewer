@@ -656,12 +656,13 @@
 
 /*
  * The history. Each line's mark hangs in its own column, and your own lines sit on a raised band. It scrolls past
- * 7 rows, or past the cap set by dragging the palette's top edge (--palette-history-cap), up to 60% of the window.
+ * 7 rows, or past the cap set by dragging the palette's top edge (--palette-history-cap), up to 60% of the window. Each fix
+ * block waiting on the viewer (--palette-fixes) adds 4 rows, about its height, so none is cut off, still up to 60%.
  * Keep the 7 rows and 60% in step with persistPaletteHeight.ts.
  */
 .palette-history {
   @apply overflow-y-auto border-b border-line py-1;
-  max-height: max(calc(var(--row) * 7 + 8px), min(var(--palette-history-cap, 0px), 60vh));
+  max-height: max(min(calc(var(--row) * (7 + 4 * var(--palette-fixes, 0)) + 8px), 60vh), min(var(--palette-history-cap, 0px), 60vh));
 }
 
 /* Drag the palette's top edge to let the history grow; double-click to go back to 7 rows. */
@@ -1612,4 +1613,285 @@
   border-color: var(--color-medium);
   background: var(--color-medium);
   @apply text-black hover:text-black;
+}
+
+/*
+ * An error with its fix, in the palette's history: framed in red, what broke on top, what fixing it does under
+ * it, then the button and the command that does the same. While the fix runs it waits in grey.
+ */
+.palette-fix {
+  margin: 4px var(--pad) 6px;
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-panel));
+}
+
+.palette-fix-running {
+  border-color: var(--color-rule);
+  background: var(--color-raised);
+}
+
+.palette-fix-head {
+  @apply flex items-center gap-2 text-accent;
+  padding: 3px 8px 0;
+}
+
+.palette-fix-running .palette-fix-head {
+  @apply text-ink;
+}
+
+.palette-fix-mark {
+  @apply shrink-0 bg-accent;
+  width: 8px;
+  height: 8px;
+}
+
+.palette-fix-running .palette-fix-mark {
+  @apply bg-transparent;
+  border: 1px solid var(--color-ink);
+  animation: palette-pulse 1s steps(2) infinite;
+}
+
+.palette-fix-detail {
+  @apply text-dim;
+  padding: 0 8px 2px 24px;
+}
+
+.palette-fix-failed {
+  @apply text-accent;
+}
+
+.palette-fix-actions {
+  @apply flex items-center gap-2.5;
+  padding: 2px 8px 6px 24px;
+}
+
+.palette-fix-actions:empty {
+  @apply hidden;
+}
+
+.palette-fix-button {
+  @apply cursor-pointer border border-ink bg-ink px-1.5 text-black hover:bg-white;
+  line-height: 18px;
+}
+
+.palette-fix-command {
+  @apply text-mute;
+}
+
+.palette-fix-dismiss {
+  @apply ml-auto cursor-pointer text-dim underline decoration-faint underline-offset-2 hover:text-ink;
+  font-size: var(--text-s);
+}
+
+/*
+ * Onboarding, over the empty screen above the palette (z-20, under the palette's z-30). An accordion of steps on
+ * the left, the open one's picture on the right. Black like a tile, so it stands off the ground.
+ */
+.onboarding {
+  @apply absolute z-20 grid bg-black;
+  top: max(24px, 7vh);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(940px, calc(100% - 32px));
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 16px 28px;
+  padding: 18px 24px 22px 20px;
+  border: 1px solid var(--color-line);
+}
+
+.onboarding-head {
+  @apply col-span-2 flex items-center gap-3.5;
+}
+
+.onboarding-title {
+  font-size: var(--text-l);
+  line-height: 28px;
+}
+
+.onboarding-progress {
+  @apply flex items-center gap-1;
+  flex: 0 0 160px;
+}
+
+.onboarding-progress i {
+  @apply flex-1 bg-line;
+  height: 3px;
+}
+
+.onboarding-progress i.onboarding-progress-done {
+  @apply bg-ink;
+}
+
+.onboarding-progress span {
+  @apply ml-2 text-dim tabular-nums;
+  font-size: var(--text-s);
+}
+
+.onboarding-skip {
+  @apply ml-auto cursor-pointer text-dim underline decoration-faint underline-offset-2 hover:text-ink;
+  font-size: var(--text-s);
+}
+
+.onboarding-steps {
+  @apply grid content-start border-t border-line;
+}
+
+.onboarding-step {
+  @apply border-b border-line;
+}
+
+.onboarding-step-open {
+  @apply bg-raised;
+}
+
+.onboarding-step-head {
+  @apply grid w-full cursor-pointer items-center gap-2 text-left hover:bg-select;
+  grid-template-columns: 2ch minmax(0, 1fr) auto;
+  padding: 8px 10px;
+}
+
+.onboarding-step-open .onboarding-step-head {
+  @apply cursor-default hover:bg-transparent;
+}
+
+.onboarding-status {
+  @apply truncate text-dim;
+  font-size: var(--text-s);
+}
+
+.onboarding-mark {
+  width: 8px;
+  height: 8px;
+}
+
+.onboarding-mark-todo {
+  border: 1px solid var(--color-dim);
+}
+
+.onboarding-mark-busy {
+  border: 1px solid var(--color-ink);
+  animation: palette-pulse 1s steps(2) infinite;
+}
+
+.onboarding-mark-done {
+  @apply bg-ink;
+}
+
+.onboarding-mark-error {
+  @apply bg-accent;
+}
+
+.onboarding-dim {
+  @apply text-mute;
+}
+
+.onboarding-step-body {
+  @apply grid gap-2.5;
+  padding: 0 10px 12px calc(2ch + 18px);
+}
+
+.onboarding-step-body p {
+  @apply m-0;
+}
+
+.onboarding-why {
+  @apply text-dim;
+}
+
+.onboarding-error {
+  @apply text-accent;
+}
+
+.onboarding-actions {
+  @apply flex flex-wrap items-center gap-2.5;
+}
+
+.onboarding-action {
+  @apply cursor-pointer border border-rule bg-transparent px-1.5 text-ink hover:border-ink;
+  line-height: 18px;
+}
+
+.onboarding-action-main {
+  @apply border-ink bg-ink text-black hover:bg-white;
+}
+
+.onboarding-command {
+  @apply text-mute;
+}
+
+.onboarding-command kbd {
+  @apply border border-line px-1 font-mono;
+}
+
+.onboarding-media {
+  @apply min-w-0;
+}
+
+.onboarding-preview {
+  @apply grid gap-1.5 border border-line bg-ground p-2 text-dim;
+  font-size: var(--text-s);
+  line-height: 16px;
+}
+
+.onboarding-preview-label {
+  @apply text-mute uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.onboarding-preview-tiles {
+  @apply grid gap-1;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  height: 200px;
+}
+
+.onboarding-preview-tile {
+  @apply flex min-h-0 flex-col overflow-hidden bg-black;
+}
+
+.onboarding-preview-big {
+  grid-row: span 2;
+}
+
+.onboarding-preview-bar {
+  @apply bg-raised px-1.5 text-dim uppercase;
+  height: 14px;
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+}
+
+.onboarding-preview-video {
+  @apply flex-1;
+  background: radial-gradient(120% 90% at 30% 40%, #1c2622 0%, #0b0e0d 55%, #000 100%);
+}
+
+.onboarding-preview-tower {
+  @apply grid content-start text-faint;
+  padding: 3px 5px;
+  font-size: 9px;
+  line-height: 13px;
+}
+
+.onboarding-preview-chat {
+  @apply border border-rule bg-panel py-1;
+}
+
+.onboarding-preview-examples {
+  @apply flex flex-wrap gap-1.5;
+}
+
+@media (max-width: 760px) {
+  .onboarding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .onboarding-head {
+    @apply col-span-1 flex-wrap;
+  }
+  .onboarding-media {
+    @apply hidden;
+  }
 }
