@@ -55,13 +55,24 @@ const copiedLogins = new Map();
 
 const readOrNull = (file) => (existsSync(file) ? readFileSync(file) : null);
 
+/** Merges `values` into the settings file of profile `dir`, at the top level. */
+function writeSettings(dir, values) {
+  const file = path.join(dir, SETTINGS);
+  let settings = {};
+  try {
+    settings = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {}
+  writeFileSync(file, JSON.stringify({ ...settings, ...values }, null, 2));
+}
+
 /**
  * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from ~/.config/oh-my-f1-viewer, and with
  * `agent`, of the agent's login and its settings too (not the rest of the settings: the run's volume and
  * background start from the defaults). The originals are never moved. The agent's login is written back after
- * the run if it was refreshed: see syncAgentLogin. Returns `dir`.
+ * the run if it was refreshed: see syncAgentLogin. Onboarding is marked finished, since a profile without the agent's
+ * login would show it over the empty screen and every tile a check puts there: `onboarding` keeps it. Returns `dir`.
  */
-export function prepareProfile(dir, { agent = false } = {}) {
+export function prepareProfile(dir, { agent = false, onboarding = false } = {}) {
   mkdirSync(dir, { recursive: true });
   for (const file of ['omfv-session.json', 'omfv-cookies.json']) {
     if (existsSync(path.join(MAIN_PROFILE, file))) copyFileSync(path.join(MAIN_PROFILE, file), path.join(dir, file));
@@ -79,8 +90,9 @@ export function prepareProfile(dir, { agent = false } = {}) {
     try {
       settings = JSON.parse(readFileSync(path.join(MAIN_PROFILE, SETTINGS), 'utf8'));
     } catch {}
-    if (settings.agent) writeFileSync(path.join(dir, SETTINGS), JSON.stringify({ agent: settings.agent }, null, 2));
+    if (settings.agent) writeSettings(dir, { agent: settings.agent });
   }
+  if (!onboarding) writeSettings(dir, { ui: { onboarded: true } });
   return dir;
 }
 
@@ -113,12 +125,12 @@ export function syncAgentLogin(dir, log = console.log) {
  * at `scale` device pixels each so a shot stays sharp. Returns the page, `log`, `userData` (the user data dir it
  * runs on), and `stop`, which closes only this instance.
  *
- * `agent` copies in the agent's login and settings, for runs with the real model: see prepareProfile.
+ * `agent` copies in the agent's login and settings, for runs with the real model, and `onboarding` keeps onboarding: see prepareProfile.
  */
-export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, agent = false, userData: given = null, inspect = false } = {}) {
+export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5, agent = false, onboarding = false, userData: given = null, inspect = false } = {}) {
   const log = (...a) => console.log(`[${name}]`, ...a);
   // A user data dir of its own, so the single-instance lock, window state, mods and timing.sqlite are apart.
-  const userData = given ?? prepareProfile(mkdtempSync(path.join(outDir, 'user-data-')), { agent });
+  const userData = given ?? prepareProfile(mkdtempSync(path.join(outDir, 'user-data-')), { agent, onboarding });
   if (profileInUse(userData)) throw new Error(`Another OMFV is using ${userData}.`);
 
   const vitePort = await freePort();
