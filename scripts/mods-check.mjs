@@ -1,6 +1,6 @@
 // Runs a mod through its life in the real app, over a real replay race, muted: written into the mods
 // folder, put on screen, saved again while playing, saved broken, made to throw, and removed. Saves a
-// screenshot at each step. Uses examples/mods/lap_form, in the mods folder of an f1a of its own (see
+// screenshot at each step. Uses examples/mods/lap_form, in the mods folder of an OMFV of its own (see
 // isolated.mjs), and removes the mod at the end. Needs the F1 TV sign-in.
 // Usage: node scripts/mods-check.mjs <screenshot-dir> [sessionKey] [year] [lap]
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

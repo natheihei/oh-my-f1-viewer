@@ -1,6 +1,8 @@
-# f1a
+<p align="center"><img src="icons/omfv-logo-framed.svg" alt="omfv, oh-my-f1-viewer" width="460"></p>
 
-An agent-driven, multi-view F1 TV player. Instead of menus, you tell an agent what you want to watch:
+# oh-my-f1-viewer
+
+**OMFV** is an agent-driven, multi-view F1 TV player. Instead of menus, you tell an agent what you want to watch:
 
 ```
 > 2025 Mexico
@@ -55,7 +57,7 @@ shows a spoiler check: answer Allow once, Allow for this session or Don't allow.
 
 ### Mods
 
-A [mod](docs/MODS.md) is a plugin: a folder in `~/.config/f1a/mods` that the app reloads on every save. For now it can add a component
+A [mod](docs/MODS.md) is a plugin: a folder in `~/.config/oh-my-f1-viewer/mods` that the app reloads on every save. For now it can add a component
 for tiles to show, such as a chart or a controller that jumps between laps. Write one yourself or have a coding agent write it, then
 ask the agent above to show it.
 
@@ -71,8 +73,8 @@ npm run check
 
 Typecheck and unit tests. The scripts below run the real app in Electron, and all but the first three need both sign-ins:
 
-A check that needs a sign-in runs an f1a of its own, apart from any other on the machine, on a fresh profile with copies of
-the F1 TV sign-in and, when it needs the agent, of the agent's sign-in and settings from `~/.config/f1a`. An agent sign-in the
+A check that needs a sign-in runs an OMFV of its own, apart from any other on the machine, on a fresh profile with copies of
+the F1 TV sign-in and, when it needs the agent, of the agent's sign-in and settings from `~/.config/oh-my-f1-viewer`. An agent sign-in the
 run refreshed is written back, so the original stays valid ([scripts/isolated.mjs](scripts/isolated.mjs)).
 
 ```bash
@@ -103,7 +105,7 @@ node scripts/seek-check.mjs
 npm run build && node scripts/prod-check.mjs
 ```
 
-This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an f1a of its own while it runs:
+This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an OMFV of its own while it runs:
 
 ```bash
 node scripts/mods-check.mjs /tmp/mods-check

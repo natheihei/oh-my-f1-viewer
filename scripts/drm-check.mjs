@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { startApp } from './harness.mjs';
 
 const outDir = process.argv[2] ?? tmpdir();
-const YEAR = Number(process.env.F1A_YEAR ?? 2026);
-const EVENT = new RegExp(process.env.F1A_EVENT ?? 'mexic', 'i');
-const DRIVERS = (process.env.F1A_DRIVERS ?? 'HAM,NOR,LEC').split(',');
+const YEAR = Number(process.env.OMFV_YEAR ?? 2026);
+const EVENT = new RegExp(process.env.OMFV_EVENT ?? 'mexic', 'i');
+const DRIVERS = (process.env.OMFV_DRIVERS ?? 'HAM,NOR,LEC').split(',');
 
 const { page, stop } = await startApp();
 page.on('console', (m) => {
@@ -18,11 +18,11 @@ page.on('console', (m) => {
 const opened = await page.evaluate(
   async ({ YEAR, EVENT }) => {
     const re = new RegExp(EVENT, 'i');
-    const seasons = await window.f1a.f1tv.seasons();
+    const seasons = await window.omfv.f1tv.seasons();
     const season = seasons.find((s) => s.year === YEAR);
-    const events = await window.f1a.f1tv.events(season.pageId);
+    const events = await window.omfv.f1tv.events(season.pageId);
     const event = events.find((e) => re.test(e.name) || re.test(e.shortName));
-    const sessions = await window.f1a.f1tv.sessions(event.pageId, YEAR);
+    const sessions = await window.omfv.f1tv.sessions(event.pageId, YEAR);
     const race = sessions.find((s) => s.type === 'race' && s.series === 'FORMULA 1') ?? sessions.find((s) => s.type === 'race');
     const viewing = await import('/src/host/viewing.ts');
     const channels = await viewing.openViewingSession(race);
@@ -38,7 +38,7 @@ const opened = await page.evaluate(
       events: events.length,
       event: event.shortName,
       sessions: sessions.map((s) => `${s.type}:${s.status}`),
-      drm: await window.f1a.f1tv.play(race.contentId).then((p) => ({ streamType: p.streamType, license: !!p.licenseUrl })),
+      drm: await window.omfv.f1tv.play(race.contentId).then((p) => ({ streamType: p.streamType, license: !!p.licenseUrl })),
       race: { contentId: race.contentId, title: race.title, meetingKey: race.meetingKey, sessionKey: race.sessionKey },
       channels: channels.map((c) => `${c.label}(${c.kind})`),
     };
@@ -144,13 +144,13 @@ console.log('clock kept running without main:', s.clock.t > beforeClose);
 const sessionStart = await page.evaluate(
   () =>
     new Promise((resolve) => {
-      const stop = window.f1a.data.onStatus((status) => {
+      const stop = window.omfv.data.onStatus((status) => {
         if (status.state !== 'ready') return;
         stop();
         resolve(status.sessionStartSec);
       });
       setTimeout(() => resolve(null), 5000);
-      window.f1a.data.open(window.modules.sessionData.archiveQuery(window.modules.session.useSession.getState().session), false);
+      window.omfv.data.open(window.modules.sessionData.archiveQuery(window.modules.session.useSession.getState().session), false);
     }),
 );
 if (sessionStart != null) {

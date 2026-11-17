@@ -196,7 +196,7 @@ function answerTools(agent: InstanceType<typeof Agent>, ok = true) {
 }
 
 beforeEach(() => {
-  host.userData = mkdtempSync(path.join(os.tmpdir(), 'f1a-agent-test-'));
+  host.userData = mkdtempSync(path.join(os.tmpdir(), 'omfv-agent-test-'));
   host.events.length = 0;
   host.sent.length = 0;
   host.keyTitles.length = 0;
@@ -636,7 +636,7 @@ describe('build mode', () => {
     const tries = [
       fauxToolCall('read', { path: '../secret.txt' }),
       fauxToolCall('write', { path: '../escape/main.tsx', content: 'x' }),
-      fauxToolCall('write', { path: '/tmp/f1a-escape.txt', content: 'x' }),
+      fauxToolCall('write', { path: '/tmp/omfv-escape.txt', content: 'x' }),
       fauxToolCall('write', { path: 'tsconfig.json', content: 'x' }),
       fauxToolCall('write', { path: '.types/a.d.ts', content: 'x' }),
       fauxToolCall('write', { path: 'a_mod/mod.log', content: 'x' }),
@@ -649,7 +649,7 @@ describe('build mode', () => {
     expect(history).not.toContain('TOKEN');
     expect(history.match(/outside the mods folder/g)).toHaveLength(3);
     expect(existsSync(path.join(host.userData, 'escape'))).toBe(false);
-    expect(existsSync('/tmp/f1a-escape.txt')).toBe(false);
+    expect(existsSync('/tmp/omfv-escape.txt')).toBe(false);
     expect(readdirSync(modsDir())).toEqual([]);
     expect(notes()).toEqual([]);
   });
@@ -995,7 +995,7 @@ describe('stored conversations', () => {
     expect(files()).toHaveLength(1);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\nhi', 'assistant: Hello.']);
     // The prompt as the model got it, for review.
-    expect(records(files()[0]).find((r) => r.model?.[0]?.role === 'system')?.model?.[0]?.sections).toEqual({ f1a: VIEW_PROMPT });
+    expect(records(files()[0]).find((r) => r.model?.[0]?.role === 'system')?.model?.[0]?.sections).toEqual({ omfv: VIEW_PROMPT });
   });
 
   it('adds later turns to the same one', async () => {
@@ -1053,7 +1053,7 @@ describe('stored conversations', () => {
     script(fauxAssistantMessage([fauxToolCall('act', { n: 1 })]), fauxAssistantMessage('Jumped to lap 30.'));
     await agent.send('go', 'state', [TOOL]);
     expect(stored(files()[0])).toEqual(['user: <app_state>\nstate\n</app_state>\n\ngo', 'assistant: ', 'toolResult: SECRET ROWS', 'assistant: Jumped to lap 30.']);
-    expect(records(files()[0]).at(-1)).toMatchObject({ kind: 'f1a.forget' });
+    expect(records(files()[0]).at(-1)).toMatchObject({ kind: 'omfv.forget' });
   });
 
   it('keeps only the newest of each kind when a new one starts', async () => {

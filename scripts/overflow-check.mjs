@@ -15,7 +15,7 @@ import { chromium } from 'playwright';
 
 const outDir = process.argv[2] ?? tmpdir();
 mkdirSync(outDir, { recursive: true });
-const userData = mkdtempSync(path.join(tmpdir(), 'f1a-overflow-'));
+const userData = mkdtempSync(path.join(tmpdir(), 'omfv-overflow-'));
 
 function writeMod(name, source) {
   mkdirSync(path.join(userData, 'mods', name), { recursive: true });
@@ -27,7 +27,7 @@ const LIST = 'rc_list';
 writeMod(
   LIST,
   `import Type from 'typebox';
-import { defineComponent } from 'f1a';
+import { defineComponent } from 'omfv';
 
 const MESSAGES = ['YELLOW IN SECTOR 2', 'CLEAR IN SECTOR 2', 'DRS ENABLED', 'TRACK LIMITS T4', 'BLUE FLAG', 'INCIDENT T1 NOTED'];
 
@@ -64,7 +64,7 @@ const TABLE = 'wide_table';
 writeMod(
   TABLE,
   `import Type from 'typebox';
-import { defineComponent } from 'f1a';
+import { defineComponent } from 'omfv';
 
 const ALL = ['P', 'DRV', 'GAP', 'INT', 'LAST', 'BEST', 'S1', 'S2', 'S3', 'SPEED', 'TYRE', 'AGE', 'PITS'];
 
@@ -124,9 +124,9 @@ await page.waitForSelector('[data-testid=palette]');
 // A hidden workspace stops producing frames when nothing moves, which stalls screenshots.
 await page.evaluate(() => {
   const style = document.createElement('style');
-  style.textContent = '@keyframes f1a-tick{from{opacity:.01}to{opacity:.02}}';
+  style.textContent = '@keyframes omfv-tick{from{opacity:.01}to{opacity:.02}}';
   const dot = document.createElement('div');
-  dot.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;z-index:99999;pointer-events:none;animation:f1a-tick 1s linear infinite';
+  dot.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;z-index:99999;pointer-events:none;animation:omfv-tick 1s linear infinite';
   document.head.append(style);
   document.body.append(dot);
 });

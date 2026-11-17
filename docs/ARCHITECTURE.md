@@ -142,10 +142,10 @@ Both use the host, but neither can call the other.
 
 ## Settings and UI state across restarts
 
-The app's settings are one JSON file in the profile, `<userData>/f1a-settings.json`, which main owns (`electron/settings.ts`). The
+The app's settings are one JSON file in the profile, `<userData>/omfv-settings.json`, which main owns (`electron/settings.ts`). The
 agent's are under `agent`, and the renderer's small UI state under `ui`. Being in the profile, they're the same for every build that
 runs on it, whatever origin its page is served from. Edit the file by hand only while the app is closed. One that doesn't parse, or
-holds no JSON object, is read as empty and kept: the first change moves it aside to `f1a-settings.json.bad` (or `.bad.1`, …, never over
+holds no JSON object, is read as empty and kept: the first change moves it aside to `omfv-settings.json.bad` (or `.bad.1`, …, never over
 an earlier one), says where in main's log, and then writes the new file.
 
 The UI state, the master volume, the background and the palette's history cap, is kept by the shell, above the host. The host holds
@@ -186,9 +186,9 @@ What the agent keeps:
 - **Its settings** are under `agent` in the app's settings file (`shared/agentSettings.ts`): the provider, model and thinking level
   `/settings-agent` chose, and the compaction and retry policy, which is changed by hand. The agent reads them from main at each use,
   and writes them when a provider is connected or a model chosen.
-- **The provider's credential** is in `<userData>/f1a-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
+- **The provider's credential** is in `<userData>/omfv-credentials.json`, beside F1 TV's sign-in and like it encrypted with the OS
   keystore (`credentials.ts`), in the shape pi-ai gives it. A file that decrypts but doesn't parse reads as signed out, with a
-  warning, and the next write moves it to `f1a-credentials.json.bad` first instead of writing over it.
+  warning, and the next write moves it to `omfv-credentials.json.bad` first instead of writing over it.
 - **Each conversation** is a SQLite database of its own in `<userData>/conversations`, `<time>_pick.sqlite`, `<time>_view.sqlite`,
   or `<time>_build.sqlite` for build mode's agent ([BUILD_MODE.md](BUILD_MODE.md)): pi-durable's own storage, holding every entry as the model saw it, the
   prompt and each change to it, `app_state`, tool calls and results, summaries, the edits that cut down a read-ahead turn, and token
@@ -230,9 +230,14 @@ that refuse a call.
 - **The agent's provider** is connected in `/settings-agent`. A ChatGPT sign-in uses your real browser, with pi running the local
   callback on port 1455. An API key is typed into its own small sandboxed window (`electron/agent/keyWindow.ts`), not the app's
   renderer, because mods run there with no sandbox and could read it. The key goes straight to main, and the renderer never sees it.
-- Both sign-ins are encrypted with the OS keyring: F1 TV's in `f1a-session.json` and `f1a-cookies.json`, the agent provider's in
-  `f1a-credentials.json`. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
+- Both sign-ins are encrypted with the OS keyring: F1 TV's in `omfv-session.json` and `omfv-cookies.json`, the agent provider's in
+  `omfv-credentials.json`. Chromium doesn't detect a keyring outside GNOME and KDE, so `main.ts` sets
   `--password-store=gnome-libsecret`. Without it, tokens would silently be stored in plain text on Hyprland.
+- **The keyring keeps the key under the app's name**, `oh-my-f1-viewer` from `package.json`, so a copy of these files works in
+  another profile of the same app on the same machine, and renaming the app loses them. The app was called f1a until
+  2026-11-16. On the first start with the default profile, `electron/oldProfile.ts` copies the mods (with their `'f1a'` imports
+  renamed), settings, conversations, the timing database and the caches from `~/.config/f1a`, but not the sign-ins, so both are
+  signed in again. The old profile is left as it was.
 - **Onboarding** (`src/shell/Onboarding.tsx`) leads a first launch through both, then opening a session, over the empty screen. It
   shows until a session opens or it's skipped, and not at all for a profile already set up; `/reset-onboarding` shows it again.
   The `onboarded` flag is kept with the UI state (`src/shell/onboardingState.ts`). Its numbered steps keep one height as they

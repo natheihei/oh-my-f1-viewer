@@ -1,4 +1,4 @@
-/** Wires every ipcMain handler `window.f1a` talks to. Glue over the other main-process modules. */
+/** Wires every ipcMain handler `window.omfv` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { AgentMode, F1TvStatus } from '../shared/api';

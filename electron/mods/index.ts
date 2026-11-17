@@ -9,7 +9,7 @@ import * as esbuild from 'esbuild';
 import { SHARED_MODULES, type BuildState, type ModLogLine, type ModStatus } from '../../shared/mods';
 import { BuildSnapshot, describeChanges } from './snapshot';
 
-export const MOD_SCHEME = 'f1a-mod';
+export const MOD_SCHEME = 'omfv-mod';
 const ENTRIES = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'];
 /** The files the app writes into a mod's folder, which mustn't start a build. */
 const WRITTEN = new Set(['mod.error', 'mod.log']);
@@ -44,11 +44,11 @@ function entryOf(dir: string): string | null {
 /** Keeps a mod's imports to the modules it shares with the app and its own files. */
 function sharedModules(dir: string): esbuild.Plugin {
   return {
-    name: 'f1a-shared',
+    name: 'omfv-shared',
     setup(build) {
       build.onResolve({ filter: /.*/ }, (args) => {
         if (args.kind === 'entry-point') return undefined;
-        if ((SHARED_MODULES as readonly string[]).includes(args.path)) return { path: args.path, namespace: 'f1a-shared' };
+        if ((SHARED_MODULES as readonly string[]).includes(args.path)) return { path: args.path, namespace: 'omfv-shared' };
         if (args.path.startsWith('.') || path.isAbsolute(args.path)) {
           const target = path.resolve(args.resolveDir, args.path);
           if (inside(target, dir)) return undefined;
@@ -57,8 +57,8 @@ function sharedModules(dir: string): esbuild.Plugin {
         return { errors: [{ text: `"${args.path}" isn't available to mods. They can import ${SHARED_MODULES.join(', ')} and their own files.` }] };
       });
       // The app's own copy, which src/main.tsx hands over, so hooks and schemas work across the boundary.
-      build.onLoad({ filter: /.*/, namespace: 'f1a-shared' }, (args) => ({
-        contents: `module.exports = globalThis.__f1aShared[${JSON.stringify(args.path)}];`,
+      build.onLoad({ filter: /.*/, namespace: 'omfv-shared' }, (args) => ({
+        contents: `module.exports = globalThis.__omfvShared[${JSON.stringify(args.path)}];`,
         loader: 'js',
       }));
     },
@@ -211,7 +211,7 @@ export class Mods {
     return this.mods.get(name)?.log ?? [];
   }
 
-  /** Serves `f1a-mod://mods/<name>/main.js`: the latest build that compiled. */
+  /** Serves `omfv-mod://mods/<name>/main.js`: the latest build that compiled. */
   serve(request: Request): Response {
     const url = new URL(request.url);
     const [, name, file] = url.pathname.split('/');
@@ -353,7 +353,7 @@ export class Mods {
           sourcemap: 'inline',
           logLevel: 'silent',
           // Its console writes to mod.log as well as the app's.
-          banner: { js: `const console = globalThis.__f1aModConsole(${JSON.stringify(mod.name)});` },
+          banner: { js: `const console = globalThis.__omfvModConsole(${JSON.stringify(mod.name)});` },
           plugins: [sharedModules(mod.dir)],
         });
       }

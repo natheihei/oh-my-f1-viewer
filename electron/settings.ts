@@ -1,9 +1,9 @@
 /**
- * The app's settings: one JSON file in the profile, `<userData>/f1a-settings.json`, that main owns. The
+ * The app's settings: one JSON file in the profile, `<userData>/omfv-settings.json`, that main owns. The
  * agent's are under `agent` (shared/agentSettings.ts) and the renderer's small UI state, such as the volume,
  * under `ui`. Every build of the app that runs on a profile shares them, however its page is served. Edit
  * it by hand only while the app is closed: the app writes what it holds over it. One it can't parse is moved
- * aside to `f1a-settings.json.bad` at the first change, not written over.
+ * aside to `omfv-settings.json.bad` at the first change, not written over.
  */
 import { app } from 'electron';
 import fs from 'node:fs';
@@ -96,7 +96,7 @@ let shared: SettingsFile | null = null;
 
 /** The profile's settings, read at first use. */
 export function appSettings(): SettingsFile {
-  shared ??= new SettingsFile(path.join(app.getPath('userData'), 'f1a-settings.json'));
+  shared ??= new SettingsFile(path.join(app.getPath('userData'), 'omfv-settings.json'));
   return shared;
 }
 

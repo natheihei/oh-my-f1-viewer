@@ -226,7 +226,7 @@ export class Agent {
     const added: Provider[] = [];
     const providers: AgentModels = {
       models: null as unknown as Models,
-      credentials: credentialStore(path.join(app.getPath('userData'), 'f1a-credentials.json')),
+      credentials: credentialStore(path.join(app.getPath('userData'), 'omfv-credentials.json')),
       setProvider: (provider) => void added.push(provider),
       login: (...args) => providers.models.login(...args),
       logout: (...args) => providers.models.logout(...args),
@@ -307,7 +307,7 @@ export class Agent {
     const { durable, context, providers, open, conversationsDir } = await this.runtime();
     const { createRegistry, defineExtension, defineTool, hook, section, CompactionTask, GenerationTask, Harness: HarnessClass, ProviderDoc } = durable;
     const build = mode === 'build';
-    const id = mode === 'view' ? 'f1a' : `f1a-${mode}`;
+    const id = mode === 'view' ? 'omfv' : `omfv-${mode}`;
     // Kept for review, and so a crash loses nothing, but never resumed: each conversation has a database of its own,
     // and a new conversation or a restart starts empty.
     await fsp.mkdir(conversationsDir, { recursive: true });
@@ -335,8 +335,8 @@ export class Agent {
     const base = PROMPTS[mode];
     // One section, so the prompt is exactly these words: the app's own, then what it knows up front.
     const prompt = defineExtension({
-      name: 'f1a-prompt',
-      sections: [section('f1a', () => (conversation.reference ? `${base}\n\n${conversation.reference}` : base), { tag: false })],
+      name: 'omfv-prompt',
+      sections: [section('omfv', () => (conversation.reference ? `${base}\n\n${conversation.reference}` : base), { tag: false })],
     });
 
     /** The renderer's tools. Installing the extension again under its name replaces the set, from the next request. */
@@ -364,12 +364,12 @@ export class Agent {
           },
         }),
       );
-      registry.install(defineExtension({ name: 'f1a-tools', tools }));
+      registry.install(defineExtension({ name: 'omfv-tools', tools }));
     };
     conversation.register = register;
 
     const rules = defineExtension({
-      name: 'f1a-rules',
+      name: 'omfv-rules',
       hooks: [
         hook(GenerationTask, {
           beforeRequest: () => {
@@ -497,7 +497,7 @@ export class Agent {
     this.connectAbort = abort;
     const timeout = setTimeout(() => abort.abort(), CONNECT_TIMEOUT_MS);
     try {
-      await providers.login(entry.provider, way, this.interaction(entry, abort.signal), { agentName: 'f1a', getDeviceId: installId });
+      await providers.login(entry.provider, way, this.interaction(entry, abort.signal), { agentName: 'oh-my-f1-viewer', getDeviceId: installId });
     } finally {
       clearTimeout(timeout);
       if (this.connectAbort === abort) this.connectAbort = null;
@@ -836,7 +836,7 @@ export class Agent {
     const page = await conversation.root.entries({ order: 'descending' }, 500, undefined, context);
     const edits = forgetTurn([...page.items].reverse(), conversation.readAhead);
     if (edits.length) {
-      const written = await conversation.root.submit({ type: 'write', entry: { kind: 'f1a.forget', edits } }, context);
+      const written = await conversation.root.submit({ type: 'write', entry: { kind: 'omfv.forget', edits } }, context);
       const settled = await written.wait(context);
       if (settled.status !== 'done') throw new Error(`the cut was not written (${settled.status})`);
     }

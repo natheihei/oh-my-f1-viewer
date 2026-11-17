@@ -5,12 +5,12 @@
 //   node devscripts/conversation.mjs                 the newest, of any kind
 //   node devscripts/conversation.mjs view            the newest of a kind: pick, view or build
 //   node devscripts/conversation.mjs <file.sqlite>   that one
-//   F1A_CONVERSATIONS=<dir>                          another profile's conversations folder
+//   OMFV_CONVERSATIONS=<dir>                         another profile's conversations folder
 import { existsSync } from 'node:fs';
 import { conversationEntries, conversationFiles, MAIN_CONVERSATIONS } from '../scripts/conversations.mjs';
 
 const arg = process.argv[2];
-const dir = process.env.F1A_CONVERSATIONS ?? MAIN_CONVERSATIONS;
+const dir = process.env.OMFV_CONVERSATIONS ?? MAIN_CONVERSATIONS;
 const file = arg && existsSync(arg) ? arg : conversationFiles(dir, ['pick', 'view', 'build'].includes(arg) ? arg : undefined).at(-1);
 if (!file) {
   console.error(`No stored conversations in ${dir}.`);
@@ -26,8 +26,9 @@ const text = (content) =>
         .join('\n');
 
 for (const entry of conversationEntries(file)) {
-  if (entry.kind === 'f1a.forget') {
-    console.log(`--- f1a.forget: ${entry.edits?.length ?? 0} edits cut a read-ahead turn from what the model sees\n`);
+  // f1a.forget: written before the app was renamed.
+  if (entry.kind === 'omfv.forget' || entry.kind === 'f1a.forget') {
+    console.log(`--- ${entry.kind}: ${entry.edits?.length ?? 0} edits cut a read-ahead turn from what the model sees\n`);
     continue;
   }
   for (const m of entry.model ?? []) {

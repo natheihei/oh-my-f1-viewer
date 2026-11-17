@@ -9,9 +9,9 @@ import { componentOps, useComponents, type ComponentDefinition } from './compone
 
 declare global {
   // eslint-disable-next-line no-var
-  var __f1aShared: Record<string, unknown> | undefined;
+  var __omfvShared: Record<string, unknown> | undefined;
   // eslint-disable-next-line no-var
-  var __f1aModConsole: ((name: string) => Console) | undefined;
+  var __omfvModConsole: ((name: string) => Console) | undefined;
 }
 
 /** Every mod in the folder, as the main process reports it. Replaced as a whole on each change. */
@@ -112,8 +112,8 @@ function apply(list: ModStatus[]): void {
 export function startMods(shared: Record<string, object>): void {
   builtins = new Set(useComponents.getState().list.map((c) => c.name));
   // Marked as ES modules, so a mod's default imports (`import Type from 'typebox'`) find their default.
-  globalThis.__f1aShared = Object.fromEntries(Object.entries(shared).map(([name, ns]) => [name, { ...ns, __esModule: true }]));
-  globalThis.__f1aModConsole = modConsole;
+  globalThis.__omfvShared = Object.fromEntries(Object.entries(shared).map(([name, ns]) => [name, { ...ns, __esModule: true }]));
+  globalThis.__omfvModConsole = modConsole;
   modsLink.onChanged(apply);
   void modsLink.list().then(apply, (e) => console.warn('[mods] list failed', e));
 }

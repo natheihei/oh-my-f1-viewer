@@ -30,7 +30,7 @@ const opened = await page.evaluate(
     const { host, read } = await import('/src/host/index.ts');
     host.audio.setVolume({ volume: 0 });
     let start = null;
-    window.f1a.data.onStatus((status) => {
+    window.omfv.data.onStatus((status) => {
       if (status.sessionStartSec != null) start = status.sessionStartSec;
     });
     const events = (await host.catalog.events({ year })).filter((e) => e.endMs < Date.now() && !e.isTest).reverse();
@@ -233,7 +233,7 @@ const timings = await page.evaluate(
       let rows = 0;
       for (let i = 0; i < 5; i++) {
         const started = performance.now();
-        rows = (await window.f1a.data.sql(key, at, sql, params)).rows.length;
+        rows = (await window.omfv.data.sql(key, at, sql, params)).rows.length;
         runs.push(performance.now() - started);
       }
       runs.sort((a, b) => a - b);

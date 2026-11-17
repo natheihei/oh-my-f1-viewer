@@ -1,6 +1,6 @@
 /**
  * The agent's settings: the provider, model and thinking level `/settings-agent` chose, and a run policy
- * that's only changed by hand. They're under `agent` in the app's settings file, `<userData>/f1a-settings.json`
+ * that's only changed by hand. They're under `agent` in the app's settings file, `<userData>/omfv-settings.json`
  * (electron/settings.ts). To change the policy, edit it while the app is closed, for example:
  *
  *   "agent": { "provider": "openai", "model": "gpt-6.1-terra", "thinking": "medium", "compaction": { "reserveTokens": 2000 } }

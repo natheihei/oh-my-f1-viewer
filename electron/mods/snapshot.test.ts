@@ -21,7 +21,7 @@ const read = (file: string) => readFileSync(path.join(mods, file), 'utf8');
 const has = (file: string) => existsSync(path.join(mods, file));
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(os.tmpdir(), 'f1a-snapshot-'));
+  root = mkdtempSync(path.join(os.tmpdir(), 'omfv-snapshot-'));
   mods = path.join(root, 'mods');
   snap = path.join(root, 'mods-snapshot');
   mkdirSync(mods);
