@@ -27,7 +27,7 @@ export interface TileState {
   error?: boolean;
   /** The viewer let this tile read past the playhead. */
   ahead?: boolean;
-  /** What build mode did to this tile's mod: "draft" or "edited". */
+  /** What build mode did to this tile's mod: "draft" or "edited". The tile is framed and its header lit, as a pointed one is. */
   mark?: string;
   /**
    * The spotlight: 'pointed' for the tile the viewer is pointing at, which is framed and its header lit,
@@ -47,6 +47,7 @@ function applyState(bar: Element, state: TileState = {}): void {
   bar.classList.toggle('tile-titlebar-audio', state.audio != null);
   const item = bar.closest('.grid-stack-item');
   item?.classList.toggle('tile-pointed', state.spot === 'pointed');
+  item?.classList.toggle('tile-marked', state.mark != null);
   item?.classList.toggle('tile-dimmed', state.spot === 'dimmed');
   const slot = (name: string, text: string | null, cls = '') => {
     const el = bar.querySelector<HTMLElement>(`:scope .tile-slot-${name}`);
@@ -56,7 +57,7 @@ function applyState(bar: Element, state: TileState = {}): void {
     el.className = `tile-slot tile-slot-${name} ${cls}`;
   };
   slot('status', state.status ?? null, state.error ? 'tile-slot-error' : '');
-  slot('mark', state.mark ?? null, 'tile-slot-build');
+  slot('mark', state.mark ?? null);
   slot('ahead', state.ahead ? 'ahead' : null, 'tile-slot-warn');
   slot('audio', state.audio === 'on' ? 'aud' : state.audio === 'muted' ? 'mute' : null, state.audio === 'on' ? 'tile-slot-on' : '');
 }
