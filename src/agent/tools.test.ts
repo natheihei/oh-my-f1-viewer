@@ -138,7 +138,7 @@ const { components } = await import('../components/registry');
 const Type = (await import('typebox')).default;
 
 // The app registers its components at start; tests do it here.
-host.components.register({ components });
+host.components.register({ components, origin: 'installed' });
 const video = (feed: string) => ({ type: 'video', props: { feed } });
 
 describe('suggested tiles', () => {
@@ -253,8 +253,10 @@ describe('components', () => {
     const list = read().components;
     expect(list.map((c) => c.name)).toEqual([...components.map((c) => c.name), 'test-chart']);
     expect(JSON.parse(JSON.stringify(list))).toEqual(list);
+    expect(list[0].origin).toBe('installed');
     expect(list.at(-1)).toEqual({
       name: 'test-chart',
+      origin: 'local',
       title: 'Test chart',
       description: 'A chart for one driver.',
       args: expect.objectContaining({ type: 'object', required: ['driver'] }),

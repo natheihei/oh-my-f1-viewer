@@ -158,7 +158,7 @@ await shoot('5-wide', [pw], [600, 300]);
 await shoot('6-fitted', [pw]);
 const spot = await page.evaluate(async (driver) => {
   const { host, read } = await import('/src/host/index.ts');
-  const { pitWindowModel, SQL } = await import('/src/components/charts/PitWindow.tsx');
+  const { pitWindowModel, PIT_WINDOW_SQL: SQL } = await import('/src/kit/index.ts');
   const { rows } = await host.data.sql({ sql: SQL });
   const loss = read().circuit.pitLoss;
   const m = pitWindowModel(rows, driver, loss.normal);

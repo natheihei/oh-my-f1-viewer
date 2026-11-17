@@ -146,10 +146,10 @@ async function shoot(moment) {
       // What the ring shows, in numbers, beside the tower's gaps, to check by hand.
       const check = await page.evaluate(async (driver) => {
         const { host, read } = await import('/src/host/index.ts');
-        const pit = await import('/src/components/charts/PitWindow.tsx');
-        const tower = await import('/src/components/charts/TimingTower.tsx');
+        const pit = await import('/src/kit/index.ts');
+        const tower = await import('/src/components/timing_tower/main.tsx');
         const circuit = read().circuit;
-        const m = pit.pitWindowModel((await host.data.sql({ sql: pit.SQL })).rows, driver, circuit.state === 'ready' ? circuit.pitLoss.normal : null);
+        const m = pit.pitWindowModel((await host.data.sql({ sql: pit.PIT_WINDOW_SQL })).rows, driver, circuit.state === 'ready' ? circuit.pitLoss.normal : null);
         const gaps = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).map((r) => `${r.position}:${r.driver} ${r.gap}`);
         return { circuit: circuit.state === 'ready' ? `${circuit.name}, pit loss ${circuit.pitLoss.normal}` : circuit.state, lapTime: m.lapTime, from: m.from, out: m.out, tower: gaps.join(' | ') };
       }, front);
@@ -159,9 +159,9 @@ async function shoot(moment) {
       // The gap chart's sides and the sectors in numbers, beside the tower's rows for the pair, to check by hand.
       const check = await page.evaluate(async (pair) => {
         const { host, read } = await import('/src/host/index.ts');
-        const gap = await import('/src/components/charts/GapEvolution.tsx');
-        const tower = await import('/src/components/charts/TimingTower.tsx');
-        const sectors = await import('/src/components/charts/SectorTable.tsx');
+        const gap = await import('/src/components/gap_evolution/main.tsx');
+        const tower = await import('/src/components/timing_tower/main.tsx');
+        const sectors = await import('/src/components/sector_table/main.tsx');
         const { points: _points, ...b } = gap.gapModel((await host.data.sql({ sql: gap.SQL, params: pair })).rows, pair);
         const s = sectors.sectorTable((await host.data.sql({ sql: sectors.SQL, params: pair })).rows, pair);
         const t = tower.towerModel((await host.data.sql({ sql: tower.SQL })).rows).filter((r) => pair.includes(r.driver));
@@ -174,8 +174,8 @@ async function shoot(moment) {
       // tower, to check by hand.
       const check = await page.evaluate(async () => {
         const { host, read } = await import('/src/host/index.ts');
-        const map = await import('/src/components/charts/TrackMap.tsx');
-        const tower = await import('/src/components/charts/TimingTower.tsx');
+        const map = await import('/src/components/track_map/main.tsx');
+        const tower = await import('/src/components/timing_tower/main.tsx');
         const { playheadMs } = read().sessionData;
         const circuit = read().circuit;
         const cars = map.trackModel((await host.data.sql({ sql: map.SQL, params: [playheadMs] })).rows);
@@ -224,9 +224,9 @@ const timings = await page.evaluate(
     const playhead = read().sessionData.playheadMs ?? Number.MAX_SAFE_INTEGER;
     const [tower, gap, tyres, deg, pit, sectors, control] = await Promise.all(
       [
-        'TimingTower', 'GapEvolution', 'TyreStrategy', 'TyreDeg', 'PitWindow',
-        'SectorTable', 'RaceControl',
-      ].map((name) => import(`/src/components/charts/${name}.tsx`)),
+        'timing_tower', 'gap_evolution', 'tyre_strategy', 'tyre_deg', '../kit',
+        'sector_table', 'race_control',
+      ].map((name) => import(name === '../kit' ? '/src/kit/index.ts' : `/src/components/${name}/main.tsx`)),
     );
     const time = async (sql, params, at = Number.MAX_SAFE_INTEGER) => {
       const runs = [];
@@ -244,11 +244,11 @@ const timings = await page.evaluate(
       gap_evolution: await time(gap.SQL, pair),
       tyre_strategy: await time(tyres.sqlFor(0), []),
       tyre_deg: await time(deg.SQL, []),
-      pit_window: await time(pit.SQL, []),
+      pit_window: await time(pit.PIT_WINDOW_SQL, []),
       sector_table: await time(sectors.SQL, pair),
       race_control: await time(control.SQL, []),
       ...(await (async () => {
-        const [map, live] = await Promise.all(['TrackMap', 'CarTelemetry'].map((name) => import(`/src/components/charts/${name}.tsx`)));
+        const [map, live] = await Promise.all(['track_map', 'car_telemetry'].map((name) => import(`/src/components/${name}/main.tsx`)));
         return {
           track_map: await time(map.SQL, [playhead], playhead),
           car_telemetry: await time(live.SQL, [pair[0], playhead], playhead),

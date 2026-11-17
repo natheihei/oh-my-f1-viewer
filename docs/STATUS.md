@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-16.
+What has actually been verified, and what hasn't. Last updated 2026-11-17.
 
 ## Verified on real sessions
 
@@ -86,7 +86,7 @@ On Linux, in the real app at 1600 by 900, over the 2026 São Paulo race replay (
 - Auto-layout over arrangements from a video with the timing tower to six tiles, three videos, and charts with no video: the
   main feed took the main place, the tower sat beside it, wide charts went below, and no chart was below its least size.
 
-`src/components/charts/charts.test.ts` runs the built-in charts through nine arrangements at that window size on every test run.
+`src/components/charts.test.ts` runs the built-in charts through nine arrangements at that window size on every test run.
 Other window sizes were only simulated: at 1280 by 640 some charts go below their least size from four tiles up.
 
 ## Verified for mods
@@ -105,6 +105,22 @@ On Linux, in the real app, over replay races (2026-11-09):
 - The mark checking only the tile's frame, with `scripts/overflow-check.mjs` (2026-11-12): a table mod whose content ran past its
   400px tile was marked "more ▾", "more ▸" or "more ▾▸" by which way it ran, and not marked when it fit or in a 1200px tile; the same
   in the suggestion strip. A list scrolling 40 rows of its own wasn't marked, nor with its scroll area squeezed to 16px.
+
+## Verified for installed components and forks
+
+On Linux, in the real app, over the 2026 São Paulo race at lap 20, with `scripts/fork-check.mjs`, with the real agent on a ChatGPT
+sign-in (gpt-6.1-terra) and with `--no-agent` (2026-11-17):
+
+- Asked in build mode to "add a column with how many pit stops each car has made to" the tower's tile, pointed at with `@`, the build
+  agent called `fork_component` first, made `timing_tower_pit_stops` labelled "Timing · pits", added a `PIT` column to it (a count
+  from the `pit` table joined into the tower's query), looked at it and suggested it. Its reply said the change is in a fork, the
+  original stays unchanged, and the fork is in the strip to replace it. The count drew on screen.
+- On start, the app copied all 16 of its own components into `mods/.installed/builtin`, each the source the app runs, and
+  `live.components` marked each `installed`.
+- In build mode, a fork of `timing_tower` made by `forkComponent`, the code behind the build agent's `fork_component`, loaded as a
+  local component, showed in the strip as a draft, and counted as added. The installed source and the tower's tile stayed as they were.
+  Added beside the original, the fork's tile had a key of its own and read "Timing · pits" where the original's read "Timing".
+- `electron/mods/installed.test.ts` forks every installed component and compiles each fork as a mod.
 
 ## Verified for agent setup
 
@@ -238,6 +254,9 @@ Terra at medium, and a real turn replied on the new login.
 
 - **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key from
   the panel hasn't run either. A ChatGPT sign-in from the panel has (above).
+
+- **Forking a fork, and other requests.** One request has been seen (above). Forking a local mod, a second change to a fork already
+  made, and installed components other than the tower haven't been asked of the real agent.
 
 - **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 

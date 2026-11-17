@@ -8,7 +8,7 @@ export const MOD_GUIDE = `What a mod is:
 - One folder in the mods folder, named in lower-case letters, digits, _ and -, starting with a letter. Its main.tsx default-exports defineComponent({ ... }), and the component's name must be the folder's name. It may import other files in its own folder.
 - A mod may import only: "omfv" (the host), "omfv/kit" (what the app's charts are drawn with), "react", "typebox", and its own files. Anything else fails to compile.
 - The app compiles a mod on every save and reloads it while the session keeps playing. A save that does not compile leaves the last version running and writes the error to mod.error in the mod's folder. What the component logs or throws goes to mod.log there.
-- Paths here are relative to the mods folder: "lap_stepper/main.tsx". The types are there to read: ".types/src/host/index.d.ts" for the host and ".types/src/components/charts/kit/index.d.ts" for the kit. Read them before using something you are not sure of. Existing mods are there to read too.
+- Paths here are relative to the mods folder: "lap_stepper/main.tsx". The types are there to read: ".types/src/host/index.d.ts" for the host and ".types/src/kit/index.d.ts" for the kit. Read them before using something you are not sure of. Existing mods are there to read too, and the installed components' sources under ".installed/builtin/<name>/".
 
 A complete mod:
 
@@ -66,7 +66,7 @@ Rules for what you build:
 - A component queries for itself. Never write race data into a mod's source: lap times, results, who pitted when. The same mod runs on other sessions.
 - A tile that only shows what has happened uses plain useSql and does not set looksAhead. Reach for asOf 'session' only as above, and show nothing from it that the viewer has not seen: use it to act, like seeking.
 - Any component that uses asOf 'session', or that could take the viewer or show them past the playhead, must set looksAhead: true. Add it when an edit makes a component look ahead, and remove it when an edit stops it.
-- Keep a mod to one component. To change one that exists, edit it. To remove one, delete its folder.
+- Keep a mod to one component. To change a mod, edit it, and to remove one, delete its folder. An installed component can't be changed or removed: fork it to change it.
 
 How it looks:
 - The app is dark and square: a black background, text #e7e7e7, secondary text #8a8a8a, lines #2c2c2c, a monospace font the view inherits. No rounded corners, shadows or gradients. In a canvas, colors() from the kit gives these.

@@ -173,7 +173,7 @@ async function shoot(name, items, squeeze, alone = false) {
 const dotOf = (driver) =>
   page.evaluate(async (driver) => {
     const { host, read } = await import('/src/host/index.ts');
-    const { fitOutline } = await import('/src/components/charts/kit/index.ts');
+    const { fitOutline } = await import('/src/kit/index.ts');
     const { rows } = await host.data.sql({ sql: 'SELECT x, y, MAX(date) FROM location WHERE driver_number = ?1 AND date > ?2 - 5000 AND date <= ?2', params: [driver, read().sessionData.playheadMs] });
     const { outline, rotation } = read().circuit;
     const canvas = document.querySelector('.chart-canvas');
@@ -196,7 +196,7 @@ await shoot('2-stops', [all]);
 // The pit lane the map draws: whose stop, how many positions, and how far off the line it runs at most and at its ends, in metres.
 console.log(`lane: ${JSON.stringify(await page.evaluate(async () => {
   const { host, read } = await import('/src/host/index.ts');
-  const { STOP_SQL, LANE_SQL, lanePath } = await import('/src/components/charts/TrackMap.tsx');
+  const { STOP_SQL, LANE_SQL, lanePath } = await import('/src/components/track_map/main.tsx');
   const [stop] = (await host.data.sql({ sql: STOP_SQL })).rows;
   if (!stop) return null;
   const { rows } = await host.data.sql({ sql: LANE_SQL, params: [stop.driver_number, stop.date, stop.lane_duration * 1000] });
