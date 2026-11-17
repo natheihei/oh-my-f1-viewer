@@ -153,7 +153,8 @@ describe('suggesting charts', () => {
   const props = () => read().suggestions.items.map((i) => ({ type: i.type, props: i.props }));
 
   beforeEach(() => {
-    host.components.register({ components: [...components, gap, pit, field, weather] });
+    host.components.register({ components, origin: 'installed' });
+    host.components.register({ components: [gap, pit, field, weather] });
     useSession.setState({ session: race, channels });
     useSessionData.setState(ready, true);
     layout.clear();
@@ -253,7 +254,8 @@ describe('suggesting charts', () => {
 
   it('offers the viewing agent only the charts that fit the open session, and the build agent every one', async () => {
     const send = vi.spyOn(host.agent, 'send').mockResolvedValue();
-    const offered = () => send.mock.lastCall![3].split('\n').filter((l) => l.startsWith('test_') || l.startsWith('car_telemetry,')).map((l) => l.split(',')[0]).sort();
+    const lines = () => send.mock.lastCall![3].split('\n').filter((l) => l.startsWith('test_') || /^car_telemetry[ ,]/.test(l));
+    const offered = () => lines().map((l) => l.split(',')[0]).sort();
     const enumOf = () =>
       (toolDefinitions().find((t) => t.name === 'suggest_tiles')?.parameters as { properties: { components: { items: { properties: { component: { enum: string[] } } } } } })
         .properties.components.items.properties.component.enum;
@@ -277,11 +279,12 @@ describe('suggesting charts', () => {
       await askAgent('charts?');
       expect(offered()).toEqual([]);
 
-      // The build agent writes and edits charts, so it sees them all.
+      // The build agent writes and edits charts, so it sees them all, each said to be installed or local.
       useSession.setState({ session: { ...race, type: 'qualifying' } });
       useBuild.setState({ active: true, changes: [], enteredAtSec: 0 });
       await askAgent('charts?');
-      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
+      expect(offered()).toEqual(['car_telemetry (installed)', 'test_field (local)', 'test_gap (local)', 'test_pit (local)', 'test_weather (local)']);
+      expect(send.mock.lastCall![3]).toContain('Each name is followed by (installed), read-only with its source in .installed/builtin/<name>/, or (local), a mod in the folder <name>/.');
     } finally {
       useBuild.setState({ active: false, changes: [], enteredAtSec: null });
       send.mockRestore();

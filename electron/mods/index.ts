@@ -1,7 +1,8 @@
 /**
  * Mods: plugins in folders under the app's data folder, each defining one tile component for now. This
  * watches the folder, compiles each mod with esbuild on save and serves the build to the renderer, which imports and registers it. The
- * renderer reports back whether it loaded. See docs/MODS.md.
+ * renderer reports back whether it loaded. It also puts the installed components' sources where they can be read, and forks one into a
+ * new mod. See docs/MODS.md.
  */
 import { existsSync, promises as fsp, statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,12 @@ const ENTRIES = ['main.tsx', 'main.ts', 'main.jsx', 'main.js'];
 const WRITTEN = new Set(['mod.error', 'mod.log']);
 /** A component name: what the folder is called. */
 const NAME = /^[a-z][a-z0-9_-]{0,47}$/;
+/** Where installed components' sources are copied, read-only, on every start: `.installed/<package>/<name>/`. */
+export const INSTALLED = '.installed';
+/** The package the app's own components come in. Components installed from elsewhere would be other packages. */
+export const BUILTIN = 'builtin';
+/** Source files, whose strings a fork renames. */
+const SOURCE = /\.(tsx?|jsx?)$/;
 /** Editors and agents often write a temp file and rename it, or save several files at once. */
 const DEBOUNCE_MS = 120;
 const MAX_LOG_LINES = 300;
@@ -74,10 +81,153 @@ async function formatErrors(e: unknown): Promise<string> {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Where the app keeps what a mod's types come from: the host's and kit's declarations. */
+/** Where the app keeps what it copies into the mods folder on every start. */
 export interface TypeSources {
-  /** `dist-types`, from `npm run build:types`. */
+  /** `dist-types`, from `npm run build:types`: the host's and kit's declarations. */
   declarations: string;
+  /** The app's own components, a folder of each like a mod's: `src/components`. */
+  installed?: string;
+}
+
+/** What `fork` made. */
+export interface Fork {
+  /** Where the source came from, relative to the mods folder. */
+  from: string;
+  /** Whether that was an installed component or another mod. */
+  origin: 'installed' | 'local';
+  /** The new mod's files, relative to the mods folder. */
+  files: string[];
+  /** How many strings named the old component, and now name the new one: its name and its keys. */
+  renamed: number;
+  /** The title it had, or null when the fork couldn't find one to replace. */
+  oldTitle: string | null;
+  /** The label its tiles' title bars showed, from `spec`, or null when that isn't written out as text. */
+  oldLabel: string | null;
+}
+
+/** Every file under `dir` a copy carries, relative to it: not what's hidden, not node_modules, not the app's own files, not tests. */
+async function sourceFiles(dir: string, base = ''): Promise<string[]> {
+  const entries = await fsp.readdir(path.join(dir, base), { withFileTypes: true }).catch(() => []);
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name.includes('.test.')) continue;
+    const rel = path.join(base, entry.name);
+    if (!base && WRITTEN.has(entry.name)) continue;
+    if (entry.isDirectory()) out.push(...(await sourceFiles(dir, rel)));
+    else if (entry.isFile()) out.push(rel);
+  }
+  return out;
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const quoted = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+
+/**
+ * A component's source with every string that names it naming `name` instead: `'tower'`, and keys such
+ * as `` `tower:${driver}` ``. A string that only starts with the name, like `'tower-row'`, is left alone.
+ */
+export function renameIn(source: string, from: string, to: string): { source: string; count: number } {
+  let count = 0;
+  const out = source.replace(new RegExp(`(['"\`])${escapeRegExp(from)}(?=['"\`:])`, 'g'), (_m, quote: string) => {
+    count += 1;
+    return quote + to;
+  });
+  return { source: out, count };
+}
+
+/** The component's `title: '…'`, the first after `defineComponent(`, replaced. Null when there's none. */
+export function retitle(source: string, title: string): { source: string; oldTitle: string } | null {
+  const from = Math.max(0, source.indexOf('defineComponent('));
+  const match = /(\btitle:\s*)(['"`])((?:\\.|(?!\2).)*)\2/.exec(source.slice(from));
+  if (!match) return null;
+  const at = from + match.index;
+  return { source: source.slice(0, at) + match[1] + quoted(title) + source.slice(at + match[0].length), oldTitle: match[3] };
+}
+
+const LABEL = /(\blabel:\s*)(['"`])((?:\\.|(?!\2).)*)\2/;
+
+/** The label `spec` gives a component's tiles, when it's written out as text: the first `label: '…'` after `spec:`. */
+export function specLabel(source: string): string | null {
+  const at = source.indexOf('spec:');
+  const match = at >= 0 ? LABEL.exec(source.slice(at)) : null;
+  return match && match[3] ? match[3] : null;
+}
+
+/** Every `label: '<from>'` in a source given `to` instead: the spec's label, and a title bar's that matches it. */
+export function relabel(source: string, from: string, to: string): string {
+  return source.replace(new RegExp(LABEL.source, 'g'), (whole, before: string, _quote: string, text: string) => (text === from ? before + quoted(to) : whole));
+}
+
+/** Folders under `dir` that are components: a name a component may have, and a `main` file. */
+async function componentsIn(dir: string): Promise<string[]> {
+  const names = await fsp.readdir(dir).catch(() => [] as string[]);
+  return names.filter((name) => NAME.test(name) && statSync(path.join(dir, name), { throwIfNoEntry: false })?.isDirectory() && entryOf(path.join(dir, name))).sort();
+}
+
+/**
+ * Copies a component into a new mod in the mods folder `dir`, to change it: an installed one from
+ * `.installed`, or another mod. The copy is renamed throughout and given `title`, and its main file says
+ * where it came from. It's copied into a hidden folder and renamed into place, so the watcher sees the new
+ * folder whole and builds it once. See docs/MODS.md, "Installed and local".
+ */
+export async function forkComponent(
+  dir: string,
+  component: string,
+  name: string,
+  title: string,
+  { label = title, on = new Date() }: { label?: string; on?: Date } = {},
+): Promise<Fork> {
+  const installedDir = path.join(dir, INSTALLED, BUILTIN);
+  const installed = await componentsIn(installedDir);
+  if (!NAME.test(name)) throw new Error(`"${name}" can't be a mod's name: use lower-case letters, digits, _ and -, starting with a letter.`);
+  if (installed.includes(name)) throw new Error(`"${name}" is an installed component's name. Give the fork a name of its own.`);
+  if (existsSync(path.join(dir, name))) throw new Error(`There's already a mod named "${name}". Pick another name, or edit that one.`);
+  const isInstalled = installed.includes(component);
+  const from = isInstalled ? path.join(INSTALLED, BUILTIN, component) : component;
+  const source = path.join(dir, from);
+  if (!(isInstalled || (NAME.test(component) && entryOf(source)))) {
+    const mods = await componentsIn(dir);
+    throw new Error(`There's no component "${component}". Installed: ${installed.join(', ') || 'none'}. Mods: ${mods.join(', ') || 'none'}.`);
+  }
+  const day = on.toISOString().slice(0, 10);
+  const header = isInstalled
+    ? `// A fork of the installed component ${component}, made on ${day}. Its original is in .installed/${BUILTIN}/${component}/ and stays as it is.\n`
+    : `// A fork of the mod ${component}, made on ${day}.\n`;
+  const entry = entryOf(source)!;
+  // The label the original's tiles show, so the fork's can show another and the two can be told apart.
+  const oldLabel = specLabel(await fsp.readFile(path.join(source, entry), 'utf8'));
+  const staging = path.join(dir, `.fork-${name}-${process.pid}`);
+  await fsp.rm(staging, { recursive: true, force: true });
+  let renamed = 0;
+  let oldTitle: string | null = null;
+  const files = await sourceFiles(source);
+  try {
+    for (const rel of files) {
+      const target = path.join(staging, rel);
+      await fsp.mkdir(path.dirname(target), { recursive: true });
+      if (!SOURCE.test(rel)) {
+        await fsp.copyFile(path.join(source, rel), target);
+        await fsp.chmod(target, 0o644);
+        continue;
+      }
+      const renaming = renameIn(await fsp.readFile(path.join(source, rel), 'utf8'), component, name);
+      let text = oldLabel === null ? renaming.source : relabel(renaming.source, oldLabel, label);
+      renamed += renaming.count;
+      if (rel === entry) {
+        const titled = retitle(text, title);
+        if (titled) ({ source: text, oldTitle } = titled);
+        text = header + text;
+      }
+      await fsp.writeFile(target, text);
+      // Installed files are read-only, and the fork is the user's to change.
+      await fsp.chmod(target, 0o644);
+    }
+    await fsp.rename(staging, path.join(dir, name));
+  } catch (e) {
+    await fsp.rm(staging, { recursive: true, force: true });
+    throw e;
+  }
+  return { from: from.split(path.sep).join('/'), origin: isInstalled ? 'installed' : 'local', files: files.map((rel) => path.join(name, rel).split(path.sep).join('/')), renamed, oldTitle, oldLabel };
 }
 
 export class Mods {
@@ -89,6 +239,8 @@ export class Mods {
   private lastBuild = '';
   /** Callers waiting for a mod's next build to load or fail. */
   private readonly waiters = new Set<() => void>();
+  /** The installed components whose source is in `.installed`, by name. */
+  private readonly installedNames = new Set<string>();
 
   /** `snapshotDir` holds build mode's copy of the folder, and must be outside it. */
   constructor(
@@ -108,6 +260,7 @@ export class Mods {
       console.log('[mods] undid an unfinished build');
     }
     if (this.types) await this.writeTypes(this.types).catch((e: Error) => console.warn('[mods] types:', e.message));
+    if (this.types?.installed) await this.writeInstalled(this.types.installed).catch((e: Error) => console.warn('[mods] installed:', e.message));
     await this.scan();
     this.watcher = watch(this.dir, { recursive: true }, (_event, file) => this.changed(file ? String(file) : null));
     this.watcher.on('error', (e) => console.warn('[mods] watcher:', e.message));
@@ -127,6 +280,38 @@ export class Mods {
     await fsp.rm(target, { recursive: true, force: true });
     if (existsSync(declarations)) await fsp.cp(declarations, target, { recursive: true });
     else console.warn('[mods] no declarations at', declarations, ': run npm run build:types');
+  }
+
+  /**
+   * Copies the installed components' sources into `.installed/builtin`, where they can be read and forked
+   * but not changed: the files are read-only, and the build agent's tools refuse to write there. A component
+   * is a folder with a `main` file, as a mod is.
+   */
+  private async writeInstalled(from: string): Promise<void> {
+    const target = path.join(this.dir, INSTALLED);
+    await fsp.rm(target, { recursive: true, force: true });
+    this.installedNames.clear();
+    for (const name of (await fsp.readdir(from).catch(() => [] as string[])).sort()) {
+      const dir = path.join(from, name);
+      if (!NAME.test(name) || !statSync(dir, { throwIfNoEntry: false })?.isDirectory() || !entryOf(dir)) continue;
+      for (const rel of await sourceFiles(dir)) {
+        const file = path.join(target, BUILTIN, name, rel);
+        await fsp.mkdir(path.dirname(file), { recursive: true });
+        await fsp.copyFile(path.join(dir, rel), file);
+        await fsp.chmod(file, 0o444);
+      }
+      this.installedNames.add(name);
+    }
+  }
+
+  /** The installed components whose source can be read and forked. */
+  installed(): string[] {
+    return [...this.installedNames];
+  }
+
+  /** Copies a component, installed or a mod, into a new mod: see `forkComponent`. */
+  fork(component: string, name: string, title: string, options: { label?: string; on?: Date } = {}): Promise<Fork> {
+    return forkComponent(this.dir, component, name, title, options);
   }
 
   /** Starts a build: from here until `saveBuild` or `undoBuild`, the folder can be put back as it is now. */

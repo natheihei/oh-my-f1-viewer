@@ -315,6 +315,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     logs: (name) => mods.logs(name),
     picture: (name) => pictureOf(name),
     health: () => healthOfScreen(),
+    fork: (component, name, title, label) => mods.fork(component, name, title, { label }),
   });
   handle('build:state', () => mods.buildState());
   handle('build:begin', () => mods.beginBuild());

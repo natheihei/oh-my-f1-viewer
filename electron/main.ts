@@ -121,7 +121,7 @@ app
     const mods = new Mods(
       path.join(app.getPath('userData'), 'mods'),
       (list) => sendToRenderer('mods:changed', list),
-      { declarations: path.join(root, 'dist-types') },
+      { declarations: path.join(root, 'dist-types'), installed: path.join(root, 'src', 'components') },
       path.join(app.getPath('userData'), 'mods-snapshot'),
       (state) => sendToRenderer('build:changed', state),
     );

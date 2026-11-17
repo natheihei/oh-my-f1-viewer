@@ -31,7 +31,7 @@ export {
   type BackgroundParams,
   type BackgroundView,
 } from './backgrounds';
-export { defineComponent, fitting, misfit, specOf, type ComponentDefinition, type ComponentInfo, type Occasion } from './components';
+export { defineComponent, fitting, misfit, specOf, type ComponentDefinition, type ComponentInfo, type ComponentOrigin, type Occasion } from './components';
 export { ComponentView, Grid, tileTitle } from './Grid';
 export {
   CODE_BAR,
@@ -72,6 +72,7 @@ export { FIRST_SEASON, type EventIndex } from '../data/catalog';
 export type { ChaseAid, Spec } from '../data/spec';
 export type { ComponentSpec, LayoutState, Tile } from '../layout/model';
 export type { Circuit, CircuitView, Dataset, DriverEntry, SessionDataView } from '../../shared/sessionData';
+export type { Channel, SessionInfo, SessionType } from '../../shared/api';
 
 const session = {
   open: write(

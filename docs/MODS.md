@@ -9,6 +9,8 @@ come from a mod.
 
 - **Mod:** a plugin, one folder the app loads and reloads. For now it defines one component.
 - **Component:** something a tile can show, from the app or from a mod, such as a chart or a controller that jumps between laps.
+- **Installed and local:** an installed component comes with the app (or, later, from a package installed from elsewhere) and can't
+  be changed. A local one is a mod, the user's own. Changing an installed one means forking it: copying it into a new mod.
 - **Tile:** one component placed on the grid.
 
 ## What a mod is
@@ -19,6 +21,7 @@ the same renderer. There's no sandbox: a mod is trusted like anything else the u
 ```
 ~/.config/oh-my-f1-viewer/mods/   the app's data folder: ~/Library/Application Support/oh-my-f1-viewer on macOS, %APPDATA%\oh-my-f1-viewer on Windows
   .types/                         written by the app on every start: declarations for omfv and omfv/kit, for the build agent
+  .installed/builtin/<name>/      written by the app on every start, read-only: the source of each installed component, to read and fork
   <name>/
     main.tsx                      the mod (required; main.ts, main.jsx or main.js also work). It may import other files in its folder
     mod.error                     written by the app while the latest save doesn't load, and removed once one does
@@ -26,7 +29,7 @@ the same renderer. There's no sandbox: a mod is trusted like anything else the u
 ```
 
 The folder's name is the mod's: lower-case letters, digits, `_` and `-`, starting with a letter. While a mod defines one component, the
-component's name must match it, and can't be the name of one of the app's own components.
+component's name must match it, and can't be the name of an installed component.
 [examples/mods/lap_form](../examples/mods/lap_form/main.tsx) is a complete one. In short:
 
 ```tsx
@@ -88,6 +91,33 @@ session; an empty list fits none, so the agent is never offered it. A component 
 only offered the components that fit the open session, and can't suggest one that doesn't. The build agent sees them all, and the grid
 draws any of them.
 
+## Installed and local
+
+Agreed on 2026-11-17. Every component can be changed, but not in place: an installed one is forked into a local one.
+
+- **Installed** components come with the app: the app's own, in `src/components/<name>/`, compiled into it and registered at start as
+  `origin: 'installed'`. Each is a folder shaped like a mod's, importing only what a mod may, so its source runs unchanged as a mod's.
+  On every start the app copies those folders, without their tests, to `mods/.installed/builtin/<name>/`, read-only, replacing what was
+  there. They are there to read, as working examples, and to fork. Nothing builds them from there, and the build agent's tools refuse to
+  write there. An update to the app updates them, with nothing to merge: no copy of them is ever edited. Components installed from
+  elsewhere, such as a package from GitHub, would be other packages beside `builtin`.
+- **Local** components are mods, the folders in the mods folder: the user's, and the build agent's to edit. `origin: 'local'`.
+- **A fork** is a mod copied from a component, to change it. `Mods.fork(component, name, title)` copies the folder from `.installed`, or
+  from another mod, into `mods/<name>/`. In every source file it renames each string that is the old name or starts a key with it
+  (`'timing_tower'`, `` `timing_tower:${drivers}` ``), so the fork's name matches its folder and its tiles' keys differ from the
+  original's. It sets the title in `defineComponent`, and the label `spec` gives its tiles, wherever a title bar shows that label, to
+  a new one (the title, unless it's given another), so a fork's tile can be told from the original's on screen. It puts a line at the
+  top of `main` saying what it was forked from and when. It
+  copies into a hidden folder first and renames that into place, so the watcher builds the fork once, whole. The fork is a new mod like
+  any other: in build mode it shows in the strip as a draft, and the installed component and its tiles stay as they are. The viewer
+  adds the fork, or swaps it for the original's tile.
+- **Updates.** An installed component updates with the app. A fork doesn't: it's the user's from the moment it's made. The line at its
+  top says what it came from, so a later fix to the original can be found and carried over by hand, or by the build agent.
+
+Why not edit an installed component in place: a tile names its component, so an edit under the same name would swap the code under
+every tile of it, and the app would have to keep the original to reset to, and merge its own updates into the user's edits. A fork
+keeps both side by side, and the original stays the app's to update.
+
 ## How the app loads mods
 
 The main process owns the folder, and the renderer imports what main hands it.
@@ -143,6 +173,10 @@ compiling, imports, errors, logs and waiting for a save.
 | Piece | File |
 | --- | --- |
 | Watching, compiling, serving, `mod.error`, `mod.log` and the types | `electron/mods/index.ts` |
+| Copying the installed sources to `.installed`, and forking | `electron/mods/index.ts` |
+| The installed components, each a folder like a mod's | `src/components/<name>/main.tsx`, listed in `src/components/registry.ts` |
+| Every installed component forked and compiled as a mod | `electron/mods/installed.test.ts` |
+| A fork made by the build agent from a tile, in the real app | `scripts/fork-check.mjs` |
 | The `omfv-mod` scheme and starting it | `electron/main.ts` |
 | The bridge to main | `src/data/mods.ts` |
 | Importing, checking, registering and `live.mods` | `src/host/mods.ts` |

@@ -190,16 +190,18 @@ export function describeEvents(index: EventIndex): string {
  * The components `suggest_tiles` can offer, for the system prompt: one line each, or nothing when
  * there are none. Video isn't one: `streams` names feeds. Only what each is for, never what it shows.
  * The viewing agent gets only those that fit the open session; the build agent gets every one, since
- * it writes and edits them.
+ * it writes and edits them, each marked installed or local.
  */
-export function describeComponents(components: ComponentInfo[]): string {
+export function describeComponents(components: ComponentInfo[], { origins = false } = {}): string {
   const offered = components.filter((c) => c.name !== 'video');
   if (offered.length === 0) return '';
   const lines = [
-    'Components for suggest_tiles. Each line: name, title, session types, what it is for, then its props. One marked replays only cannot be suggested in a live session. Give a component every required prop; an optional one left out does what its description says. A prop named driver… is one driver and drivers… a list, each by code, surname or car number.',
+    'Components for suggest_tiles. Each line: name, title, session types, what it is for, then its props. One marked replays only cannot be suggested in a live session. Give a component every required prop; an optional one left out does what its description says. A prop named driver… is one driver and drivers… a list, each by code, surname or car number.' +
+      (origins ? ' Each name is followed by (installed), read-only with its source in .installed/builtin/<name>/, or (local), a mod in the folder <name>/.' : ''),
   ];
   for (const c of offered) {
-    lines.push(`${c.name}, ${c.title}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description} ${propsText(c)}.`);
+    const origin = origins ? ` (${c.origin})` : '';
+    lines.push(`${c.name}${origin}, ${c.title}, ${c.sessions ? c.sessions.join('/') : 'any session'}${c.replayOnly ? ', replays only' : ''}: ${c.description} ${propsText(c)}.`);
   }
   return lines.join('\n');
 }
@@ -250,7 +252,7 @@ export function askAgent(text: string): Promise<void> {
   const { components, sessionData, build, session } = read();
   if (build.active) {
     turnMode = 'build';
-    const reference = [describeComponents(components), describeTables(sessionData)].filter(Boolean).join('\n\n');
+    const reference = [describeComponents(components, { origins: true }), describeTables(sessionData)].filter(Boolean).join('\n\n');
     const tools = toolDefinitions('build');
     shownTools = namesOf(tools);
     return host.agent.send(text, describeAppState(note, describeBuild()), tools, reference, 'build');

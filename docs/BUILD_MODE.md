@@ -13,8 +13,12 @@ Agreed and built on 2026-11-11. [STATUS.md](STATUS.md) says what's verified. [MO
 A mod is already a real component: the app compiles it on every save and reloads it while the session plays. So build mode needs no
 editor and no separate preview. The draft is the real component, on the open session, and the viewer tries it by using it.
 
-- **The agent chooses what to do.** It creates, edits or deletes folders under `mods/` as the request needs. The viewer never picks
+- **The agent chooses what to do.** It creates, edits, forks or deletes folders under `mods/` as the request needs. The viewer never picks
   "add", "edit" or "remove".
+- **An installed component is forked, not edited.** Asked to change one, such as the timing tower pointed at with `@`, the agent forks
+  it into a new mod and edits that. The fork shows in the strip as a draft, and the installed component and its tiles stay as they
+  are. The agent says in a few words that it made a fork, and that the viewer can add it or swap it for the tile they have. See
+  "Installed and local" in [MODS.md](MODS.md).
 - **The app shows what changed.** It watches the folder and shows the result. The agent doesn't have to announce its work.
 - **A build is one transaction.** The viewer ends it with **Save** or **Undo all**.
 
@@ -164,18 +168,21 @@ instructions, and a separate session keeps what the build read out of the viewin
   it what the build has changed so far and every mod there is. That's enough for "make the chart I'm looking at show 12 laps".
 - **Its instructions are its own**, `shared/buildPrompt.ts`: how to work, and the mod guide in `shared/modGuide.ts`, which is what a
   mod is, a complete example, the host in brief and the rules for a component. [COMPONENTS.md](COMPONENTS.md) is where those rules are decided.
-  The chart and table lists follow them, as for the viewing agent. The event list doesn't: it can't find or open a session.
+  The chart and table lists follow them, as for the viewing agent, with each component marked `(installed)` or `(local)`. The event
+  list doesn't: it can't find or open a session.
 - **It gets file tools for the mods folder.** They run in the main process and reach nothing outside the folder:
 
   | Tool | What it does |
   | --- | --- |
   | `read`, `ls`, `grep`, `find` | Reads and searches the folder: mods, their `mod.error` and `mod.log`, and the types under `.types` |
   | `write`, `edit` | Writes inside a mod's folder, then waits for the app to load the save and says whether it did, with the error if not. `edit` takes several changes to one file in one call |
+  | `fork_component` | Copies a component, installed or a mod, into a new mod with the name, title and tile label it's given (`Mods.fork`), then waits for it to load, like `write` |
   | `delete_path` | Deletes a file in a mod, or a whole mod by its folder name |
   | `mod_status` | Whether the latest save loaded, how each of the mod's tiles and its draft is drawing, and the last lines of its log |
   | `look_at` | A picture of the mod's component as it shows now |
 
-  They refuse the app's own files (`.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder.
+  They refuse the app's own files (`.types`, `mod.error`, `mod.log`) and anything that isn't in a mod's folder. A write under
+  `.installed` says it's an installed component's source, and to fork it.
   All of them are the app's own (`electron/agent/extensions/modFiles.ts`), written over `fs` alone, with the descriptions, parameters and result texts pi's tools of those names had. Every path is resolved the way
   pi resolved it (a leading `@` stripped, `~` expanded) and then checked against the mods folder, so a refusal names the path really
   meant. `read` returns any file as text: a picture of a component comes from `look_at`. `edit` matches as pi's does:
@@ -281,7 +288,11 @@ It runs in three parts: a build that's saved, a build that's undone, and a build
 - **19 and 22:** it checks that no spoiler check showed and that the saved source holds no timestamps or tables of numbers. Whether the
   agent's replies gave anything away is read from its output by a person.
 
-The unit tests cover the snapshot (`electron/mods/snapshot.test.ts`), the build conversation and its file tools
+`node scripts/fork-check.mjs <screenshot-dir>` checks forking the same way: the timing tower on screen, `/build`, and a change asked
+of its tile pointed at with `@`. The agent should fork it, the fork should load and show in the strip as a draft, the tower's tile
+and its installed source should stay as they were, and the reply should say it made a fork.
+
+The unit tests cover the snapshot (`electron/mods/snapshot.test.ts`), forking (`electron/mods/installed.test.ts`), the build conversation and its file tools
 (`electron/agent/agent.test.ts`), drafts and approvals (`src/host/build.test.ts`), the build agent's tools (`src/agent/tools.test.ts`)
 and `/build` itself (`src/shell/commands.test.ts`).
 

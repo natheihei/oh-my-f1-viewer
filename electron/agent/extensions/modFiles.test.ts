@@ -63,13 +63,13 @@ const FOLDER = 'A folder, relative to the mods folder, like "my_mod" or ".types"
 const outside = (p: string) => `"${p}" is outside the mods folder. Paths are relative to it, like "my_mod/main.tsx".`;
 
 describe('the build agent\'s file tools', () => {
-  it('are six file tools and our three, in one pi-durable extension', () => {
+  it('are six file tools and our four, in one pi-durable extension', () => {
     const { extension, tools } = setup();
     expect(extension.name).toBe('mod-files');
     expect([...tools.keys()]).toEqual(MOD_FILE_TOOLS);
     expect(MOD_FILE_TOOLS).not.toContain('bash');
     // Saves run one at a time.
-    for (const name of ['write', 'edit', 'delete_path']) expect(tools.get(name)!.executionMode).toBe('sequential');
+    for (const name of ['write', 'edit', 'fork_component', 'delete_path']) expect(tools.get(name)!.executionMode).toBe('sequential');
   });
 
   it('show the model the descriptions and schemas the wrapped pi tools did', () => {
@@ -81,7 +81,7 @@ describe('the build agent\'s file tools', () => {
     const strict = { type: 'json_schema', strict: 'prefer' };
     expect(shown('read')).toEqual({
       description:
-        "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+        "In the mods folder: a mod's source, its mod.error or mod.log, the types under .types, or an installed component's source under .installed. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
       parameters: {
         type: 'object',
         required: ['path'],
@@ -127,7 +127,7 @@ describe('the build agent\'s file tools', () => {
     });
     expect(shown('grep')).toEqual({
       description:
-        'Search the contents of files under the mods folder for a JavaScript regular expression, or for plain text with literal. Returns matching lines as file:line: text, with paths relative to the folder searched. Includes dot folders like .types, and skips node_modules, binary files and files over 1 MB. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.',
+        'Search the contents of files under the mods folder for a JavaScript regular expression, or for plain text with literal. Returns matching lines as file:line: text, with paths relative to the folder searched. Includes dot folders like .types and .installed, and skips node_modules, binary files and files over 1 MB. Output is truncated to 100 matches or 50KB (whichever is hit first). Long lines are truncated to 500 chars.',
       parameters: {
         type: 'object',
         required: ['pattern'],
@@ -145,7 +145,7 @@ describe('the build agent\'s file tools', () => {
     });
     expect(shown('find')).toEqual({
       description:
-        "Find files and folders by glob pattern, like '*.tsx' or 'my_mod/**/*.ts'. A pattern without '/' matches names at any depth. Returns paths relative to the folder searched, with '/' after folders. Includes dot folders like .types, and skips node_modules. Output is truncated to 1000 results.",
+        "Find files and folders by glob pattern, like '*.tsx' or 'my_mod/**/*.ts'. A pattern without '/' matches names at any depth. Returns paths relative to the folder searched, with '/' after folders. Includes dot folders like .types and .installed, and skips node_modules. Output is truncated to 1000 results.",
       parameters: {
         type: 'object',
         required: ['pattern'],
@@ -248,6 +248,7 @@ describe('the build agent\'s file tools', () => {
       ['tsconfig.json', 'Write inside a mod\'s folder, like "my_mod/main.tsx".'],
       ['top.tsx', 'Write inside a mod\'s folder, like "my_mod/main.tsx".'],
       ['.types/a.d.ts', '".types/a.d.ts" is the app\'s, and can\'t be written.'],
+      ['.installed/builtin/tower/main.tsx', '".installed/builtin/tower/main.tsx" is an installed component\'s source, which can\'t be changed. To change tower, fork it with fork_component and edit the fork.'],
       ['a_mod/node_modules/x.js', '"a_mod/node_modules/x.js" is the app\'s, and can\'t be written.'],
       ['a_mod/.hidden', '"a_mod/.hidden" is the app\'s, and can\'t be written.'],
       ['a_mod/mod.log', 'The app writes mod.log itself.'],
@@ -588,6 +589,33 @@ describe('the build agent\'s file tools', () => {
       expect((await call('find', { pattern: '*.ts', limit: 2 })).text).toBe('m/a.ts\nm/b.ts\n\n[2 results limit reached]');
       expect((await call('find', { pattern: '*.ts', limit: 3 })).text).toBe('m/a.ts\nm/b.ts\nm/c.ts');
     });
+  });
+
+  describe('fork_component', () => {
+    it('forks through the app, then says what it made and whether it loaded', async () => {
+      const fork = vi.fn(async () => ({ from: '.installed/builtin/tower', origin: 'installed' as const, files: ['tower_pits/main.tsx'], renamed: 2, oldTitle: 'Timing', oldLabel: 'Timing' }));
+      const { call, reports } = setup(() => ready('tower_pits'), { fork });
+      const result = await call('fork_component', { component: 'tower', name: 'tower_pits', title: 'Timing · pits' });
+      expect(fork).toHaveBeenCalledWith('tower', 'tower_pits', 'Timing · pits', undefined);
+      expect(result).toEqual({
+        isError: false,
+        text: 'Forked tower from .installed/builtin/tower into tower_pits: tower_pits/main.tsx. 2 string(s) naming tower now name tower_pits. Its title was "Timing" and is now "Timing · pits". Its tiles\' label was "Timing" and is now "Timing · pits". tower is unchanged. Edit the fork now. tower_pits loaded.',
+      });
+      expect(reports).toEqual([['fork_component', true, 'forked tower as tower_pits · loaded']]);
+    });
+
+    it('passes on why the app refused', async () => {
+      const { call } = setup(undefined, { fork: async () => Promise.reject(new Error('There\'s already a mod named "mine".')) });
+      expect(await call('fork_component', { component: 'tower', name: 'mine', title: 'T' })).toEqual({ isError: true, text: 'There\'s already a mod named "mine".' });
+    });
+  });
+
+  it('read, ls, grep and find see the installed sources under .installed', async () => {
+    const { call, file } = setup();
+    file('.installed/builtin/tower/main.tsx', "name: 'tower'");
+    expect((await call('read', { path: '.installed/builtin/tower/main.tsx' })).text).toBe("name: 'tower'");
+    expect((await call('grep', { pattern: 'tower' })).text).toBe(".installed/builtin/tower/main.tsx:1: name: 'tower'");
+    expect((await call('find', { pattern: 'main.tsx', path: '.installed' })).text).toBe('builtin/tower/main.tsx');
   });
 
   it('read, ls, grep and find see the types under .types, and skip node_modules', async () => {

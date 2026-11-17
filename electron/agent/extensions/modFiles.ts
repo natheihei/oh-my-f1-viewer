@@ -1,6 +1,6 @@
 /**
  * The build agent's own tools: read, write, edit, ls, grep and find, kept inside the mods folder, and
- * ours for deleting, a mod's status, and a picture of a draft. They run here, not in the renderer, and
+ * ours for forking an installed component, deleting, a mod's status, and a picture of a draft. They run here, not in the renderer, and
  * reach nothing outside the mods folder. They use only plain fs calls. See docs/BUILD_MODE.md.
  *
  * The six file tools were pi-coding-agent's, wrapped. They are ours now, and answer the model in pi's
@@ -15,6 +15,7 @@ import type { Context } from '@earendil-works/chord/context' with { 'resolution-
 import type { Extension, ToolExecutionResult, ToolRegistration } from '@earendil-works/pi-durable' with { 'resolution-mode': 'import' };
 import { describePlace, notDrawing, type PlaceHealth } from '../../../shared/health';
 import type { ModLogLine, ModStatus } from '../../../shared/mods';
+import type { Fork } from '../../mods';
 
 /**
  * What the extension needs of pi-durable. pi-durable is ESM only, and this file compiles to CommonJS, so
@@ -33,6 +34,8 @@ export interface ModFilesHost {
   picture(name: string): Promise<Buffer | null>;
   /** How every tile and draft is drawing, once each has drawn with its latest code. Null when the app can't say. */
   health(): Promise<PlaceHealth[] | null>;
+  /** Copies a component, installed or a mod, into a new mod with a name and title of its own. */
+  fork(component: string, name: string, title: string, label?: string): Promise<Fork>;
 }
 
 /** Told about each call as it ends, with a line for the palette when there's one to show. */
@@ -79,6 +82,9 @@ function writable(dir: string, given: string): { file: string; mod: string; rel:
   const parts = path.relative(dir, file).split(path.sep);
   const rel = parts.join('/');
   if (parts.length < 2) throw new Error('Write inside a mod\'s folder, like "my_mod/main.tsx".');
+  if (parts[0] === '.installed') {
+    throw new Error(`"${rel}" is an installed component's source, which can't be changed. To change ${parts[2] ? `${parts[2]}, fork it` : 'one, fork it'} with fork_component and edit the fork.`);
+  }
   if (parts.some((p) => p.startsWith('.') || p === 'node_modules')) throw new Error(`"${rel}" is the app's, and can't be written.`);
   if (parts.length === 2 && WRITTEN.has(parts[1])) throw new Error(`The app writes ${parts[1]} itself.`);
   if (!/^[a-z][a-z0-9_-]{0,47}$/.test(parts[0])) throw new Error(`"${parts[0]}" can't be a mod's name: use lower-case letters, digits, _ and -, starting with a letter.`);
@@ -614,7 +620,7 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
       {
         name: 'read',
         description:
-          "In the mods folder: a mod's source, its mod.error or mod.log, or the types under .types. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+          "In the mods folder: a mod's source, its mod.error or mod.log, the types under .types, or an installed component's source under .installed. Read the contents of a file as text, images and binary files too. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
         parameters: piObject({ path: string(PATH), offset: number('Line number to start reading from (1-indexed)'), limit: number('Maximum number of lines to read') }, ['path']),
         constrainedSampling: STRICT,
         outputLimits: OUTPUT_LIMITS,
@@ -745,7 +751,7 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
     tool<GrepArgs>(
       {
         name: 'grep',
-        description: `Search the contents of files under the mods folder for a JavaScript regular expression, or for plain text with literal. Returns matching lines as file:line: text, with paths relative to the folder searched. Includes dot folders like .types, and skips node_modules, binary files and files over 1 MB. Output is truncated to ${GREP_LIMIT} matches or ${MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_LINE} chars.`,
+        description: `Search the contents of files under the mods folder for a JavaScript regular expression, or for plain text with literal. Returns matching lines as file:line: text, with paths relative to the folder searched. Includes dot folders like .types and .installed, and skips node_modules, binary files and files over 1 MB. Output is truncated to ${GREP_LIMIT} matches or ${MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_LINE} chars.`,
         parameters: piObject(
           {
             pattern: string('A JavaScript regular expression, or plain text when literal is true.'),
@@ -769,7 +775,7 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
       {
         name: 'find',
         description:
-          "Find files and folders by glob pattern, like '*.tsx' or 'my_mod/**/*.ts'. A pattern without '/' matches names at any depth. Returns paths relative to the folder searched, with '/' after folders. Includes dot folders like .types, and skips node_modules. Output is truncated to 1000 results.",
+          "Find files and folders by glob pattern, like '*.tsx' or 'my_mod/**/*.ts'. A pattern without '/' matches names at any depth. Returns paths relative to the folder searched, with '/' after folders. Includes dot folders like .types and .installed, and skips node_modules. Output is truncated to 1000 results.",
         parameters: piObject(
           {
             pattern: string("Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'"),
@@ -806,6 +812,38 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
   ];
 
   const ours: ToolRegistration[] = [
+    tool<{ component: string; name: string; title: string; label?: string }>(
+      {
+        name: 'fork_component',
+        description:
+          "Copy a component into a new mod, to change it: an installed one, whose source is under .installed and can't be changed, or another mod. The copy gets the new name everywhere the old one was a string (its name and its keys), the new title, and a new label for its tiles' title bars, so they can be told from the original's, and its main file says what it was forked from. The original stays as it is. Waits for the fork to load, like write.",
+        parameters: object(
+          {
+            component: string('The component to copy, by name: an installed one, or a mod\'s folder name.'),
+            name: string('The new mod\'s name, which is also its folder: lower-case letters, digits, _ and -, starting with a letter. Say what the fork changes, like "timing_tower_pits".'),
+            title: string('The new component\'s title, close to the original\'s so the user knows it, like "Timing · pits".'),
+            label: string('What its tiles\' title bars show, short and different from the original\'s, like "Timing · pits". Leave out to use the title.'),
+          },
+          ['component', 'name', 'title'],
+        ),
+        executionMode: 'sequential',
+      },
+      async ({ component, name, title, label }) => {
+        const fork = await host().fork(component, name, title, label);
+        const { line, note } = await loaded(`forked ${component} as`, name, name);
+        const titled = fork.oldTitle !== null ? ` Its title was "${fork.oldTitle}" and is now "${title}".` : ` It had no title the fork could find: set title in its defineComponent.`;
+        const labelled =
+          fork.oldLabel !== null
+            ? ` Its tiles' label was "${fork.oldLabel}" and is now "${label ?? title}".`
+            : ` Its spec's label isn't plain text, so its tiles may show the same label as the original's: change it so they can be told apart.`;
+        return {
+          output: text(
+            `Forked ${component} from ${fork.from} into ${name}: ${fork.files.join(', ')}. ${fork.renamed} string(s) naming ${component} now name ${name}.${titled}${labelled} ${component} is unchanged. Edit the fork now. ${line}`,
+          ),
+          note,
+        };
+      },
+    ),
     tool<{ path: string }>(
       {
         name: 'delete_path',
@@ -864,4 +902,4 @@ export function modFilesExtension(durable: Durable, host: () => ModFilesHost, re
   return durable.defineExtension({ name: 'mod-files', tools: [...files, ...ours] });
 }
 
-export const MOD_FILE_TOOLS = ['read', 'write', 'edit', 'ls', 'grep', 'find', 'delete_path', 'mod_status', 'look_at'];
+export const MOD_FILE_TOOLS = ['read', 'write', 'edit', 'ls', 'grep', 'find', 'fork_component', 'delete_path', 'mod_status', 'look_at'];
