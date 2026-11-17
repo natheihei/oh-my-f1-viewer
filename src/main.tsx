@@ -8,7 +8,7 @@ import './styles.css';
 import { backgrounds, DEFAULT_BACKGROUND } from './backgrounds/registry';
 import * as kit from './components/charts/kit';
 import { components } from './components/registry';
-import * as f1a from './host';
+import * as omfv from './host';
 import { host, startBuild, startHealth, startMods, startPictures } from './host';
 import { App } from './shell/App';
 import { restoreBackground } from './shell/persistBackground';
@@ -19,7 +19,7 @@ import { restoreVolume } from './shell/persistVolume';
 host.components.register({ components });
 host.backgrounds.register({ backgrounds });
 // Mods import these as the app's own copies. See docs/MODS.md.
-startMods({ f1a, 'f1a/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });
+startMods({ omfv, 'omfv/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });
 startBuild();
 startHealth();
 startPictures();

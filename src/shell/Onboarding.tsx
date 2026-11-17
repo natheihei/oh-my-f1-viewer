@@ -11,6 +11,7 @@ import type { AgentProviderOption, AiStatus } from '../../shared/api';
 import { FIRST_SEASON, host, useLive } from '../host';
 import { sendToAgent } from './agentFeed';
 import { errorText, reportReadiness } from './commands';
+import { OmfvMark } from './OmfvMark';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 
@@ -43,8 +44,8 @@ const STEPS: StepId[] = ['f1tv', 'agent', 'watch'];
 const TITLES: Record<StepId, string> = { f1tv: 'Sign in to F1 TV', agent: 'Connect a model', watch: 'Open a session' };
 
 const WHY: Record<StepId, string> = {
-  f1tv: 'Every feed and all the timing come from your F1 TV subscription. f1a keeps the sign-in on this computer only.',
-  agent: 'You tell the agent what to watch. It opens the session and suggests tiles. f1a can use the model or subscription you already have.',
+  f1tv: 'Every feed and all the timing come from your F1 TV subscription. OMFV keeps the sign-in on this computer only.',
+  agent: 'You tell the agent what to watch. It opens the session and suggests tiles. OMFV can use the model or subscription you already have.',
   watch: `Name any session from ${FIRST_SEASON} on, in your own words. The agent finds it and opens the feeds.`,
 };
 
@@ -222,7 +223,8 @@ export function Onboarding() {
   return (
     <div className="onboarding" data-testid="onboarding" role="region" aria-label="Get started">
       <div className="onboarding-head">
-        <span className="onboarding-title">Get started with f1a</span>
+        <OmfvMark className="onboarding-logo" />
+        <span className="onboarding-title">Get started</span>
         <span className="onboarding-sub">Three steps, about a minute</span>
         <button type="button" className="onboarding-skip" data-testid="onboarding-skip" onClick={() => {
             onboarding.finish('skipped');

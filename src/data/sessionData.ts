@@ -46,7 +46,7 @@ function applySchedule(schedule: Schedule | null, reason: string | null, state: 
 
 /** The calendar refreshes itself in the main process on every start. This just keeps a copy up to date. */
 function startSchedule(): void {
-  const api = globalThis.window?.f1a?.data;
+  const api = globalThis.window?.omfv?.data;
   if (!api) return;
   api.onSchedule(({ schedule, reason }) => applySchedule(schedule, reason, 'ready'));
   void api
@@ -96,7 +96,7 @@ export type SqlAsOf = 'playhead' | 'session';
 export async function sessionSql(sql: string, params: unknown[] = [], asOf: SqlAsOf = 'playhead'): Promise<SqlRows> {
   if (!current) throw new Error('No session data is open.');
   const playhead = asOf === 'session' ? EVERYTHING_VISIBLE : current.playhead();
-  return deepFreeze(await window.f1a.data.sql(current.sessionKey, playhead, sql, params));
+  return deepFreeze(await window.omfv.data.sql(current.sessionKey, playhead, sql, params));
 }
 
 export function openSessionData(session: SessionInfo, live: boolean): SessionDataHandle {
@@ -137,7 +137,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     reading = true;
     readSecond = Math.floor(playhead / 1000);
     try {
-      const next = await window.f1a.data.objects(sessionKey, playhead);
+      const next = await window.omfv.data.objects(sessionKey, playhead);
       const serialized = JSON.stringify(next);
       if (serialized !== lastObjects) {
         lastObjects = serialized;
@@ -185,11 +185,11 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   useSessionData.setState({ state: 'loading', sessionKey: null, datasets: null }, true);
   useCircuit.setState({ state: 'loading' }, true);
   const asked = JSON.stringify(query);
-  const stopCircuit = window.f1a.data.onCircuit(({ query: sent, circuit }) => {
+  const stopCircuit = window.omfv.data.onCircuit(({ query: sent, circuit }) => {
     if (!destroyed && JSON.stringify(sent) === asked) useCircuit.setState(deepFreeze(circuit), true);
   });
-  const unsubscribe = window.f1a.data.onStatus(onStatus);
-  void window.f1a.data.open(query, live).catch((e: Error) => {
+  const unsubscribe = window.omfv.data.onStatus(onStatus);
+  void window.omfv.data.open(query, live).catch((e: Error) => {
     if (!destroyed) useSessionData.setState({ state: 'failed', reason: e.message }, true);
   });
 
@@ -210,7 +210,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       current = null;
       unsubscribe();
       stopCircuit();
-      void window.f1a.data.close().catch(() => {});
+      void window.omfv.data.close().catch(() => {});
       useSessionData.setState({ state: 'idle' }, true);
       useCircuit.setState({ state: 'idle' }, true);
     },

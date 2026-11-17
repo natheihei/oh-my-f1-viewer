@@ -120,7 +120,7 @@ export class StreamHandle {
   async start(): Promise<void> {
     try {
       const { contentId, channelId } = this.channel;
-      this.playback = await window.f1a.f1tv.play(contentId, channelId);
+      this.playback = await window.omfv.f1tv.play(contentId, channelId);
       if (this.destroyed) return;
       if (!this.playback?.manifestUrl) throw new Error('F1 TV returned no stream for this channel.');
       this.setStatus('loading');
@@ -352,7 +352,7 @@ export class StreamHandle {
     const code = (e as { code?: number })?.code;
     if (code === 1001 || code === 6001 || code === 6007 || code === 6012) {
       const key = streamKeyOf(this.playback?.licenseUrl);
-      const f1Message = await window.f1a.f1tv.lastLicenseError(key).catch(() => '');
+      const f1Message = await window.omfv.f1tv.lastLicenseError(key).catch(() => '');
       if (f1Message?.trim()) return `F1 TV: ${f1Message.trim()}`;
     }
     switch (code) {

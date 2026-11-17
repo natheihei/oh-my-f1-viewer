@@ -19,7 +19,7 @@ const check = (name, ok, detail = '') => {
 await page.waitForTimeout(2000);
 await page.evaluate(async () => {
   window.events = [];
-  window.f1a.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
+  window.omfv.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
   window.m = { session: await import('/src/data/session.ts'), layout: await import('/src/layout/store.ts') };
 });
 
@@ -80,7 +80,7 @@ check('reports ready when both are signed in', /Ready/.test(await paletteText(pa
 
 // A weekend that hasn't finished needs clarifying. Name the next one, so this works any time.
 const nextEvent = await page.evaluate(async () => {
-  const main = (await window.f1a.f1tv.upcoming()).find((x) => x.series === 'FORMULA 1' && ['practice', 'qualifying', 'race'].includes(x.type));
+  const main = (await window.omfv.f1tv.upcoming()).find((x) => x.series === 'FORMULA 1' && ['practice', 'qualifying', 'race'].includes(x.type));
   return main?.title.match(/^(\d{4}) (.+?) (?:GP|Grand Prix)/)?.slice(1, 3).join(' ') ?? null;
 });
 let r = await say(nextEvent ?? '2026 Brazil', 'journey-1-clarify.png');

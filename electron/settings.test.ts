@@ -8,11 +8,11 @@ vi.mock('electron', () => ({ app: { getPath: () => os.tmpdir() } }));
 const { SettingsFile, setUiState, uiState } = await import('./settings');
 
 let dir = '';
-const file = () => path.join(dir, 'f1a-settings.json');
+const file = () => path.join(dir, 'omfv-settings.json');
 const onDisk = () => JSON.parse(readFileSync(file(), 'utf8')) as unknown;
 
 beforeEach(() => {
-  dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-settings-test-'));
+  dir = mkdtempSync(path.join(os.tmpdir(), 'omfv-settings-test-'));
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -40,7 +40,7 @@ describe('the settings file', () => {
     expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining(`moved to ${file()}.bad`));
     settings.set('ui', { volume: 0.5 });
     settings.flush();
-    expect(readdirSync(dir).sort()).toEqual(['f1a-settings.json', 'f1a-settings.json.bad']);
+    expect(readdirSync(dir).sort()).toEqual(['omfv-settings.json', 'omfv-settings.json.bad']);
   });
 
   it('moves aside a file that holds no object, without losing an earlier one', () => {
@@ -71,7 +71,7 @@ describe('the settings file', () => {
     settings.set('ui', { volume: 0.4 });
     expect(readdirSync(dir)).toEqual([]);
     await vi.waitFor(() => expect(onDisk()).toEqual({ agent: { provider: 'openai' }, ui: { volume: 0.4 } }));
-    expect(readdirSync(dir)).toEqual(['f1a-settings.json']);
+    expect(readdirSync(dir)).toEqual(['omfv-settings.json']);
     expect(new SettingsFile(file()).get('ui')).toEqual({ volume: 0.4 });
   });
 

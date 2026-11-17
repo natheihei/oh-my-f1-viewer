@@ -28,10 +28,10 @@ function loadEventIndex(): Promise<EventIndex> {
   useEventIndex.setState({ state: 'loading', error: null });
   indexLoad = (async () => {
     try {
-      const all = await window.f1a.f1tv.seasons();
+      const all = await window.omfv.f1tv.seasons();
       const supported = all.filter((s) => s.year >= FIRST_SEASON).sort((a, b) => a.year - b.year);
       if (supported.length === 0) throw new Error(`F1 TV lists no season from ${FIRST_SEASON} on.`);
-      const seasons = await Promise.all(supported.map(async (s) => ({ year: s.year, events: await window.f1a.f1tv.events(s.pageId) })));
+      const seasons = await Promise.all(supported.map(async (s) => ({ year: s.year, events: await window.omfv.f1tv.events(s.pageId) })));
       useEventIndex.setState({ state: 'ready', seasons, error: null });
     } catch (e) {
       const message = (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '');
@@ -70,35 +70,35 @@ export const catalog = {
   /** Loads the event index, or joins a load already under way. Never throws: the result says how it went. */
   loadIndex: loadEventIndex,
 
-  seasons: (): Promise<SeasonInfo[]> => window.f1a.f1tv.seasons(),
+  seasons: (): Promise<SeasonInfo[]> => window.omfv.f1tv.seasons(),
 
   async events(year: number): Promise<EventInfo[]> {
-    const seasons = await window.f1a.f1tv.seasons();
+    const seasons = await window.omfv.f1tv.seasons();
     const season = seasons.find((s) => s.year === year);
     if (!season) throw new Error(`F1 TV has no ${year} season. It has: ${seasons.map((s) => s.year).join(', ')}`);
-    return window.f1a.f1tv.events(season.pageId);
+    return window.omfv.f1tv.events(season.pageId);
   },
 
   /** Event pages also carry F1 Academy and similar, whose races would read as "the race". */
   async sessions(pageId: number, year: number): Promise<SessionInfo[]> {
-    const all = await window.f1a.f1tv.sessions(pageId, year);
+    const all = await window.omfv.f1tv.sessions(pageId, year);
     remember(all);
     const formula1 = all.filter((s) => s.series === 'FORMULA 1');
     return formula1.length ? formula1 : all;
   },
 
   /** The live list, without remembering it. Cheap enough to poll. */
-  liveNow: (): Promise<LiveItem[]> => window.f1a.f1tv.liveNow(),
+  liveNow: (): Promise<LiveItem[]> => window.omfv.f1tv.liveNow(),
 
   async live(): Promise<LiveItem[]> {
-    const items = await window.f1a.f1tv.liveNow();
+    const items = await window.omfv.f1tv.liveNow();
     const now = Date.now();
     remember(items.map((i) => liveToSession(i, now)));
     return items;
   },
 
   async upcoming(): Promise<SessionInfo[]> {
-    const sessions = (await window.f1a.f1tv.upcoming()).filter((s) => s.series === 'FORMULA 1');
+    const sessions = (await window.omfv.f1tv.upcoming()).filter((s) => s.series === 'FORMULA 1');
     remember(sessions);
     return sessions;
   },
@@ -125,7 +125,7 @@ export const catalog = {
       status: 'replay',
     };
     if (session.status !== 'upcoming') return session;
-    const live = await window.f1a.f1tv.liveNow();
+    const live = await window.omfv.f1tv.liveNow();
     return live.some((i) => i.contentId === contentId) ? { ...session, status: 'live' } : session;
   },
 };

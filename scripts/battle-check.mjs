@@ -1,7 +1,7 @@
 // Checks components that show video, in the real app over a real replay race, muted: the battle tile with its
 // two onboards and its list of fights, the same onboard in a video tile of its own at once, where the sound
 // goes as pictures are clicked, switched and closed, and the chase tile. Prints what it finds and saves a
-// screenshot of each step. Runs its own isolated f1a: see scripts/isolated.mjs.
+// screenshot of each step. Runs its own isolated OMFV: see scripts/isolated.mjs.
 // Usage: node scripts/battle-check.mjs <screenshot-dir> [lap] [session key]
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';

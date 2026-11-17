@@ -25,7 +25,7 @@ const open = (live = false) =>
       new Promise((resolve) => {
         const started = performance.now();
         const seen = [];
-        const stop = window.f1a.data.onStatus((status) => {
+        const stop = window.omfv.data.onStatus((status) => {
           const states = status.coverage ? Object.values(status.coverage.datasets).map((d) => d.state) : [];
           seen.push({ at: Math.round(performance.now() - started), state: status.state, telemetry: status.coverage?.datasets.telemetry.state, results: status.coverage?.datasets.results.state, timing: status.coverage?.datasets.timing.state, reason: status.reason });
           const settled = status.state === 'failed' || status.state === 'unsupported' || (status.state === 'ready' && !states.includes('absent') && !states.includes('loading'));
@@ -34,7 +34,7 @@ const open = (live = false) =>
             resolve({ seen, ms: Math.round(performance.now() - started), status });
           }
         });
-        void window.f1a.data.open(query, live);
+        void window.omfv.data.open(query, live);
       }),
     { query: { year, sessionKey, meetingKey, sessionType: 'race', sessionName: 'Race' }, live },
   );
@@ -43,7 +43,7 @@ let calendar = null;
 const calendarDeadline = Date.now() + 120_000;
 while (!calendar && Date.now() < calendarDeadline) {
   calendar = await page.evaluate(async () => {
-    const s = await window.f1a.data.schedule();
+    const s = await window.omfv.data.schedule();
     return s?.refreshedAt ? { meetings: s.meetings.length, sessions: s.sessions.length, upcoming: s.sessions.filter((x) => !x.path).length, seasons: [...new Set(s.sessions.map((x) => x.year))].sort() } : null;
   });
   if (!calendar) await page.waitForTimeout(1000);
@@ -64,9 +64,9 @@ console.log(`     missing feeds: ${coverage?.missingFeeds.join(', ') || 'none'}`
 const counts = await page.evaluate(async (key) => {
   const out = {};
   for (const table of ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary', 'drivers', 'championship_drivers', 'championship_teams', 'starting_grid', 'session_result']) {
-    out[table] = (await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
+    out[table] = (await window.omfv.data.sql(key, Number.MAX_SAFE_INTEGER, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
   }
-  const objects = await window.f1a.data.objects(key, Number.MAX_SAFE_INTEGER);
+  const objects = await window.omfv.data.objects(key, Number.MAX_SAFE_INTEGER);
   out.objects = Object.fromEntries(Object.entries(objects).map(([k, v]) => [k, Array.isArray(v) ? v.length : v]));
   return out;
 }, sessionKey);
@@ -74,16 +74,16 @@ console.log(`     rows: ${JSON.stringify(counts)}`);
 check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary', 'drivers', 'championship_drivers', 'championship_teams', 'starting_grid', 'session_result'].every((t) => counts[t] > 0));
 check('roster and lap count filled', Object.values(counts.objects).every((v) => (typeof v === 'number' ? v > 0 : v?.current > 0 && v.total > 0)));
 
-const database = path.join(os.homedir(), '.config/f1a/timing.sqlite');
+const database = path.join(os.homedir(), '.config/oh-my-f1-viewer/timing.sqlite');
 console.log(`     database: ${(statSync(database).size / 1e6).toFixed(0)} MB`);
 
 const timing = await page.evaluate(async (key) => {
   const time = async (sql, playhead = Number.MAX_SAFE_INTEGER) => {
     const started = performance.now();
-    const { rows } = await window.f1a.data.sql(key, playhead, sql, []);
+    const { rows } = await window.omfv.data.sql(key, playhead, sql, []);
     return { ms: Math.round(performance.now() - started), rows: rows.length };
   };
-  const { rows } = await window.f1a.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT MIN(date) AS a, MAX(date) AS b FROM car_data', []);
+  const { rows } = await window.omfv.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT MIN(date) AS a, MAX(date) AS b FROM car_data', []);
   const mid = Math.round((rows[0].a + rows[0].b) / 2);
   return {
     gapsPerLap: await time('SELECT lap_number, driver_number, date_start FROM laps'),
@@ -96,14 +96,14 @@ console.log(`     query times: ${JSON.stringify(timing)}`);
 check('a chart-sized query is quick', timing.gapsPerLap.ms < 500 && timing.oneCarWindow.ms < 500);
 
 const visibility = await page.evaluate(async ({ key, timeBaseMs }) => {
-  const count = async (table, at) => (await window.f1a.data.sql(key, at, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
+  const count = async (table, at) => (await window.omfv.data.sql(key, at, `SELECT COUNT(*) AS n FROM ${table}`, [])).rows[0].n;
   const all = Number.MAX_SAFE_INTEGER;
   // The clock base comes from the feed's first anchor. Reading the views for it wouldn't do: they
   // only hold each row's newest version.
-  const { rows } = await window.f1a.data.sql(key, all, 'SELECT MIN(visible_from) AS a, MAX(visible_from) AS b FROM laps', []);
+  const { rows } = await window.omfv.data.sql(key, all, 'SELECT MIN(visible_from) AS a, MAX(visible_from) AS b FROM laps', []);
   const mid = Math.round((rows[0].a + rows[0].b) / 2);
   const beforeFeed = timeBaseMs - 1;
-  const denied = async (sql) => window.f1a.data.sql(key, all, sql, []).then(() => false, () => true);
+  const denied = async (sql) => window.omfv.data.sql(key, all, sql, []).then(() => false, () => true);
   return {
     before: (await Promise.all(['laps', 'position', 'intervals', 'stints', 'pit', 'race_control', 'weather', 'car_data', 'location'].map((t) => count(t, beforeFeed)))).reduce((x, y) => x + y, 0),
     midway: await count('laps', mid),
@@ -124,14 +124,14 @@ check('base tables and writes are refused', visibility.deniedBase && visibility.
 console.log('\nSecond open: should skip ingesting…');
 const second = await open();
 check('nothing ingested again', second.ms < 2000, `${second.ms}ms`);
-await page.evaluate(() => window.f1a.data.close());
+await page.evaluate(() => window.omfv.data.close());
 
 console.log('\nThrough the host, in a real session (muted, from the start)…');
 const viaHost = await page.evaluate(async (year) => {
   const { host, read } = await import('/src/host/index.ts');
   host.audio.setVolume({ volume: 0 });
   let lastStatus = null;
-  window.f1a.data.onStatus((status) => {
+  window.omfv.data.onStatus((status) => {
     if (status.clock) lastStatus = status;
   });
   const events = await host.catalog.events({ year });

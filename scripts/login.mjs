@@ -1,10 +1,10 @@
 // Runs F1 TV sign-in and the agent's setup through the palette, skipping any that are already done. It runs on the
-// main profile, ~/.config/f1a, since that's where the checks copy both logins from: close f1a first.
+// main profile, ~/.config/oh-my-f1-viewer, since that's where the checks copy both logins from: close OMFV first.
 import { paletteText, startApp, typeInPalette } from './harness.mjs';
 import { MAIN_PROFILE } from './isolated.mjs';
 
 const { page, stop } = await startApp(undefined, { userData: MAIN_PROFILE });
-const status = () => page.evaluate(async () => ({ f1: await window.f1a.f1tv.status(), ai: await window.f1a.ai.status() }));
+const status = () => page.evaluate(async () => ({ f1: await window.omfv.f1tv.status(), ai: await window.omfv.ai.status() }));
 console.log('before:', JSON.stringify(await status()));
 
 /** Waits on the login itself rather than palette text, which a reload would clear. */

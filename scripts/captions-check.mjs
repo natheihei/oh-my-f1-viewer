@@ -189,7 +189,7 @@ async function main() {
   const { startApp } = await import('./harness.mjs');
   const { app, page, stop } = await startApp(5186);
   try {
-    await page.evaluate((id) => window.f1a.f1tv.channels(id), contentId); // Waits for the client to sign in.
+    await page.evaluate((id) => window.omfv.f1tv.channels(id), contentId); // Waits for the client to sign in.
     const client = path.resolve('dist-electron/electron/vendor/f1ov/f1tvClient.js');
     // Follows the feed's play link, as channelIdForPlay does in the app: the world feed's link has no channelId.
     const play = await app.evaluate(

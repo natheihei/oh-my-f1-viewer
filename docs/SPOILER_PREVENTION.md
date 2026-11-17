@@ -1,6 +1,6 @@
 # Spoiler prevention
 
-f1a holds whole races in a local database, and most viewers are watching a replay they don't know the end of. The rule across the app:
+OMFV holds whole races in a local database, and most viewers are watching a replay they don't know the end of. The rule across the app:
 
 **The viewer learns nothing past the frame on screen unless they asked to.**
 
@@ -80,7 +80,7 @@ How it works, in `electron/agent/extensions/forgetReadAhead.ts`:
   results and reasoning are all dropped, including the SQL and seek dates, which can carry what the agent learned.
 - **Telling the agent.** The user message gains an `<app_note>` block saying the tool calls were removed. It's on the user side, next to `<app_state>`, so the
   agent isn't shown a pattern of replying without tools that it could copy.
-- **When the turn ends**, however it ends, one more entry is written to the conversation (`f1a.forget`). It holds an edit for each
+- **When the turn ends**, however it ends, one more entry is written to the conversation (`omfv.forget`). It holds an edit for each
   entry of the turn: replace the user message with the noted one, replace the last reply with everything the agent said, and omit the
   rest. pi-durable applies those edits whenever it builds what the model sees, so every later request reads the cut-down turn.
   If writing it fails, the turn's calls stay marked and it's tried again before the next message; if that fails too, the

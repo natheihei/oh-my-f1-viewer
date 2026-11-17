@@ -17,7 +17,7 @@ import { MAIN_PROFILE, prepareProfile, profileInUse, startIsolatedApp, syncAgent
  * temp dir with the app's main.log, on Hyprland.
  */
 export async function startApp(port = 5198, { userData: given = null } = {}) {
-  const run = mkdtempSync(path.join(os.tmpdir(), 'f1a-harness-'));
+  const run = mkdtempSync(path.join(os.tmpdir(), 'omfv-harness-'));
   const userData = given ?? prepareProfile(path.join(run, 'user-data'), { agent: true });
   // On the main profile, the window's size and place are put back after, so the next launch opens as before.
   const windowState = path.join(userData, 'window-state.json');
@@ -37,14 +37,14 @@ export async function startApp(port = 5198, { userData: given = null } = {}) {
   }
   if (profileInUse(userData)) {
     cleanUp();
-    throw new Error(`Another f1a is using ${userData}: close it first.`);
+    throw new Error(`Another OMFV is using ${userData}: close it first.`);
   }
   const server = await createServer({ server: { port, strictPort: true }, logLevel: 'error' });
   await server.listen();
   const { CHROME_DESKTOP: _ignored, ...env } = process.env;
   const app = await electron.launch({
     executablePath: path.resolve('node_modules/electron/dist/electron'),
-    args: ['.', `--user-data-dir=${userData}`, ...(process.env.F1A_ELECTRON_ARGS?.split(' ') ?? [])],
+    args: ['.', `--user-data-dir=${userData}`, ...(process.env.OMFV_ELECTRON_ARGS?.split(' ') ?? [])],
     env: { ...env, ELECTRON_START_URL: `http://127.0.0.1:${port}` },
     timeout: 60_000,
   });

@@ -88,7 +88,7 @@ describe('openingState', () => {
 
 describe('loadWindowState and saveWindowState', () => {
   it('round-trips through the file, and treats a missing or broken file as nothing saved', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f1a-window-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omfv-window-'));
     const file = path.join(dir, 'window-state.json');
     expect(loadWindowState(file)).toBeNull();
     const state = { x: 5, y: 6, width: 1000, height: 700, maximized: false };

@@ -93,7 +93,7 @@ describe("the tools sent with the agent's messages", () => {
     const results: AgentToolResult[] = [];
     let onCall: (call: AgentToolCall) => void = () => {};
     vi.stubGlobal('window', {
-      f1a: {
+      omfv: {
         ai: {
           send: async (_text: string, _context: string, tools: { name: string }[], reference: string, mode: string, scope: string) =>
             void sent.push({ tools: tools.map((t) => t.name), reference, mode, scope }),

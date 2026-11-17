@@ -22,7 +22,7 @@ function setup(
   status: (name: string, dir: string) => ModStatus | null = (name, dir) => (existsSync(path.join(dir, name, 'main.tsx')) ? ready(name) : null),
   more: Partial<ModFilesHost> = {},
 ) {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'f1a-modfiles-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'omfv-modfiles-'));
   roots.push(root);
   const dir = path.join(root, 'mods');
   mkdirSync(dir);
@@ -166,7 +166,7 @@ describe('the build agent\'s file tools', () => {
     const realHome = process.env.HOME;
     let home = '';
     beforeEach(() => {
-      home = mkdtempSync(path.join(os.tmpdir(), 'f1a-home-'));
+      home = mkdtempSync(path.join(os.tmpdir(), 'omfv-home-'));
       process.env.HOME = home;
       writeFileSync(path.join(home, 'escape.txt'), 'TOKEN');
     });
@@ -533,7 +533,7 @@ describe('the build agent\'s file tools', () => {
       file('a_mod/Zed.ts', '');
       file('a_mod/main.tsx', '');
       file('a_mod/sub/x.ts', '');
-      file('.types/f1a.d.ts', '');
+      file('.types/omfv.d.ts', '');
       mkdirSync(path.join(dir, 'empty'));
       expect((await call('ls', {})).text).toBe('.types/\na_mod/\nb_mod/\nempty/');
       expect((await call('ls', { path: 'a_mod' })).text).toBe('main.tsx\nsub/\nZed.ts');
@@ -592,18 +592,18 @@ describe('the build agent\'s file tools', () => {
 
   it('read, ls, grep and find see the types under .types, and skip node_modules', async () => {
     const { call, file } = setup();
-    file('.types/f1a.d.ts', 'export type Lap = number;');
+    file('.types/omfv.d.ts', 'export type Lap = number;');
     file('lap_form/main.tsx', 'const lap: Lap = 1;');
     file('lap_form/node_modules/dep/index.ts', 'Lap');
     file('.git/HEAD', 'Lap');
-    expect((await call('read', { path: '.types/f1a.d.ts' })).text).toContain('export type Lap');
+    expect((await call('read', { path: '.types/omfv.d.ts' })).text).toContain('export type Lap');
     expect((await call('ls', {})).text).toContain('.types/');
     const grep = await call('grep', { pattern: 'Lap' });
-    expect(grep.text).toBe('.types/f1a.d.ts:1: export type Lap = number;\nlap_form/main.tsx:1: const lap: Lap = 1;');
-    expect((await call('grep', { pattern: 'Lap', path: '.types' })).text).toContain('f1a.d.ts:1:');
-    expect((await call('find', { pattern: '*.ts' })).text).toBe('.types/f1a.d.ts');
+    expect(grep.text).toBe('.types/omfv.d.ts:1: export type Lap = number;\nlap_form/main.tsx:1: const lap: Lap = 1;');
+    expect((await call('grep', { pattern: 'Lap', path: '.types' })).text).toContain('omfv.d.ts:1:');
+    expect((await call('find', { pattern: '*.ts' })).text).toBe('.types/omfv.d.ts');
     expect((await call('find', { pattern: 'lap_form/*.tsx' })).text).toBe('lap_form/main.tsx');
-    expect((await call('find', { pattern: '*.d.ts', path: '.types' })).text).toBe('f1a.d.ts');
+    expect((await call('find', { pattern: '*.d.ts', path: '.types' })).text).toBe('omfv.d.ts');
   });
 
   describe('grep', () => {
@@ -622,9 +622,9 @@ describe('the build agent\'s file tools', () => {
       const { call, file } = setup();
       file('a/main.tsx', 'Lap');
       file('a/util.ts', 'Lap');
-      file('.types/f1a.d.ts', 'Lap');
+      file('.types/omfv.d.ts', 'Lap');
       expect((await call('grep', { pattern: 'Lap', glob: '*.tsx' })).text).toBe('a/main.tsx:1: Lap');
-      expect((await call('grep', { pattern: 'Lap', glob: './.types/*.ts' })).text).toBe('.types/f1a.d.ts:1: Lap');
+      expect((await call('grep', { pattern: 'Lap', glob: './.types/*.ts' })).text).toBe('.types/omfv.d.ts:1: Lap');
       expect(lines((await call('grep', { pattern: 'Lap', glob: '!*.d.ts' })).text)).toEqual(['a/main.tsx:1: Lap', 'a/util.ts:1: Lap']);
     });
 
@@ -695,11 +695,11 @@ describe('the build agent\'s file tools', () => {
 
     it('needs no ripgrep', async () => {
       const { call, file } = setup();
-      file('.types/f1a.d.ts', 'export type Lap = number;');
+      file('.types/omfv.d.ts', 'export type Lap = number;');
       const saved = process.env.PATH;
       process.env.PATH = '';
       try {
-        expect((await call('grep', { pattern: 'Lap' })).text).toBe('.types/f1a.d.ts:1: export type Lap = number;');
+        expect((await call('grep', { pattern: 'Lap' })).text).toBe('.types/omfv.d.ts:1: export type Lap = number;');
       } finally {
         process.env.PATH = saved;
       }
@@ -736,11 +736,11 @@ describe('the build agent\'s file tools', () => {
 
     it('refuses the folder itself, the app\'s files, and mods that aren\'t there', async () => {
       const { call, file, dir, reports } = setup();
-      file('.types/f1a.d.ts', '');
+      file('.types/omfv.d.ts', '');
       expect(await call('delete_path', { path: '.' })).toEqual({ isError: true, text: '"." can\'t be deleted.' });
       expect(await call('delete_path', { path: '.types' })).toEqual({ isError: true, text: '".types" can\'t be deleted.' });
       expect(await call('delete_path', { path: 'nope' })).toEqual({ isError: true, text: 'There is no mod "nope".' });
-      expect(existsSync(path.join(dir, '.types/f1a.d.ts'))).toBe(true);
+      expect(existsSync(path.join(dir, '.types/omfv.d.ts'))).toBe(true);
       expect(reports.every(([, ok, note]) => !ok && note === null)).toBe(true);
     });
   });

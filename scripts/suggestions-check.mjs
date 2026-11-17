@@ -15,7 +15,7 @@ await server.listen();
 const { CHROME_DESKTOP: _ignored, ...env } = process.env;
 const app = await electron.launch({
   executablePath: path.resolve('node_modules/electron/dist/electron'),
-  args: ['.', `--user-data-dir=${mkdtempSync(path.join(tmpdir(), 'f1a-suggest-'))}`],
+  args: ['.', `--user-data-dir=${mkdtempSync(path.join(tmpdir(), 'omfv-suggest-'))}`],
   env: { ...env, ELECTRON_START_URL: 'http://127.0.0.1:5197' },
 });
 const page = await app.firstWindow();

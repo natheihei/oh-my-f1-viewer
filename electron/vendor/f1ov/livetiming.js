@@ -496,7 +496,7 @@ const SYNC_API_BASE = 'https://api.multiviewer.app/api/v1';
 function curlGetText(url, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const args = ['-s', '-S', '--compressed', '--max-time', '20', '-w', '\\n%{http_code}',
-      '-H', 'User-Agent: f1a', '-H', 'Accept: application/json'];
+      '-H', 'User-Agent: oh-my-f1-viewer', '-H', 'Accept: application/json'];
     for (const [k, v] of Object.entries(extraHeaders)) args.push('-H', `${k}: ${v}`);
     args.push(url);
     execFile(WIN_CURL, args, { maxBuffer: 32 * 1024 * 1024, windowsHide: true, timeout: 25000 }, (err, stdout) => {
@@ -511,7 +511,7 @@ function curlGetText(url, extraHeaders = {}) {
 
 async function httpGetText(url, extraHeaders = {}) {
   if (USE_CURL) return curlGetText(url, extraHeaders); // curl.exe is VPN-split-tunnelled; reaches it directly
-  const res = await undiciFetch(url, { headers: { 'User-Agent': 'f1a', Accept: 'application/json', ...extraHeaders }, signal: AbortSignal.timeout(20000) });
+  const res = await undiciFetch(url, { headers: { 'User-Agent': 'oh-my-f1-viewer', Accept: 'application/json', ...extraHeaders }, signal: AbortSignal.timeout(20000) });
   if (!res.ok) throw new Error(`GET ${url} → HTTP ${res.status}`);
   return res.text();
 }

@@ -4,7 +4,7 @@
 // Also saves the reference block the app sends at the end of the system prompt, before and after the
 // session's data is ready.
 // Usage: node scripts/agent-charts-check.mjs <out-dir> [sessionKey] [year] [event]
-//   Defaults: 11396, 2026, "united states". The battle pair is the first two drivers of F1A_PAIR (NOR,PIA).
+//   Defaults: 11396, 2026, "united states". The battle pair is the first two drivers of OMFV_PAIR (NOR,PIA).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startApp, typeInPalette } from './harness.mjs';
@@ -14,8 +14,8 @@ if (!outDir) throw new Error('Usage: node scripts/agent-charts-check.mjs <out-di
 const sessionKey = String(process.argv[3] ?? 11396);
 const YEAR = Number(process.argv[4] ?? 2026);
 const EVENT = process.argv[5] ?? 'united states';
-const [A, B] = (process.env.F1A_PAIR ?? 'NOR,PIA').split(',');
-const PIT_DRIVER = process.env.F1A_PIT_DRIVER ?? 'Hadjar';
+const [A, B] = (process.env.OMFV_PAIR ?? 'NOR,PIA').split(',');
+const PIT_DRIVER = process.env.OMFV_PIT_DRIVER ?? 'Hadjar';
 mkdirSync(outDir, { recursive: true });
 
 const { page, stop } = await startApp(5192);
@@ -35,7 +35,7 @@ const check = (name, ok, detail = '') => {
 };
 
 await page.waitForTimeout(2000);
-const signIns = await page.evaluate(async () => ({ f1: (await window.f1a.f1tv.status()).signedIn, ai: (await window.f1a.ai.status()).ready }));
+const signIns = await page.evaluate(async () => ({ f1: (await window.omfv.f1tv.status()).signedIn, ai: (await window.omfv.ai.status()).ready }));
 console.log(`sign-ins: ${JSON.stringify(signIns)}`);
 if (!signIns.f1 || !signIns.ai) {
   console.log('FAIL a sign-in has expired: not running the agent checks.');
@@ -50,13 +50,13 @@ await page.evaluate(async () => {
   Object.assign(window, { host, read, tilesOf, bridge });
   window.events = [];
   window.sent = [];
-  window.f1a.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
+  window.omfv.ai.onEvent((e) => window.events.push({ ...e, at: performance.now() }));
   const send = host.agent.send;
   host.agent.send = (text, context, tools, reference) => {
     window.sent.push({ text, context, reference, queryDescription: tools.find((t) => t.name === 'query_session')?.description ?? '' });
     return send(text, context, tools, reference);
   };
-  await window.f1a.ai.reset();
+  await window.omfv.ai.reset();
 });
 
 // Before any session: the reference the app would send has no table list.
@@ -154,7 +154,7 @@ const lap20 = await page.evaluate(async () => {
 console.log(`  at lap ${JSON.stringify(lap20)}`);
 
 // 1: a request that needs a driver, with no context: it should ask.
-await page.evaluate(() => window.f1a.ai.reset());
+await page.evaluate(() => window.omfv.ai.reset());
 r = await say('pit window', 'agent-1-pit-window.png');
 const sentReady = await page.evaluate(() => window.sent.at(-1));
 writeFileSync(path.join(outDir, 'reference-session-ready.txt'), sentReady.reference);
@@ -165,7 +165,7 @@ check('it asks whose pit window', r.reply.includes('?') && !r.strip.some((s) => 
 hygiene(r);
 
 // 2: a battle.
-await page.evaluate(() => window.f1a.ai.reset());
+await page.evaluate(() => window.omfv.ai.reset());
 const numbers = await page.evaluate(([a, b]) => {
   const d = window.read().sessionData.drivers;
   return [a, b].map((code) => d.find((x) => x.name_acronym === code)?.driver_number);

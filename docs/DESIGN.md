@@ -4,7 +4,7 @@ Agreed on 2026-11-08. This is where the app's layering is heading. `docs/ARCHITE
 says what's verified.
 
 The pattern comes from [herdr-app](https://github.com/herdrdev/herdr-app), whose interface is mods reading one data surface and changing the
-app through one write path. f1a adopts the idea, not the machinery.
+app through one write path. OMFV adopts the idea, not the machinery.
 
 ## The rules
 
@@ -306,7 +306,7 @@ it. The file names parsers and the registry holds their code, so a new case mean
 
 ## What we took from Herdr, and what we didn't
 
-| Herdr | f1a |
+| Herdr | OMFV |
 | --- | --- |
 | Mod, drawn in a layout block | Component in a tile |
 | Layout block `{mod, props}` | `ComponentSpec`, where a copy is keyed by name and props |

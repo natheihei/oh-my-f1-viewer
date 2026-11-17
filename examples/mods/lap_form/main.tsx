@@ -5,8 +5,8 @@
  */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, useSql } from 'f1a';
-import { ChartCanvas, ChartFrame, colors, text, textWidth, useDriverStyles, type Box, type DriverStyle } from 'f1a/kit';
+import { defineComponent, useSql } from 'omfv';
+import { ChartCanvas, ChartFrame, colors, text, textWidth, useDriverStyles, type Box, type DriverStyle } from 'omfv/kit';
 
 const LAPS = 8;
 const SQL = `SELECT driver_number, lap_number, lap_duration, is_pit_out_lap FROM laps

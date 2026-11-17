@@ -19,7 +19,7 @@ async function until<T>(get: () => T | null | undefined | false, timeoutMs = 500
 }
 
 async function start(files: Record<string, string>): Promise<{ mods: Mods; last: () => ModStatus[] }> {
-  dir = mkdtempSync(path.join(os.tmpdir(), 'f1a-mods-'));
+  dir = mkdtempSync(path.join(os.tmpdir(), 'omfv-mods-'));
   write(files);
   let latest: ModStatus[] = [];
   mods = new Mods(dir, (list) => (latest = list));
@@ -34,7 +34,7 @@ function write(files: Record<string, string>): void {
   }
 }
 
-const code = async (m: Mods, name: string) => (await m.serve(new Request(`f1a-mod://mods/${name}/main.js?v=1`))).text();
+const code = async (m: Mods, name: string) => (await m.serve(new Request(`omfv-mod://mods/${name}/main.js?v=1`))).text();
 
 /** Waits for text in a file the app writes in the background, which can be missing or still empty until then. */
 const untilFileHas = (file: string, text: string) =>
@@ -49,15 +49,15 @@ afterEach(async () => {
 describe('mods', () => {
   it('compiles a mod with the shared modules left to the app', async () => {
     const { mods, last } = await start({
-      'tower/main.tsx': `import { useLive } from 'f1a';\nimport { helper } from './helper';\nexport default { name: 'tower', View: () => <b>{helper(useLive((s) => s.volume))}</b> };`,
+      'tower/main.tsx': `import { useLive } from 'omfv';\nimport { helper } from './helper';\nexport default { name: 'tower', View: () => <b>{helper(useLive((s) => s.volume))}</b> };`,
       'tower/helper.ts': `export const helper = (n: number) => n.toFixed(1);`,
     });
     const status = await until(() => last().find((m) => m.version === 1));
-    expect(status).toMatchObject({ name: 'tower', state: 'loading', url: 'f1a-mod://mods/tower/main.js?v=1', error: null });
+    expect(status).toMatchObject({ name: 'tower', state: 'loading', url: 'omfv-mod://mods/tower/main.js?v=1', error: null });
     const js = await code(mods, 'tower');
-    expect(js).toContain('globalThis.__f1aShared["f1a"]');
-    expect(js).toContain('globalThis.__f1aShared["react/jsx-runtime"]');
-    expect(js).toContain('globalThis.__f1aModConsole("tower")');
+    expect(js).toContain('globalThis.__omfvShared["omfv"]');
+    expect(js).toContain('globalThis.__omfvShared["react/jsx-runtime"]');
+    expect(js).toContain('globalThis.__omfvModConsole("tower")');
     expect(js).toContain('toFixed(1)');
   });
 

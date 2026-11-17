@@ -12,7 +12,7 @@ const { page, stop } = await startApp(5190);
 await page.waitForTimeout(2500);
 await page.evaluate(async () => {
   window.events = [];
-  window.f1a.ai.onEvent((e) => window.events.push(e));
+  window.omfv.ai.onEvent((e) => window.events.push(e));
   window.m = { session: await import('/src/data/session.ts'), viewing: await import('/src/host/viewing.ts') };
 });
 
@@ -30,7 +30,7 @@ const countdown = await page.evaluate(() => {
 });
 log(`countdown: ${JSON.stringify(countdown)}`);
 await page.evaluate(() => {
-  window.f1a.ai.onEvent((e) => {
+  window.omfv.ai.onEvent((e) => {
     if (e.type === 'turn_start' || e.type === 'tool_start') window.logAgentEvent(`${e.type} ${e.name ?? ''} ${e.args ? JSON.stringify(e.args) : ''}`);
   });
   const input = document.querySelector('[data-testid=palette-input]');
@@ -47,7 +47,7 @@ let lastLive = '';
 let opened = null;
 while (Date.now() < deadline) {
   const state = await page.evaluate(async () => ({
-    live: (await window.f1a.f1tv.liveNow().catch(() => [])).map((i) => i.contentId),
+    live: (await window.omfv.f1tv.liveNow().catch(() => [])).map((i) => i.contentId),
     session: window.m.session.useSession.getState().session,
     counting: !!window.m.viewing.useCountdown.getState().countdown,
   }));

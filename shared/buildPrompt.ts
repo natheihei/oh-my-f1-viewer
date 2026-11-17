@@ -1,7 +1,7 @@
 /** How the build agent is told to behave: the app's agent while the viewer is in build mode. See docs/BUILD_MODE.md. */
 import { MOD_GUIDE } from './modGuide';
 
-export const BUILD_PROMPT = `You build mods for f1a, a multi-view Formula 1 viewer. The user is in build mode: they describe a tile they want, or a change to one, in a small command palette over the video, usually in very few words. You make it by writing files in the mods folder.
+export const BUILD_PROMPT = `You build mods for OMFV (oh-my-f1-viewer), a multi-view Formula 1 viewer. The user is in build mode: they describe a tile they want, or a change to one, in a small command palette over the video, usually in very few words. You make it by writing files in the mods folder.
 
 ${MOD_GUIDE}
 

@@ -10,7 +10,7 @@ pi-coding-agent is a terminal coding agent the app borrowed a session from. It b
 built-in tools and extension loading, and assumes Node everywhere. pi-durable is the harness alone, written to run anywhere: it takes
 its storage, its model credentials and its tools from the host, so the app supplies exactly what the agent can reach.
 
-It's also what makes a browser build of f1a practical, which is kept for later. A browser bundle of what `agent.ts` imported from
+It's also what makes a browser build of OMFV practical, which is kept for later. A browser bundle of what `agent.ts` imported from
 pi-coding-agent asks for 39 Node modules and is 7.6 MB minified. pi-durable with pi-ai's OpenAI and Anthropic providers asks for
 three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helper) and is 0.9 MB.
 
@@ -18,13 +18,13 @@ three (`http`, `crypto` and `fs`, all from pi-ai's ChatGPT sign-in and one helpe
 
 | On pi-coding-agent | On pi-durable |
 | --- | --- |
-| `ModelRuntime`, over `auth.json` | pi-ai's `createModels()` with only the supported providers, and a `CredentialStore` of the app's (`credentials.ts`) on `<userData>/f1a-credentials.json`, encrypted with the OS keystore like F1 TV's sign-in |
-| `SettingsManager`, over `settings.json` | `agent` in the app's settings file, `<userData>/f1a-settings.json` (`electron/settings.ts`, `shared/agentSettings.ts`) |
+| `ModelRuntime`, over `auth.json` | pi-ai's `createModels()` with only the supported providers, and a `CredentialStore` of the app's (`credentials.ts`) on `<userData>/omfv-credentials.json`, encrypted with the OS keystore like F1 TV's sign-in |
+| `SettingsManager`, over `settings.json` | `agent` in the app's settings file, `<userData>/omfv-settings.json` (`electron/settings.ts`, `shared/agentSettings.ts`) |
 | `createAgentSession`, `SessionManager` and its `.jsonl` | A `Harness` per conversation, on pi-durable's SQLite storage: one database per conversation in `<userData>/conversations`, never resumed |
 | The prompt extension, over `SYSTEM.md` | One prompt `section()`, from the agent's prompt in code (`shared/viewPrompt.ts`, `shared/buildPrompt.ts`). `SYSTEM.md` is no longer written |
 | The tools extension | `defineTool()` tools in an extension that's installed again to replace the set, also from inside a call |
 | `roundCap` | `maxTurns`. The run ends with `turn_limit`, which is told apart from a cancel |
-| `forgetReadAhead`, on each request and each compaction | One `f1a.forget` entry when the turn ends, holding context edits, and a `beforeCompact` hook for a turn still running. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) |
+| `forgetReadAhead`, on each request and each compaction | One `omfv.forget` entry when the turn ends, holding context edits, and a `beforeCompact` hook for a turn still running. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) |
 | `renderCheck` | An `onYield` hook that continues the run, within the rounds the message has left |
 | pi's `read`, `write`, `edit`, `ls`, `find`, wrapped, and our `grep` | The app's own six, over `fs` alone (`modFiles.ts`) |
 | `text_delta` events | A watch on the conversation: the reply in progress is published every 40 ms, and each finished reply is an entry |
@@ -35,11 +35,11 @@ What the agent does is the same. These are the differences someone could notice:
 
 - **Stored conversations** are SQLite databases in `<userData>/conversations`, one each, no longer `.jsonl` files in
   `pi-agent/sessions` and `pi-agent/build-sessions`. Each is pi-durable's own record: every entry as the model saw it, including the
-  prompt sent and each change to it, summaries (`pi.compaction`) and the `f1a.forget` edits that cut down a read-ahead turn.
+  prompt sent and each change to it, summaries (`pi.compaction`) and the `omfv.forget` edits that cut down a read-ahead turn.
   `node devscripts/conversation.mjs` prints one. Nothing is left in `pi-agent`.
 - **Sign in again, and choose the model again.** The credential moved out of `pi-agent/auth.json` and the settings out of
   `pi-agent/settings.json`, and neither is carried over. The settings are under `agent` in the app's own settings file,
-  `f1a-settings.json`, with the app's own keys: `provider`, `model`, `thinking`, `compaction` and `retry`.
+  `omfv-settings.json`, with the app's own keys: `provider`, `model`, `thinking`, `compaction` and `retry`.
 - **`SYSTEM.md`, `models.json` and `models-store.json`** in `pi-agent` are no longer written or read: pi-coding-agent read its prompt
   from the first and kept its own model settings in the others, which the app never used.
 - **The mods folder** no longer gets an `AGENTS.md` or a `tsconfig.json`. Nothing in the app read them: they were for a coding

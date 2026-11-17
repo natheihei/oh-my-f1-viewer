@@ -1,4 +1,4 @@
-// Checks a tile's "Attach error to agent" in an f1a of its own (see isolated.mjs), over a real replay race,
+// Checks a tile's "Attach error to agent" in an OMFV of its own (see isolated.mjs), over a real replay race,
 // muted, and saves a screenshot at each step. It writes a small mod, attach_check, that names the car
 // ahead and so throws for the leader, who has none: the kind of render error the button is for.
 //
@@ -26,7 +26,7 @@ mkdirSync(outDir, { recursive: true });
 
 const MOD = 'attach_check';
 const MOD_SOURCE = `import Type from 'typebox';
-import { defineComponent, useSql } from 'f1a';
+import { defineComponent, useSql } from 'omfv';
 
 const LATEST = \`WITH p AS (SELECT driver_number, position, ROW_NUMBER() OVER (PARTITION BY driver_number ORDER BY date DESC) rn FROM position),
   i AS (SELECT driver_number, interval, ROW_NUMBER() OVER (PARTITION BY driver_number ORDER BY date DESC) rn FROM intervals)
