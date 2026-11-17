@@ -130,6 +130,8 @@
 .stage-host {
   @apply absolute overflow-hidden bg-black;
   visibility: hidden;
+  /* A stacking context of its own, so the build agent's look_at can take a picture of it alone: src/host/picture.ts. */
+  isolation: isolate;
 }
 
 /* Under the tiles: it shows only in the gaps between them. */
@@ -1074,6 +1076,8 @@
 .strip-view {
   /* Its shape comes from the component's size hint: see src/shell/stripShape.ts. */
   @apply relative w-full overflow-hidden border border-line bg-black;
+  /* A stacking context of its own, so the build agent's look_at can take a picture of a draft alone: src/host/picture.ts. */
+  isolation: isolate;
 }
 
 .strip-item:focus-visible .strip-view,

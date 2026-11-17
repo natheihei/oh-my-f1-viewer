@@ -68,6 +68,8 @@ const api: F1aApi = {
     log: (name, line) => ipcRenderer.send('mods:log', name, line),
     onHealthAsked: (cb) => subscribe<string>('mods:healthAsk', cb),
     health: (id, places) => ipcRenderer.send('mods:health', id, places),
+    onPictureAsked: (cb) => subscribe<{ id: string; type: string }>('mods:pictureAsk', cb),
+    picture: (id, result) => ipcRenderer.send('mods:picture', id, result),
   },
   build: {
     state: () => invoke('build:state'),
