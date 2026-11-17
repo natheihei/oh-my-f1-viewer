@@ -1,6 +1,6 @@
 // Checks mentioning tiles on screen and teams in the palette's prompt, in the real app over a real replay race:
-// the bare @ grouped as on screen, drivers and teams; the selected tile row outlining its tile; keys taking over
-// from a row under a still mouse; picking a tile
+// the bare @ grouped as on screen, drivers and teams; the selected tile row outlining its tile; the mouse and the
+// keys sharing one selected row; picking a tile
 // and a team; a driver's code ranking above the tile that names them; a tile's tag outlining its tile under
 // the mouse and going dashed once the tile closes; what the agent reads; and no picker with no session.
 // Saves a screenshot at each step.
@@ -102,19 +102,19 @@ await page.keyboard.press('ArrowDown');
 check('↓ moves the outline to the next tile', (await pointed()) === setup.tiles[1].id, `${await pointed()}`);
 await snap('bare-at-down');
 
-// The mouse resting on a row points at its tile; keys then take over until the mouse moves again.
+// One selected row: the mouse moving onto a row selects it, the keys move on from there, whichever came last.
 const option = (i) => page.locator('[data-testid=mention-option]').nth(i);
+const active = () => page.locator('[data-testid=mention-option]').evaluateAll((rows) => rows.findIndex((r) => r.classList.contains('palette-suggestion-active')));
 await option(3).hover();
-check('the row under the mouse outlines its tile', (await pointed()) === setup.tiles[3].id, `${await pointed()}`);
-await page.keyboard.press('ArrowDown');
-check('↓ under a still mouse moves the outline to the selected row', (await pointed()) === setup.tiles[2].id, `${await pointed()}`);
-check('and the row under the mouse is no longer raised', (await page.locator('.palette-mention-hovered').count()) === 0);
-await snap('hover-then-down');
+check('moving the mouse onto a row selects it and outlines its tile', (await active()) === 3 && (await pointed()) === setup.tiles[3].id, `${await active()} ${await pointed()}`);
+await page.keyboard.press('ArrowUp');
+check('↑ under a still mouse selects the row above', (await active()) === 2 && (await pointed()) === setup.tiles[2].id, `${await active()} ${await pointed()}`);
+await snap('mouse-then-up');
 const box = await option(3).boundingBox();
 await page.mouse.move(box.x + box.width / 2 + 4, box.y + box.height / 2);
-check('moving the mouse again outlines the row under it', (await pointed()) === setup.tiles[3].id, `${await pointed()}`);
+check('moving the mouse again selects the row under it', (await active()) === 3 && (await pointed()) === setup.tiles[3].id, `${await active()} ${await pointed()}`);
 await page.mouse.move(box.x + box.width / 2, box.y - 400);
-check('leaving the picker goes back to the selected row', (await pointed()) === setup.tiles[2].id, `${await pointed()}`);
+check('leaving the picker keeps the selection', (await active()) === 3 && (await pointed()) === setup.tiles[3].id, `${await active()} ${await pointed()}`);
 
 // A tile by a word of its label.
 await page.keyboard.type('gap');
