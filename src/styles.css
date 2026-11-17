@@ -813,14 +813,9 @@
   grid-template-columns: 6ch minmax(0, 1fr);
 }
 
-/* A mention row is raised only while it's the hovered row: once the keys move the selection, the row
-   under a still mouse goes plain. */
+/* A mention row is selected or not: the mouse moving onto a row selects it, so there's no hover look. */
 .palette-mention:not(.palette-suggestion-active):hover {
   background: transparent;
-}
-
-.palette-mention.palette-mention-hovered:not(.palette-suggestion-active) {
-  background: var(--color-raised);
 }
 
 /* With tiles or teams among the rows, the tag column takes a tile's label; a longer one is cut short. */
