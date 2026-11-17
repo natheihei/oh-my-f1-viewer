@@ -113,6 +113,11 @@ GPT-6.1 Terra at medium on a ChatGPT plan, the recommended OpenAI model, on the 
 race" called `list_sessions` then `load_session` and opened the race in 8.3s, and "Hamilton" suggested his onboard with `suggest_tiles` in
 4.1s. The stored session shows every reply came from `gpt-6.1-terra`.
 
+**Onboarding** (2026-11-16), in isolated instances. On an empty profile it opened on the F1 TV step, the agent step offered
+"Sign in with ChatGPT" and Other providers, and Skip for now left fix blocks in the palette for F1 TV and the agent; Dismiss turned one
+into a line naming `/login-f1tv`. On a profile with both signed in it didn't show at start, and `/reset-onboarding` brought it back
+with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block.
+
 ## Verified for build mode
 
 On Linux, in the real app with the real agent, over the 2026 United States race, with `scripts/build-check.mjs` (2026-11-11). It runs
@@ -185,6 +190,10 @@ OpenAI's page in the default browser, the callback came back, the provider showe
 Terra at medium, and a real turn replied on the new login.
 
 ## Not verified
+
+- **Fixing a sign-in from onboarding or a fix block.** Neither has completed an F1 TV or ChatGPT sign-in in the real app, F1 TV
+  ending a sign-in hasn't been seen, and no turn has failed for a rejected connection or a usage limit, so sending the message again
+  after the fix hasn't run.
 
 - **The agent on an API key, or on Anthropic.** No real turn has run on an OpenAI or Anthropic key. Connecting through an OpenAI key from
   the panel hasn't run either. A ChatGPT sign-in from the panel has (above).

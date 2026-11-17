@@ -14,6 +14,30 @@ export interface PaletteEntry {
   action?: { label: string; run(): void };
   /** Tiles whose errors went with this line, drawn as tags before its text, as they stood when sent. */
   attached?: AttachedTag[];
+  /** What fixes an error line: drawn as a block with its button, in place of the plain line. */
+  fix?: Fix;
+}
+
+/**
+ * How to fix what an error line reports. The block says what happens after the fix, has the fix as its button
+ * and the command that does the same beside it. While it runs the block waits in place; once it's done the
+ * block becomes one line in the history.
+ */
+export interface Fix {
+  /** What fixing it does, under the error. */
+  detail: string;
+  /** The button. */
+  label: string;
+  /** The `/` command that does the same, so the viewer learns it. */
+  command: string;
+  /** Said while it runs. */
+  busy: string;
+  /** Does the fix. Resolves to the line that replaces the block; throws to keep the block, with why under it. */
+  run(): Promise<string>;
+  /** Running now. */
+  running?: boolean;
+  /** Why the last try didn't fix it. */
+  failed?: string;
 }
 
 /** A tile as an attachment's tag names it: its id, and its title-bar label. */
@@ -24,6 +48,9 @@ export interface AttachedTag {
 
 /** A settings panel the palette shows in its place. */
 export type PalettePanel = 'background' | 'agent';
+
+/** Called once when the panel open now closes, however it closes. */
+let onPanelClose: (() => void) | null = null;
 
 interface PaletteState {
   open: boolean;
@@ -48,6 +75,38 @@ export const palette = {
     const extra = { ...(action ? { action } : {}), ...(parts ? { parts } : {}), ...(attached?.length ? { attached } : {}) };
     usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...extra }] }));
     return id;
+  },
+  /**
+   * An error line with its fix. An earlier block offering the same fix goes back to a plain error line, so
+   * only the newest one asks.
+   */
+  pushFix(text: string, fix: Fix): number {
+    const id = nextEntry++;
+    usePalette.setState((s) => ({
+      entries: [...s.entries.map((e) => (e.fix && !e.fix.running && e.fix.command === fix.command ? { ...e, fix: undefined } : e)), { id, role: 'error', text, fix }],
+    }));
+    return id;
+  },
+  /** Runs an entry's fix. Done, the block becomes the line it resolved to; failed, it stays with why. */
+  async runFix(id: number): Promise<void> {
+    const fix = usePalette.getState().entries.find((e) => e.id === id)?.fix;
+    if (!fix || fix.running) return;
+    const set = (change: (e: PaletteEntry) => PaletteEntry) => usePalette.setState((s) => ({ entries: s.entries.map((e) => (e.id === id ? change(e) : e)) }));
+    set((e) => ({ ...e, fix: { ...fix, running: true, failed: undefined } }));
+    try {
+      const done = await fix.run();
+      set((e) => ({ id: e.id, role: 'system', text: done }));
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const failed = raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim();
+      set((e) => ({ ...e, fix: { ...fix, running: false, failed } }));
+    }
+  },
+  /** Puts an error's fix away: the block becomes a line naming the command, for later. */
+  dismissFix(id: number): void {
+    usePalette.setState((s) => ({
+      entries: s.entries.map((e) => (e.id === id && e.fix && !e.fix.running ? { id: e.id, role: 'error', text: `${e.text} ${e.fix.command} fixes it.` } : e)),
+    }));
   },
   /** Runs an entry's action, which then goes: it can only be taken once. */
   act(id: number): void {
@@ -83,12 +142,25 @@ export const palette = {
   },
   /** Typing or focusing the palette keeps it open. */
   keepOpen: cancelHide,
-  /** Shows a settings panel where the palette is, until it's closed. */
-  openPanel(panel: PalettePanel): void {
+  /** Shows a settings panel where the palette is, until it's closed. `onClose` is called when it closes. */
+  openPanel(panel: PalettePanel, onClose?: () => void): void {
     cancelHide();
+    const before = onPanelClose;
+    onPanelClose = onClose ?? null;
     usePalette.setState({ open: true, panel });
+    // A panel opened over another closes that one.
+    before?.();
   },
-  closePanel(): void {
+  /** Closes the panel. Returns whether whoever opened it was waiting on that, and has been told. */
+  closePanel(): boolean {
     usePalette.setState({ panel: null });
+    const after = onPanelClose;
+    onPanelClose = null;
+    after?.();
+    return after != null;
+  },
+  /** Shows a panel, and resolves when it closes. */
+  panelClosed(panel: PalettePanel): Promise<void> {
+    return new Promise((resolve) => palette.openPanel(panel, resolve));
   },
 };
