@@ -272,6 +272,10 @@ export interface F1aApi {
     onHealthAsked(cb: (id: string) => void): () => void;
     /** The answer to that: null if it couldn't be read. */
     health(id: string, places: import('./health').PlaceHealth[] | null): void;
+    /** The main process asks for a picture of a component, for the build agent's look_at. */
+    onPictureAsked(cb: (ask: { id: string; type: string }) => void): () => void;
+    /** The answer to that. */
+    picture(id: string, result: import('./mods').PictureResult): void;
   };
   /** Build mode's snapshot of the mods folder. See docs/BUILD_MODE.md. */
   build: {

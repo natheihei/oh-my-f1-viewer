@@ -9,6 +9,7 @@ import { agent } from './agent/agent';
 import { setUiState, uiState } from './settings';
 import type { Mods } from './mods';
 import { TimingDb } from './timingdb';
+import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
 
@@ -40,51 +41,53 @@ function handle(channel: string, fn: (evt: IpcMainInvokeEvent, ...args: any[]) =
   });
 }
 
-/**
- * A PNG of a component as the window shows it now: its tile if it has one, else its preview in the
- * strip. For the build agent, which may see the session anyway. Null when it's on neither.
- */
-async function pictureOf(name: string): Promise<Buffer | null> {
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return null;
-  const box = (await win.webContents.executeJavaScript(
-    `(() => {
-      const type = ${JSON.stringify(name)};
-      const el = document.querySelector('[data-tile-type="' + CSS.escape(type) + '"]') ?? document.querySelector('[data-draft-type="' + CSS.escape(type) + '"]');
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
-    })()`,
-  )) as { x: number; y: number; width: number; height: number } | null;
-  if (!box) return null;
-  return (await win.webContents.capturePage(box)).toPNG();
-}
-
 const agentMode = (mode: unknown): AgentMode => (mode === 'build' || mode === 'pick' ? mode : 'view');
 
-const HEALTH_TIMEOUT_MS = 3000;
-const healthWaiting = new Map<string, (places: PlaceHealth[] | null) => void>();
+/** Answers the renderer owes the main process, by the id they were asked with. */
+const waiting = new Map<string, (answer: unknown) => void>();
+
+/**
+ * Asks the renderer something and waits for its answer, sent back with the id. `fallback` when there's no
+ * window, or it doesn't answer within `ms`.
+ */
+function askRenderer<T>(channel: string, payload: (id: string) => unknown, ms: number, fallback: T): Promise<T> {
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return Promise.resolve(fallback);
+  return new Promise((resolve) => {
+    const id = randomUUID();
+    const timer = setTimeout(() => {
+      waiting.delete(id);
+      resolve(fallback);
+    }, ms);
+    waiting.set(id, (answer) => {
+      clearTimeout(timer);
+      waiting.delete(id);
+      resolve(answer as T);
+    });
+    sendToRenderer(channel, payload(id));
+  });
+}
+
+/** A renderer's answer to askRenderer. */
+function answered(id: unknown, answer: unknown): void {
+  waiting.get(String(id))?.(answer);
+}
 
 /**
  * How every tile and draft is drawing, as the renderer reports it once each has drawn with its latest
  * code. For the build agent. Null when there's no window, or it didn't answer.
  */
-function healthOfScreen(): Promise<PlaceHealth[] | null> {
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const id = randomUUID();
-    const timer = setTimeout(() => {
-      healthWaiting.delete(id);
-      resolve(null);
-    }, HEALTH_TIMEOUT_MS);
-    healthWaiting.set(id, (places) => {
-      clearTimeout(timer);
-      healthWaiting.delete(id);
-      resolve(places);
-    });
-    sendToRenderer('mods:healthAsk', id);
-  });
+const healthOfScreen = (): Promise<PlaceHealth[] | null> => askRenderer('mods:healthAsk', (id) => id, 3000, null);
+
+/**
+ * A PNG of a component as it shows now: its tile if it has one, else its draft in the strip. For the build
+ * agent, which may see the session anyway. Null when it's on neither. The renderer takes it with Element
+ * Capture (src/host/picture.ts), so the palette floating over a tile isn't in it. Throws when it couldn't.
+ */
+async function pictureOf(type: string): Promise<Buffer | null> {
+  const result = await askRenderer<PictureResult>('mods:pictureAsk', (id) => ({ id, type }), 10_000, { error: "The window didn't answer." });
+  if ('error' in result) throw new Error(`Couldn't take a picture of ${type}: ${result.error}`);
+  return result.png ? Buffer.from(result.png) : null;
 }
 
 function f1Status(): F1TvStatus {
@@ -296,7 +299,13 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   });
 
   ipcMain.on('mods:health', (evt, id, places) => {
-    if (isTrusted(evt)) healthWaiting.get(String(id))?.(Array.isArray(places) ? (places as PlaceHealth[]) : null);
+    if (isTrusted(evt)) answered(id, Array.isArray(places) ? (places as PlaceHealth[]) : null);
+  });
+
+  ipcMain.on('mods:picture', (evt, id, result) => {
+    if (!isTrusted(evt)) return;
+    const png = result?.png;
+    answered(id, png instanceof Uint8Array || png === null ? { png } : { error: typeof result?.error === 'string' ? result.error : 'No picture came back.' });
   });
 
   // --- Build mode ---

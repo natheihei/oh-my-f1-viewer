@@ -178,8 +178,12 @@ instructions, and a separate session keeps what the build read out of the viewin
   regular expression. There is no `bash`.
 - **It keeps some viewing tools:** `list_streams`, `remove_tiles`, `edit_tile`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`. The
   last two don't ask the spoiler gate. `suggest_tiles` takes any component name here, since the mod may have been written this turn.
-- **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` captures that part of the window.
-  The viewing agent never sees what a chart shows. The build agent may, since it can already read the whole session.
+- **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` records the window with
+  Element Capture, restricted to the tile or draft, and keeps one frame (`src/host/picture.ts`). The palette floating over a tile isn't
+  in it, and nothing on screen changes while it's taken. That takes each tile and draft being a stacking context of its own
+  (`isolation: isolate` in `styles.css`), and the window allowed to record itself: `electron/main.ts` grants `display-capture` to the
+  app's own window only, and a recording only of itself. The viewing agent never sees what a chart shows. The build agent may, since
+  it can already read the whole session.
 - **It hears when something isn't drawing.** A mod that loads may still not draw: its draft needs props nobody gave, a tile's props
   stopped fitting, or the view threw. The report is `live.health`, and the agent gets it three ways, each line saying what would fix it:
   - **A save's result** adds the saved mod's own places that aren't drawing: "pace loaded. Draft pace in the strip: needs driver. Call

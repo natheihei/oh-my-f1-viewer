@@ -9,7 +9,7 @@ import { backgrounds, DEFAULT_BACKGROUND } from './backgrounds/registry';
 import * as kit from './components/charts/kit';
 import { components } from './components/registry';
 import * as f1a from './host';
-import { host, startBuild, startHealth, startMods } from './host';
+import { host, startBuild, startHealth, startMods, startPictures } from './host';
 import { App } from './shell/App';
 import { restoreBackground } from './shell/persistBackground';
 import { restorePaletteHeight } from './shell/persistPaletteHeight';
@@ -22,6 +22,7 @@ host.backgrounds.register({ backgrounds });
 startMods({ f1a, 'f1a/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });
 startBuild();
 startHealth();
+startPictures();
 async function start(): Promise<void> {
   // What was saved, read once before anything is restored from it.
   await host.savedState.load();
