@@ -145,7 +145,7 @@ for (const lap of LAPS) {
   const count = await gotoLap(lap);
   const got = await page.evaluate(async () => {
     const { host, read } = await import('/src/host/index.ts');
-    const { sqlFor } = await import('/src/components/charts/TyreStrategy.tsx');
+    const { sqlFor } = await import('/src/components/tyre_strategy/main.tsx');
     const r = await host.data.sql({ sql: sqlFor(0) });
     const sd = read().sessionData;
     return { rows: r.rows ?? r, lapCount: sd.lapCount, drivers: sd.drivers.map((d) => ({ n: d.driver_number, code: d.name_acronym, colour: d.team_colour, team: d.team_name })) };

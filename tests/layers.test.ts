@@ -27,6 +27,8 @@ const RULES: Record<string, string[]> = {
   'src/host': ['src/components', 'src/backgrounds', 'src/shell', 'src/agent'],
   // Consumers use the host and nothing below it.
   'src/components': ['src/data', 'src/layout', 'src/backgrounds', 'src/shell', 'src/agent'],
+  // The kit is what components share, over the host.
+  'src/kit': ['src/data', 'src/layout', 'src/components', 'src/backgrounds', 'src/shell', 'src/agent'],
   'src/backgrounds': ['src/data', 'src/layout', 'src/components', 'src/shell', 'src/agent'],
   'src/agent': ['src/data', 'src/layout', 'src/components', 'src/backgrounds', 'src/shell'],
   'src/shell': ['src/data', 'src/layout', 'src/backgrounds'],
@@ -45,7 +47,7 @@ describe('layer boundaries', () => {
   }
 
   it('consumers only use the host through its one entry point', () => {
-    const violations = ['src/components', 'src/agent', 'src/shell'].flatMap((layer) =>
+    const violations = ['src/components', 'src/kit', 'src/agent', 'src/shell'].flatMap((layer) =>
       sourceFiles(layer).flatMap((file) =>
         imports(file)
           .filter((target) => target.startsWith('src/host/'))

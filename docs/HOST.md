@@ -46,7 +46,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `schedule` | `ScheduleView` | Every meeting and session from 2023 on, refreshed each time the app starts, plus `state` and `reason` |
 | `sessionData` | `SessionDataView` | Whether there's session data and, if not, why (see below) |
 | `circuit` | `CircuitView` | The open session's circuit: outline, corners and pit loss (see below) |
-| `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
+| `components` | `ComponentInfo[]` | Every component a tile can show, including those from mods that loaded, without its code: `name`, `origin` (`installed`, the app's own, read-only and forked to change, or `local`, a mod), `title`, `description`, `args` (its props' schema, as plain JSON), `sessions` (the session types it applies to, or `null` for any), `needs` (the datasets it reads) and `size` (its shape and its least room in pixels, or `null`). It only changes when something registers or unregisters |
 | `mods` | `ModStatus[]` | Every mod in the mods folder: `name`, `state` (`loading`, `ready` or `failed`), `version`, `url` and `error`. See [MODS.md](MODS.md) |
 | `build` | `BuildView` | Build mode: `active`, `changes` (each mod that differs from how the folder stood on entry, as `{ name, change }` with `added`, `edited` or `deleted`) `enteredAtSec` (the session clock on entry, or null with no session) and `offer` (build mode offered to the viewer from view mode and not yet answered: the offering agent's `reason`, for the viewer, and `note`, for the build agent, and `tiles` whose errors go along, maybe none; or null). See [BUILD_MODE.md](BUILD_MODE.md) |
 | `health` | `PlaceHealth[]` | Each place a component shows, a tile or a preview in the strip: its `scope`, `where` (`tile` or `strip`), `type`, `label` and `state`. `drawn` means it didn't throw. `needs_props` lists the required props it lacks in `missing`, and those its args no longer accept in `dropped`. `error` has the `message` it threw. `waiting` looks ahead and isn't drawn until the viewer allows it. A place that isn't drawing has `since`, the moment it first stood this way (`clockSec`, and `playheadMs` in UTC ms), kept while it fails the same way. It's null otherwise, and with no session open |
@@ -217,7 +217,7 @@ keeps their definitions, draws tiles with them, and lists what's safe to share i
 
 | Function | Arguments | Effect |
 | --- | --- | --- |
-| `register` | `components: ComponentDefinition[]` | Makes the components available to tiles. One with a name that's already registered replaces it, and its tiles redraw with the new one |
+| `register` | `components: ComponentDefinition[]`, `origin?: 'installed' \| 'local'` | Makes the components available to tiles. One with a name that's already registered replaces it, and its tiles redraw with the new one. `origin` says where they come from, `local` (a mod) unless said: `src/main.tsx` registers the app's own as `installed` |
 | `unregister` | `names: string[]` | Makes the components unavailable and takes their tiles off screen. Returns the names that were registered. A mod's folder being deleted does this |
 
 ### `host.backgrounds` and `host.appearance`

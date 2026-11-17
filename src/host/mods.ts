@@ -19,7 +19,7 @@ export const useMods = create<{ list: ModStatus[] }>(() => ({ list: [] }));
 
 /** The version of each mod that's registered now. */
 const running = new Map<string, number>();
-/** The app's own components: a mod can't take one of their names. */
+/** The installed components, the app's own: a mod can't take one of their names. */
 let builtins = new Set<string>();
 
 function textOf(args: unknown[]): string {
@@ -63,7 +63,7 @@ function problemWith(definition: unknown, name: string): string | null {
   if (!definition || typeof definition !== 'object') return 'main must `export default defineComponent({ ... })`.';
   const d = definition as Partial<ComponentDefinition>;
   if (d.name !== name) return `Its name is "${String(d.name)}", but the component's name must match the mod's folder: "${name}".`;
-  if (builtins.has(name)) return `"${name}" is one of the app's own components. Rename the folder and the component.`;
+  if (builtins.has(name)) return `"${name}" is an installed component's name. A changed copy of it is a fork with a name of its own: rename the folder and the component.`;
   if (typeof d.title !== 'string' || !d.title) return 'It needs a title.';
   if (typeof d.description !== 'string' || !d.description) return 'It needs a description.';
   if (!d.args || typeof d.args !== 'object' || (d.args as { type?: unknown }).type !== 'object') return 'Its args must be a TypeBox object schema: Type.Object({ ... }).';

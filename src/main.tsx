@@ -6,7 +6,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
 import { backgrounds, DEFAULT_BACKGROUND } from './backgrounds/registry';
-import * as kit from './components/charts/kit';
+import * as kit from './kit';
 import { components } from './components/registry';
 import * as omfv from './host';
 import { host, startBuild, startHealth, startMods, startPictures } from './host';
@@ -15,8 +15,8 @@ import { restoreBackground } from './shell/persistBackground';
 import { restorePaletteHeight } from './shell/persistPaletteHeight';
 import { restoreVolume } from './shell/persistVolume';
 
-// Before the first render: the grid and the agent read components from the host.
-host.components.register({ components });
+// Before the first render: the grid and the agent read components from the host. The app's own are installed: read-only, and forked to change.
+host.components.register({ components, origin: 'installed' });
 host.backgrounds.register({ backgrounds });
 // Mods import these as the app's own copies. See docs/MODS.md.
 startMods({ omfv, 'omfv/kit': kit, react: React, 'react/jsx-runtime': jsxRuntime, typebox });

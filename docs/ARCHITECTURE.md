@@ -19,7 +19,8 @@
 
 `tests/layers.test.ts` fails if anything reaches around the host, or if anything but the data layer talks to the main process. The layout knows
 nothing about video: a tile just names a component, so charts can be added by defining one and listing it in `src/components/registry.ts`,
-or from outside the app in a [mod](MODS.md).
+or from outside the app in a [mod](MODS.md). The app's own components are installed: each is a folder shaped like a mod's, which can be
+read and forked into a mod but not changed (see [MODS.md](MODS.md#installed-and-local)).
 
 [DESIGN.md](DESIGN.md) has the direction this is heading in, and why.
 
@@ -36,12 +37,16 @@ Everything a component, the shell or the agent can do goes through here. [HOST.m
   hold videos, as many as it likes: `video` is one component among the rest, and `battle` holds two. A component says what its title bar
   shows with `useTileHeader`, and keeps what the viewer picks in it with `useTileState`.
 
-## Charts (`src/components/charts`)
+## Charts (`src/components/<name>`, `src/kit`)
 
 A component is a spec that takes props and draws in a tile; nothing about charts is special. Charts are the components drawn on a
-canvas with the kit: one file each, holding the `defineComponent` declaration (the description the agent reads, `args`,
-`sessions`, `needs`, `size`), its SQL, a pure function from rows to a drawable model, and the drawing. They draw on Canvas 2D by hand,
-with no chart library. They may only import from the host, and from the kit beside them:
+canvas with the kit. Each component is a folder named for it, shaped like a mod's: `main.tsx` holds the `defineComponent` declaration
+(the description the agent reads, `args`, `sessions`, `needs`, `size`), its SQL, a pure function from rows to a drawable model, and the
+drawing. They draw on Canvas 2D by hand, with no chart library. Like a mod, a component
+imports only `omfv` (the host, `src/host`), `omfv/kit` (the kit, `src/kit`), React, TypeBox and files in its own folder: the names
+resolve through an alias in `vite.config.ts` and `tsconfig.json`. That is what lets its folder be copied into a mod as it is, to fork
+it. What two components share goes in the kit: the running order and fights (`kit/fights.ts`), race control's messages
+(`kit/raceControl.ts`) and the pit window's model (`kit/pitWindow.ts`). The kit:
 
 - **`kit/ChartFrame`** wraps every chart. It shows a short message instead of the chart while session data isn't ready, a dataset in
   `needs` is absent or failed, something else in `waits` isn't there (such as the circuit, through `circuitMessage`), the query
@@ -65,7 +70,9 @@ its length, and a position projected onto it as distance along the lap.
   playhead give a new query each time. That's right for the map and the live telemetry, which move every second. `pedal_barcode` keys its
   completed laps on their starts, so those parameters only change when a lap is completed.
 
-To add one: write the file, keep the rows-to-model function pure and test it, and list the component in `src/components/registry.ts`.
+To add one: make its folder with a `main.tsx`, keep the rows-to-model function pure and test it, and list the component in
+`src/components/registry.ts`. `electron/mods/installed.test.ts` forks every one into a mod and compiles it, which fails if one reaches
+outside its folder.
 Keep the model's reference until its rows change (`useSql` already does for its result), so the canvas redraws only then.
 `scripts/charts-check.mjs` puts the charts on screen over a real replay and saves screenshots.
 

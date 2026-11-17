@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -37,6 +38,13 @@ function csp(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss(), csp()],
+  // The app's own components import the host and the kit by the names a mod does: see docs/MODS.md.
+  resolve: {
+    alias: [
+      { find: /^omfv$/, replacement: fileURLToPath(new URL('./src/host/index.ts', import.meta.url)) },
+      { find: /^omfv\/kit$/, replacement: fileURLToPath(new URL('./src/kit/index.ts', import.meta.url)) },
+    ],
+  },
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
   build: { outDir: 'dist', chunkSizeWarningLimit: 2000 },
   test: {

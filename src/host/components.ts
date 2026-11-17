@@ -60,9 +60,16 @@ export interface ComponentDefinition extends Declared {
   View: ComponentType<{ props: Record<string, unknown>; label: string }>;
 }
 
+/**
+ * Where a component comes from. `installed`: it came with the app, and can't be changed; its source is in the
+ * mods folder's `.installed`, to read or fork. `local`: a mod in the mods folder, to edit. See docs/MODS.md.
+ */
+export type ComponentOrigin = 'installed' | 'local';
+
 /** What `live.components` holds: a definition without its code. */
 export interface ComponentInfo {
   name: string;
+  origin: ComponentOrigin;
   title: string;
   description: string;
   /** The props' schema, as plain JSON. */
@@ -88,6 +95,7 @@ export function defineComponent<S extends TObject>(
 }
 
 const definitions = new Map<string, ComponentDefinition>();
+const origins = new Map<string, ComponentOrigin>();
 
 /**
  * A definition's size hint, checked. A mod written when `min` was a pair of grid cells still loads: its
@@ -110,6 +118,7 @@ export const useComponents = create<{ list: ComponentInfo[] }>(() => ({ list: []
 function infoOf(c: ComponentDefinition): ComponentInfo {
   return {
     name: c.name,
+    origin: origins.get(c.name) ?? 'local',
     title: c.title,
     description: c.description,
     args: JSON.parse(JSON.stringify(c.args)),
@@ -160,10 +169,14 @@ export const componentOps = {
       description: 'Make components available to tiles. One with a name already registered replaces it.',
       args: Type.Object({
         components: Type.Unsafe<ComponentDefinition[]>({ type: 'array', description: 'Definitions from defineComponent' }),
+        origin: Type.Optional(Type.Union([Type.Literal('installed'), Type.Literal('local')], { description: "Where they come from: 'local', a mod, unless said" })),
       }),
     },
-    ({ components }) => {
-      for (const c of components) definitions.set(c.name, c);
+    ({ components, origin = 'local' }) => {
+      for (const c of components) {
+        definitions.set(c.name, c);
+        origins.set(c.name, origin);
+      }
       useComponents.setState({ list: [...definitions.values()].map(infoOf) });
     },
   ),
@@ -174,6 +187,7 @@ export const componentOps = {
     },
     ({ names }) => {
       const gone = names.filter((name) => definitions.delete(name));
+      for (const name of gone) origins.delete(name);
       if (!gone.length) return gone;
       const ids = allTiles(useLayout.getState())
         .filter((t) => gone.includes(t.component.type))

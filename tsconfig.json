@@ -11,6 +11,7 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "paths": { "omfv": ["./src/host/index.ts"], "omfv/kit": ["./src/kit/index.ts"] },
     "types": ["vite/client", "node"]
   },
   "include": ["src", "shared"]

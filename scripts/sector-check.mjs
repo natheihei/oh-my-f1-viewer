@@ -147,7 +147,7 @@ for (const lap of targetLaps) {
   console.log(`at lap ${JSON.stringify(count)}`);
   const rows = await page.evaluate(async (pair) => {
     const { host } = await import('/src/host/index.ts');
-    const s = await import('/src/components/charts/SectorTable.tsx');
+    const s = await import('/src/components/sector_table/main.tsx');
     const m = s.sectorTable((await host.data.sql({ sql: s.SQL, params: pair })).rows, pair);
     const f = (v) => (v === null ? '·' : v.toFixed(3));
     return {
