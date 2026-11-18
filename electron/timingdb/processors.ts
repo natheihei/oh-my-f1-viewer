@@ -87,6 +87,24 @@ class PositionProcessor implements Processor {
   }
 }
 
+/**
+ * When each car goes into the pit lane and comes out, from `TimingData`'s `InPit`: `true` as it enters,
+ * `false` as it leaves. F1 repeats the flag, so a row is only a change. A car's first row is where it
+ * stood when the feed first said, such as in the garage before practice.
+ */
+class PitLaneProcessor implements Processor {
+  topics = ['TimingData'];
+  private inPit = new Map<number, boolean>();
+  constructor(private key: Key) {}
+  *process({ content, time }: Message): Iterable<Emission> {
+    for (const [driver, data] of driverEntries(content?.Lines)) {
+      if (typeof data.InPit !== 'boolean' || this.inPit.get(driver) === data.InPit) continue;
+      this.inPit.set(driver, data.InPit);
+      yield { table: 'pit_lane', row: { ...this.key, driver_number: driver, date: time, in_pit: data.InPit } };
+    }
+  }
+}
+
 class WeatherProcessor implements Processor {
   topics = ['WeatherData'];
   constructor(private key: Key) {}
@@ -815,6 +833,7 @@ export function timingRouter({ meetingKey, sessionKey, isRace }: SessionMeta): R
   return new Router(
     [
       new PositionProcessor(key),
+      new PitLaneProcessor(key),
       new WeatherProcessor(key),
       new TrackStatusProcessor(key),
       new LapCountProcessor(key),
