@@ -13,6 +13,7 @@ import {
   largestFreeRect,
   measure,
   minCells,
+  NoRoomError,
   removeTile,
   replaceComponent,
   setMain,
@@ -193,6 +194,52 @@ describe('auto-layout', () => {
     // The main tile keeps its place, at the size the others leave it.
     expect(byKey(wall, 'main')).toMatchObject({ x: 0, y: 0 });
     expect(area(byKey(wall, 'main'))).toBeGreaterThanOrEqual(64);
+  });
+});
+
+describe('a full grid', () => {
+  const onboard = (key: string): ComponentSpec => ({ ...video(key), size: { aspect: 16 / 9, min: { width: 320, height: 180 } } });
+  /** Adds onboards till one is refused. Returns the last layout that took one, and the error. */
+  const fill = (start: LayoutState) => {
+    let s = start;
+    for (let i = 0; i < 200; i += 1) {
+      try {
+        s = addTile(s, onboard(`onboard${i}`));
+      } catch (error) {
+        return { full: s, error };
+      }
+    }
+    throw new Error('Never refused a tile');
+  };
+
+  it('refuses a tile that would leave some too small, and keeps every tile at least 3 cells either way', () => {
+    const { full, error } = fill(opened);
+    expect(error).toBeInstanceOf(NoRoomError);
+    expect((error as Error).message).toMatch(/^No room for onboard\d+/);
+    expect(full.tiles.length).toBeGreaterThan(32);
+    assertNoOverlap(full.tiles);
+    for (const t of allTiles(full)) expect(t.w >= 3 && t.h >= 3, `${t.component.key} is ${t.w}x${t.h}`).toBe(true);
+    // The main tile keeps its place to the end.
+    expect(byKey(full, 'main')).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it('refuses one in a hand-arranged layout too, and leaves it as arranged', () => {
+    const { full } = fill(opened);
+    const arranged = swap(full, idOf(full, 'onboard0'), idOf(full, 'onboard1'));
+    expect(() => addTile(arranged, onboard('one more'))).toThrow(NoRoomError);
+    // A component already on screen is still no error: it adds nothing.
+    expect(addTile(arranged, onboard('onboard0'))).toBe(arranged);
+  });
+
+  it('never splits a tile on a drop into halves under 3 cells', () => {
+    // A 5 by 5 tile would split into halves 2 and 3 wide; a 6 by 5 one into two 3 wide.
+    const small = applyMouseEdit(opened, idOf(opened, 'main'), { x: 0, y: 0, w: 5, h: 5 });
+    expect(dropTarget(small, { x: 1, y: 1 }, 1)).toBeNull();
+    const six = applyMouseEdit(opened, idOf(opened, 'main'), { x: 0, y: 0, w: 6, h: 5 });
+    expect(dropTarget(six, { x: 4, y: 1 }, 1)?.room).toEqual({ x: 3, y: 0, w: 3, h: 5 });
+    // Nor does it fill a gap under 3 cells.
+    const strip = applyMouseEdit(opened, idOf(opened, 'main'), { x: 0, y: 0, w: 24, h: 22 });
+    expect(dropTarget(strip, { x: 1, y: 23 }, 1)).toBeNull();
   });
 });
 

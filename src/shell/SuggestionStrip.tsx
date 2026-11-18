@@ -15,6 +15,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ComponentView, host, previewScope, PreviewScope, tilesOf, useLive, type ComponentSpec } from '../host';
+import { palette } from './palette';
 import { clampPreviewSize, manualSizes, MAX_PREVIEW_HEIGHT_OF_WINDOW, previewAspect } from './stripShape';
 
 export interface SuggestionStripHandle {
@@ -69,9 +70,19 @@ export const SuggestionStrip = forwardRef<
     if (index > items.length - 1 && items.length > 0) setIndex(items.length - 1);
   }, [index, items.length]);
 
+  /** Runs an add or a drop. When the grid has no room left, the card stays and the palette says why. */
+  const tryAdding = (run: () => boolean): boolean => {
+    try {
+      return run();
+    } catch (e) {
+      palette.push('error', e instanceof Error ? e.message : String(e));
+      return false;
+    }
+  };
+
   const add = (spec: ComponentSpec, i: number) => {
     const wasFocused = cards.current.includes(document.activeElement as HTMLDivElement);
-    host.suggestions.add({ key: spec.key });
+    if (!tryAdding(() => host.suggestions.add({ key: spec.key }))) return;
     host.suggestions.highlight({ key: null });
     if (items.length <= 1) onLeave();
     else if (wasFocused) {
@@ -123,7 +134,7 @@ export const SuggestionStrip = forwardRef<
       setDrag(null);
       if (!state.moved) return;
       suppressClick.current = true;
-      if (ev.type === 'pointercancel' || !host.suggestions.drop({ key: spec.key, x: ev.clientX, y: ev.clientY })) {
+      if (ev.type === 'pointercancel' || !tryAdding(() => host.suggestions.drop({ key: spec.key, x: ev.clientX, y: ev.clientY }))) {
         host.suggestions.cancelDrag();
         return;
       }

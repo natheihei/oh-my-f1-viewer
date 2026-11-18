@@ -161,7 +161,8 @@ export const suggestionOps = {
   ),
   add: write(
     {
-      description: "Add a suggestion to the layout, where auto-layout puts it, and take it out of the strip. One that's already on screen only leaves the strip.",
+      description:
+        "Add a suggestion to the layout, where auto-layout puts it, and take it out of the strip. One that's already on screen only leaves the strip. Fails, and leaves it in the strip, when the grid has no room left for it.",
       args: Type.Object({ key: Key }),
     },
     ({ key }) => {

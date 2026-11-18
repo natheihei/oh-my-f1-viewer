@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shareWithin, solve, type Slot } from './solve';
+import { arrange, shareWithin, solve, type Slot } from './solve';
 
 const sum = (list: number[]) => list.reduce((a, v) => a + v, 0);
 
@@ -88,6 +88,8 @@ describe('solve', () => {
   });
 
   it('falls back to a plain grid, with no overlap, when no rail or band gives every slot room', () => {
-    legible(solve(Array.from({ length: 80 }, () => slot()), grid, 0), 2);
+    const many = Array.from({ length: 80 }, () => slot());
+    expect(arrange(many, grid, 0)).toBeNull();
+    legible(solve(many, grid, 0), 2);
   });
 });
