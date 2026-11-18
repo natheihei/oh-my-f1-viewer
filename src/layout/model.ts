@@ -329,13 +329,29 @@ export function freeRectAt(nodes: Rect[], cell: Cell, columns = GRID_COLUMNS, ro
  * Where a tile dropped on this cell goes. On empty space, it fills the biggest gap there. On a
  * tile, that tile splits across its longer side as it looks on screen, and the new tile takes the
  * half under the cell. `cellAspect` is a cell's width over its height. Null when the tile is too
- * small to split.
+ * small to split. With `component`, `rect` is shrunk to what its content uses, keeping the top-left
+ * corner, as an auto-placed tile is: the rest of `room` stays empty.
  */
-export function dropTarget(state: LayoutState, cell: Cell, cellAspect = 1): { rect: Rect; split: Tile | null } | null {
+export function dropTarget(
+  state: LayoutState,
+  cell: Cell,
+  cellAspect = 1,
+  component?: ComponentSpec,
+): { rect: Rect; room: Rect; split: Tile | null } | null {
+  const target = dropRoom(state, cell, cellAspect);
+  if (!target) return null;
+  const { room, split } = target;
+  if (!component) return { rect: room, room, split };
+  const { x, y, w, h } = fit({ id: '', component, ...room }, state.cell);
+  return { rect: { x, y, w, h }, room, split };
+}
+
+/** The room a drop on this cell has: the gap there, or half the tile under it. */
+function dropRoom(state: LayoutState, cell: Cell, cellAspect: number): { room: Rect; split: Tile | null } | null {
   const node = state.tiles.find((t) => contains(t, cell));
   if (!node) {
     const rect = freeRectAt(state.tiles, cell);
-    return rect ? { rect, split: null } : null;
+    return rect ? { room: rect, split: null } : null;
   }
   const across = node.w * cellAspect >= node.h;
   const size = across ? node.w : node.h;
@@ -351,17 +367,20 @@ export function dropTarget(state: LayoutState, cell: Cell, cellAspect = 1): { re
         { x: node.x, y: node.y, w: node.w, h: first },
         { x: node.x, y: node.y + first, w: node.w, h: size - first },
       ];
-  return { rect: inFirst ? halves[0] : halves[1], split: node };
+  return { room: inFirst ? halves[0] : halves[1], split: node };
 }
 
-/** Adds a tile where it was dropped, which makes the layout manual. Falls back to `addTile`. */
+/**
+ * Adds a tile where it was dropped, which makes the layout manual. It takes what its content uses of
+ * the room there, so a chart that stops growing doesn't stretch across it. Falls back to `addTile`.
+ */
 export function addTileAt(state: LayoutState, component: ComponentSpec, cell: Cell, cellAspect = 1): LayoutState {
   if (tileWithKey(state, component.key)) return state;
-  const target = dropTarget(state, cell, cellAspect);
+  const target = dropTarget(state, cell, cellAspect, component);
   if (!target) return addTile(state, component);
-  const { rect, split } = target;
+  const { rect, room, split } = target;
   const tile: Tile = { ...newTile(component), ...rect };
-  const tiles = state.tiles.map((t) => (t === split ? { ...t, ...rectMinus(t, rect) } : t));
+  const tiles = state.tiles.map((t) => (t === split ? { ...t, ...rectMinus(t, room) } : t));
   return { ...state, tiles: [...tiles, tile], manual: true };
 }
 
