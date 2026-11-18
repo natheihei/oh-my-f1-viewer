@@ -143,7 +143,7 @@ tile: it lasts until the tile is gone, survives the component reloading, and ano
 [BUILD_MODE.md](BUILD_MODE.md) has the details.
 
 The tables are `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`,
-`overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen (`car_data` and `location`: each sample whose `date` the frame has reached), so a query
+`overtakes`, `pit`, `pit_lane`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen (`car_data` and `location`: each sample whose `date` the frame has reached), so a query
 can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
 the user must ask first. `useSql` reads as of the playhead unless it asks for the session, as above. Only `SELECT` is allowed. The tables and their columns, as SQLite
 reports them, are in `sessionData.tables`. The stored tables are defined in [shared/sessionTables.ts](../shared/sessionTables.ts), and the
