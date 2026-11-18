@@ -27,7 +27,7 @@ import {
 
 const NEEDS = ['telemetry' as const];
 
-/** How far back from the playhead to look for each car's latest position, in ms: rows are revealed up to 2 s after their `date`, every 0.25 s or so. */
+/** How far back from the playhead to look for each car's latest position, in ms: a car's positions come every 0.25 s or so, and up to 1.4 s apart. */
 export const WINDOW_MS = 5000;
 
 /**

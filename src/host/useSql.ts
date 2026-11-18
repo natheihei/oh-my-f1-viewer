@@ -33,8 +33,9 @@ export function nextView(previous: SqlView, next: SqlView): SqlView {
 }
 
 /**
- * Runs `sql` now and again on every `sessionData.revision`, about once a second while playing. The
- * returned view keeps its reference until its rows change, so a chart can redraw only then.
+ * Runs `sql` now and again on every `sessionData.revision`, about once a second while playing, and whenever
+ * `params` change. Passing `sessionData.playheadMs`, which moves ten times a second, reads at that rate.
+ * The returned view keeps its reference until its rows change, so a chart can redraw only then.
  *
  * It reads as of the playhead. `asOf: 'session'` reads the whole session, which can spoil it: a
  * component that does should declare `looksAhead`, so the viewer is asked before it's drawn.

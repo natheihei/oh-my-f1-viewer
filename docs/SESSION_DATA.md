@@ -101,6 +101,11 @@ Each row stores when the feed revealed it, on the same clock as the playhead:
 
 A row's own `date` can't serve, because a message often reports something earlier than when it was sent.
 
+Telemetry is the exception. `car_data` and `location` are `shownAtDate`: a sample shows once the playhead reaches its own `date`, not its
+`visible_from`. The feed sends them in a batch about once a second, each holding the last second's four samples, so gated on `visible_from`
+the charts jumped once a second, behind the picture. A sample's `date` is never after the frame on screen, so the viewer is already
+watching what it describes. It can show up to 1.9s before the feed sent it.
+
 Rows that change as a session goes on (`laps`, `stints`, `pit`, `drivers`, the championship tables) are stored as versions, and a read takes the newest one the playhead has
 reached. So a stint's `lap_end` can't reveal a stop that hasn't happened, and a lap's time doesn't show before it's known. The grid shows from the first message of
 a race or sprint, and the result from when the session finalises.
@@ -203,7 +208,8 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   pit lane or a circuit added since may be wrong or missing. An archive session whose meeting isn't in the schedule never learns
   its key, so its circuit stays `loading`.
 - **Telemetry is coarse.** `car_data` comes about 3.7 times a second and `location` 3.9, at irregular intervals (median 0.26 s, up to
-  1.4 s apart). All cars share each sample's `date`. Rows are revealed 0 to 1.9 s after their `date` (median 0.4 s), never before it. At
+  1.4 s apart). All cars share each sample's `date`. The feed sends them 0 to 1.9 s after their `date` (median 0.4 s), in a batch about once a second,
+  and they're shown at their `date` (see `visible_from`, above). At
   300 km/h a sample is every 20 m or so, so braking points are approximate.
 - **`laps.date_start` isn't exactly the line.** By each car's positions, it comes 0.34 s after the car crosses the outline's first point
   (median over 4 drivers' laps 3 to 45), give or take 0.1 to 0.2 s from lap to lap, and once 1.35 s. A chart that needs a lap's ends exactly should

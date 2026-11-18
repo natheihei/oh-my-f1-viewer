@@ -213,6 +213,9 @@ Components drawn on a canvas with the kit, `src/kit`.
 - **Every chart is for races to start with: `sessions: ['race', 'sprint']`.** The agent is only offered what fits the open session,
   so a chart reaches qualifying or practice once it's been made to make sense there. (2026-11-12)
 - **A chart that needs car telemetry sets `replayOnly`.** The feed has no telemetry while a session is live. (2026-11-12)
+- **Telemetry moves with every sample.** `car_data` and `location` show each sample once the playhead reaches its `date`, about every
+  260ms, so a chart that passes `playheadMs` to its query moves with the car on screen. Gated on when the feed sent them, in a batch once a
+  second, the map's dots jumped once a second. (2026-11-18)
 - **Missing data is drawn as missing.** A value the feed hasn't sent is a gap or a dash, never a guess.
 - **A crowded chart labels what answers its question, and names the rest under the pointer.** Codes that land on each other read as
   none. A mark without a label is named, with its value, when the pointer is on it: `ChartCanvas` passes the pointer to the chart

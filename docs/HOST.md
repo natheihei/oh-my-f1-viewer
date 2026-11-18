@@ -77,7 +77,7 @@ names a tile. `live.health` and look-ahead approvals name tiles by id too.
   - `datasets`: each dataset's (`timing`, `telemetry`, `results`) `state` (`absent`, `loading`, `partial`, `complete` or `failed`)
     and `reason`.
   - `revision`: goes up each time what can be seen may have changed.
-  - `playheadMs`: the frame on screen, in UTC milliseconds.
+  - `playheadMs`: the frame on screen, in UTC milliseconds. It moves ten times a second while playing, without a new `revision`.
   - `drivers`: the roster as it stood at the playhead. The grid, the result and the championship are in SQL, below.
   - `lapCount`: `{ current, total }`, the leader's lap and the scheduled distance, as of the playhead. `null` in a session
     without them, such as practice or qualifying.
@@ -126,7 +126,7 @@ Queries read things that aren't part of the live state. They return promises, ex
 ### Session SQL
 
 `host.data.sql` runs one query. `useSql(sql, params)` runs it again whenever `sessionData.revision` changes, about once a second
-while playing, and returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
+while playing, and whenever `params` change: a query passed `playheadMs` runs ten times a second. It returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
 returns the same rows as the last, it keeps returning the previous object, so a chart can redraw only when its data changes.
 
 `useSql(sql, params, { asOf: 'session' })` reads the whole session, for a component that needs the future, such as a control that
@@ -136,7 +136,7 @@ tile: it lasts until the tile is gone, survives the component reloading, and ano
 [BUILD_MODE.md](BUILD_MODE.md) has the details.
 
 The tables are `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`,
-`overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen, so a query
+`overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status` and `weather`. `drivers` is the same roster as `sessionData.drivers`. By default (`asOf: 'playhead'`) each holds only what the feed had revealed at the frame on screen (`car_data` and `location`: each sample whose `date` the frame has reached), so a query
 can't see past the playhead. `asOf: 'session'` sees everything the session holds, results included, so a caller that shows what it reads to
 the user must ask first. `useSql` reads as of the playhead unless it asks for the session, as above. Only `SELECT` is allowed. The tables and their columns, as SQLite
 reports them, are in `sessionData.tables`. The stored tables are defined in [shared/sessionTables.ts](../shared/sessionTables.ts), and the
