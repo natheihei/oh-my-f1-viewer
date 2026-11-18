@@ -18,6 +18,7 @@ export const SQL_TABLES = [
   'location',
   'overtakes',
   'pit',
+  'pit_lane',
   'position',
   'race_control',
   'session_result',

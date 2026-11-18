@@ -39,7 +39,7 @@ function raceFiles(): Record<string, string> {
       [240_000, { Lines: { '1': { Stints: { '1': { Compound: 'HARD', StartLaps: 0, TotalLaps: 0 } } } } }],
     ]),
     TimingData: stream([
-      [50_000, { Lines: { '1': { Line: 3 } } }],
+      [50_000, { Lines: { '1': { Line: 3, InPit: false } } }],
       [61_000, { Lines: { '1': { Sectors: { '0': { Value: '' } } } } }],
       [150_000, { Lines: { '1': { NumberOfLaps: 1, Line: 2 } } }],
       [151_000, { Lines: { '1': { LastLapTime: { Value: '1:29.000' } } } }],
@@ -47,7 +47,10 @@ function raceFiles(): Record<string, string> {
       [241_000, { Lines: { '1': { LastLapTime: { Value: '1:31.000' } } } }],
       // F1 sends `PitOut: false` too, which isn't an out lap.
       [155_000, { Lines: { '1': { PitOut: false } } }],
-      [245_000, { Lines: { '1': { PitOut: true } } }],
+      // Into the pit lane at the end of lap 2, out on lap 3. The flag comes again unchanged.
+      [235_000, { Lines: { '1': { InPit: true } } }],
+      [238_000, { Lines: { '1': { InPit: true } } }],
+      [245_000, { Lines: { '1': { PitOut: true, InPit: false } } }],
       [330_000, { Lines: { '1': { NumberOfLaps: 3, Line: 1 } } }],
     ]),
     TrackStatus: stream([
@@ -172,6 +175,17 @@ describe('session database', () => {
         { lap_number: 2, is_pit_out_lap: 0 },
         { lap_number: 3, is_pit_out_lap: 1 },
         { lap_number: 4, is_pit_out_lap: 0 },
+      ]);
+    });
+
+    it('says when a car is in the pit lane, from when the feed said so', () => {
+      const pitLane = (playhead: number) => sql('SELECT date, in_pit FROM pit_lane ORDER BY date', at(playhead));
+      expect(pitLane(234_999)).toEqual([{ date: BASE + 50_000, in_pit: 0 }]);
+      expect(pitLane(235_000).at(-1)).toEqual({ date: BASE + 235_000, in_pit: 1 });
+      expect(pitLane(600_000)).toEqual([
+        { date: BASE + 50_000, in_pit: 0 },
+        { date: BASE + 235_000, in_pit: 1 },
+        { date: BASE + 245_000, in_pit: 0 },
       ]);
     });
 
