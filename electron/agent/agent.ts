@@ -50,8 +50,6 @@ const PROMPTS: Record<AgentMode, string> = { pick: PICK_PROMPT, view: VIEW_PROMP
 const CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** How often the text of a reply in progress is published. */
 const PARTIAL_INTERVAL_MS = 40;
-/** How many of the newest entries the end of a turn reads again, for reply text the watch folded away. */
-const FLUSHED_ENTRIES = 100;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
 
@@ -688,19 +686,18 @@ export class Agent {
       sent = done ? '' : full;
       if (delta && !turn.cancelled) emit({ type: 'text_delta', turnId: turn.id, delta });
     };
+    const watch = await conversation.root.watch(context);
+    // Entries are in ID order, and the watch sees every commit after its first value and nothing earlier, so
+    // whatever is newer than that value's newest entry is this message's. The window doesn't start the
+    // transcript, so `before` is the newest when it's empty.
+    const last = watch.value.entries.at(-1)?.id ?? watch.value.before;
     const take = (entries: readonly EntryRecord[]) => {
       for (const entry of entries) {
-        if (seen.has(entry.id)) continue;
+        if ((last !== undefined && entry.id <= last) || seen.has(entry.id)) continue;
         seen.add(entry.id);
         if (durable.AssistantEntry.is(entry)) say(textOf(entry.model?.[0]), true);
       }
     };
-    // What's already there belongs to earlier messages: as far back as the flush below reads, since the
-    // watch starts with only the newest 50 entries.
-    const before = await conversation.root.entries({ order: 'descending' }, FLUSHED_ENTRIES, undefined, context);
-    for (const entry of before.items) seen.add(entry.id);
-    const watch = await conversation.root.watch(context);
-    for (const entry of watch.value.entries) seen.add(entry.id);
     watch.start(async (call) => {
       if (call.kind !== 'value') return;
       take(call.value.entries);
@@ -710,8 +707,10 @@ export class Agent {
     return {
       flush: async () => {
         await watch.stop();
-        // The watch folds commits together, so the last entries are read again, in order.
-        const page = await conversation.root.entries({ order: 'descending' }, FLUSHED_ENTRIES, undefined, context);
+        // The watch folds commits together, so the last entries are read again, in order. `minEntryId` is
+        // inclusive, so this message's start from the ID after `last`.
+        const after = last === undefined ? {} : { minEntryId: (last + 1) as EntryRecord['id'] };
+        const page = await conversation.root.entries({ order: 'descending', ...after }, 100, undefined, context);
         take([...page.items].reverse());
       },
     };
