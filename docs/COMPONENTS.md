@@ -87,6 +87,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Adding a tile moves nothing if a gap fits it.** A new tile goes into an empty gap that meets its least size, closest to its shape.
   Everything is arranged again only when there is no such gap, or when a tile is removed.
 - **A hand-arranged layout is left alone,** and dragging a tile below its least size is allowed. The viewer's choice wins.
+- **A dropped suggestion takes what its content uses of the room there,** keeping the top-left corner, as a tile added by
+  auto-layout does. A gap chart dropped on half a wide tile stays at 640 by 340 rather than stretching across it, and the rest is
+  left empty. The tile it split keeps its own half. The drop preview shows the same box. (2026-11-18)
 
 ### Overflow
 

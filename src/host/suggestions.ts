@@ -181,7 +181,8 @@ export const suggestionOps = {
     { description: 'Show where a suggestion being dragged would land.', args: Type.Object(Point) },
     ({ key, x, y }) => {
       const at = cellAt(x, y);
-      const target = at && itemOf(key) && !onScreen(key) ? dropTarget(useLayout.getState(), at.cell, at.aspect) : null;
+      const spec = itemOf(key);
+      const target = at && spec && !onScreen(key) ? dropTarget(useLayout.getState(), at.cell, at.aspect, spec) : null;
       const drop = target?.rect ?? null;
       const current = useSuggestions.getState().drop;
       if (JSON.stringify(drop) !== JSON.stringify(current)) useSuggestions.setState({ drop });

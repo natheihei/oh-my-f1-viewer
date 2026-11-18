@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addTile,
   addTileAt,
+  dropTarget,
   allTiles,
   applyMouseEdit,
   autoLayout,
@@ -403,6 +404,18 @@ describe('dropping a tile', () => {
     expect(freeRectAt(withMain.tiles, { x: 18, y: 3 })).toEqual({ x: 12, y: 0, w: 12, h: 24 });
     const next = addTileAt(withMain, spec('ham'), { x: 18, y: 3 });
     expect(allTiles(next).find((t) => t.component.key === 'ham')).toMatchObject({ x: 12, y: 0, w: 12, h: 24 });
+  });
+
+  it("takes only what its content uses of the room, keeping the corner, and the split tile keeps its half", () => {
+    const cell = { w: 100, h: 50 };
+    const state: LayoutState = { ...EMPTY_LAYOUT, cell, manual: true, tiles: [{ id: 't', component: spec('main'), x: 0, y: 0, w: 24, h: 24 }] };
+    const chart: ComponentSpec = { type: 'chart', key: 'gap', label: 'Gap', props: {}, fit: { width: 640, height: 340 } };
+    const target = dropTarget(state, { x: 18, y: 3 }, cell.w / cell.h, chart)!;
+    expect(target.room).toEqual({ x: 12, y: 0, w: 12, h: 24 });
+    expect(target.rect).toEqual({ x: 12, y: 0, w: 7, h: 8 });
+    const next = addTileAt(state, chart, { x: 18, y: 3 }, cell.w / cell.h);
+    expect(byKey(next, 'gap')).toMatchObject(target.rect);
+    expect(byKey(next, 'main')).toMatchObject({ x: 0, y: 0, w: 12, h: 24 });
   });
 
   it('ignores a component already on screen', () => {
