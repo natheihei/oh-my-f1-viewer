@@ -62,6 +62,7 @@ export type { BuildChange, ModLogLine, ModStatus } from '../../shared/mods';
 export { tilesOf } from './layoutOps';
 export { read, useLive, type Live } from './live';
 export { useSql, type SqlView } from './useSql';
+export { useSqlWindow } from './useSqlWindow';
 export type { Op } from './op';
 export { PreviewScope, streamSlots, useStream, Video, type Stream } from './Video';
 export { useTileHeader, useTilePlace, useTileState, type TileHeader, type TilePlace } from './tile';

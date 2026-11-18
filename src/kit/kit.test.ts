@@ -5,7 +5,7 @@ import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, median, neutralOf, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
 import { circuitMessage, dataMessage, viewMessage } from './status';
-import { fitOutline, outlineLength, projector, rotate } from './track';
+import { cachedProjector, fitOutline, outlineLength, projector, rotate } from './track';
 import { compoundLetter, formatGap, formatLapTime, gapSeconds, parseGap, stintAge } from './values';
 
 describe('scales', () => {
@@ -219,5 +219,12 @@ describe('track geometry', () => {
     expect(project(103, 25)).toEqual({ s: 125, off: 3, fx: 100, fy: 25 });
     // Back along the closing side, from (0, 50) to (0, 0).
     expect(project(-1, 10)).toEqual({ s: 290, off: 1, fx: 0, fy: 10 });
+  });
+
+  it('remembers each point it projected, with the same answers', () => {
+    const project = cachedProjector(square);
+    expect(project(50, -3)).toEqual({ s: 50, off: 3, fx: 50, fy: 0 });
+    expect(project(50, -3)).toBe(project(50, -3));
+    expect(project(103, 25)).toEqual(projector(square)(103, 25));
   });
 });
