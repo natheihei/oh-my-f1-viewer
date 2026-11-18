@@ -38,7 +38,8 @@ export const Highlighted = (max?: number, more = '') =>
   Type.Optional(DriverList(`Drivers to highlight among those drawn${more}. Left out, none is`, max));
 
 /** The usual `drivers_to_display` prop: those to draw. */
-export const Displayed = (more = '') => Type.Optional(DriverList(`Drivers to draw${more}. Left out, everyone`));
+export const Displayed = (more = '') =>
+  Type.Optional(DriverList(`Drivers to draw${more}, only when the user asked to see just some. Left out, everyone`));
 
 /** A driver-prop value for a key: car numbers joined, or a placeholder when left out. */
 export const keyPart = (value: number | readonly number[] | undefined, none = 'all'): string =>
