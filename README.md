@@ -111,6 +111,13 @@ This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an O
 node scripts/mods-check.mjs /tmp/mods-check
 ```
 
+This one needs only the F1 TV sign-in. It opens a replay race and adds suggestions one by one: each re-tiles the grid until a
+tile is arranged by hand, and after that a new one goes into the biggest gap:
+
+```bash
+node scripts/auto-layout-add-check.mjs /tmp/auto-layout-add-check
+```
+
 This one runs [build mode](docs/BUILD_MODE.md) with the real agent: it needs both sign-ins, and takes about a quarter of an
 hour:
 
