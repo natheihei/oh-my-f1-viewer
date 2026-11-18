@@ -100,3 +100,22 @@ export function projector(outline: Outline): (x: number, y: number) => { s: numb
     return { s: best.s, off: best.off, fx: best.fx, fy: best.fy };
   };
 }
+
+/**
+ * `projector`, remembering each point's answer, so a chart that projects the same positions on every
+ * redraw, such as laps already done, works each out once. Forgets everything past `limit` points.
+ */
+export function cachedProjector(outline: Outline, limit = 50_000): ReturnType<typeof projector> {
+  const project = projector(outline);
+  const seen = new Map<string, ReturnType<ReturnType<typeof projector>>>();
+  return (x, y) => {
+    const key = `${x},${y}`;
+    let answer = seen.get(key);
+    if (!answer) {
+      if (seen.size >= limit) seen.clear();
+      answer = project(x, y);
+      seen.set(key, answer);
+    }
+    return answer;
+  };
+}

@@ -1,7 +1,7 @@
 /** One car's last lap traced on the circuit as a ribbon: thicker where it's faster, in the pedal colours, green on throttle, darker on a lift and red on the brake, with each corner's slowest speed. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, Driver, useLive, useSql, type CircuitView } from 'omfv';
+import { defineComponent, Driver, useLive, useSql, useSqlWindow, type CircuitView } from 'omfv';
 import {
   ChartCanvas,
   ChartFrame,
@@ -31,14 +31,15 @@ const NO_READING = 104;
 export const LAP_SQL = `SELECT lap_duration FROM laps WHERE driver_number = ?1 AND lap_duration IS NOT NULL ORDER BY lap_number DESC LIMIT 1`;
 
 /**
- * The car's positions and samples over the window (`?3`, in ms). Each half is bounded both ways by `date`, the
- * second column of the primary key, so it reads an index range of every car's rows over one lap and keeps this
- * one's 350 or so. A row is never revealed before its `date`, so the playhead (`?2`) is the upper bound.
+ * Car `?3`'s positions and samples after `?1` up to `?2`, read by `useSqlWindow` over the window. Each half is
+ * bounded both ways by `date`, the second column of the primary key, so it reads an index range of every car's
+ * rows and keeps this one's. A row is never revealed before its `date`, so the playhead is the upper bound.
  */
 export const SQL = `SELECT date, x, y, NULL AS speed, NULL AS n_gear, NULL AS throttle, NULL AS brake FROM location
-WHERE date > ?2 - ?3 AND date <= ?2 AND driver_number = ?1
+WHERE date > ?1 AND date <= ?2 AND driver_number = ?3
 UNION ALL SELECT date, NULL, NULL, speed, n_gear, throttle, brake FROM car_data
-WHERE date > ?2 - ?3 AND date <= ?2 AND driver_number = ?1`;
+WHERE date > ?1 AND date <= ?2 AND driver_number = ?3
+ORDER BY date`;
 
 /** The window in seconds, from the latest lap time: whole seconds, within `WINDOW`. */
 export function windowSeconds(rows: ReadonlyArray<Record<string, unknown>>): number {
@@ -374,7 +375,8 @@ function SpeedRibbon({ props }: { props: { driver: number } }) {
   const playhead = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.playheadMs : null));
   const lapView = useSql(LAP_SQL, [driver]);
   const seconds = windowSeconds(lapView.state === 'ready' ? lapView.rows : []);
-  const view = useSql(SQL, [driver, playhead ?? NO_PLAYHEAD, seconds * 1000]);
+  const to = playhead ?? NO_PLAYHEAD;
+  const view = useSqlWindow(SQL, [driver], { from: to - seconds * 1000, to });
   const styles = useDriverStyles();
   const circuit = useLive((s) => s.circuit);
   const model = useMemo(() => {

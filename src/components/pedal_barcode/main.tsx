@@ -1,7 +1,7 @@
 /** One car's throttle and brake, lap over lap: a row per lap, from the line, with the turns marked. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, Driver, useLive, useSql, type Circuit } from 'omfv';
+import { defineComponent, Driver, useLive, useSql, useSqlWindow, type Circuit } from 'omfv';
 import {
   ChartCanvas,
   ChartFrame,
@@ -12,6 +12,7 @@ import {
   neutralOf,
   num,
   outlineLength,
+  cachedProjector,
   projector,
   styleOf,
   text,
@@ -53,9 +54,13 @@ export const LAPS_SQL = `SELECT ${LAP_COLUMNS} FROM lap_summary WHERE driver_num
 export const PAST_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date >= ?2 AND date < ?3 AND driver_number = ?1
 UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date < ?3 AND driver_number = ?1`;
 
-/** The lap in progress, from its start to the playhead (`?3`): a row is never revealed before its `date`. */
-export const NOW_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1
-UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date >= ?2 AND date <= ?3 AND driver_number = ?1`;
+/**
+ * The lap in progress, read by `useSqlWindow`: rows after `?1` up to `?2`, the playhead, for car `?3`. A row is
+ * never revealed before its `date`, so the playhead is the upper bound.
+ */
+export const NOW_SQL = `SELECT date, throttle, brake, NULL AS x, NULL AS y FROM car_data WHERE date > ?1 AND date <= ?2 AND driver_number = ?3
+UNION ALL SELECT date, NULL, NULL, x, y FROM location WHERE date > ?1 AND date <= ?2 AND driver_number = ?3
+ORDER BY date`;
 
 /** Why a lap's time isn't pace: a red flag, a pit stop, a safety car or a virtual one, or a standing start. */
 export type Skip = 'PIT' | Neutral | 'START';
@@ -186,9 +191,9 @@ export function pedalModel(
   rows: ReadonlyArray<Record<string, unknown>>,
   playhead: number,
   circuit: Pick<Circuit, 'outline' | 'corners'>,
+  project: ReturnType<typeof projector> = projector(circuit.outline),
 ): PedalModel {
   const length = outlineLength(circuit.outline);
-  const project = projector(circuit.outline);
   const samples = rows
     .map((r) => ({ date: num(r.date), throttle: num(r.throttle), brake: num(r.brake) }))
     .filter((s): s is { date: number; throttle: number | null; brake: number | null } => s.date !== null && (s.throttle !== null || s.brake !== null))
@@ -333,6 +338,7 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
 
 const NO_ROWS: Array<Record<string, unknown>> = [];
 const NO_PLAYHEAD = 0;
+const NO_RANGE = { from: 0, to: 0 };
 
 function PedalBarcode({ props }: { props: { driver: number } }) {
   const lapsView = useSql(LAPS_SQL, [props.driver]);
@@ -341,13 +347,16 @@ function PedalBarcode({ props }: { props: { driver: number } }) {
   const current = laps.at(-1);
   // Keyed on the laps, so this only runs again when a lap is completed.
   const pastView = useSql(PAST_SQL, pastParams(driver, laps));
-  const nowView = useSql(NOW_SQL, driver !== null && current ? [driver, current.start, playhead] : [0, 0, -1]);
+  // Dates are whole milliseconds, so after a millisecond before the lap's start is from its start on.
+  const nowView = useSqlWindow(NOW_SQL, [driver ?? 0], driver !== null && current ? { from: current.start - 1, to: playhead } : NO_RANGE);
   const styles = useDriverStyles();
   const circuit = useLive((s) => s.circuit);
+  // Every position of the laps shown is placed on the outline on every redraw: remembered, the laps done are placed once.
+  const project = useMemo(() => (circuit.state === 'ready' ? cachedProjector(circuit.outline) : null), [circuit]);
   const model = useMemo(() => {
-    if (driver === null || pastView.state !== 'ready' || nowView.state !== 'ready' || circuit.state !== 'ready') return null;
-    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit), style: styleOf(styles, driver) };
-  }, [driver, laps, pastView, nowView, playhead, circuit, styles]);
+    if (driver === null || pastView.state !== 'ready' || nowView.state !== 'ready' || circuit.state !== 'ready' || !project) return null;
+    return { ...pedalModel(laps, [...pastView.rows, ...nowView.rows], playhead, circuit, project), style: styleOf(styles, driver) };
+  }, [driver, laps, pastView, nowView, playhead, circuit, project, styles]);
   const waiting = lapsView.state === 'ready' && laps.length === 0 ? 'Waiting for a lap' : null;
   return (
     <ChartFrame needs={NEEDS} waits={[circuitMessage(circuit), waiting]} views={[lapsView, pastView, nowView]}>

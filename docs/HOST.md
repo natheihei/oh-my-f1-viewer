@@ -14,7 +14,7 @@ There are three kinds of things:
 | Kind | How | Changes anything? |
 | --- | --- | --- |
 | Live state | `useLive(select)`, `read()` | No |
-| Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.health.errors`, `host.data.sql`, `useSql` | No |
+| Queries | `host.catalog.*`, `host.session.feeds`, `host.health.settled`, `host.health.errors`, `host.data.sql`, `useSql`, `useSqlWindow` | No |
 | Writes | `host.session.*`, `host.playback.*`, `host.audio.*`, `host.layout.*`, `host.suggestions.*`, `host.build.*`, `host.health.attach`, `host.health.detach`, `host.health.takeAttached`, `host.components.*`, `host.backgrounds.*`, `host.appearance.*`, `host.catalog.loadIndex` | Yes |
 
 The host has no gates. Nothing checks who is calling or whether they should, so `host.playback.seek` goes anywhere, forward
@@ -128,6 +128,13 @@ Queries read things that aren't part of the live state. They return promises, ex
 `host.data.sql` runs one query. `useSql(sql, params)` runs it again whenever `sessionData.revision` changes, about once a second
 while playing, and whenever `params` change: a query passed `playheadMs` runs ten times a second. It returns `{ state: 'loading' }`, `{ state: 'failed', reason }` or `{ state: 'ready', ...rows }`. When a run
 returns the same rows as the last, it keeps returning the previous object, so a chart can redraw only when its data changes.
+
+`useSqlWindow(sql, params, { from, to })` is for a window of dates that moves with the playhead, such as a car's last lap of
+telemetry. `?1` is `from` and `?2` is `to`, and `params` follow from `?3`. The query reads rows dated after `?1` up to `?2`, with a
+`date` column, in date order. It reads the whole window on every revision and whenever the query or `params` change, and
+otherwise only the rows after its last read, dropping those dated `from` or before. A playhead that goes back, or a window that
+starts earlier, reads the whole window again. With `to` the playhead, it never reads past the frame. On a 90 second window ten
+times a second, it reads a sample or two instead of 340 rows.
 
 `useSql(sql, params, { asOf: 'session' })` reads the whole session, for a component that needs the future, such as a control that
 jumps to the next lap. It asks the viewer nothing. A component that should warn them declares `looksAhead: true` in `defineComponent`:
