@@ -85,8 +85,8 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   round the main feed make a grid of 4 by 4 cells rather than a pile. No tile gets less than 3 cells either way, the least a rail
   or band may be. (2026-11-18. Before, the rail had at most two columns and the band two rows, so 22 onboards and 9 charts left
   tiles one row high and 14 onboards on the same cells.)
-- **A tile that doesn't fit is refused.** When there is no gap for it and re-tiling can't give every tile 3 cells either way, the
-  tile isn't added and nothing moves: about 53 tiles in all, the main feed included. A click on its suggestion leaves the card in
+- **A tile that doesn't fit is refused.** When re-tiling can't give every tile 3 cells either way, and in a hand-arranged layout
+  there is no gap for it either, the tile isn't added and nothing moves: about 53 tiles in all, the main feed included. A click on its suggestion leaves the card in
   the strip and puts the reason in the palette, and `host.layout.add` fails with the same reason, which the agent passes on. The
   viewer closes a tile to make room. This holds in a hand-arranged layout too, and a drop never splits a tile into halves, or
   fills a gap, under 3 cells. A plain grid of equal cells is kept only for a grid that shrank under tiles already there.
@@ -94,8 +94,10 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Then the main tile is as large as it can be, shapes are as asked, and the grid is as full as it can be,** in that order of weight.
 - **A tile isn't stretched past what it can use,** so a capped one, like the timing tower, leaves room empty. It isn't given to a
   neighbour that would then be the wrong shape.
-- **Adding a tile moves nothing if a gap fits it.** A new tile goes into an empty gap that meets its least size, closest to its shape.
-  Everything is arranged again only when there is no such gap, or when a tile is removed.
+- **Until the viewer arranges tiles by hand, adding a tile re-tiles the grid,** as `/auto-layout` does, so the new tile takes its place
+  among the others as if the layout had been built with it. Removing a tile does the same. Once the viewer has moved, resized,
+  swapped or dropped a tile, a new one goes into the biggest gap instead, and the grid is re-tiled only when that gap is too small.
+  (2026-11-18. Before, an auto layout put a new tile into a gap that fit it, so nothing on screen moved.)
 - **A hand-arranged layout is left alone,** and dragging a tile below its least size is allowed. The viewer's choice wins.
 - **A dropped suggestion takes what its content uses of the room there,** keeping the top-left corner, as a tile added by
   auto-layout does. A gap chart dropped on half a wide tile stays at 640 by 340 rather than stretching across it, and the rest is
