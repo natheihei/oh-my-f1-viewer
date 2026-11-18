@@ -1,7 +1,7 @@
 /**
  * The tables behind the session database. Each stores `visible_from`: the moment the feed revealed
  * that row, on the same clock as the playhead. The row's own `date` can't serve, since a message
- * often reports something earlier than when it was sent.
+ * often reports something earlier than when it was sent. Telemetry is the exception: see `shownAtDate`.
  *
  * Two kinds of table:
  * - Events never change once sent, so they hold one row per thing.
@@ -40,10 +40,11 @@ export function createTableSql(table: TableDefinition): string {
 
 /**
  * Rows of one session as of the playhead: for a versioned table, the newest version of each row that
- * the playhead has reached. `session` and `playhead` are SQL expressions.
+ * the playhead has reached. Telemetry (`shownAtDate`) goes by its own `date` instead of when it was sent.
+ * `session` and `playhead` are SQL expressions.
  */
 export function asOfSql(table: TableDefinition, session: string, playhead: string): string {
-  const where = `session_key = ${session} AND visible_from <= ${playhead}`;
+  const where = `session_key = ${session} AND ${table.shownAtDate ? 'date' : 'visible_from'} <= ${playhead}`;
   if (!table.versioned) return `SELECT * FROM main.t_${table.name} WHERE ${where}`;
   // A table with no key holds one row per session.
   if (!table.key.length) return `SELECT * FROM main.t_${table.name} WHERE ${where} ORDER BY visible_from DESC LIMIT 1`;

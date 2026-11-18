@@ -12,6 +12,11 @@ import { openSessionData, type SessionDataHandle } from './sessionData';
 import { normalizeVolume, toggledVolume } from './volume';
 
 const TICK_MS = 200;
+/**
+ * Session data follows the video this often, apart from the sync tick: telemetry comes about every 260ms, and
+ * a 200ms playhead would play its samples out in uneven steps of 200 and 400ms.
+ */
+const PLAYHEAD_MS = 100;
 /** Spacing between seeks, so all streams don't flush their buffers at the same instant. */
 const SEEK_STAGGER_MS = 60;
 /**
@@ -120,6 +125,7 @@ class SessionRuntime {
   private readonly letGo = new Map<string, { hold: Hold; timer: ReturnType<typeof setTimeout> }>();
   private seq = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private playheadTimer: ReturnType<typeof setInterval> | null = null;
   private referenceId: string | null = null;
   private wantPlaying = true;
   private virtualTime = 0;
@@ -136,6 +142,7 @@ class SessionRuntime {
   ) {
     this.live = session.status === 'live';
     this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.playheadTimer = setInterval(() => this.followPlayhead(), PLAYHEAD_MS);
     this.sessionData = openSessionData(session, this.live);
   }
 
@@ -358,6 +365,12 @@ class SessionRuntime {
     if (end > 0) this.seek(end - LIVE_EDGE_OFFSET_SEC);
   }
 
+  /** Between sync ticks, moves session data's playhead to the reference stream's frame. The tick does it when there's none. */
+  private followPlayhead(): void {
+    const ref = this.referenceId ? this.handles.get(this.referenceId) : undefined;
+    if (ref?.hasMedia) this.sessionData?.update(ref.video.currentTime, ref.wallClockMs());
+  }
+
   private tick(): void {
     const entries = [...this.handles.values()].map((h) => ({
       id: h.id,
@@ -425,7 +438,9 @@ class SessionRuntime {
 
   destroy(): void {
     if (this.timer != null) clearInterval(this.timer);
+    if (this.playheadTimer != null) clearInterval(this.playheadTimer);
     this.timer = null;
+    this.playheadTimer = null;
     this.sessionData?.destroy();
     this.sessionData = null;
     for (const { timer } of this.letGo.values()) clearTimeout(timer);

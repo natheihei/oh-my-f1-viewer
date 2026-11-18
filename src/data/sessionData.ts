@@ -199,8 +199,14 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       videoWallClockMs = wallClockMs;
       const at = playheadOf(live, map, timeSec, wallClockMs);
       playhead = at === 'everything' ? EVERYTHING_VISIBLE : (at ?? NOTHING_VISIBLE);
-      shownPlayhead = typeof at === 'number' ? at : null;
+      const shown = typeof at === 'number' ? at : null;
+      const moved = shown !== shownPlayhead;
+      shownPlayhead = shown;
+      // A new second reads the objects again and publishes a revision. In between, only the playhead is
+      // published, ten times a second: telemetry shows each sample at its own date, about four a second, and
+      // charts that pass the playhead to their query read again as it moves. Others still read once a second.
       if (ready && Math.floor(playhead / 1000) !== readSecond) void read();
+      else if (moved) publish();
     },
     videoTimeOf(dateMs) {
       return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs);

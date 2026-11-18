@@ -66,8 +66,12 @@ its length, and a position projected onto it as distance along the lap.
   index range and a driver filter alone is a scan. Pass `sessionData.playheadMs` as a parameter and use `date > ? - window AND date <= ?`:
   a row is never revealed before its `date`, and without the upper bound the range runs on through every row after the playhead (13ms
   instead of 0.3ms at lap 20).
-- **Re-query only when the answer can change.** `useSql` runs again on every revision, about once a second, so parameters tied to the
-  playhead give a new query each time. That's right for the map and the live telemetry, which move every second. `pedal_barcode` keys its
+- **Telemetry goes by its own `date`.** The feed sends it in a batch about once a second, each holding the last second's four samples, so
+  gated on when it was sent the charts jumped once a second. `car_data` and `location` are `shownAtDate` in `shared/sessionTables.ts`:
+  each sample shows once the playhead reaches its `date`, so they play out one by one, about every 260ms, in step with the picture.
+- **Re-query only when the answer can change.** `useSql` runs again on every revision, about once a second, and whenever its parameters
+  change. `playheadMs` moves every 100ms without a revision (`PLAYHEAD_MS` in `session.ts`, apart from the 200ms sync tick), so a query
+  passed it runs ten times a second. That's right for the map and the live telemetry, which move with every sample. `pedal_barcode` keys its
   completed laps on their starts, so those parameters only change when a lap is completed.
 
 To add one: make its folder with a `main.tsx`, keep the rows-to-model function pure and test it, and list the component in
