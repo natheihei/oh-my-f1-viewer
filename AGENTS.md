@@ -6,6 +6,17 @@ session and suggests tiles: video feeds and charts. The agent can also build mod
 It was called f1a until 2026-11-16. Use OMFV or oh-my-f1-viewer in what people read and `omfv` in code. `f1a` is left only where it
 names the old profile, `~/.config/f1a`, or reads what the old name wrote. The logo and icons are in `icons/`.
 
+## Build targets
+
+The repo builds two things that share no code. Each has its own `package.json`, and you run npm in its own folder.
+
+| Target | Where | Stack | Build |
+| --- | --- | --- | --- |
+| OMFV electron app | Repo root: `electron/` (main process), `src/` (renderer), `shared/` (imported by both) | Electron, React, Vite | `npm run build`. See [README.md](README.md) |
+| OMFV product site | `site/` | Astro (static), Tailwind CSS v4 | `npm run build` in `site/`, which writes `site/dist/`. See [site/README.md](site/README.md) |
+
+Don't import across them. The site keeps its own copies of the logo from `icons/`.
+
 ## Docs
 
 Read the one that covers what you're changing. [README.md](README.md) has how to run the app and the check scripts.
