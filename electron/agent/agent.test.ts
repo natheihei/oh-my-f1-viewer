@@ -271,6 +271,21 @@ describe('a turn', () => {
     expect(said()).toBe('Looking. Found it.');
   });
 
+  // A conversation's watch starts with only its newest 50 entries, and the end of a turn reads the newest 100.
+  it('passes on only its own reply in a long conversation', async () => {
+    const { agent, script } = setup();
+    answerTools(agent);
+    const turns = 30;
+    script(
+      ...Array.from({ length: turns }, (_, i) => [fauxAssistantMessage([fauxToolCall('act', { n: i })]), fauxAssistantMessage(`Reply ${i}.`)]).flat(),
+      fauxAssistantMessage('The newest.'),
+    );
+    for (let i = 0; i < turns; i += 1) await agent.send(`message ${i}`, 'state', [TOOL]);
+    host.events.length = 0;
+    await agent.send('one more', 'state', [TOOL]);
+    expect(said()).toBe('The newest.');
+  });
+
   it('does not count a failed tool as acting', async () => {
     const { agent, script } = setup();
     answerTools(agent, false);
