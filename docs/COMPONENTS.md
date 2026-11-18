@@ -81,11 +81,16 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **Least sizes come before the main tile's size.** The main tile gets smaller before any other tile goes below its least size, so
   adding charts shrinks the video. When there are too many for that, the shortfall is shared, and the host's "more" mark covers a
   tile that is cut. (2026-11-12)
-- **However many tiles there are, none overlaps and none is a sliver.** The rail and band take as many columns and rows as suit
-  their tiles, so 31 tiles round the main feed make a grid of 4 by 4 cells rather than a pile. No tile gets less than 3 cells
-  either way, the least a rail or band may be. When even that leaves some without room, everything goes in a plain grid of equal
-  cells. (2026-11-18. Before, the rail had at most two columns and the band two rows, so 22 onboards and 9 charts left tiles one
-  row high and 14 onboards on the same cells.)
+- **No tile overlaps another or is a sliver.** The rail and band take as many columns and rows as suit their tiles, so 31 tiles
+  round the main feed make a grid of 4 by 4 cells rather than a pile. No tile gets less than 3 cells either way, the least a rail
+  or band may be. (2026-11-18. Before, the rail had at most two columns and the band two rows, so 22 onboards and 9 charts left
+  tiles one row high and 14 onboards on the same cells.)
+- **A tile that doesn't fit is refused.** When there is no gap for it and re-tiling can't give every tile 3 cells either way, the
+  tile isn't added and nothing moves: about 53 tiles in all, the main feed included. A click on its suggestion leaves the card in
+  the strip and puts the reason in the palette, and `host.layout.add` fails with the same reason, which the agent passes on. The
+  viewer closes a tile to make room. This holds in a hand-arranged layout too, and a drop never splits a tile into halves, or
+  fills a gap, under 3 cells. A plain grid of equal cells is kept only for a grid that shrank under tiles already there.
+  (2026-11-18)
 - **Then the main tile is as large as it can be, shapes are as asked, and the grid is as full as it can be,** in that order of weight.
 - **A tile isn't stretched past what it can use,** so a capped one, like the timing tower, leaves room empty. It isn't given to a
   neighbour that would then be the wrong shape.

@@ -48,9 +48,9 @@ const MAIN_HEIGHTS = [10, 12, 14, 16, 18];
 const LEAST_STRIP = 3;
 /**
  * No tile gets less room than this many cells either way: a tile one row high is only its title bar.
- * An arrangement that would give one less isn't tried.
+ * An arrangement that would give one less isn't tried, and a tile that would leave none is refused.
  */
-const LEAST_ROOM = LEAST_STRIP;
+export const LEAST_ROOM = LEAST_STRIP;
 
 /** How much each fault costs. A tile below its least size outweighs everything else. */
 const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3 };
@@ -188,7 +188,9 @@ const mostLines = (items: number, thickness: number) => Math.max(1, Math.min(ite
 
 /**
  * Every slot in a plain grid of near-equal cells, in the order given, each fitted to its cell: what
- * is left when no rail or band gives every tile its `LEAST_ROOM`. Nothing overlaps.
+ * `solve` falls back to when no rail or band gives every tile its `LEAST_ROOM`. Adding a tile is
+ * refused before that, so this is only for a grid that shrank under tiles already there. Nothing
+ * overlaps until there are more tiles than cells.
  */
 function evenGrid(slots: Slot[], { columns, rows }: Grid): Box[] {
   const across = Math.min(columns, Math.ceil(Math.sqrt(slots.length)));
@@ -241,9 +243,15 @@ const RAIL_WIDTHS = [4, 5, 6, 7, 8, 10, 12];
 
 /**
  * A box for every slot, in the order given. `main` is the slot that has the main place, top left and as
- * large as the others allow. Null when none has: the slots then share the grid, none favoured.
+ * large as the others allow. Null when none has: the slots then share the grid, none favoured. When no
+ * arrangement gives every slot its `LEAST_ROOM`, they go in a plain grid: see `arrange` to tell.
  */
 export function solve(slots: Slot[], grid: Grid, main: number | null = null): Box[] {
+  return arrange(slots, grid, main) ?? evenGrid(slots, grid);
+}
+
+/** The boxes `solve` gives, or null when no arrangement gives every slot its `LEAST_ROOM`. */
+export function arrange(slots: Slot[], grid: Grid, main: number | null = null): Box[] | null {
   const { columns, rows } = grid;
   if (slots.length === 0) return [];
   const whole = (i: number, w: number, h: number): Box => ({ x: 0, y: 0, ...slots[i].fit({ w, h }) });
@@ -346,6 +354,6 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
     }
   }
   const found = best as Map<number, Box> | null;
-  if (!found) return evenGrid(slots, grid);
+  if (!found) return null;
   return slots.map((_, i) => found.get(i)!);
 }
