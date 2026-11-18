@@ -205,16 +205,6 @@ function freeRects(nodes: Rect[], min: [number, number], columns: number, rows: 
   return out;
 }
 
-/** True when no side of `r` can move out a cell into empty space. */
-function maximal(r: Rect, occupied: boolean[][], columns: number, rows: number): boolean {
-  const free = (x0: number, y0: number, w: number, h: number) => {
-    if (x0 < 0 || y0 < 0 || x0 + w > columns || y0 + h > rows) return false;
-    for (let y = y0; y < y0 + h; y += 1) for (let x = x0; x < x0 + w; x += 1) if (occupied[y][x]) return false;
-    return true;
-  };
-  return !free(r.x - 1, r.y, 1, r.h) && !free(r.x + r.w, r.y, 1, r.h) && !free(r.x, r.y - 1, r.w, 1) && !free(r.x, r.y + r.h, r.w, 1);
-}
-
 /**
  * The biggest empty rectangle on the grid that is at least `min` cells. Empty when there is none.
  */
@@ -222,32 +212,14 @@ export function largestFreeRect(nodes: Rect[], min: [number, number] = [1, 1], c
   return freeRects(nodes, min, columns, rows).reduce((best, r) => (area(r) > area(best) ? r : best), ZERO);
 }
 
-/**
- * The gap for a tile of this shape: of the gaps at least `min` cells that can't grow any further, the
- * one closest to `aspect` as it looks on screen, then the biggest. Empty when there is none.
- */
-export function gapFor(nodes: Rect[], min: [number, number], aspect: number, cell: CellPx, columns = GRID_COLUMNS, rows = GRID_ROWS): Rect {
-  const occupied = occupancy(nodes, columns, rows);
-  const [cw, ch] = cell.w > 0 && cell.h > 0 ? [cell.w, cell.h] : [1, 1];
-  const off = (r: Rect) => Math.abs(Math.log((r.w * cw) / Math.max(1, r.h * ch - (cell.h > 0 ? TITLE_BAR_PX : 0)) / aspect));
-  let best: Rect = ZERO;
-  for (const r of freeRects(nodes, min, columns, rows)) {
-    if (!maximal(r, occupied, columns, rows)) continue;
-    if (area(best) === 0 || off(r) < off(best) - 1e-9 || (Math.abs(off(r) - off(best)) <= 1e-9 && area(r) > area(best))) best = r;
-  }
-  return best;
-}
-
 /** A new tile needs at least this much room before a manual layout gets re-tiled to make space. */
 const MIN_FREE_AREA = 36;
 
 /** The least room any tile is given, in cells either way, as `[columns, rows]`. */
 const LEAST: [number, number] = [LEAST_ROOM, LEAST_ROOM];
-/** A least size in cells, raised to `LEAST` where it is under it. */
-const noLessThanLeast = ([w, h]: [number, number]): [number, number] => [Math.max(w, LEAST_ROOM), Math.max(h, LEAST_ROOM)];
 
 /**
- * Adding a tile was refused: there is no gap for it, and re-tiling can't give every tile, the new one
+ * Adding a tile was refused: re-tiling can't give every tile, the new one
  * included, at least `LEAST_ROOM` cells either way. Nothing on screen changed.
  */
 export class NoRoomError extends Error {
@@ -259,29 +231,22 @@ export class NoRoomError extends Error {
 }
 
 /**
- * After a structural change. An auto layout puts a tile with a size hint into the gap closest to its
- * shape that meets its least size, so nothing on screen moves, and re-tiles when no gap does. A hand-arranged
- * layout uses its biggest gap for anything, and re-tiles only when that is too small. A gap is never
- * under `LEAST_ROOM` either way. Throws `NoRoomError` when re-tiling can't give every tile that.
+ * After a structural change. An auto layout is re-tiled, so a new tile takes its place among the
+ * others as if the layout had been built with it. A hand-arranged layout uses its biggest gap for
+ * anything, and re-tiles only when that is too small. A gap is never under `LEAST_ROOM` either way.
+ * Throws `NoRoomError` when re-tiling can't give every tile that.
  */
 function place(state: LayoutState, added: Tile): LayoutState {
-  const others = state.tiles.filter((t) => t !== added);
-  const into = (free: Rect) => ({
-    ...state,
-    tiles: state.tiles.map((t) => (t === added ? fit({ ...t, ...free }, state.cell) : t)),
-  });
   const retiled = () => {
     const boxes = arrange(...problem(state));
     if (!boxes) throw new NoRoomError(added.component);
     return laidOut(state, boxes);
   };
-  if (!state.manual) {
-    const size = added.component.size;
-    const free = size ? gapFor(others, noLessThanLeast(minCells(size, state.cell)), size.aspect, state.cell) : ZERO;
-    return area(free) > 0 ? into(free) : retiled();
-  }
-  const free = largestFreeRect(others, LEAST);
-  return area(free) < MIN_FREE_AREA ? retiled() : into(free);
+  if (!state.manual) return retiled();
+  const free = largestFreeRect(state.tiles.filter((t) => t !== added), LEAST);
+  return area(free) < MIN_FREE_AREA
+    ? retiled()
+    : { ...state, tiles: state.tiles.map((t) => (t === added ? fit({ ...t, ...free }, state.cell) : t)) };
 }
 
 export function allTiles(state: Pick<LayoutState, 'tiles'>): Tile[] {

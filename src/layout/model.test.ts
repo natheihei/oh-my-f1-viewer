@@ -277,24 +277,18 @@ describe('fitting content', () => {
     expect(r.main.w + r.tower.w).toBe(GRID_COLUMNS);
   });
 
-  it('puts a new tile into the gap closest to its shape, and moves nothing else', () => {
+  it('re-tiles an auto layout when a tile is added, even when a gap would fit it', () => {
     const card = addTile(withTower, chart('card', 1.6, 300, 150));
-    expect(rects(card)).toEqual({ ...rects(withTower), card: { x: 18, y: 16, w: 6, h: 8 } });
+    expect(rects(card)).toEqual(rects(autoLayout(card)));
     expect(card.manual).toBe(false);
+    assertNoOverlap(card.tiles);
   });
 
-  it('re-tiles when no gap is big enough', () => {
+  it('gives a new tile at least its least size', () => {
     const next = addTile(withTower, chart('big', 16 / 9, 600, 300));
-    const r = rects(next);
-    expect(r.main).not.toEqual(rects(withTower).main);
     const [w, h] = minCells(next.tiles[2].component.size, CELL);
+    const r = rects(next);
     expect(r.big.w >= w && r.big.h >= h).toBe(true);
-    assertNoOverlap(next.tiles);
-  });
-
-  it('never puts a video into a gap', () => {
-    const next = addTile(withTower, video('onboard'));
-    expect(rects(next)).toEqual(rects(autoLayout(next)));
     assertNoOverlap(next.tiles);
   });
 
