@@ -143,6 +143,18 @@ export const TABLES: TableDefinition[] = [
     versioned: true,
   },
   {
+    name: 'pit_lane',
+    dataset: 'timing',
+    key: ['date', 'driver_number'],
+    columns: { in_pit: 'INTEGER' },
+    versioned: false,
+    booleans: ['in_pit'],
+    about:
+      'One row each time a car enters the pit lane (in_pit true) or leaves it (false), shown as the feed said so. A car is in the pit lane now when its latest row is true. ' +
+      'Its first row is where it was when the feed first said, such as in the garage. Not every trip is a stop: cars drive through before a race starts, and wait there under a red flag. ' +
+      'pit has the stop itself, once the car is out.',
+  },
+  {
     name: 'stints',
     dataset: 'timing',
     key: ['driver_number', 'stint_number'],

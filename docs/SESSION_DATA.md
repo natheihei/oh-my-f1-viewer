@@ -14,7 +14,7 @@ Everything about a session from 2023 onward, in a local SQLite database, read th
 | Drivers | `useLive((s) => s.sessionData)` | When a session opens |
 | Lap count | `useLive((s) => s.sessionData.lapCount)` | When a session opens |
 | Circuit: outline, corners, pit loss | `useLive((s) => s.circuit)` | Each time a session opens, from MultiViewer. The last copy stays readable, with a `reason`, if that fails |
-| `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured. `drivers` is also in `sessionData` |
+| `car_data`, `championship_drivers`, `championship_teams`, `drivers`, `intervals`, `lap_summary`, `laps`, `location`, `overtakes`, `pit`, `pit_lane`, `position`, `race_control`, `session_result`, `starting_grid`, `stints`, `track_status`, `weather` | `host.data.sql({ sql, params })`, `useSql(sql, params)` | When a session opens. A live session gets whatever is captured. `drivers` is also in `sessionData` |
 
 Names match OpenF1, except that all times are UTC milliseconds, and two tables OpenF1 doesn't have: `track_status` is the first that
 doesn't follow its naming, and `lap_summary` is our own (see below). `laps` also has one column of ours, `is_out`. Team radio is left out, on purpose. The calendar comes from F1's season indexes plus F1 TV's
@@ -41,10 +41,16 @@ unit), so it's in tenths of a metre too: the last corner, at 52,753, is 5,275 m 
 start their laps there, give or take a few metres. The outline runs anticlockwise with y up, as Austin does, so the y axis isn't flipped.
 `rotation` is 0 there, so which way it turns is untested: the charts turn anticlockwise with y up, as FastF1 does with the same field.
 
-## Track status, lap count and `lap_summary`
+## Track status, `pit_lane`, lap count and `lap_summary`
 
 - **`track_status`** (`date`, `status`) comes from F1's `TrackStatus` feed, one row per change. `status` keeps F1's own words: `AllClear`,
   `Yellow`, `SCDeployed`, `VSCDeployed`, `VSCEnding` and `Red`. `date` is when the message was sent, as the feed gives no other time.
+- **`pit_lane`** (`driver_number`, `date`, `in_pit`) comes from `TimingData`'s `InPit`, one row each time a car enters the pit lane
+  (`true`) or leaves it (`false`). F1 repeats the flag, so only changes are kept. A car is in the pit lane now when its latest row is true,
+  which `pit` can't say: a `pit` row carries the time in the lane, so it's only sent once the car is out. A car's first row is where it stood
+  when the feed first said, which before practice is often the garage. Not every trip is a stop: before a race's start cars go in and out
+  on their laps to the grid, and under a red flag every car waits in the pit lane. In a cached 2025 race with a red flag on lap 34, it gave 20
+  stops of 22 to 30 s, every car in the lane for about 20 minutes from lap 34, and 63 trips before the start.
 - **`sessionData.lapCount`** comes from `LapCount`, stored as versions. `total` is the scheduled distance, in the feed's first message, so it
   isn't a spoiler. A shortened race shows its new distance only from when the feed said so. Practice and qualifying have no `LapCount`.
 - **`lap_summary`** is a view over the other views, not a table, so it only knows what they show at the playhead. One row per driver per lap
@@ -121,7 +127,7 @@ Each dataset has its own mark in `t_ingest`, so a failed scrape can't force the 
 | `telemetry` | `CarData.z`, `Position.z` | The same as timing |
 
 A complete dataset is skipped when the session opens again. Bump `INGEST_VERSION` when a processor or table changes, and each session is ingested again the next time it opens.
-It's 4 since `laps.is_out` was added. Changing a table's columns also takes a bump of `SCHEMA_VERSION` in `store.ts`, which drops the stored tables, since they're a cache.
+It's 5 since `pit_lane` was added. Changing a table's columns also takes a bump of `SCHEMA_VERSION` in `store.ts`, which drops the stored tables, since they're a cache.
 
 `ArchiveStatus` can't be the test: it reads `Generating` in files that have been final for years. Neither can the feed alone, since some archives never report the end.
 
@@ -174,7 +180,7 @@ history. There's no lap-by-lap history from before, as a snapshot doesn't hold i
 
 | Table | Result, session 11396 |
 | --- | --- |
-| `laps`, `stints`, `pit`, `position`, `race_control`, `weather`, `overtakes`, `intervals`, `drivers`, championship, `session_result` | Same rows and values (`intervals`: 24,227 rows) |
+| `laps`, `stints`, `pit`, `pit_lane`, `position`, `race_control`, `weather`, `overtakes`, `intervals`, `drivers`, championship, `session_result` | Same rows and values (`intervals`: 24,227 rows) |
 | `laps.is_pit_out_lap` | The same 32 out laps. It wasn't compared before, and every car's lap 1 was wrongly marked until `INGEST_VERSION` 3 |
 | `lap_summary` | For 5 drivers, every lap's end, position, gaps and pit-in flag agree with a recount from the raw tables. Each completed lap has positions 1 to 22 once. The last lap's order matches the published result for all 19 classified cars |
 | `car_data`, `location` | Same rows and values, in a 1-minute sample for one car |
@@ -220,4 +226,4 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 - **Odd values when stopped.** `brake` is 0 or 100, and 104 (nearly always with `throttle` 104) 47,595 times in session 11396, 46,565 of
   them at 0 km/h. Charts cap both at 100. `location` is exactly (0, 0) before a car first leaves the garage. A retired car keeps
   reporting where it stopped, or the garage, so `track_map` leaves out cars marked `is_out`.
-- **Dropped with `useTiming`.** Track status, lap count, the session clock, `inPit`, `pitOut`, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them.
+- **Dropped with `useTiming`.** Track status, lap count, the session clock, `bestLap`, and the fastest-sector and new-tyre flags aren't exposed anywhere now. Nothing used them. `inPit` and `pitOut` came back as `pit_lane` and `laps.is_pit_out_lap`.

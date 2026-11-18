@@ -16,7 +16,7 @@ import type { DerivedTable, TableDefinition } from '../../shared/sessionTables';
 export { rowColumns, sqlColumns, TABLE_BY_NAME, TABLES, visibleColumns, type RowTable, type TableDefinition } from '../../shared/sessionTables';
 
 /** Bump when a processor or table changes: sessions are then ingested again the next time they open. */
-export const INGEST_VERSION = 4;
+export const INGEST_VERSION = 5;
 
 /** Column types for key columns. Dates and numbers are integers; the rest are text. */
 function keyType(column: string): string {
