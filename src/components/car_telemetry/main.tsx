@@ -1,7 +1,7 @@
 /** One car's speed, gear, revs, throttle and brake as of the playhead, with its speed over the last lap. */
 import { useMemo } from 'react';
 import Type from 'typebox';
-import { defineComponent, Driver, useLive, useSql, type ChaseAid } from 'omfv';
+import { defineComponent, Driver, useLive, useSql, useSqlWindow, type ChaseAid } from 'omfv';
 import {
   ChartCanvas,
   ChartFrame,
@@ -31,12 +31,12 @@ const BREAK_SECONDS = 2;
 const NO_READING = 104;
 
 /**
- * The car's samples over the trace's window (`?3`, in ms). Bounded both ways by `date`, the second column of
- * the primary key, so it reads an index range of all cars' rows and keeps this one's 300 or so. A row is never
- * revealed before its `date`, so the playhead (`?2`) is the upper bound.
+ * Car `?3`'s samples after `?1` up to `?2`, read by `useSqlWindow` over the trace's window. Bounded both ways by
+ * `date`, the second column of the primary key, so it reads an index range of all cars' rows and keeps this one's.
+ * A row is never revealed before its `date`, so the playhead is the upper bound.
  */
 export const SQL = `SELECT date, speed, rpm, n_gear, throttle, brake, drs FROM car_data
-WHERE date > ?2 - ?3 AND date <= ?2 AND driver_number = ?1 ORDER BY date`;
+WHERE date > ?1 AND date <= ?2 AND driver_number = ?3 ORDER BY date`;
 
 /** The car's latest lap time, which sets the trace's length. */
 export const LAP_SQL = `SELECT lap_duration FROM laps WHERE driver_number = ?1 AND lap_duration IS NOT NULL ORDER BY lap_number DESC LIMIT 1`;
@@ -292,7 +292,8 @@ function CarTelemetry({ props }: { props: { driver: number } }) {
   const aid = useLive((s) => s.spec.chaseAid);
   const lap = useSql(LAP_SQL, [driver]);
   const seconds = lap.state === 'ready' ? traceSeconds(lap.rows) : TRACE_SECONDS;
-  const view = useSql(SQL, [driver, playhead ?? NO_PLAYHEAD, seconds * 1000]);
+  const to = playhead ?? NO_PLAYHEAD;
+  const view = useSqlWindow(SQL, [driver], { from: to - seconds * 1000, to });
   const interval = useSql(INTERVAL_SQL, [driver]);
   const styles = useDriverStyles();
   const model = useMemo(

@@ -73,6 +73,13 @@ its length, and a position projected onto it as distance along the lap.
   change. `playheadMs` moves every 100ms without a revision (`PLAYHEAD_MS` in `session.ts`, apart from the 200ms sync tick), so a query
   passed it runs ten times a second. That's right for the map and the live telemetry, which move with every sample. `pedal_barcode` keys its
   completed laps on their starts, so those parameters only change when a lap is completed.
+- **Read only the new samples.** `car_telemetry`, `speed_ribbon` and `pedal_barcode`'s lap in progress hold up to 700 rows. Read whole
+  ten times a second, they cost 3ms a tick in the database thread and moved 1,400 rows a tick to the renderer. `useSqlWindow` reads
+  the window whole once a revision, then only the rows after its last read, under 1 a tick, and drops what fell out. The map and the
+  backdrop's trail read about 20 rows, so they still use `useSql`.
+- **Don't redo work for rows that didn't change.** `pedal_barcode` placed every position of its six laps on the outline on every
+  redraw, half the renderer's script time. `cachedProjector` in `kit/track.ts` remembers each point's place, so the laps done are
+  placed once.
 
 To add one: make its folder with a `main.tsx`, keep the rows-to-model function pure and test it, and list the component in
 `src/components/registry.ts`. `electron/mods/installed.test.ts` forks every one into a mod and compiles it, which fails if one reaches
