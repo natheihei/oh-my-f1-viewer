@@ -168,6 +168,32 @@ describe('auto-layout', () => {
     assertNoOverlap(many.tiles);
     expect(many.tiles).toHaveLength(11);
   });
+
+  it('spreads a wall of 31 tiles round the main one over more lines, with no overlap and none a sliver', () => {
+    // Twenty-two onboards clicked in one by one, then nine charts, as on a replay with the world feed open.
+    const onboard = (key: string): ComponentSpec => ({ ...video(key), size: { aspect: 16 / 9, min: { width: 320, height: 180 } } });
+    const charts = [
+      { ...chart('tower', 0.78, 330, 376), fit: { width: 396, height: 500 } },
+      chart('strategy', 1.3, 380, 380),
+      chart('deg', 1.3, 380, 400),
+      chart('windows', 1.1, 330, 380),
+      chart('window', 0.9, 330, 400),
+      chart('track', 1.4, 360, 250),
+      chart('telemetry', 2, 300, 150),
+      chart('pedals', 2.4, 300, 150),
+      chart('ribbon', 1.2, 300, 240),
+    ];
+    const onboards = add(opened, ...Array.from({ length: 22 }, (_, i) => onboard(`onboard${i}`)));
+    const wall = add(onboards, ...charts);
+    expect(wall.tiles).toHaveLength(32);
+    for (const s of [onboards, wall]) {
+      assertNoOverlap(s.tiles);
+      for (const t of allTiles(s)) expect(t.w >= 3 && t.h >= 3, `${t.component.key} is ${t.w}x${t.h}`).toBe(true);
+    }
+    // The main tile keeps its place, at the size the others leave it.
+    expect(byKey(wall, 'main')).toMatchObject({ x: 0, y: 0 });
+    expect(area(byKey(wall, 'main'))).toBeGreaterThanOrEqual(64);
+  });
 });
 
 describe('least sizes', () => {

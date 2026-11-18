@@ -3,7 +3,9 @@
  * The rest go in a rail beside it, a band below it, or both, and which goes where follows each tile's
  * shape: tall ones suit the rail, wide ones the band. Every arrangement of that kind is tried, and the
  * one that keeps tiles at their least size, the main tile large, shapes close to what was asked for and
- * the grid full wins. It is small enough to try them all: a few thousand at most.
+ * the grid full wins. It is small enough to try them all: a few thousand at most. The rail and band take
+ * as many columns and rows as suit their tiles, so a wall of tiles still gets a grid, and no arrangement
+ * that would give a tile under `LEAST_ROOM` cells either way, or put two on the same cells, is tried.
  *
  * Pure, and in grid cells. What a tile needs comes in as `Slot`s, so this file knows nothing of components.
  */
@@ -44,6 +46,11 @@ const MAIN_WIDTHS = [8, 10, 12, 14, 16, 18];
 const MAIN_HEIGHTS = [10, 12, 14, 16, 18];
 /** A band or rail thinner than this holds nothing worth showing. */
 const LEAST_STRIP = 3;
+/**
+ * No tile gets less room than this many cells either way: a tile one row high is only its title bar.
+ * An arrangement that would give one less isn't tried.
+ */
+const LEAST_ROOM = LEAST_STRIP;
 
 /** How much each fault costs. A tile below its least size outweighs everything else. */
 const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3 };
@@ -108,12 +115,19 @@ function runs<T>(list: T[], lines: number): T[][] {
 
 const LOTS = 1e6;
 
-/** Stacks slots down a column, each as tall as its shape asks at that width, within what it can use. */
-function stackDown(area: Box, items: number[], slots: Slot[], grid: Grid): Map<number, Box> {
+/** Shares that each give at least `LEAST_ROOM` and together fit in `total`. */
+const roomy = (shares: number[], total: number) => shares.every((v) => v >= LEAST_ROOM) && shares.reduce((a, v) => a + v, 0) <= total;
+
+/**
+ * Stacks slots down a column, each as tall as its shape asks at that width, within what it can use.
+ * Null when the column is too short to give each its `LEAST_ROOM`.
+ */
+function stackDown(area: Box, items: number[], slots: Slot[], grid: Grid): Map<number, Box> | null {
   const { cell, titleBar } = grid;
   const wants = items.map((i) => Math.max(slots[i].min.h, ((area.w * cell.w) / slots[i].aspect + titleBar) / cell.h));
   const most = items.map((i) => slots[i].fit({ w: area.w, h: LOTS }).h);
   const heights = shareWithin(area.h, wants, most);
+  if (area.w < LEAST_ROOM || !roomy(heights, area.h)) return null;
   const out = new Map<number, Box>();
   let y = area.y;
   items.forEach((i, k) => {
@@ -124,12 +138,13 @@ function stackDown(area: Box, items: number[], slots: Slot[], grid: Grid): Map<n
   return out;
 }
 
-/** Lays slots along a row, each as wide as its shape asks at that height, within what it can use. */
-function layAcross(area: Box, items: number[], slots: Slot[], grid: Grid): Map<number, Box> {
+/** Lays slots along a row, each as wide as its shape asks at that height, within what it can use. Null as for `stackDown`. */
+function layAcross(area: Box, items: number[], slots: Slot[], grid: Grid): Map<number, Box> | null {
   const { cell, titleBar } = grid;
   const wants = items.map((i) => Math.max(slots[i].min.w, (Math.max(1, area.h * cell.h - titleBar) * slots[i].aspect) / cell.w));
   const most = items.map((i) => slots[i].fit({ w: LOTS, h: area.h }).w);
   const widths = shareWithin(area.w, wants, most);
+  if (area.h < LEAST_ROOM || !roomy(widths, area.w)) return null;
   const out = new Map<number, Box>();
   let x = area.x;
   items.forEach((i, k) => {
@@ -140,45 +155,77 @@ function layAcross(area: Box, items: number[], slots: Slot[], grid: Grid): Map<n
   return out;
 }
 
-function rail(area: Box, items: number[], columns: number, slots: Slot[], grid: Grid): Map<number, Box> {
+/** Slots in `columns` side by side, each stacked down. Null when a tile wouldn't get its `LEAST_ROOM`. */
+function rail(area: Box, items: number[], columns: number, slots: Slot[], grid: Grid): Map<number, Box> | null {
   const out = new Map<number, Box>();
   const widths = split(area.w, columns);
   let x = area.x;
-  runs(items, columns).forEach((run, k) => {
-    for (const [i, box] of stackDown({ x, y: area.y, w: widths[k], h: area.h }, run, slots, grid)) out.set(i, box);
+  for (const [k, run] of runs(items, columns).entries()) {
+    const boxes = stackDown({ x, y: area.y, w: widths[k], h: area.h }, run, slots, grid);
+    if (!boxes) return null;
+    for (const [i, box] of boxes) out.set(i, box);
     x += widths[k];
-  });
+  }
   return out;
 }
 
-function band(area: Box, items: number[], rows: number, slots: Slot[], grid: Grid): Map<number, Box> {
+/** Slots in `rows` one above the other, each laid across. Null as for `rail`. */
+function band(area: Box, items: number[], rows: number, slots: Slot[], grid: Grid): Map<number, Box> | null {
   const out = new Map<number, Box>();
   const heights = split(area.h, rows);
   let y = area.y;
-  runs(items, rows).forEach((run, k) => {
-    for (const [i, box] of layAcross({ x: area.x, y, w: area.w, h: heights[k] }, run, slots, grid)) out.set(i, box);
+  for (const [k, run] of runs(items, rows).entries()) {
+    const boxes = layAcross({ x: area.x, y, w: area.w, h: heights[k] }, run, slots, grid);
+    if (!boxes) return null;
+    for (const [i, box] of boxes) out.set(i, box);
     y += heights[k];
-  });
+  }
   return out;
+}
+
+/** The most lines a strip of this thickness can be split into, each still `LEAST_ROOM` thick. */
+const mostLines = (items: number, thickness: number) => Math.max(1, Math.min(items, Math.floor(thickness / LEAST_ROOM)));
+
+/**
+ * Every slot in a plain grid of near-equal cells, in the order given, each fitted to its cell: what
+ * is left when no rail or band gives every tile its `LEAST_ROOM`. Nothing overlaps.
+ */
+function evenGrid(slots: Slot[], { columns, rows }: Grid): Box[] {
+  const across = Math.min(columns, Math.ceil(Math.sqrt(slots.length)));
+  const down = Math.min(rows, Math.ceil(slots.length / across));
+  const widths = split(columns, across);
+  const heights = split(rows, down);
+  return slots.map((slot, i) => {
+    const col = i % across;
+    const row = Math.min(down - 1, Math.floor(i / across));
+    const x = widths.slice(0, col).reduce((a, v) => a + v, 0);
+    const y = heights.slice(0, row).reduce((a, v) => a + v, 0);
+    return { x, y, ...slot.fit({ w: widths[col], h: heights[row] }) };
+  });
 }
 
 /** How a tile's box looks on screen, as width over height, without its title bar. */
 const shapeOf = (box: Size, { cell, titleBar }: Grid) => (box.w * cell.w) / Math.max(1, box.h * cell.h - titleBar);
 
-function cost(boxes: Map<number, Box>, main: number | null, slots: Slot[], grid: Grid): number {
+/**
+ * What one tile adds to `cost`: its deficit, its shape and the room it fills. They add up tile by tile,
+ * so a strip's best split into lines can be chosen on its own. `others` is how many tiles aren't the main one.
+ */
+function tileCost(i: number, box: Box, main: number | null, others: number, slots: Slot[], grid: Grid): number {
+  const { min, aspect } = slots[i];
   let deficit = 0;
-  let shape = 0;
-  let used = 0;
-  for (const [i, box] of boxes) {
-    const { min, aspect } = slots[i];
-    if (min.w > 0) deficit += Math.max(0, min.w - box.w) / min.w;
-    if (min.h > 0) deficit += Math.max(0, min.h - box.h) / min.h;
-    if (i !== main) shape += Math.abs(Math.log(shapeOf(box, grid) / aspect));
-    used += box.w * box.h;
-  }
+  if (min.w > 0) deficit += Math.max(0, min.w - box.w) / min.w;
+  if (min.h > 0) deficit += Math.max(0, min.h - box.h) / min.h;
+  const shape = i === main ? 0 : Math.abs(Math.log(shapeOf(box, grid) / aspect));
+  return COST.deficit * deficit + (COST.shape * shape) / others - (COST.empty * box.w * box.h) / (grid.columns * grid.rows);
+}
+
+function cost(boxes: Map<number, Box>, main: number | null, slots: Slot[], grid: Grid): number {
   const all = grid.columns * grid.rows;
   const mainBox = main === null ? null : boxes.get(main)!;
   const others = Math.max(1, boxes.size - (mainBox ? 1 : 0));
+  let tiles = 0;
+  for (const [i, box] of boxes) tiles += tileCost(i, box, main, others, slots, grid);
   const mainArea = mainBox ? mainBox.w * mainBox.h : 0;
   // With no main tile, none of those that can grow is favoured: the largest is kept close to the smallest.
   let uneven = 0;
@@ -186,7 +233,7 @@ function cost(boxes: Map<number, Box>, main: number | null, slots: Slot[], grid:
     const areas = [...boxes].filter(([i]) => !slots[i].capped).map(([, box]) => box.w * box.h);
     if (areas.length > 1) uneven = (Math.max(...areas) - Math.min(...areas)) / all;
   }
-  return COST.deficit * deficit + (COST.shape * shape) / others - (COST.main * mainArea) / all + (COST.empty * (all - used)) / all + COST.uneven * uneven;
+  return tiles - (COST.main * mainArea) / all + COST.empty + COST.uneven * uneven;
 }
 
 /** The widths tried for a rail of tall tiles when there is no main tile. */
@@ -208,6 +255,29 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
 
   let best: Map<number, Box> | null = null;
   let bestCost = Infinity;
+  // With a main tile, a tile's cost depends only on its own box, so each strip is split into however
+  // many lines suits it best on its own: more of them as tiles are added, so none is squeezed to a
+  // sliver. The same strip comes up again and again across main sizes and orders, so each is worked out once.
+  const others = Math.max(1, rest.length);
+  const strips = new Map<string, Map<number, Box> | null>();
+  const bestStrip = (lay: typeof rail, area: Box, items: number[], thickness: number): Map<number, Box> | null => {
+    const key = `${lay === rail ? 'rail' : 'band'} ${area.x},${area.y},${area.w},${area.h} ${items.join(',')}`;
+    if (strips.has(key)) return strips.get(key)!;
+    let found: Map<number, Box> | null = null;
+    let least = Infinity;
+    for (let lines = 1; lines <= mostLines(items.length, thickness); lines += 1) {
+      const boxes = lay(area, items, lines, slots, grid);
+      if (!boxes) continue;
+      let c = 0;
+      for (const [i, box] of boxes) c += tileCost(i, box, main, others, slots, grid);
+      if (c < least - 1e-9) {
+        found = boxes;
+        least = c;
+      }
+    }
+    strips.set(key, found);
+    return found;
+  };
   const consider = (boxes: Map<number, Box>) => {
     const c = cost(boxes, main, slots, grid);
     if (c < bestCost - 1e-9) {
@@ -236,10 +306,9 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
             const bodyLines = bandItems.length ? Array.from({ length: Math.min(bandItems.length, 4) }, (_, k) => k + 1) : [1];
             for (const railColumns of railLines) {
               for (const bodyRows of bodyLines) {
-                const boxes = new Map<number, Box>();
-                if (railItems.length) for (const [i, b] of rail(railArea, railItems, railColumns, slots, grid)) boxes.set(i, b);
-                if (bandItems.length) for (const [i, b] of band(bodyArea, bandItems, bodyRows, slots, grid)) boxes.set(i, b);
-                consider(boxes);
+                const railBoxes = railItems.length ? rail(railArea, railItems, railColumns, slots, grid) : new Map<number, Box>();
+                const bandBoxes = bandItems.length ? band(bodyArea, bandItems, bodyRows, slots, grid) : new Map<number, Box>();
+                if (railBoxes && bandBoxes) consider(new Map([...railBoxes, ...bandBoxes]));
               }
             }
           }
@@ -267,14 +336,9 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
                 w: corner === 'band' ? columns : railX,
                 h: rows - bandY,
               };
-              for (const railColumns of railItems.length >= 3 && railArea.w >= 10 ? [1, 2] : [1]) {
-                for (const bandRows of bandItems.length >= 3 && bandArea.h >= 10 ? [1, 2] : [1]) {
-                  const boxes = new Map<number, Box>([[main, mainBox]]);
-                  if (railItems.length) for (const [i, b] of rail(railArea, railItems, railColumns, slots, grid)) boxes.set(i, b);
-                  if (bandItems.length) for (const [i, b] of band(bandArea, bandItems, bandRows, slots, grid)) boxes.set(i, b);
-                  consider(boxes);
-                }
-              }
+              const railBoxes = railItems.length ? bestStrip(rail, railArea, railItems, railArea.w) : new Map<number, Box>();
+              const bandBoxes = bandItems.length ? bestStrip(band, bandArea, bandItems, bandArea.h) : new Map<number, Box>();
+              if (railBoxes && bandBoxes) consider(new Map([[main, mainBox], ...railBoxes, ...bandBoxes]));
             }
           }
         }
@@ -282,6 +346,6 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
     }
   }
   const found = best as Map<number, Box> | null;
-  if (!found) return slots.map((_, i) => whole(i, columns, rows));
+  if (!found) return evenGrid(slots, grid);
   return slots.map((_, i) => found.get(i)!);
 }

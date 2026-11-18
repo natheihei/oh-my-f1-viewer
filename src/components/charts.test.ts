@@ -20,7 +20,7 @@ const { telemetryModel, chaseOf, corners, traceSeconds } = await import('./car_t
 const { lapsOf, lapColumn, pastParams, pedalModel, pedalOf, throttleShade, lapDelta } = await import('./pedal_barcode/main');
 const { cornerSpeeds, ribbonModel, ribbonWidth, windowSeconds } = await import('./speed_ribbon/main');
 const { components } = await import('./registry');
-const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells } = await import('../layout/model');
+const { addTile, allTiles, autoLayout, EMPTY_LAYOUT, measure, minCells, setMain } = await import('../layout/model');
 type ComponentSpec = import('../layout/model').ComponentSpec;
 type LayoutState = import('../layout/model').LayoutState;
 
@@ -1275,6 +1275,28 @@ describe('sizes', () => {
       ['timing_tower', 'gap_evolution', 'sector_table'],
     ];
     for (const names of arrangements) expect(short(arrange(names)), names.join(', ')).toEqual([]);
+  });
+
+  it('lays out 22 onboards and 9 charts clicked in round the main feed with no overlap and no slivers', () => {
+    // As on a replay: the world feed in the main place, every onboard added, then the charts. (2026-11-18)
+    let state = addTile(measure(EMPTY_LAYOUT, cell), specOf('video', 0));
+    state = setMain(state, state.tiles[0].id);
+    for (let n = 1; n <= 22; n += 1) state = addTile(state, specOf('video', n));
+    const charts = ['timing_tower', 'tyre_strategy', 'tyre_deg', 'pit_windows', 'pit_window', 'track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon'];
+    for (const name of charts) state = addTile(state, specOf(name, 0));
+    expect(state.tiles).toHaveLength(32);
+    const taken = new Set<string>();
+    for (const t of allTiles(state)) {
+      const name = t.component.key;
+      expect(t.w >= 3 && t.h >= 3 && t.x + t.w <= 24 && t.y + t.h <= 24, `${name} at ${t.x},${t.y} ${t.w}x${t.h}`).toBe(true);
+      for (let y = t.y; y < t.y + t.h; y += 1) {
+        for (let x = t.x; x < t.x + t.w; x += 1) {
+          expect(taken.has(`${x},${y}`), `${name} overlaps at ${x},${y}`).toBe(false);
+          taken.add(`${x},${y}`);
+        }
+      }
+    }
+    expect(state.tiles[0]).toMatchObject({ x: 0, y: 0 });
   });
 
   it('gives the main place to the video, and the timing tower a place beside it', () => {

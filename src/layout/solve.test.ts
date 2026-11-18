@@ -64,4 +64,30 @@ describe('solve', () => {
     expect(box.h).toBeGreaterThanOrEqual(10);
     expect(main.w * main.h).toBeLessThanOrEqual(24 * 24 - 100);
   });
+
+  /** No two boxes share a cell, none leaves the grid, and each is at least `least` cells either way. */
+  const legible = (boxes: { x: number; y: number; w: number; h: number }[], least: number) => {
+    const seen = new Set<string>();
+    for (const b of boxes) {
+      expect(b.w >= least && b.h >= least && b.x >= 0 && b.y >= 0 && b.x + b.w <= 24 && b.y + b.h <= 24, JSON.stringify(b)).toBe(true);
+      for (let y = b.y; y < b.y + b.h; y += 1) {
+        for (let x = b.x; x < b.x + b.w; x += 1) {
+          expect(seen.has(`${x},${y}`), `overlap at ${x},${y}`).toBe(false);
+          seen.add(`${x},${y}`);
+        }
+      }
+    }
+  };
+
+  it('splits the rail and band into as many lines as they need, so no slot is squeezed to a sliver', () => {
+    for (const count of [8, 16, 32, 48]) {
+      const slots = Array.from({ length: count }, (_, i) => slot({ min: { w: 5, h: 6 }, aspect: i % 3 === 0 ? 0.8 : 16 / 9 }));
+      legible(solve(slots, grid, 0), 3);
+      legible(solve(slots, grid), 3);
+    }
+  });
+
+  it('falls back to a plain grid, with no overlap, when no rail or band gives every slot room', () => {
+    legible(solve(Array.from({ length: 80 }, () => slot()), grid, 0), 2);
+  });
 });
