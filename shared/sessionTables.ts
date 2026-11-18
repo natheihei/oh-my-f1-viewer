@@ -30,6 +30,11 @@ export interface TableDefinition {
   hidden?: string[];
   /** Row storage keyed directly on the primary key, for tables with very many rows. */
   compact?: boolean;
+  /**
+   * Shown from its own `date`, when it happened, rather than `visible_from`, when the feed sent it. Only for telemetry: the feed
+   * sends it in a batch once a second, and a sample's `date` is never after the frame on screen, so the viewer is watching what it describes.
+   */
+  shownAtDate?: boolean;
   /** What it's for, when its columns don't say. It reaches SQL's consumers, the agent among them, through `sessionData.tables`. */
   about?: string;
 }
@@ -47,6 +52,7 @@ export const TABLES: TableDefinition[] = [
     columns: { rpm: 'INTEGER', speed: 'INTEGER', n_gear: 'INTEGER', throttle: 'INTEGER', brake: 'INTEGER', drs: 'INTEGER' },
     versioned: false,
     compact: true,
+    shownAtDate: true,
   },
   {
     name: 'location',
@@ -55,6 +61,7 @@ export const TABLES: TableDefinition[] = [
     columns: { x: 'INTEGER', y: 'INTEGER', z: 'INTEGER' },
     versioned: false,
     compact: true,
+    shownAtDate: true,
   },
   {
     name: 'position',

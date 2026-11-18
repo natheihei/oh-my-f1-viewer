@@ -99,6 +99,22 @@ describe('session data', () => {
     handle.destroy();
   });
 
+  it('moves the playhead within a second without a new revision, for telemetry', async () => {
+    const handle = openSessionData(session, false);
+    emit(ready);
+    handle.update(500, null);
+    await flush();
+    const before = useSessionData.getState();
+    const revision = before.state === 'ready' ? before.revision : -1;
+    handle.update(500.25, null);
+    expect(useSessionData.getState()).toMatchObject({ revision, playheadMs: BASE + 2_000_250 });
+    // A paused video reports the same frame: nothing is published.
+    const paused = useSessionData.getState();
+    handle.update(500.25, null);
+    expect(useSessionData.getState()).toBe(paused);
+    handle.destroy();
+  });
+
   it('shows nothing until a replay frame can be placed', async () => {
     const handle = openSessionData(session, false);
     emit({ ...ready, clock: null });
