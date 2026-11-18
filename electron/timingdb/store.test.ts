@@ -425,16 +425,20 @@ describe('session database', () => {
   });
 
   describe('telemetry', () => {
-    it('decompresses both feeds and shows them by when they arrived', async () => {
+    it('decompresses both feeds and shows each sample from its own date, before the batch it came in arrived', async () => {
       ingest();
       const files = {
         'CarData.z': compressed([[60_000, { Entries: [{ Utc: utc(59_000), Cars: { '1': { Channels: { '0': 11000, '2': 300, '3': 8, '4': 100, '5': 0, '45': 12 } } } }] }]]),
         'Position.z': compressed([[60_000, { Position: [{ Timestamp: utc(59_500), Entries: { '1': { X: 1, Y: 2, Z: 3 } } }] }]]),
       };
       await ingestTelemetry(store, META, { files, failed: [] }, BASE, BASE + DAY, async () => {});
-      expect(sql('SELECT * FROM car_data', at(59_999))).toEqual([]);
-      expect(sql('SELECT date, speed, n_gear FROM car_data', at(60_000))).toEqual([{ date: BASE + 59_000, speed: 300, n_gear: 8 }]);
-      expect(sql('SELECT date, x FROM location', at(60_000))).toEqual([{ date: BASE + 59_500, x: 1 }]);
+      // Both were sent at 60s, in one batch each, about things at 59s and 59.5s.
+      expect(sql('SELECT * FROM car_data', at(58_999))).toEqual([]);
+      expect(sql('SELECT date, speed, n_gear FROM car_data', at(59_000))).toEqual([{ date: BASE + 59_000, speed: 300, n_gear: 8 }]);
+      expect(sql('SELECT * FROM location', at(59_499))).toEqual([]);
+      expect(sql('SELECT date, x FROM location', at(59_500))).toEqual([{ date: BASE + 59_500, x: 1 }]);
+      // Every other table still waits for its message: the pit stop at 200s isn't known until 235s.
+      expect(sql('SELECT * FROM pit', at(234_999))).toEqual([]);
       expect(store.isComplete(META.sessionKey, 'telemetry')).toBe(true);
     });
   });

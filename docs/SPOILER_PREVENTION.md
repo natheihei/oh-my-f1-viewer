@@ -20,6 +20,10 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
 
 - **Every row knows when it was revealed.** `visible_from` is when the feed made a row known, on the same clock as the playhead. A row's own `date` can't
   serve, because a message often reports something earlier than when it was sent.
+- **Telemetry goes by when it happened.** `car_data` and `location` show each sample once the playhead reaches its own `date`, up to 1.9s before the feed
+  sent it. A sample's `date` is never after the frame on screen, so it tells the viewer only what they're watching. It's for the charts: the feed sends
+  telemetry in a batch once a second, and gated on `visible_from` they jumped once a second, behind the picture. No other table does this, since a lap
+  time or a decision reported early would be news. (2026-11-18)
 - **Rows that change are stored as versions.** `laps`, `stints`, `pit`, `drivers` and the championship tables return the newest version the playhead has
   reached, so a stint's `lap_end` can't reveal a stop that hasn't happened yet.
 - **SQL can only reach limited views.** Consumers' queries run on a read-only connection against temporary views limited to the session and the playhead. An
