@@ -50,6 +50,8 @@ const PROMPTS: Record<AgentMode, string> = { pick: PICK_PROMPT, view: VIEW_PROMP
 const CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** How often the text of a reply in progress is published. */
 const PARTIAL_INTERVAL_MS = 40;
+/** How many of the newest entries the end of a turn reads again, for reply text the watch folded away. */
+const FLUSHED_ENTRIES = 100;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
 
@@ -693,8 +695,11 @@ export class Agent {
         if (durable.AssistantEntry.is(entry)) say(textOf(entry.model?.[0]), true);
       }
     };
+    // What's already there belongs to earlier messages: as far back as the flush below reads, since the
+    // watch starts with only the newest 50 entries.
+    const before = await conversation.root.entries({ order: 'descending' }, FLUSHED_ENTRIES, undefined, context);
+    for (const entry of before.items) seen.add(entry.id);
     const watch = await conversation.root.watch(context);
-    // What's already there belongs to earlier messages.
     for (const entry of watch.value.entries) seen.add(entry.id);
     watch.start(async (call) => {
       if (call.kind !== 'value') return;
@@ -706,7 +711,7 @@ export class Agent {
       flush: async () => {
         await watch.stop();
         // The watch folds commits together, so the last entries are read again, in order.
-        const page = await conversation.root.entries({ order: 'descending' }, 100, undefined, context);
+        const page = await conversation.root.entries({ order: 'descending' }, FLUSHED_ENTRIES, undefined, context);
         take([...page.items].reverse());
       },
     };
