@@ -18,7 +18,7 @@ export const layoutOps = {
   add: write(
     {
       description:
-        'Put components on screen as individual tiles. Returns the id of the tile showing each, in order: one already on screen with the same key is not added again, and its id is returned.',
+        "Put components on screen as individual tiles. Returns the id of the tile showing each, in order: one already on screen with the same key is not added again, and its id is returned. Fails when the grid has no room left for one, because every tile would then be too small to read: those before it stay added, and the user must close a tile first.",
       args: Type.Object({ items: Type.Array(Item) }),
     },
     ({ items }) => items.map((item) => layout.add(specOf(item))),

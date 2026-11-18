@@ -7,7 +7,7 @@
  * moves, resizes and new props, till it's taken off screen. Ids are only unique while the app runs.
  * A component's key only keeps the same thing from being added twice.
  */
-import { solve, type Slot } from './solve';
+import { arrange, LEAST_ROOM, solve, type Slot } from './solve';
 
 /** A component's size hint: the shape it reads best in, as width over height, and the least room its content reads in, in pixels. */
 export interface SizeHint {
@@ -149,15 +149,15 @@ function mainIndex(state: LayoutState): number | null {
  * top left, and the rest beside or below it by shape, in the order they were added. See `solve`.
  */
 export function autoLayout(state: LayoutState): LayoutState {
-  const { tiles } = state;
-  const grid = { columns: GRID_COLUMNS, rows: GRID_ROWS, cell: measured(state.cell), titleBar: TITLE_BAR_PX };
-  const boxes = solve(
-    tiles.map((t) => slotOf(t, state.cell)),
-    grid,
-    mainIndex(state),
-  );
-  return { ...state, manual: false, tiles: tiles.map((t, i) => ({ ...t, ...boxes[i] })) };
+  return laidOut(state, solve(...problem(state)));
 }
+
+/** What the solver is given for a layout: its tiles' slots, the grid, and which is the main one. */
+const problem = (state: LayoutState) =>
+  [state.tiles.map((t) => slotOf(t, state.cell)), { columns: GRID_COLUMNS, rows: GRID_ROWS, cell: measured(state.cell), titleBar: TITLE_BAR_PX }, mainIndex(state)] as const;
+
+/** The layout with each tile in its box, in order: an auto layout again. */
+const laidOut = (state: LayoutState, boxes: Rect[]): LayoutState => ({ ...state, manual: false, tiles: state.tiles.map((t, i) => ({ ...t, ...boxes[i] })) });
 
 const rectsOf = (tiles: Tile[]) => JSON.stringify(tiles.map(({ id, x, y, w, h }) => [id, x, y, w, h]));
 
@@ -241,10 +241,28 @@ export function gapFor(nodes: Rect[], min: [number, number], aspect: number, cel
 /** A new tile needs at least this much room before a manual layout gets re-tiled to make space. */
 const MIN_FREE_AREA = 36;
 
+/** The least room any tile is given, in cells either way, as `[columns, rows]`. */
+const LEAST: [number, number] = [LEAST_ROOM, LEAST_ROOM];
+/** A least size in cells, raised to `LEAST` where it is under it. */
+const noLessThanLeast = ([w, h]: [number, number]): [number, number] => [Math.max(w, LEAST_ROOM), Math.max(h, LEAST_ROOM)];
+
+/**
+ * Adding a tile was refused: there is no gap for it, and re-tiling can't give every tile, the new one
+ * included, at least `LEAST_ROOM` cells either way. Nothing on screen changed.
+ */
+export class NoRoomError extends Error {
+  constructor(component: ComponentSpec) {
+    const name = component.label || component.title?.name || 'another tile';
+    super(`No room for ${name}: with it, some tiles would be too small to read. Close a tile to make room.`);
+    this.name = 'NoRoomError';
+  }
+}
+
 /**
  * After a structural change. An auto layout puts a tile with a size hint into the gap closest to its
  * shape that meets its least size, so nothing on screen moves, and re-tiles when no gap does. A hand-arranged
- * layout uses its biggest gap for anything, and re-tiles only when that is too small.
+ * layout uses its biggest gap for anything, and re-tiles only when that is too small. A gap is never
+ * under `LEAST_ROOM` either way. Throws `NoRoomError` when re-tiling can't give every tile that.
  */
 function place(state: LayoutState, added: Tile): LayoutState {
   const others = state.tiles.filter((t) => t !== added);
@@ -252,13 +270,18 @@ function place(state: LayoutState, added: Tile): LayoutState {
     ...state,
     tiles: state.tiles.map((t) => (t === added ? fit({ ...t, ...free }, state.cell) : t)),
   });
+  const retiled = () => {
+    const boxes = arrange(...problem(state));
+    if (!boxes) throw new NoRoomError(added.component);
+    return laidOut(state, boxes);
+  };
   if (!state.manual) {
     const size = added.component.size;
-    const free = size ? gapFor(others, minCells(size, state.cell), size.aspect, state.cell) : ZERO;
-    return area(free) > 0 ? into(free) : autoLayout(state);
+    const free = size ? gapFor(others, noLessThanLeast(minCells(size, state.cell)), size.aspect, state.cell) : ZERO;
+    return area(free) > 0 ? into(free) : retiled();
   }
-  const free = largestFreeRect(others);
-  return area(free) < MIN_FREE_AREA ? autoLayout(state) : into(free);
+  const free = largestFreeRect(others, LEAST);
+  return area(free) < MIN_FREE_AREA ? retiled() : into(free);
 }
 
 export function allTiles(state: Pick<LayoutState, 'tiles'>): Tile[] {
@@ -279,7 +302,10 @@ function newTile(component: ComponentSpec): Tile {
   return { id: newId(), component, ...ZERO };
 }
 
-/** Adds a tile for the component. One whose key is on screen already adds nothing: `tileWithKey` finds the tile it has. */
+/**
+ * Adds a tile for the component. One whose key is on screen already adds nothing: `tileWithKey` finds the
+ * tile it has. Throws `NoRoomError`, and changes nothing, when there's no room left for it.
+ */
 export function addTile(state: LayoutState, component: ComponentSpec): LayoutState {
   if (tileWithKey(state, component.key)) return state;
   const tile = newTile(component);
@@ -328,9 +354,10 @@ export function freeRectAt(nodes: Rect[], cell: Cell, columns = GRID_COLUMNS, ro
 /**
  * Where a tile dropped on this cell goes. On empty space, it fills the biggest gap there. On a
  * tile, that tile splits across its longer side as it looks on screen, and the new tile takes the
- * half under the cell. `cellAspect` is a cell's width over its height. Null when the tile is too
- * small to split. With `component`, `rect` is shrunk to what its content uses, keeping the top-left
- * corner, as an auto-placed tile is: the rest of `room` stays empty.
+ * half under the cell. `cellAspect` is a cell's width over its height. Null when the gap, or
+ * either half of the tile, would be under `LEAST_ROOM` cells either way. With `component`, `rect`
+ * is shrunk to what its content uses, keeping the top-left corner, as an auto-placed tile is: the
+ * rest of `room` stays empty.
  */
 export function dropTarget(
   state: LayoutState,
@@ -351,11 +378,12 @@ function dropRoom(state: LayoutState, cell: Cell, cellAspect: number): { room: R
   const node = state.tiles.find((t) => contains(t, cell));
   if (!node) {
     const rect = freeRectAt(state.tiles, cell);
-    return rect ? { room: rect, split: null } : null;
+    return rect && rect.w >= LEAST_ROOM && rect.h >= LEAST_ROOM ? { room: rect, split: null } : null;
   }
   const across = node.w * cellAspect >= node.h;
   const size = across ? node.w : node.h;
-  if (size < 2) return null;
+  // Both halves keep their least room, and the new tile its least the other way too.
+  if (Math.floor(size / 2) < LEAST_ROOM || (across ? node.h : node.w) < LEAST_ROOM) return null;
   const first = Math.floor(size / 2);
   const inFirst = across ? cell.x < node.x + first : cell.y < node.y + first;
   const halves: [Rect, Rect] = across

@@ -138,7 +138,8 @@ changes.
 - A tile draws a hairline on its right and bottom edges only, so neighbours share one seam. Tiles are black on a slightly lifted
   ground, which is what separates them where there's no neighbour.
 - A full grid has no empty cells to drag into, so dropping a tile on another swaps them.
-- After a mouse edit the layout stays as arranged, and new tiles go in the largest free space, or re-tile if there is none.
+- After a mouse edit the layout stays as arranged, and new tiles go in the largest free space, or re-tile if there is none. A tile
+  that would leave some tile under 3 cells either way is refused instead: see [COMPONENTS.md](COMPONENTS.md).
 
 ## Commands and agent tools are separate
 
