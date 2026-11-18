@@ -136,7 +136,7 @@ describe('the chart list', () => {
     expect(lines.slice(1)).toEqual([
       'test_gap, Test gap, race/sprint: The gap between two drivers. props driver_a (required): One, as a car number; driver_b (required): The other, as a car number.',
       'test_pit, Test pit window, any session: When one driver could stop. props driver (required): The driver, as a car number.',
-      'test_field, Test field, any session: Every car. props drivers_to_display (optional): Drivers to draw. Left out, everyone, as car numbers; drivers (optional, at most 6): Drivers to highlight among those drawn. Left out, none is, as car numbers; laps (optional): Laps to show.',
+      'test_field, Test field, any session: Every car. props drivers_to_display (optional): Drivers to draw, only when the user asked to see just some. Left out, everyone, as car numbers; drivers (optional, at most 6): Drivers to highlight among those drawn. Left out, none is, as car numbers; laps (optional): Laps to show.',
       'test_weather, Test weather, any session: The weather. no props.',
     ]);
     const suggest = toolDefinitions().find((t) => t.name === 'suggest_tiles');

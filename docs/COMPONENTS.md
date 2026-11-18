@@ -43,6 +43,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
     `tyre_strategy`, `tyre_deg`, `pit_windows`.
   - `drivers_to_display`: those to draw, when a chart of the field can show just some. Left out, everyone. Optional:
     `tyre_strategy`, `tyre_deg`, `pit_windows`, where `drivers` then picks who stands out among those drawn.
+  The agent leaves `drivers_to_display` out unless the viewer asked to see only some, and puts who the request is about in `drivers`:
+  "how is VER doing" gets every car's tyres with VER highlighted. (2026-11-18. Before, it often drew the one driver alone, which
+  gave a chart of the field with nothing to compare against.)
   A name starting `driver_` or `drivers_` is a driver prop too, one driver or a list, so a component can add its own.
 - **Every prop is in the key,** so the same chart can be on screen twice when its props differ, one telemetry for HAM and one for VER,
   and the same props twice is one tile. Where the order of two drivers doesn't change what's drawn, the key sorts them.
