@@ -401,7 +401,7 @@ export function CommandPalette() {
         <PromptInput
           ref={inputRef}
           placeholder={
-            building ? 'ask for a mod, or a change to one' : pointing ? 'name a session, like 2025 Mexico race' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'
+            building ? 'describe a tile to build, or a change to one' : pointing ? 'name a session, like 2025 Mexico race' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'
           }
           onChange={(next) => {
             setParts(next);
