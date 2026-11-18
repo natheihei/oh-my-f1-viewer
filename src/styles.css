@@ -305,23 +305,27 @@
 
 .grid-stack .grid-stack-item > .ui-resizable-se {
   background:
-    linear-gradient(var(--color-dim), var(--color-dim)) right 3px bottom 3px / 8px 1px no-repeat,
-    linear-gradient(var(--color-dim), var(--color-dim)) right 3px bottom 3px / 1px 8px no-repeat;
+    linear-gradient(var(--color-dim), var(--color-dim)) right bottom / 8px 1px no-repeat,
+    linear-gradient(var(--color-dim), var(--color-dim)) right bottom / 1px 8px no-repeat;
 }
 
 .grid-stack .grid-stack-item > .ui-resizable-sw {
   background:
-    linear-gradient(var(--color-dim), var(--color-dim)) left 3px bottom 3px / 8px 1px no-repeat,
-    linear-gradient(var(--color-dim), var(--color-dim)) left 3px bottom 3px / 1px 8px no-repeat;
+    linear-gradient(var(--color-dim), var(--color-dim)) left bottom / 8px 1px no-repeat,
+    linear-gradient(var(--color-dim), var(--color-dim)) left bottom / 1px 8px no-repeat;
 }
 
-.grid-stack .grid-stack-item > .ui-resizable-e:hover,
+/* Lines and brackets sit on the tile's own edge, not the middle of GridStack's 10px handle, so they trace the tile. */
+.grid-stack .grid-stack-item > .ui-resizable-e:hover {
+  background: linear-gradient(var(--color-dim), var(--color-dim)) right / 1px 100% no-repeat;
+}
+
 .grid-stack .grid-stack-item > .ui-resizable-w:hover {
-  background: linear-gradient(var(--color-dim), var(--color-dim)) center / 1px 100% no-repeat;
+  background: linear-gradient(var(--color-dim), var(--color-dim)) left / 1px 100% no-repeat;
 }
 
 .grid-stack .grid-stack-item > .ui-resizable-s:hover {
-  background: linear-gradient(var(--color-dim), var(--color-dim)) center / 100% 1px no-repeat;
+  background: linear-gradient(var(--color-dim), var(--color-dim)) bottom / 100% 1px no-repeat;
 }
 
 .grid-stack > .grid-stack-item:hover > .ui-resizable-handle {
