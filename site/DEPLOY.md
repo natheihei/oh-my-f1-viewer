@@ -49,6 +49,7 @@ The repo holds `wrangler.jsonc` (Workers, custom domains, assets) and the releas
 | Root directory | `site` | `site` |
 | Build command | `npm run build` | `npm run build` |
 | Deploy command | `npx wrangler deploy --env=""` | `npx wrangler deploy --env staging` |
+| Preview command | left at its default, never runs | same |
 | Build watch paths | include `site/*` | include `site/*` |
 | Branch control: preview builds | off | off |
 
