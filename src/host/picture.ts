@@ -38,15 +38,15 @@ export async function takePicture(type: string): Promise<PictureResult> {
   try {
     await track.restrictTo(await RestrictionTarget.fromElement(el));
     const reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
-    // A frame from before the restriction may still be queued: the first one the element's size is of it alone.
-    const width = Math.round(box.width * devicePixelRatio);
-    const height = Math.round(box.height * devicePixelRatio);
+    // A frame from before the restriction may still be queued: the first one with the element's shape is of it alone.
+    // Its scale can't be known ahead: Chromium fits a tab's recording to the screen's size, and raises the tab's scale
+    // while it's recorded, so on macOS a 1454×662 tile came as 1710×778.
     const deadline = Date.now() + FRAME_TIMEOUT_MS;
     try {
       for (;;) {
         const { value: frame } = await within(reader.read(), Math.max(0, deadline - Date.now()), 'A frame of it');
         if (!frame) throw new Error('The recording ended before a frame of it');
-        if (Math.abs(frame.displayWidth - width) > 2 || Math.abs(frame.displayHeight - height) > 2) {
+        if (Math.abs(frame.displayHeight - (frame.displayWidth * box.height) / box.width) > 2) {
           frame.close();
           continue;
         }

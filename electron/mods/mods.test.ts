@@ -100,6 +100,15 @@ describe('mods', () => {
     await until(() => last().length === 0 && mods.list().length === 0);
   });
 
+  it('finds a new mod a write just made, before the watcher says so', async () => {
+    const { mods } = await start({});
+    // As when macOS's watcher reports the save late.
+    (mods as unknown as { watcher: { close(): void } }).watcher.close();
+    write({ 'early/main.ts': `export default {};` });
+    expect(await mods.settled('early', 1000)).toMatchObject({ name: 'early', state: 'loading', version: 1, error: null });
+    expect(await mods.settled('missing', 1000)).toBeNull();
+  });
+
   it('refuses a folder name that cannot be a component name', async () => {
     const { mods } = await start({ 'Bad Name/main.ts': `export default {};` });
     expect(mods.status('Bad Name')).toMatchObject({ state: 'failed', version: 0 });
