@@ -1,4 +1,4 @@
-/** Where "Join the beta" goes. Nothing takes sign-ups yet, so it points at the "Please come help me test it" section. */
+/** Where "Join the beta" goes. Nothing takes sign-ups yet, so it points at the "Please help me test the beta" section. */
 export const BETA_HREF = '#need';
 
 /** Team colours, for driver and team tags drawn the way the app draws them. */
