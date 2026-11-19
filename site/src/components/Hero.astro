@@ -25,8 +25,10 @@ import { BETA_HREF } from '../site';
 
 <div id="top" class="wrap flex flex-col gap-12 pt-14 pb-[72px]">
   <div class="flex max-w-[980px] flex-col gap-6">
-    <h1 class="disp" style="font-size: clamp(40px, 6.4vw, 84px); line-height: 0.98">
-      Your own F1 viewer: any car, any chart, any moment.
+    <h1 class="disp" style="font-size: clamp(34px, 5.4vw, 70px); line-height: 1.04">
+      Your F1 viewer,<br />with an AI <span class="sr-only">TV director and race engineer.</span><span class="role" aria-hidden="true"
+        ><span class="text-signal">TV director</span><span class="text-build">race engineer</span></span
+      >
     </h1>
     <p class="mono m-0 flex items-center gap-3.5 font-bold" style="font-size: clamp(28px, 4vw, 48px)">
       <Arrow />
@@ -48,3 +50,41 @@ import { BETA_HREF } from '../site';
 
   <HeroReel />
 </div>
+
+<style>
+  /* The two jobs it does, one after the other in the same place, each in its own colour. They share one grid cell,
+     so the box is as wide as the longer one (wrapping only on the narrowest phones) and sits on the headline's
+     baseline. Under reduced motion it stays on the first */
+  .role {
+    display: inline-grid;
+  }
+  .role > span {
+    grid-area: 1 / 1;
+    animation: role 7s infinite;
+  }
+  .role > span + span {
+    opacity: 0;
+    animation-delay: -3.5s;
+  }
+  @keyframes role {
+    0% {
+      opacity: 0;
+      transform: translateY(0.25em);
+    }
+    6%,
+    44% {
+      opacity: 1;
+      transform: none;
+    }
+    50%,
+    100% {
+      opacity: 0;
+      transform: translateY(-0.25em);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .role > span {
+      animation: none;
+    }
+  }
+</style>
