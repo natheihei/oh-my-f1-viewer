@@ -8,6 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import os from 'node:os';
 import { _electron as electron } from 'playwright';
 import { MAIN_PROFILE, prepareProfile, profileInUse, startIsolatedApp, syncAgentLogin } from './isolated.mjs';
+import { appEnv, ELECTRON_BIN, ON_HYPRLAND } from './platform.mjs';
 
 /**
  * Starts the app on a fresh profile, or on `userData`: one prepareProfile made, for a check that launches it
@@ -29,7 +30,7 @@ export async function startApp(port = 5198, { userData: given = null } = {}) {
   };
   // Under Hyprland the window must open silently on workspace 3, which Playwright's own launch can't do:
   // started the way scripts/isolated.mjs starts it.
-  if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+  if (ON_HYPRLAND) {
     return startSilently(run, userData, cleanUp).catch((e) => {
       cleanUp();
       throw e;
@@ -41,11 +42,10 @@ export async function startApp(port = 5198, { userData: given = null } = {}) {
   }
   const server = await createServer({ server: { port, strictPort: true }, logLevel: 'error' });
   await server.listen();
-  const { CHROME_DESKTOP: _ignored, ...env } = process.env;
   const app = await electron.launch({
-    executablePath: path.resolve('node_modules/electron/dist/electron'),
+    executablePath: ELECTRON_BIN,
     args: ['.', `--user-data-dir=${userData}`, ...(process.env.OMFV_ELECTRON_ARGS?.split(' ') ?? [])],
-    env: { ...env, ELECTRON_START_URL: `http://127.0.0.1:${port}` },
+    env: appEnv({ ELECTRON_START_URL: `http://127.0.0.1:${port}` }),
     timeout: 60_000,
   });
   const page = await app.firstWindow();

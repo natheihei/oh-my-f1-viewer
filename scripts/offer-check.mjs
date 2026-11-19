@@ -83,7 +83,7 @@ await page.evaluate(async (agent) => {
     host.agent.send = async (text) => void window.__sent.push(text);
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
+if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in the main profile: connect it in /settings-agent.');
 
 /** Sends a message as the viewer, waits for the turn to end, and returns the tool calls and the reply. */
 async function say(text) {

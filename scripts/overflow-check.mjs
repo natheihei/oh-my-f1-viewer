@@ -4,7 +4,7 @@
 // grid and in the suggestion strip. A list that scrolls its own rows has handled its overflow, so it isn't
 // marked however many rows it has. Saves a screenshot of each.
 //
-// The app is launched through Hyprland on workspace 3, floating and without focus, and driven over CDP, so
+// The app is launched on Hyprland on workspace 3, floating and without focus (elsewhere as an ordinary window), and driven over CDP, so
 // it never takes over the screen. Usage: node scripts/overflow-check.mjs [screenshot-dir]
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { MAIN_PROFILE, startElectron } from './platform.mjs';
 
 const outDir = process.argv[2] ?? tmpdir();
 mkdirSync(outDir, { recursive: true });
@@ -97,9 +98,7 @@ export default defineComponent({
 const server = await createServer({ server: { port: 5196, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const CDP = 9336;
-const electronBin = path.resolve('node_modules/electron/dist/electron');
-const cmd = `env ELECTRON_START_URL=http://127.0.0.1:5196 ${electronBin} ${path.resolve('.')} --user-data-dir=${userData} --remote-debugging-port=${CDP}`;
-execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(cmd)}, { workspace = "3 silent", float = true, size = "1600 900", no_initial_focus = true })`]);
+startElectron([path.resolve('.'), `--user-data-dir=${userData}`, `--remote-debugging-port=${CDP}`], { env: { ELECTRON_START_URL: `http://127.0.0.1:5196` } });
 let browser;
 for (let i = 0; i < 120 && !browser; i++) {
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP}`).catch(() => null);

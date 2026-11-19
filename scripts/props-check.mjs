@@ -64,7 +64,7 @@ await page.evaluate(async (agent) => {
     await window.omfv.ai.reset();
   }
 }, agent);
-if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
+if (agent && !(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) await fail('The agent is not set up in the main profile: connect it in /settings-agent.');
 
 let step = 0;
 const shot = async (name) => {
