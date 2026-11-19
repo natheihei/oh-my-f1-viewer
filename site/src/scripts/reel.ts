@@ -55,16 +55,21 @@ export function palette(el: HTMLElement, wait: (ms: number) => Promise<void>) {
   return {
     /** Shows the palette empty, types the prompt a key at a time, and presses Enter. Resolves while the "…" pulses */
     async ask(prompt: string) {
-      el.classList.remove('sent', 'keys', 'busy', 'asking', 'pressing', 'pressed');
+      el.classList.remove('sent', 'keys', 'busy', 'asking', 'pressing', 'pressed', 'building');
       mark.textContent = '>';
       typed.textContent = '';
       el.classList.add('show');
       await wait(900);
       el.classList.add('keys');
-      if (reduce) typed.textContent = prompt;
-      else
+      // Once /build is typed, the palette is in build mode
+      const build = (n: number) => el.classList.toggle('building', prompt.startsWith('/build') && n >= 6);
+      if (reduce) {
+        typed.textContent = prompt;
+        build(prompt.length);
+      } else
         for (let n = 1; n <= prompt.length; n++) {
           typed.textContent = prompt.slice(0, n);
+          build(n);
           await wait(28 + Math.random() * 45);
         }
       await wait(reduce ? 1200 : 500);
@@ -86,7 +91,7 @@ export function palette(el: HTMLElement, wait: (ms: number) => Promise<void>) {
       await wait(300);
     },
     hide() {
-      el.classList.remove('show', 'asking', 'pressing', 'pressed');
+      el.classList.remove('show', 'asking', 'pressing', 'pressed', 'building');
     },
   };
 }
