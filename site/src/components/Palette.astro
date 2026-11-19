@@ -2,7 +2,8 @@
 /**
  * The app's palette, centred on a reel's empty screen while a prompt types into it. `palette()` in scripts/reel.ts
  * drives it through the classes on its root: show, keys (typing), sent (Enter pressed), busy (the agent working), and
- * with `spoiler`, asking (the spoiler check) and pressing / pressed (Allow once).
+ * with `spoiler`, asking (the spoiler check) and pressing / pressed (Allow once). A prompt that starts with /build
+ * turns it yellow, with the BUILD tag, as build mode does in the app.
  */
 interface Props {
   /** Draws the spoiler check the app asks before the agent looks ahead, hidden until it's asking */
@@ -29,7 +30,8 @@ const { spoiler = false } = Astro.props;
   }
   <div class="palette-input">
     <span class="palette-mark palette-arrow" data-mark>&gt;</span><span data-typed></span><span
-      class="palette-caret"></span><span class="palette-placeholder">ask for anything on screen</span>
+      class="palette-caret"></span><span class="palette-placeholder palette-ask-for">ask for anything on screen</span><span
+      class="palette-placeholder palette-describe">describe a tile to build, or a change to one</span><span class="palette-tag">BUILD</span>
   </div>
 </div>
 
@@ -106,6 +108,33 @@ const { spoiler = false } = Astro.props;
   }
   .palette.keys .palette-placeholder {
     display: none;
+  }
+
+  /* Build mode: yellow, as in the app */
+  .palette.building {
+    border-color: #ffd12e;
+  }
+  .palette.building .palette-arrow {
+    color: #ffd12e;
+  }
+  .palette-tag {
+    display: none;
+    float: right;
+    margin-left: 1em;
+    color: #ffd12e;
+    font-size: 0.8em;
+    letter-spacing: 0.06em;
+    line-height: 1.8;
+  }
+  .palette.building .palette-tag {
+    display: inline;
+  }
+  .palette-describe,
+  .palette.building .palette-ask-for {
+    display: none;
+  }
+  .palette.building:not(.keys) .palette-describe {
+    display: inline;
   }
 
   /* The spoiler check, as the app asks it: Allow once is picked, and gets pressed */

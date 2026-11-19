@@ -11,6 +11,7 @@ import battle from '../assets/shots/page/hero-battle.webp';
 import onboards from '../assets/shots/page/hero-onboards.webp';
 import lead from '../assets/shots/page/hero-lead.webp';
 import charts from '../assets/shots/page/hero-charts.webp';
+import build from '../assets/shots/page/hero-build.webp';
 
 // Each prompt is the one that was typed into the app for that screenshot (see shots/hero/SHOTS.md).
 const slides = [
@@ -23,6 +24,11 @@ const slides = [
     img: onboards,
     prompt: 'Onboards of the top 10, and jump to 10 seconds before lights out',
     alt: 'Asked for the onboards of the top 10, ten seconds before lights out at the 2026 Mexico City Grand Prix: the grid formed up under five red lights, and ten onboards.',
+  },
+  {
+    img: build,
+    prompt: '/build onboard of whoever\'s pitting. An overlay of "[DRIVER] pitting" in the center.',
+    alt: "In build mode, asked for the onboard of whoever's pitting with their name over it: the agent wrote the tile, and its draft, framed in yellow, shows Russell's onboard in the pit lane under \"RUS pitting\". The palette offers Undo all and Save.",
   },
   {
     img: lead,

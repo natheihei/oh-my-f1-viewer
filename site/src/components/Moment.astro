@@ -1,8 +1,8 @@
 ---
 /**
  * The jump, as screens one after another like the hero: the race on lap 22, then the screen dims and the prompt types,
- * the spoiler check comes up and Allow once is pressed, then the race on lap 36.
- * Frames are shots 6d and 6b (shots/hero/SHOTS.md). Without JavaScript it's the race on lap 22. Under reduced motion it
+ * the spoiler check comes up and Allow once is pressed, then Verstappen on Hamilton on lap 37.
+ * Frames are shots 6d and 6e (shots/hero/SHOTS.md). Without JavaScript it's the race on lap 22. Under reduced motion it
  * starts paused there, and the prompt appears whole.
  */
 import { Image } from 'astro:assets';
@@ -48,7 +48,7 @@ const sizes = '(min-width: 1240px) 640px, calc(100vw - 32px)';
         />
         <Image
           src={jump}
-          alt="Asked to go to when Verstappen caught Hamilton after his pit stop, and allowed once to look ahead, it jumps to lap 36: Jumped to Verstappen catching Hamilton."
+          alt="Asked to go to when Verstappen caught Hamilton after his pit stop, and allowed once to look ahead, it jumps to lap 37: Verstappen on Hamilton down the straight, with Hamilton still fourth and Verstappen fifth on the tower."
           widths={[640, 1280, 1920]}
           sizes={sizes}
           class="reel-img"
@@ -109,7 +109,10 @@ const sizes = '(min-width: 1240px) 640px, calc(100vw - 32px)';
       pal.hide();
       showFrame(frames, 1);
       dim.classList.remove('on');
-      await wait(5000);
+      await wait(6500);
+      // A beat of empty screen, so it's clear it starts over
+      showFrame(frames, -1);
+      await wait(1600);
     };
 
     (async () => {
