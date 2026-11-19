@@ -276,20 +276,6 @@
     transform-origin: left center;
     margin: 0;
   }
-  .note-out {
-    position: absolute;
-    bottom: 100%;
-    right: 12px;
-    margin: 0 0 10px;
-    white-space: nowrap;
-  }
-  @media (max-width: 620px) {
-    .note-out {
-      position: static;
-      white-space: normal;
-      margin: 0;
-    }
-  }
 
   /* Hover or focus a term to see what it covers */
   .tip {
