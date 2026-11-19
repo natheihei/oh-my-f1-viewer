@@ -375,6 +375,8 @@ export class Mods {
     const deadline = Date.now() + timeoutMs;
     // A save reaches the watcher a moment after the write returns.
     await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS * 2));
+    // On macOS it can come later than that, and a new mod would read as no mod at all: one on disk is looked for now.
+    if (!this.mods.has(name) && !this.scanTimer && entryOf(path.join(this.dir, name))) await this.scan();
     for (;;) {
       const mod = this.mods.get(name);
       const busy = mod ? mod.timer != null || mod.building != null || mod.status.state === 'loading' : this.scanTimer != null;
