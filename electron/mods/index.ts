@@ -4,7 +4,7 @@
  * renderer reports back whether it loaded. It also puts the installed components' sources where they can be read, and forks one into a
  * new mod. See docs/MODS.md.
  */
-import { existsSync, promises as fsp, statSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, promises as fsp, realpathSync, statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import * as esbuild from 'esbuild';
 import { SHARED_MODULES, type BuildState, type ModLogLine, type ModStatus } from '../../shared/mods';
@@ -50,6 +50,13 @@ function entryOf(dir: string): string | null {
 
 /** Keeps a mod's imports to the modules it shares with the app and its own files. */
 function sharedModules(dir: string): esbuild.Plugin {
+  // esbuild resolves symlinks, so `resolveDir` is a real path: on macOS the temp folder, /var/..., is /private/var/....
+  let real = dir;
+  try {
+    real = realpathSync(dir);
+  } catch {
+    // Not there yet: the build fails on its own.
+  }
   return {
     name: 'omfv-shared',
     setup(build) {
@@ -58,7 +65,7 @@ function sharedModules(dir: string): esbuild.Plugin {
         if ((SHARED_MODULES as readonly string[]).includes(args.path)) return { path: args.path, namespace: 'omfv-shared' };
         if (args.path.startsWith('.') || path.isAbsolute(args.path)) {
           const target = path.resolve(args.resolveDir, args.path);
-          if (inside(target, dir)) return undefined;
+          if (inside(target, dir) || inside(target, real)) return undefined;
           return { errors: [{ text: `A mod can only import files in its own folder, not "${args.path}".` }] };
         }
         return { errors: [{ text: `"${args.path}" isn't available to mods. They can import ${SHARED_MODULES.join(', ')} and their own files.` }] };
