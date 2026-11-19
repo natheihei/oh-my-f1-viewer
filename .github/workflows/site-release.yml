@@ -1,0 +1,69 @@
+# Puts a site release into production. Workers Builds builds the `omfv-site` Worker from the
+# `site-production` branch, so this moves that branch to the release's commit. See site/DEPLOY.md.
+#
+# - Publishing a release tagged `site-v*` (on a commit in main) fast-forwards `site-production` to it.
+# - Running this by hand with an older `site-v*` tag rolls production back to that tag.
+name: Release site
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Site release tag to put in production, e.g. site-v1.2.0. An older tag rolls back.'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Releases of the app, and pre-releases, never touch the site.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.release.tag_name, 'site-v') && !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Move site-production to the release
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          case "$TAG" in site-v*) ;; *) fail "$TAG is not a site release tag (site-v*)." ;; esac
+          commit=$(git rev-list -n 1 "refs/tags/$TAG") || fail "No tag $TAG."
+
+          # Only ship what staging, which builds main, has already shown.
+          git merge-base --is-ancestor "$commit" origin/main || fail "$TAG ($commit) is not on main."
+
+          if current=$(git rev-parse -q --verify origin/site-production); then
+            if [ "$current" = "$commit" ]; then
+              echo "site-production is already at $TAG ($commit)."
+              exit 0
+            elif git merge-base --is-ancestor "$current" "$commit"; then
+              echo "Fast-forwarding site-production from $current to $TAG ($commit)."
+              git push origin "$commit:refs/heads/site-production"
+            elif [ "$EVENT" = workflow_dispatch ]; then
+              echo "Rolling site-production back from $current to $TAG ($commit)."
+              git push --force-with-lease="site-production:$current" origin "$commit:refs/heads/site-production"
+            else
+              fail "$TAG is behind site-production ($current). To roll back, run this workflow by hand with that tag."
+            fi
+          else
+            echo "Creating site-production at $TAG ($commit)."
+            git push origin "$commit:refs/heads/site-production"
+          fi
+
+          echo "### site-production → \`$TAG\` (\`${commit:0:7}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Workers Builds now builds \`omfv-site\` for https://oh-my-f1-viewer.yueyao.run." >> "$GITHUB_STEP_SUMMARY"
