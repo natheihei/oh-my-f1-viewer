@@ -3,15 +3,16 @@
 // every column and lets its rows run past the tile for the host to mark. Prints the rows it shows, each tile's
 // size, the size the table draws at and the host's mark, and saves a screenshot of each.
 //
-// Launched as scripts/tower-check.mjs is: through Hyprland on workspace 3, floating and without focus, with
+// Launched as scripts/tower-check.mjs is: on Hyprland on workspace 3, floating and without focus (elsewhere as an ordinary window), with
 // its own user data (the F1 TV sign-in copied in), and driven over CDP.
 // Usage: node scripts/sector-check.mjs <screenshot-dir> [laps, comma-separated] [race, by name: the latest replay race if none] [--keep]
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { MAIN_PROFILE, startElectron } from './platform.mjs';
 
 const keep = process.argv.includes('--keep');
 const args = process.argv.filter((a) => a !== '--keep');
@@ -21,15 +22,13 @@ const targetLaps = (args[3] ?? '39,53').split(',').map(Number);
 const raceName = args[4] ?? '';
 mkdirSync(outDir, { recursive: true });
 const userData = mkdtempSync(path.join(process.env.OMFV_SCRATCH ?? tmpdir(), 'omfv-sectors-'));
-for (const f of ['omfv-session.json', 'omfv-cookies.json']) copyFileSync(path.join(homedir(), '.config/oh-my-f1-viewer', f), path.join(userData, f));
+for (const f of ['omfv-session.json', 'omfv-cookies.json']) copyFileSync(path.join(MAIN_PROFILE, f), path.join(userData, f));
 
 const PORT = 5217;
 const CDP = 9357;
 const server = await createServer({ server: { port: PORT, strictPort: true }, logLevel: 'error' });
 await server.listen();
-const electronBin = path.resolve('node_modules/electron/dist/electron');
-const cmd = `env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:${PORT} ${electronBin} ${path.resolve('.')} --user-data-dir=${userData} --remote-debugging-port=${CDP}`;
-execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(cmd)}, { workspace = "3 silent", float = true, size = "1600 900", no_initial_focus = true })`]);
+startElectron([path.resolve('.'), `--user-data-dir=${userData}`, `--remote-debugging-port=${CDP}`], { env: { ELECTRON_START_URL: `http://127.0.0.1:${PORT}` } });
 let browser;
 for (let i = 0; i < 120 && !browser; i++) {
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${CDP}`).catch(() => null);

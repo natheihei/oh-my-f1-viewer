@@ -2,9 +2,9 @@
 // session. Prints counts, timings and states only, no race information.
 // Usage: node scripts/data-check.mjs [sessionKey] [meetingKey] [year]
 import { statSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { startApp } from './harness.mjs';
+import { MAIN_PROFILE } from './platform.mjs';
 
 const [sessionKey, meetingKey, year] = [Number(process.argv[2] ?? 11396), Number(process.argv[3] ?? 1297), Number(process.argv[4] ?? 2026)];
 const { page, stop } = await startApp(5194);
@@ -74,7 +74,7 @@ console.log(`     rows: ${JSON.stringify(counts)}`);
 check('every table has rows', ['car_data', 'location', 'position', 'intervals', 'weather', 'overtakes', 'race_control', 'pit', 'stints', 'laps', 'track_status', 'lap_summary', 'drivers', 'championship_drivers', 'championship_teams', 'starting_grid', 'session_result'].every((t) => counts[t] > 0));
 check('roster and lap count filled', Object.values(counts.objects).every((v) => (typeof v === 'number' ? v > 0 : v?.current > 0 && v.total > 0)));
 
-const database = path.join(os.homedir(), '.config/oh-my-f1-viewer/timing.sqlite');
+const database = path.join(MAIN_PROFILE, 'timing.sqlite');
 console.log(`     database: ${(statSync(database).size / 1e6).toFixed(0)} MB`);
 
 const timing = await page.evaluate(async (key) => {
