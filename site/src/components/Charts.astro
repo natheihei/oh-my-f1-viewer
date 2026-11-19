@@ -69,13 +69,13 @@ const more = ['Sector table', 'Tyre strategy', 'Race control', 'Track map'];
             {[0, 1, 2, 3].map((copy) =>
               row.cards.map((card) =>
                 card.kind === 'chart' ? (
-                  <div class="card flex-[0_0_320px]" aria-hidden={copy ? 'true' : undefined}>
+                  <div class="card flex-[0_0_220px] sm:flex-[0_0_320px]" aria-hidden={copy ? 'true' : undefined}>
                     <div class="aspect-[16/10] overflow-hidden border-b border-[#232323] bg-black">
-                      <Image src={card.img} alt={copy ? '' : card.alt} widths={[320, 640]} sizes="320px" class="h-full w-full object-cover object-top" />
+                      <Image src={card.img} alt={copy ? '' : card.alt} widths={[320, 640]} sizes="(min-width: 640px) 320px, 220px" class="h-full w-full object-cover object-top" />
                     </div>
-                    <div class="flex flex-col gap-1.5 px-4 pt-3.5 pb-4">
-                      <span class="mono text-[13px] font-bold">{card.name}</span>
-                      <span class="text-sm leading-normal text-[#9a9a9a]">{card.desc}</span>
+                    <div class="flex flex-col gap-1.5 px-3 pt-3 pb-3.5 sm:px-4 sm:pt-3.5 sm:pb-4">
+                      <span class="mono text-xs font-bold sm:text-[13px]">{card.name}</span>
+                      <span class="text-[13px] leading-normal sm:text-sm text-[#9a9a9a]">{card.desc}</span>
                     </div>
                   </div>
                 ) : card.kind === 'build' ? (
@@ -83,13 +83,13 @@ const more = ['Sector table', 'Tyre strategy', 'Race control', 'Track map'];
                     href="#build"
                     tabindex={copy ? -1 : undefined}
                     aria-hidden={copy ? 'true' : undefined}
-                    class="mono flex flex-[0_0_240px] flex-col justify-center gap-2.5 border border-dashed border-build p-[22px] text-build no-underline hover:text-build"
+                    class="mono flex flex-[0_0_170px] flex-col sm:flex-[0_0_240px] justify-center gap-2.5 border border-dashed border-build p-[22px] text-build no-underline hover:text-build"
                   >
                     <span class="text-[44px] leading-none font-bold">+</span>
                     <span class="text-sm font-bold">the one you build</span>
                   </a>
                 ) : (
-                  <div class="card flex-[0_0_320px] gap-4 p-[22px]" aria-hidden={copy ? 'true' : undefined}>
+                  <div class="card flex-[0_0_220px] gap-4 p-4 sm:flex-[0_0_320px] sm:p-[22px]" aria-hidden={copy ? 'true' : undefined}>
                     <span class="mono text-[11px] tracking-[0.08em] text-dim">AND MORE</span>
                     <div class="flex flex-wrap gap-2">
                       {more.map((m) => (
