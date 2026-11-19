@@ -1,252 +1,83 @@
 ---
 /**
- * The jump, told as a reel like the hero's, with its steps lit below as they happen: the prompt types on an empty screen,
- * the spoiler check comes up on lap 22, Allow once is pressed, it jumps to lap 36, and the rest of the race stays hidden.
- * Frames are shots 6a and 6b (shots/hero/SHOTS.md). Without JavaScript it's the spoiler check, with every step listed.
+ * The jump, as screens one after another like the hero: the race on lap 22, then the screen dims and the prompt types,
+ * the spoiler check comes up and Allow once is pressed, then the race on lap 36.
+ * Frames are shots 6d and 6b (shots/hero/SHOTS.md). Without JavaScript it's the race on lap 22. Under reduced motion it
+ * starts paused there, and the prompt appears whole.
  */
 import { Image } from 'astro:assets';
 import Ticker from './Ticker.astro';
 import Palette from './Palette.astro';
-import ask from '../assets/shots/page/m1-ask.webp';
+import race from '../assets/shots/page/m1-race.webp';
 import jump from '../assets/shots/page/m1-jump.webp';
 
 const prompts = ['go to when VER caught HAM', 'back to the restart', 'take me to lap 30', 'show me that overtake again'];
 // What was typed for shot 6a
 const PROMPT = 'go to when VER caught HAM after his pit stop';
-const LAPS = 53;
-const pct = (lap: number) => `${((lap / LAPS) * 100).toFixed(1)}%`;
-
-const steps = [
-  { title: 'You ask', text: "For a moment you haven't reached yet." },
-  { title: 'It asks first', text: 'I hate spoilers, so it asks before it looks ahead.' },
-  { title: 'You allow it', text: 'Allow once, and it jumps from lap 22 to lap 36.' },
-  { title: 'The rest stays hidden', text: 'Nothing on screen gives away what comes after.' },
-];
-const sizes = '(min-width: 1240px) 1208px, calc(100vw - 32px)';
+const sizes = '(min-width: 1240px) 640px, calc(100vw - 32px)';
 ---
 
 <section id="moment" class="band">
-  <div class="wrap flex flex-col gap-10">
-    <div class="flex flex-wrap items-end justify-between gap-x-16 gap-y-6">
-      <div class="flex min-w-0 flex-[1_1_520px] flex-col gap-[22px]">
-        <p class="eyebrow"><b>›</b> <Ticker prompts={prompts} offset={3} /></p>
-        <h2 class="disp h2">Jump to the moment, without spoiling the rest.</h2>
+  <div class="wrap flex flex-wrap items-center gap-x-16 gap-y-12">
+    <div class="flex min-w-0 flex-[1_1_440px] flex-col gap-[22px]">
+      <p class="eyebrow"><b>›</b> <Ticker prompts={prompts} offset={3} /></p>
+      <h2 class="disp h2">Jump to the moment, without spoiling the rest.</h2>
+      <div class="flex flex-col gap-3.5 pt-2">
+        <div class="flex items-baseline gap-3.5">
+          <span class="mono font-bold text-signal">!</span><span class="text-[15px] leading-[1.55]"
+            >I hate spoilers, so it asks before it looks ahead.</span
+          >
+        </div>
+        <div class="flex items-baseline gap-3.5">
+          <span class="mono font-bold text-signal">!</span><span class="text-[15px] leading-[1.55]"
+            >Nothing on screen gives it away.</span
+          >
+        </div>
       </div>
-      <p class="hand pb-1">undercut the slow laps, jump straight to the fight ↓</p>
     </div>
 
-    <div class="flex flex-col gap-3">
-      <div class="reel shot" data-moment-reel data-prompt={PROMPT}>
+    <div class="flex min-w-0 flex-[1_1_520px] flex-col gap-2.5">
+      <p class="hand pb-1.5 pl-1">undercut the slow laps, jump straight to the fight ↓</p>
+      <div class="reel shot" data-moment-reel data-prompt={PROMPT} style="--palette-size: clamp(10px, 2.5cqw, 16px)">
         <Image
-          src={ask}
-          alt="Asked to go to when Verstappen caught Hamilton after his pit stop, on lap 22 of the 2026 Italian Grand Prix, the palette asks first: the agent wants to look ahead of where you are. Allow once, allow for this session, or don't allow."
-          widths={[800, 1240, 1600, 2400]}
+          src={race}
+          alt="The 2026 Italian Grand Prix on lap 22, with the two Mercedes ahead and Verstappen behind them."
+          widths={[640, 1280, 1920]}
           sizes={sizes}
           class="reel-img on"
         />
         <Image
           src={jump}
-          alt="Allowed once, it jumps to lap 36, with Verstappen catching Hamilton. The palette says: Jumped to Verstappen catching Hamilton."
-          widths={[800, 1240, 1600, 2400]}
+          alt="Asked to go to when Verstappen caught Hamilton after his pit stop, and allowed once to look ahead, it jumps to lap 36: Jumped to Verstappen catching Hamilton."
+          widths={[640, 1280, 1920]}
           sizes={sizes}
           class="reel-img"
         />
-        <!-- Over Allow once in shot 6a (646,1164 to 794,1197 of 2400×1350), pressed before the jump -->
-        <span class="press" data-press aria-hidden="true"></span>
-        <Palette />
+        <div class="dim" data-dim></div>
+        <Palette spoiler />
       </div>
-
-      <div class="tl" data-tl aria-hidden="true" style={`--from: ${pct(22)}; --to: ${pct(36)}`}>
-        <div class="tl-bar">
-          <div class="tl-hidden"></div>
-          <div class="tl-fill"></div>
-          <div class="tl-from"></div>
-          <div class="tl-arc"></div>
-          <div class="tl-head"></div>
-        </div>
-        <div class="mono flex items-center justify-between gap-4 text-[11px] text-dim">
-          <span>LAP 22<span class="tl-to"> → 36</span></span>
-          <span class="flex items-center gap-4">
-            <span class="tl-note">the rest of the race stays hidden</span>
-            <button type="button" class="reel-toggle text-xs" data-moment-toggle aria-pressed="false">pause</button>
-          </span>
-        </div>
+      <div class="mono flex justify-end text-xs">
+        <button type="button" class="reel-toggle" data-moment-toggle aria-pressed="false">pause</button>
       </div>
     </div>
-
-    <ol class="steps" data-steps>
-      {
-        steps.map((s, i) => (
-          <li>
-            <span class="mono text-xs text-dim">{String(i + 1).padStart(2, '0')}</span>
-            <span class="mono text-[13px]">{s.title}</span>
-            <span class="text-[15px] leading-[1.55] text-[#9a9a9a]">{s.text}</span>
-          </li>
-        ))
-      }
-    </ol>
   </div>
 </section>
 
 <style>
-  /* Allow once, pressed: a red ring, then the press */
-  .press {
+  /* The race, dimmed to almost dark while you ask */
+  .dim {
     position: absolute;
-    left: 26.92%;
-    top: 86.22%;
-    width: 6.17%;
-    height: 2.44%;
-    outline: 2px solid #ff3b30;
-    outline-offset: 3px;
+    inset: 0;
+    background: #000;
     opacity: 0;
-    transition: opacity 0.25s ease;
+    transition: opacity 0.6s ease;
     pointer-events: none;
   }
-  .press.on {
-    opacity: 1;
+  .dim.on {
+    opacity: 0.86;
   }
-  .press.hit {
-    background: rgba(255, 255, 255, 0.45);
-  }
-
-  /* The race as a bar, like the app's seek bar: watched up to the playhead, and hidden after it */
-  .tl {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border: 1px solid #232323;
-    background: #0a0a0a;
-    padding: 16px 16px 6px;
-  }
-  .tl-bar {
-    position: relative;
-    height: 22px;
-    --at: var(--from);
-  }
-  .tl.jumped .tl-bar {
-    --at: var(--to);
-  }
-  .tl-fill,
-  .tl-hidden {
-    position: absolute;
-    top: 10px;
-    height: 2px;
-  }
-  .tl-fill {
-    left: 0;
-    width: var(--at);
-    background: #e7e7e7;
-    transition: width 1.2s cubic-bezier(0.6, 0, 0.2, 1);
-  }
-  /* What's after the playhead, hatched */
-  .tl-hidden {
-    left: 0;
-    right: 0;
-    top: 6px;
-    height: 10px;
-    background: repeating-linear-gradient(-45deg, #2c2c2c 0 2px, transparent 2px 6px);
-    transition: background 0.4s ease;
-  }
-  .tl.lit .tl-hidden {
-    background: repeating-linear-gradient(-45deg, #5a5a5a 0 2px, transparent 2px 6px);
-  }
-  .tl-head {
-    position: absolute;
-    top: 2px;
-    left: var(--at);
-    width: 3px;
-    height: 18px;
-    margin-left: -1px;
-    background: #e7e7e7;
-    transition: left 1.2s cubic-bezier(0.6, 0, 0.2, 1);
-  }
-  /* Where it jumped from, and the jump over the laps between */
-  .tl-from {
-    position: absolute;
-    top: 4px;
-    left: var(--from);
-    width: 2px;
-    height: 14px;
-    background: #5a5a5a;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  .tl-arc {
-    position: absolute;
-    top: -2px;
-    left: var(--from);
-    width: calc(var(--to) - var(--from));
-    border-top: 1px dashed #8f8f8f;
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 1.2s cubic-bezier(0.6, 0, 0.2, 1);
-  }
-  .tl.jumped .tl-from {
-    opacity: 1;
-  }
-  .tl.jumped .tl-arc {
-    transform: none;
-  }
-  .tl-to {
-    opacity: 0;
-    transition: opacity 0.4s ease 0.8s;
-  }
-  .tl.jumped .tl-to {
-    opacity: 1;
-  }
-  .tl-note {
-    transition: color 0.4s ease;
-  }
-  .tl.lit .tl-note {
-    color: #e7e7e7;
-  }
-  /* Without JavaScript, or before it plays, it's where it lands */
-  .tl:not(.live) .tl-bar {
-    --at: var(--to);
-  }
-  .tl:not(.live) .tl-from,
-  .tl:not(.live) .tl-to {
-    opacity: 1;
-  }
-  .tl:not(.live) .tl-arc {
-    transform: none;
-  }
-
-  /* The steps, one after the other. While it plays, the one happening is lit and the ones before it are done */
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-    gap: 24px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .steps li {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding-top: 14px;
-    border-top: 2px solid #2c2c2c;
-    transition:
-      border-color 0.3s ease,
-      opacity 0.3s ease;
-  }
-  .steps.live li {
-    opacity: 0.45;
-  }
-  .steps.live li.done {
-    opacity: 0.75;
-    border-top-color: #5a5a5a;
-  }
-  .steps.live li.on {
-    opacity: 1;
-    border-top-color: #ff3b30;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .press,
-    .tl *,
-    .steps li {
+    .dim {
       transition: none;
     }
   }
@@ -257,51 +88,28 @@ const sizes = '(min-width: 1240px) 1208px, calc(100vw - 32px)';
 
   const reel = document.querySelector<HTMLElement>('[data-moment-reel]');
   const toggle = document.querySelector<HTMLButtonElement>('[data-moment-toggle]');
-  const tl = document.querySelector<HTMLElement>('[data-tl]');
-  const list = document.querySelector<HTMLElement>('[data-steps]');
-  if (reel && toggle && tl && list) {
+  if (reel && toggle) {
     const frames = [...reel.querySelectorAll<HTMLImageElement>('.reel-img')];
-    const press = reel.querySelector<HTMLElement>('[data-press]')!;
-    const steps = [...list.querySelectorAll('li')];
+    const dim = reel.querySelector<HTMLElement>('[data-dim]')!;
     const prompt = reel.dataset.prompt ?? '';
     const { ready, wait } = clock(reel, toggle, 'the jump');
     const pal = palette(reel.querySelector<HTMLElement>('[data-palette]')!, wait);
 
-    const step = (n: number) => {
-      list.classList.add('live');
-      steps.forEach((s, i) => {
-        s.classList.toggle('on', i === n);
-        s.classList.toggle('done', i < n);
-      });
-    };
-
     const play = async () => {
+      // The slow laps
       await ready();
-      // 1. On lap 22, the prompt typed on an empty screen
-      tl.classList.add('live');
-      tl.classList.remove('jumped', 'lit');
-      step(0);
-      showFrame(frames, -1);
-      await pal.ask(prompt);
-      // 2. The spoiler check
-      step(1);
       showFrame(frames, 0);
+      await wait(2600);
+      // It dims, and you ask
+      dim.classList.add('on');
+      await pal.ask(prompt);
+      // It asks first, and you allow it
+      await pal.allow();
+      // The jump
       pal.hide();
-      await wait(2800);
-      // 3. Allow once, and the jump
-      step(2);
-      press.classList.add('on');
-      await wait(800);
-      press.classList.add('hit');
-      await wait(250);
-      press.classList.remove('on', 'hit');
       showFrame(frames, 1);
-      tl.classList.add('jumped');
-      await wait(2800);
-      // 4. What's after stays hidden
-      step(3);
-      tl.classList.add('lit');
-      await wait(3600);
+      dim.classList.remove('on');
+      await wait(5000);
     };
 
     (async () => {

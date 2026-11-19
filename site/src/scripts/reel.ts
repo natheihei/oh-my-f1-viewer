@@ -55,7 +55,7 @@ export function palette(el: HTMLElement, wait: (ms: number) => Promise<void>) {
   return {
     /** Shows the palette empty, types the prompt a key at a time, and presses Enter. Resolves while the "…" pulses */
     async ask(prompt: string) {
-      el.classList.remove('sent', 'keys', 'busy');
+      el.classList.remove('sent', 'keys', 'busy', 'asking', 'pressing', 'pressed');
       mark.textContent = '>';
       typed.textContent = '';
       el.classList.add('show');
@@ -76,8 +76,17 @@ export function palette(el: HTMLElement, wait: (ms: number) => Promise<void>) {
       mark.textContent = '…';
       await wait(1500);
     },
+    /** The spoiler check comes up, and Allow once is pressed. For a palette drawn with `spoiler` */
+    async allow() {
+      el.classList.add('asking');
+      await wait(2400);
+      el.classList.add('pressing');
+      await wait(800);
+      el.classList.add('pressed');
+      await wait(300);
+    },
     hide() {
-      el.classList.remove('show');
+      el.classList.remove('show', 'asking', 'pressing', 'pressed');
     },
   };
 }
