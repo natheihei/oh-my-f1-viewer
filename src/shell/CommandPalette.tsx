@@ -4,7 +4,7 @@
  * tiles and the tiles' errors attached to the next message. Older history is a scroll away. Sits above
  * the timeline, over the video. It stays open while any of those wait on the viewer.
  */
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent } from 'react';
 import { host, read, useLive } from '../host';
 import { AgentPanel, describeAgent } from './AgentPanel';
 import { AttachTag, AttachTray } from './AttachTray';
@@ -18,7 +18,7 @@ import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
-import { palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
+import { AUTO_HIDE_MS, palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
@@ -77,8 +77,26 @@ export function CommandPalette() {
   const hasTiles = tiles.length > 0;
   // While building, the tag beside the input is the only way out, so the palette stays.
   // Attached errors and an offer of build mode wait on the viewer, so the palette stays for them too.
-  const showing = open || blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
+  const held = blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
+  const showing = open || held;
   const suggestions = matchCommands(value);
+
+  // A timer that runs out while the palette is held leaves it be: hiding it then would only show once the hold ends.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const heldRef = useRef(held);
+  heldRef.current = held;
+  const free = () => !heldRef.current;
+  /** Focus moving into the palette keeps it open; leaving it for elsewhere in the app hides it after a while. */
+  const focusProps = {
+    ref: rootRef,
+    onMouseDown: palette.keepOpen,
+    onFocus: palette.keepOpen,
+    onBlur: (e: FocusEvent<HTMLDivElement>) => {
+      if (e.currentTarget.contains(e.relatedTarget)) return;
+      // Still in the palette when the time's up means the window lost focus, not the palette: leave it.
+      palette.hideAfter(AUTO_HIDE_MS, () => free() && !rootRef.current?.contains(document.activeElement));
+    },
+  };
 
   // The picker's selected row outlines its tile, if it's one. The keys and the mouse both select a row.
   const pointed = picker ? picker.options[picker.selected] : null;
@@ -215,7 +233,7 @@ export function CommandPalette() {
       requestAnimationFrame(() => inputRef.current?.focus());
     };
     return (
-      <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
+      <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
         <BackgroundPanel onClose={closePanel} />
       </div>
     );
@@ -233,7 +251,7 @@ export function CommandPalette() {
       });
     };
     return (
-      <div className="palette" data-testid="palette" onMouseDown={palette.keepOpen}>
+      <div className="palette" data-testid="palette" {...focusProps}>
         <AgentPanel onClose={closePanel} />
       </div>
     );
@@ -254,7 +272,8 @@ export function CommandPalette() {
         palette.push('user', rest ? `${command.name} ${rest}` : command.name);
         // Typed in full, since the list doesn't offer it without a session.
         if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
-        else void command.run(rest);
+        // Done, the palette goes after a while, as it does once the agent has acted. A panel or build mode holds it.
+        else void Promise.resolve(command.run(rest)).then(() => palette.hideAfter(AUTO_HIDE_MS, free));
       } else {
         palette.push('user', text);
         palette.push('error', `Unknown command. Available: ${availableCommands().map((c) => c.name).join(', ')}`);
@@ -265,7 +284,7 @@ export function CommandPalette() {
   };
 
   return (
-    <div className={`palette ${building ? 'palette-building' : ''} ${pointing ? 'palette-pointing' : ''}`} data-testid="palette" data-building={building} onMouseDown={palette.keepOpen}>
+    <div className={`palette ${building ? 'palette-building' : ''} ${pointing ? 'palette-pointing' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
       {blank && entries.length <= 1 && !onboardingActive ? (
         <div className="palette-intro" data-testid="palette-intro">
           <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>

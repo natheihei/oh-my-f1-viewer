@@ -8,10 +8,7 @@ import { loadEvents } from './commands';
 import { agentFix, f1tvFix } from './fixes';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
-import { palette, usePalette, type AttachedTag } from './palette';
-
-// Long enough to read the reply before the palette goes.
-const AUTO_HIDE_MS = 10_000;
+import { AUTO_HIDE_MS, palette, usePalette, type AttachedTag } from './palette';
 
 /**
  * The last message sent to the agent, as it went: what a fix sends again once the agent can answer. Only the

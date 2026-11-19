@@ -61,6 +61,9 @@ interface PaletteState {
 
 export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [], panel: null }));
 
+/** How long the palette stays once it's done with, or once focus leaves it: long enough to read the last line. */
+export const AUTO_HIDE_MS = 10_000;
+
 let nextEntry = 1;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -133,11 +136,15 @@ export const palette = {
     cancelHide();
     usePalette.setState({ open: false });
   },
-  hideAfter(ms: number): void {
+  /**
+   * Hides the palette in `ms`, unless something keeps it open first: typing, a click or focus in it, the
+   * agent starting a turn. `still` is asked when the time is up, and keeps it open by answering false.
+   */
+  hideAfter(ms: number, still: () => boolean = () => true): void {
     cancelHide();
     hideTimer = setTimeout(() => {
       hideTimer = null;
-      usePalette.setState({ open: false });
+      if (!usePalette.getState().busy && still()) usePalette.setState({ open: false });
     }, ms);
   },
   /** Typing or focusing the palette keeps it open. */
