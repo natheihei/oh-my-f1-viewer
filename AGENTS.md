@@ -13,7 +13,7 @@ The repo builds two things that share no code. Each has its own `package.json`, 
 | Target | Where | Stack | Build |
 | --- | --- | --- | --- |
 | OMFV electron app | Repo root: `electron/` (main process), `src/` (renderer), `shared/` (imported by both) | Electron, React, Vite | `npm run build`. See [README.md](README.md) |
-| OMFV product site | `site/` | Astro (static), Tailwind CSS v4 | `npm run build` in `site/`, which writes `site/dist/`. See [site/README.md](site/README.md) |
+| OMFV product site | `site/` | Astro (static), Tailwind CSS v4 | `npm run build` in `site/`, which writes `site/dist/`. See [site/README.md](site/README.md). Deployed to Cloudflare Workers: see [site/DEPLOY.md](site/DEPLOY.md) |
 
 Don't import across them. The site keeps its own copies of the logo from `icons/`.
 
