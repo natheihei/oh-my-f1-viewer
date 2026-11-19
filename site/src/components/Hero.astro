@@ -1,11 +1,50 @@
 ---
-import { Image } from 'astro:assets';
-import logo from '../assets/omfv-logo.svg';
+import Arrow from './Arrow.astro';
+import HeroReel from './HeroReel.astro';
+import { BETA_HREF } from '../site';
 ---
 
-<section class="mx-auto flex max-w-4xl flex-col items-start gap-8 px-4 py-24 sm:px-8">
-  <Image src={logo} alt="OMFV, oh-my-f1-viewer" class="h-auto w-56" />
-  <h1 class="text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
-    Your own F1 viewer: any car, any chart, any moment. <span class="text-signal">Just ask.</span>
-  </h1>
-</section>
+<header class="wrap flex flex-wrap items-center justify-between gap-4 py-5">
+  <a href="#top" class="flex items-center gap-2.5 no-underline">
+    <svg width="34" height="26" viewBox="5 8 22 16" aria-hidden="true">
+      <path
+        fill="#ff3b30"
+        d="M13.39 20.37Q12.95 20.37 12.63 20.05Q12.30 19.72 12.30 19.29Q12.30 18.91 12.57 18.60L12.72 18.43Q13.22 17.86 13.58 17.49Q13.94 17.12 14.05 17.05L14.05 16.97Q13.69 16.99 13.31 17.02Q12.93 17.05 12.61 17.05L7.54 17.05Q7.06 17.05 6.73 16.74Q6.40 16.44 6.40 16.00Q6.40 15.56 6.73 15.26Q7.06 14.96 7.54 14.96L12.53 14.96Q13.03 14.96 13.43 14.97Q13.82 14.99 14.05 15.03L14.05 14.96Q13.86 14.78 13.53 14.45Q13.20 14.12 12.82 13.72L12.49 13.36Q12.25 13.05 12.25 12.67Q12.25 12.24 12.57 11.93Q12.89 11.63 13.33 11.63Q13.88 11.63 14.20 12.11L17.51 16.00L14.22 19.93Q13.92 20.37 13.39 20.37Z"
+      ></path>
+      <rect fill="#e7e7e7" x="19.7" y="9" width="6" height="14"></rect>
+    </svg>
+    <span class="mono text-[15px] font-bold">oh-my-f1-viewer</span>
+    <span class="mono bg-paper px-1.5 py-0.5 text-[10px] tracking-[0.08em] text-ink">BETA</span>
+  </a>
+  <nav class="mono flex flex-wrap items-center gap-6 text-[13px]">
+    <a href="#ask" class="text-[#b9b9b9] no-underline">Features</a>
+    <a href="#build" class="text-build no-underline">/build</a>
+    <a class="btn" href={BETA_HREF} style="min-height: 36px; padding: 0 14px; font-size: 13px">Join the beta</a>
+  </nav>
+</header>
+
+<div id="top" class="wrap flex flex-col gap-12 pt-14 pb-[72px]">
+  <div class="flex max-w-[980px] flex-col gap-6">
+    <h1 class="disp" style="font-size: clamp(40px, 6.4vw, 84px); line-height: 0.98">
+      Your own F1 viewer: any car, any chart, any moment.
+    </h1>
+    <p class="mono m-0 flex items-center gap-3.5 font-bold" style="font-size: clamp(28px, 4vw, 48px)">
+      <Arrow />
+      <span>Just ask.</span><span class="cursor" aria-hidden="true"></span>
+    </p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a class="btn" href={BETA_HREF}>Join the beta</a>
+      <span class="mono pl-1 text-xs leading-relaxed text-dim">
+        A fan project · Needs F1 TV and{' '}
+        <span class="tip" tabindex="0"
+          >an LLM provider<span class="tip-pop"
+            >A ChatGPT plan, or an API key from a provider like Anthropic (Claude) or OpenAI.</span
+          ></span
+        >
+      </span>
+    </div>
+    <p class="hand -mt-2.5 pl-1" style="font-size: 26px">↑ open source soon. still doing formation laps</p>
+  </div>
+
+  <HeroReel />
+</div>

@@ -1,0 +1,17 @@
+---
+/** A section's eyebrow prompt, rolling through a few examples on a 12 s loop. Screen readers get the first one. */
+interface Props {
+  prompts: string[];
+  /** Seconds into the loop to start, so sections don't roll together. */
+  offset?: number;
+}
+const { prompts, offset = 0 } = Astro.props;
+const loop = [...prompts, prompts[0]];
+---
+
+<span class="sr-only">{prompts[0]}</span>
+<span class="tick" aria-hidden="true">
+  <span class="tick-track" style={`animation-delay: -${offset}s`}>
+    {loop.map((p) => <span>{p}</span>)}
+  </span>
+</span>
