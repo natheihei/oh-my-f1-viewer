@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { palette, usePalette, type Fix } from './palette';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AUTO_HIDE_MS, palette, usePalette, type Fix } from './palette';
 
 const fix = (run: Fix['run'], command = '/login-f1tv'): Fix => ({ detail: 'why', label: 'Sign in', command, busy: 'waiting', run });
 const entry = (id: number) => usePalette.getState().entries.find((e) => e.id === id)!;
@@ -68,5 +68,47 @@ describe('panels', () => {
     palette.openPanel('background');
     expect(first).toBe(true);
     expect(palette.closePanel()).toBe(false);
+  });
+});
+
+describe('hiding after a while', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    usePalette.setState({ open: true, busy: false });
+  });
+  afterEach(() => {
+    palette.keepOpen();
+    vi.useRealTimers();
+  });
+
+  it('hides once the time is up', () => {
+    palette.hideAfter(AUTO_HIDE_MS);
+    vi.advanceTimersByTime(AUTO_HIDE_MS - 1);
+    expect(usePalette.getState().open).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(usePalette.getState().open).toBe(false);
+  });
+
+  it('stays when kept open before the time is up', () => {
+    palette.hideAfter(AUTO_HIDE_MS);
+    palette.keepOpen();
+    vi.advanceTimersByTime(AUTO_HIDE_MS);
+    expect(usePalette.getState().open).toBe(true);
+  });
+
+  it('stays when what it waited on says no once the time is up', () => {
+    let held = false;
+    palette.hideAfter(AUTO_HIDE_MS, () => !held);
+    held = true;
+    vi.advanceTimersByTime(AUTO_HIDE_MS);
+    expect(usePalette.getState().open).toBe(true);
+  });
+
+  it('stays while the agent is working', () => {
+    palette.setBusy(true);
+    palette.hideAfter(AUTO_HIDE_MS);
+    vi.advanceTimersByTime(AUTO_HIDE_MS);
+    expect(usePalette.getState().open).toBe(true);
+    palette.setBusy(false);
   });
 });
