@@ -2,7 +2,6 @@
 import { Image } from 'astro:assets';
 import Ticker from './Ticker.astro';
 import draft from '../assets/shots/page/b1-draft.webp';
-import saved from '../assets/shots/page/b1-saved.webp';
 import badge from '../assets/ferrari-badge.png';
 
 const prompts = [
@@ -32,23 +31,111 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
       </div>
     </div>
 
-    <div class="pair min-w-0 flex-[1_1_560px]" style="filter: drop-shadow(0 18px 40px rgba(60, 45, 0, 0.35))">
+    <div class="build-shot min-w-0 flex-[1_1_560px]" style="filter: drop-shadow(0 18px 40px rgba(60, 45, 0, 0.35))">
       <Image
         src={draft}
-        alt="Build mode on the 2026 Mexico City Grand Prix, asked for the onboard of whoever's pitting with their name over it: a draft tile, framed in yellow, shows Russell in the pit lane with 'RUS pitting', and the palette offers Save or Undo all."
+        alt="Build mode on the 2026 Mexico City Grand Prix, under the safety car: a new tile, framed in yellow and marked DRAFT, shows Russell's onboard in the pit lane with 'RUS pitting' over it."
         widths={[680, 1360, 1780]}
         sizes={sizes}
         class="shot"
         style="border-color: #0d0d0d"
       />
-      <Image
-        src={saved}
-        alt="After Save, the pitting onboard is an ordinary tile."
-        widths={[680, 1360, 1780]}
-        sizes={sizes}
-        class="shot"
-        style="border-color: #0d0d0d"
-      />
+      <!-- The build palette as it was for this shot (3b in shots/hero/SHOTS.md), drawn here so its text is sharp -->
+      <div class="bp mono">
+        <div class="bp-said"><span class="bp-mark">&gt;</span> /build</div>
+        <div class="bp-note"># Build mode. Save keeps what gets built, Undo all puts everything back.</div>
+        <div class="bp-said">
+          <span class="bp-mark">&gt;</span> onboard of whoever's pitting. An overlay of "[DRIVER] pitting" in the center.
+        </div>
+        <div class="bp-note"># wrote pitting_onboard/main.tsx · loaded</div>
+        <div class="bp-reply">
+          Built Pitting onboard. It follows the most recent car in the pit lane and shows a centered driver overlay.
+        </div>
+        <div class="bp-input">
+          <span><span class="bp-mark bp-arrow">&gt;</span> <span class="bp-placeholder">describe a tile to build, or a change to one</span></span>
+          <span class="bp-tags"
+            ><span>BUILD · 1 CHANGE</span><span class="bp-undo">UNDO ALL</span><span class="bp-save">SAVE</span></span
+          >
+        </div>
+      </div>
     </div>
   </div>
 </section>
+
+<style>
+  /* The screenshot, with the build palette over its left side where the app drew it. A size container, so the
+     palette's type scales with the picture; when that's too small to read, the palette goes under it */
+  .build-shot {
+    position: relative;
+    container-type: inline-size;
+  }
+  .bp {
+    position: absolute;
+    left: 1.5%;
+    bottom: 2.5%;
+    width: 66%;
+    background: #1a1a1a;
+    border: 1px solid #ffd12e;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    font-size: clamp(9px, 1.8cqw, 13px);
+    line-height: 1.5;
+    color: #e7e7e7;
+  }
+  .bp > div {
+    padding: 0.3em 0.8em;
+  }
+  .bp-said {
+    background: #262626;
+  }
+  .bp-mark {
+    color: #8f8f8f;
+  }
+  .bp-note {
+    color: #8f8f8f;
+  }
+  .bp-reply {
+    padding-left: 2.1em !important;
+  }
+  .bp-input {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4em 1em;
+    margin-top: 0.3em;
+    border-top: 1px solid #2c2c2c;
+    padding-block: 0.5em !important;
+  }
+  .bp-arrow {
+    color: #ffd12e;
+    font-weight: 700;
+  }
+  .bp-placeholder {
+    color: #6f6f6f;
+  }
+  .bp-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    color: #ffd12e;
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+  }
+  .bp-undo {
+    border: 1px solid #ffd12e;
+    padding: 0 0.4em;
+  }
+  .bp-save {
+    background: #ffd12e;
+    color: #0d0d0d;
+    padding: 0 0.4em;
+  }
+  @container (max-width: 520px) {
+    .bp {
+      position: static;
+      width: auto;
+      margin-top: 10px;
+      font-size: 11px;
+    }
+  }
+</style>
