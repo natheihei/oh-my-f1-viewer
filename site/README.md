@@ -19,6 +19,8 @@ npm run preview    # serve the built dist/
 | `src/pages/` | One file per route: `index.astro`, `404.astro` |
 | `src/layouts/Base.astro` | `<head>`, meta and Open Graph tags, global CSS |
 | `src/components/` | Page sections, top to bottom: `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
+| `src/components/HeroReel.astro`, `Palette.astro` | The hero's reel, and the app's palette a reel types prompts into |
+| `src/scripts/reel.ts` | What the hero and `Moment` share to tell a story in frames: the clock with its pause button, typing into the palette, and switching frames |
 | `src/site.ts` | Where "Join the beta" goes, and team colours |
 | `src/assets/` | Images Astro optimises (import them) |
 | `src/assets/shots/page/` | The crops the page uses, from the raw shots on the `assets/landing-shots` branch (see `shots/hero/SHOTS.md`) |
