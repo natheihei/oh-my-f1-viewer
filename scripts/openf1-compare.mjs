@@ -7,13 +7,14 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { MAIN_PROFILE } from './platform.mjs';
 
 const require = createRequire(import.meta.url);
 const { TimingStore } = require('../dist-electron/electron/timingdb/store.js');
 const { ingestTiming } = require('../dist-electron/electron/timingdb/ingest.js');
 const { TIMING_FEEDS } = require('../dist-electron/electron/timingdb/processors.js');
 
-const CACHE = path.join(os.homedir(), '.config/oh-my-f1-viewer/livetiming-cache');
+const CACHE = path.join(MAIN_PROFILE, 'livetiming-cache');
 const API = 'https://api.openf1.org/v1';
 const STATIC = 'https://livetiming.formula1.com/static';
 const ALL_VISIBLE = Number.MAX_SAFE_INTEGER;

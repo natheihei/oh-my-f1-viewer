@@ -1,5 +1,5 @@
 // Runs F1 TV sign-in and the agent's setup through the palette, skipping any that are already done. It runs on the
-// main profile, ~/.config/oh-my-f1-viewer, since that's where the checks copy both logins from: close OMFV first.
+// main profile (scripts/platform.mjs), since that's where the checks copy both logins from: close OMFV first.
 import { paletteText, startApp, typeInPalette } from './harness.mjs';
 import { MAIN_PROFILE } from './isolated.mjs';
 

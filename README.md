@@ -17,7 +17,7 @@ Every stream, and the session data, stays locked to one session clock. Needs an 
 
 ## Run it
 
-Linux only for now.
+Runs on Linux and macOS, from source: it needs [Node.js](https://nodejs.org) (`brew install node` on macOS).
 
 ```bash
 npm install --allow-git=all
@@ -57,7 +57,8 @@ shows a spoiler check: answer Allow once, Allow for this session or Don't allow.
 
 ### Mods
 
-A [mod](docs/MODS.md) is a plugin: a folder in `~/.config/oh-my-f1-viewer/mods` that the app reloads on every save. For now it can add a component
+A [mod](docs/MODS.md) is a plugin: a folder in the app's profile, `~/.config/oh-my-f1-viewer/mods` on Linux and
+`~/Library/Application Support/oh-my-f1-viewer/mods` on macOS, that the app reloads on every save. For now it can add a component
 for tiles to show, such as a chart or a controller that jumps between laps. Write one yourself or have a coding agent write it, then
 ask the agent above to show it.
 
@@ -74,8 +75,10 @@ npm run check
 Typecheck and unit tests. The scripts below run the real app in Electron, and all but the first three need both sign-ins:
 
 A check that needs a sign-in runs an OMFV of its own, apart from any other on the machine, on a fresh profile with copies of
-the F1 TV sign-in and, when it needs the agent, of the agent's sign-in and settings from `~/.config/oh-my-f1-viewer`. An agent sign-in the
-run refreshed is written back, so the original stays valid ([scripts/isolated.mjs](scripts/isolated.mjs)).
+the F1 TV sign-in and, when it needs the agent, of the agent's sign-in and settings from the main profile. An agent sign-in the
+run refreshed is written back, so the original stays valid ([scripts/isolated.mjs](scripts/isolated.mjs)). On Hyprland the
+check's window opens on workspace 3 without taking focus; elsewhere, macOS included, it opens as an ordinary window in front
+([scripts/platform.mjs](scripts/platform.mjs)).
 
 ```bash
 node scripts/layout-check.mjs

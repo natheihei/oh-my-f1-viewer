@@ -34,7 +34,7 @@ try {
     await host.catalog.loadIndex();
     if (read().events.state !== 'ready') throw new Error(`Events didn't load: ${read().events.error}`);
   });
-  if (!(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) throw new Error('The agent is not set up in ~/.config/oh-my-f1-viewer: connect it in /settings-agent.');
+  if (!(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) throw new Error('The agent is not set up in the main profile: connect it in /settings-agent.');
 
   const results = [];
   for (const request of requests) {

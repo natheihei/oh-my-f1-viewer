@@ -2,11 +2,11 @@
 // <time>_<pick|view|build>.sqlite. Each entry is a row of pi-durable's `entries` table, its
 // record JSON. Read-only, so it works while the app has the newest one open.
 import { existsSync, readdirSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { MAIN_PROFILE } from './platform.mjs';
 
-export const MAIN_CONVERSATIONS = path.join(os.homedir(), '.config', 'oh-my-f1-viewer', 'conversations');
+export const MAIN_CONVERSATIONS = path.join(MAIN_PROFILE, 'conversations');
 
 /** The stored conversations of a kind ('pick', 'view' or 'build', or every kind when omitted), oldest first, as full paths. */
 export function conversationFiles(dir = MAIN_CONVERSATIONS, kind) {
