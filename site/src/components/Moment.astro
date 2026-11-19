@@ -1,0 +1,62 @@
+---
+import { Image } from 'astro:assets';
+import Ticker from './Ticker.astro';
+import ask from '../assets/shots/page/m1-ask.webp';
+import jump from '../assets/shots/page/m1-jump.webp';
+
+const prompts = ['go to when VER caught HAM', 'back to the restart', 'take me to lap 30', 'show me that overtake again'];
+const sizes = '(min-width: 1240px) 640px, calc(100vw - 32px)';
+---
+
+<section id="moment" class="band">
+  <div class="wrap flex flex-wrap items-center gap-x-16 gap-y-12">
+    <div class="flex min-w-0 flex-[1_1_440px] flex-col gap-[22px]">
+      <p class="eyebrow"><b>›</b> <Ticker prompts={prompts} offset={3} /></p>
+      <h2 class="disp h2">Jump to the moment, without spoiling the rest.</h2>
+      <div class="flex flex-col gap-3.5 pt-2">
+        <div class="flex items-baseline gap-3.5">
+          <span class="mono font-bold text-signal">!</span><span class="text-[15px] leading-[1.55]"
+            >I hate spoilers, so it asks before it looks ahead.</span
+          >
+        </div>
+        <div class="flex items-baseline gap-3.5">
+          <span class="mono font-bold text-signal">!</span><span class="text-[15px] leading-[1.55]"
+            >Nothing on screen gives it away.</span
+          >
+        </div>
+      </div>
+    </div>
+
+    <div class="flex min-w-0 flex-[1_1_520px] flex-col gap-4">
+      <p class="hand pl-1">undercut the slow laps, jump straight to the fight ↓</p>
+      <div class="pair">
+        <Image
+          src={ask}
+          alt="Asked to go to when Verstappen caught Hamilton after his pit stop, on lap 22 of the 2026 Italian Grand Prix, the palette asks first: the agent wants to look ahead of where you are. Allow once, allow for this session, or don't allow."
+          widths={[640, 1280]}
+          sizes={sizes}
+          class="shot"
+        />
+        <Image
+          src={jump}
+          alt="Allowed once, it jumps to lap 36, with Verstappen catching Hamilton."
+          widths={[640, 1280]}
+          sizes={sizes}
+          class="shot"
+        />
+      </div>
+      <div class="flex flex-col gap-2.5 border border-[#232323] bg-[#0a0a0a] p-4">
+        <div class="relative h-[22px]" aria-hidden="true">
+          <div class="absolute inset-x-0 top-2.5 h-0.5 bg-[#2c2c2c]"></div>
+          <div class="absolute top-2.5 left-0 h-0.5 w-[68%] bg-paper"></div>
+          <div class="absolute top-1 left-[41%] h-3.5 w-0.5 bg-[#5a5a5a]"></div>
+          <div class="absolute top-0.5 left-[68%] h-[18px] w-[3px] bg-paper"></div>
+          <div class="absolute top-[-2px] right-[32%] left-[41%] h-px border-t border-dashed border-dim"></div>
+        </div>
+        <div class="mono flex justify-between text-[11px] text-dim">
+          <span>LAP 22 → 36</span><span>the rest of the race stays hidden</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

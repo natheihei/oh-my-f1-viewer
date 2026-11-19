@@ -1,0 +1,54 @@
+---
+import { Image } from 'astro:assets';
+import Ticker from './Ticker.astro';
+import draft from '../assets/shots/page/b1-draft.webp';
+import saved from '../assets/shots/page/b1-saved.webp';
+import badge from '../assets/ferrari-badge.png';
+
+const prompts = [
+  "show whoever's pitting",
+  "always show the leader's onboard",
+  'buttons to skip a lap',
+  'the gap to the car behind, on every onboard',
+];
+const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
+---
+
+<section id="build" class="band" style="background: #ffd12e; color: #0d0d0d; border-top: none">
+  <div class="wrap flex flex-wrap items-center gap-x-16 gap-y-12">
+    <div class="flex min-w-0 flex-[1_1_420px] flex-col gap-[22px]">
+      <p class="eyebrow" style="color: #3d3400">
+        <b style="color: #0d0d0d">›</b> <span class="font-bold text-ink">/build</span>
+        <Ticker prompts={prompts} offset={9} />
+      </p>
+      <h2 class="disp h2 text-ink">Missing a view? Ask for it to be built.</h2>
+      <p class="lead" style="color: #2b2500">Describe it, and try it on the race you're watching.</p>
+      <div class="hand text-ink" style="font-size: 30px">
+        <p class="m-0">a view you always wanted? radio it in.</p>
+        <p class="m-0 mt-2 flex items-center gap-3 font-bold" style="color: #e8002d">
+          <Image src={badge} alt="Ferrari badge" width={36} height={48} class="h-12 w-9 flex-none object-contain" />
+          <span>we’re <s>checking</s> building.</span>
+        </p>
+      </div>
+    </div>
+
+    <div class="pair min-w-0 flex-[1_1_560px]" style="filter: drop-shadow(0 18px 40px rgba(60, 45, 0, 0.35))">
+      <Image
+        src={draft}
+        alt="Build mode on the 2026 Mexico City Grand Prix, asked for the onboard of whoever's pitting with their name over it: a draft tile, framed in yellow, shows Russell in the pit lane with 'RUS pitting', and the palette offers Save or Undo all."
+        widths={[680, 1360, 1780]}
+        sizes={sizes}
+        class="shot"
+        style="border-color: #0d0d0d"
+      />
+      <Image
+        src={saved}
+        alt="After Save, the pitting onboard is an ordinary tile."
+        widths={[680, 1360, 1780]}
+        sizes={sizes}
+        class="shot"
+        style="border-color: #0d0d0d"
+      />
+    </div>
+  </div>
+</section>
