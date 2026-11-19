@@ -42,20 +42,20 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
       />
       <!-- The build palette as it was for this shot (3b in shots/hero/SHOTS.md), drawn here so its text is sharp -->
       <div class="bp mono">
-        <div class="bp-said"><span class="bp-mark">&gt;</span> /build</div>
-        <div class="bp-note"># Build mode. Save keeps what gets built, Undo all puts everything back.</div>
-        <div class="bp-said">
-          <span class="bp-mark">&gt;</span> onboard of whoever's pitting. An overlay of "[DRIVER] pitting" in the center.
+        <div class="bp-row bp-said"><span class="bp-mark">&gt;</span><span>/build</span></div>
+        <div class="bp-row bp-note">
+          <span>#</span><span>Build mode. Save keeps what gets built, Undo all puts everything back.</span>
         </div>
-        <div class="bp-note"># wrote pitting_onboard/main.tsx · loaded</div>
-        <div class="bp-reply">
-          Built Pitting onboard. It follows the most recent car in the pit lane and shows a centered driver overlay.
+        <div class="bp-row bp-said">
+          <span class="bp-mark">&gt;</span><span>onboard of whoever's pitting. An overlay of <span class="whitespace-nowrap">"[DRIVER] pitting"</span> in the center.</span>
         </div>
-        <div class="bp-input">
-          <span><span class="bp-mark bp-arrow">&gt;</span> <span class="bp-placeholder">describe a tile to build, or a change to one</span></span>
-          <span class="bp-tags"
-            ><span>BUILD · 1 CHANGE</span><span class="bp-undo">UNDO ALL</span><span class="bp-save">SAVE</span></span
-          >
+        <div class="bp-row bp-note"><span>#</span><span>wrote pitting_onboard/main.tsx · loaded</span></div>
+        <div class="bp-row">
+          <span></span><span>Built Pitting onboard. It follows the most recent car in the pit lane and shows a centered driver overlay.</span>
+        </div>
+        <div class="bp-row bp-input">
+          <span class="bp-arrow">&gt;</span><span class="bp-placeholder">describe a tile to build, or a change to one</span>
+          <span class="bp-tags"><span>BUILD · 1 CHANGE</span><span class="bp-undo">UNDO ALL</span><span class="bp-save">SAVE</span></span>
         </div>
       </div>
     </div>
@@ -74,6 +74,7 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
     left: 1.5%;
     bottom: 2.5%;
     width: 66%;
+    padding-top: 0.25em;
     background: #1a1a1a;
     border: 1px solid #ffd12e;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
@@ -81,30 +82,28 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
     line-height: 1.5;
     color: #e7e7e7;
   }
-  .bp > div {
-    padding: 0.3em 0.8em;
+  /* Every row has a column for its mark (> said, # from the app), so text and its wrapped lines line up */
+  .bp-row {
+    display: grid;
+    grid-template-columns: 2ch minmax(0, 1fr);
+    padding: 0.3em 0.9em;
   }
   .bp-said {
     background: #262626;
+    margin-block: 0.15em;
   }
-  .bp-mark {
-    color: #8f8f8f;
-  }
+  .bp-said > :first-child,
   .bp-note {
     color: #8f8f8f;
   }
-  .bp-reply {
-    padding-left: 2.1em !important;
-  }
+  /* The input on one line: its placeholder gives way to the build tag */
   .bp-input {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
+    grid-template-columns: 2ch minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.4em 1em;
-    margin-top: 0.3em;
+    column-gap: 0;
+    margin-top: 0.35em;
+    padding-block: 0.55em;
     border-top: 1px solid #2c2c2c;
-    padding-block: 0.5em !important;
   }
   .bp-arrow {
     color: #ffd12e;
@@ -112,23 +111,28 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
   }
   .bp-placeholder {
     color: #6f6f6f;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .bp-tags {
     display: flex;
     align-items: center;
-    gap: 0.6em;
+    gap: 0.55em;
+    margin-left: 1em;
     color: #ffd12e;
-    font-size: 0.85em;
-    letter-spacing: 0.04em;
+    font-size: 0.82em;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
   }
-  .bp-undo {
+  .bp-undo,
+  .bp-save {
+    padding: 0.1em 0.45em;
     border: 1px solid #ffd12e;
-    padding: 0 0.4em;
   }
   .bp-save {
     background: #ffd12e;
     color: #0d0d0d;
-    padding: 0 0.4em;
   }
   @container (max-width: 520px) {
     .bp {
@@ -136,6 +140,15 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
       width: auto;
       margin-top: 10px;
       font-size: 11px;
+    }
+    /* The build tag under the placeholder, so it reads whole */
+    .bp-input {
+      grid-template-columns: 2ch minmax(0, 1fr);
+      row-gap: 0.6em;
+    }
+    .bp-tags {
+      grid-column: 2;
+      margin-left: 0;
     }
   }
 </style>
