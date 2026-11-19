@@ -1,5 +1,5 @@
 // Runs build mode in the real app, over a real replay race, muted, with the real agent: the cases in
-// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up in ~/.config/oh-my-f1-viewer.
+// docs/BUILD_MODE.md, "Checking it", numbered the same. Needs F1 TV signed in and the agent set up in the main profile.
 // It runs in an OMFV of its own, with both logins copied in (see isolated.mjs), launched more than once on the same
 // profile, whose mods folder starts empty. Prints what the agent says, which could give the race away: use a
 // session you've watched.
@@ -368,6 +368,8 @@ async function partSave() {
   r = await say('give the buttons a 3px white border, and check how it looks');
   const buildLog = newest('build');
   check('23 the build agent took a picture of the draft', r.names.includes('look_at') && buildLog.includes('"look_at"') && buildLog.includes('"image"'), r.names.join(' '));
+  // The log is the whole build, so its image can be an earlier one: the note is this turn's, and only a picture leaves it.
+  check('23 and got it', r.notes.some((n) => n.includes('looked at')), r.notes.join(' | '));
   const borders = await tile(stepper)
     .locator('button')
     .evaluateAll((els) =>
