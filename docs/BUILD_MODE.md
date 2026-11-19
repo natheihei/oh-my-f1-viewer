@@ -192,8 +192,9 @@ instructions, and a separate session keeps what the build read out of the viewin
 - **It keeps some viewing tools:** `list_streams`, `remove_tiles`, `edit_tile`, `play`, `pause`, `suggest_tiles`, `query_session` and `seek_to`. The
   last two don't ask the spoiler gate. `suggest_tiles` takes any component name here, since the mod may have been written this turn.
 - **It can see a picture of a draft**, in the strip or on the grid, to check how it looks. `look_at` records the window with
-  Element Capture, restricted to the tile or draft, and keeps one frame (`src/host/picture.ts`). The palette floating over a tile isn't
-  in it, and nothing on screen changes while it's taken. That takes each tile and draft being a stacking context of its own
+  Element Capture, restricted to the tile or draft, and keeps the first frame with its shape (`src/host/picture.ts`). The frame's
+  scale isn't the window's: Chromium fits a recording to the screen and raises the page's scale while it's recorded, so on macOS a
+  tile came 1.18 times its size. The palette floating over a tile isn't in it, and nothing on screen changes while it's taken. That takes each tile and draft being a stacking context of its own
   (`isolation: isolate` in `styles.css`), and the window allowed to record itself: `electron/main.ts` grants `display-capture` to the
   app's own window only, and a recording only of itself. The viewing agent never sees what a chart shows. The build agent may, since
   it can already read the whole session.
@@ -343,7 +344,8 @@ and `/build` itself (`src/shell/commands.test.ts`).
 
 **The picture**
 
-23. After "give the buttons a 3px white border", the build's stored conversation shows it took a picture of the draft, and the screen matches.
+23. After "give the buttons a 3px white border", the build's stored conversation shows it took a picture of the draft, the turn's
+    notes say it looked, and the screen matches.
 24. Asked for a mod about one driver with nobody named, the agent hears that its draft needs a driver, the strip's card says so, and
     the agent asks whose without picking.
 25. Asked to change a mod on screen from two drivers to one, the agent hears that the tile's props no longer fit, and gives the tile its
