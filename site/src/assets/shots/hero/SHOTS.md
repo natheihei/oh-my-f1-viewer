@@ -10,7 +10,7 @@ design canvas's `Main.dc.html`.
 Page slots:
 
 - [x] **H1 · hero.** The page rotates four, each after its prompt is typed: shots 8b, 1, 5b and 2. They're the ones with the palette closed, since the page types the prompt itself.
-- [x] **M1 · spoiler check, then the jump.** Shots 6a, 6b and 6c.
+- [x] **M1 · spoiler check, then the jump.** Shots 6a and 6b, as whole frames: the section plays them as a reel, the prompt typed first and Allow once pressed between them. Shot 6c isn't used.
 - [x] **B1 · build draft, then Save.** Shots 3 and 4.
 - [x] **S1 · suggestion strip with live previews.** Shot 7.
 - [x] **X1 · point at anything.** [x1-mention.png](https://github.com/natheihei/oh-my-f1-viewer/blob/assets/landing-shots/x1-mention.png?raw=true). Asked as `how is @Ferrari doing against @Mercedes on the @gap` instead of `how is HAM vs @Ferrari`, since HAM drives for Ferrari in 2026, and only a tile tag lights a tile.

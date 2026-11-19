@@ -322,7 +322,41 @@
     color: #ff3b30;
   }
 
+  /* A story told in frames of the app (scripts/reel.ts). The frames stack, and the one that's on fades in. It's a size
+     container, so the palette typed into between frames scales with it */
+  .reel {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    container-type: inline-size;
+  }
+  .reel-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.7s ease;
+  }
+  .reel-img.on {
+    opacity: 1;
+  }
+  .reel-toggle {
+    color: #8f8f8f;
+    background: none;
+    border: 0;
+    padding: 4px 2px;
+    min-height: 32px;
+    cursor: pointer;
+  }
+  .reel-toggle:hover {
+    color: #e7e7e7;
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .reel-img {
+      transition: none;
+    }
     .cursor,
     .tick-track,
     .marquee-track {
