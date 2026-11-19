@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-17.
+What has actually been verified, and what hasn't. Last updated 2026-11-19.
 
 ## Verified on real sessions
 
@@ -245,6 +245,27 @@ to `omfv-credentials.json`, the settings to `omfv-settings.json` and each conver
 OpenAI's page in the default browser, the callback came back, the provider showed as "OpenAI (ChatGPT subscription)" with GPT-6.1
 Terra at medium, and a real turn replied on the new login.
 
+## Verified on macOS
+
+On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew (2026-11-19):
+
+- Install, build, typecheck and unit tests. One unit test is flaky on macOS: "finds new mods and drops removed ones" in
+  `electron/mods/mods.test.ts` timed out in 1 of 3 full runs and passes alone, likely the folder watcher starting late under load.
+- The castLabs CDM downloads and is ready. Signing in to F1 TV, connecting ChatGPT, playing a race and talking to the agent all
+  work, by hand. Most replays don't use DRM, so whether F1 TV accepts the castLabs build's development VMP signature on macOS
+  isn't known yet.
+- Ctrl+Shift+P toggles the palette (`scripts/layout-check.mjs`). macOS gets the app, Edit and Window menus for Cmd+C, Cmd+V,
+  Cmd+A and Cmd+Q, which haven't been tried by hand.
+- `scripts/layout-check.mjs`, `scripts/suggestions-check.mjs` and `scripts/overflow-check.mjs` pass, and so does
+  `scripts/mods-check.mjs` on the 2026 United States race at lap 25. The checks' windows open in front and take focus.
+- Build mode, with `scripts/build-check.mjs` on the 2026 United States race, three runs. The first passed in full, though its case 23
+  passed with the picture failing: `look_at` timed out on most tries, since Chromium records a tab at the screen's size and
+  `src/host/picture.ts` waited for a frame at the window's. It now takes the first frame with the element's shape, and case 23 also
+  checks the turn's note. The second run found a new mod's first save reported as "not a mod yet": macOS's watcher told of the save
+  after `settled` had stopped waiting, which now looks for the folder itself. The third passed every case but 25: the edit's
+  result left out that the tile needed a driver, though the agent still fixed the tile in that turn, having been refused by
+  `edit_tile`. Case 25 passed in the first run, so it comes and goes, and why isn't known.
+
 ## Not verified
 
 - **The window icon.** Hyprland shows none, so it hasn't been seen.
@@ -258,9 +279,9 @@ Terra at medium, and a real turn replied on the new login.
 - **Forking a fork, and other requests.** One request has been seen (above). Forking a local mod, a second change to a fork already
   made, and installed components other than the tower haven't been asked of the real agent.
 
-- **Mods on macOS and Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
+- **Mods on Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 
-- **Build mode on a live session, on macOS or Windows, or in the production build.** `look_at` records the window, which hasn't been
+- **Build mode on a live session, on Windows, or in the production build.** `look_at` records the window, which hasn't been
   tried with DRM video on screen.
 - **A build that runs long enough to compact.** The build conversation isn't collapsed, so nothing depends on it, but it hasn't run.
 - **Dragging a draft from the strip onto the grid.** Enter and the host's add are checked. The drag is the same code as any suggestion's.
@@ -311,5 +332,5 @@ Terra at medium, and a real turn replied on the new login.
 - Race-state tools for the agent.
 - More charts.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
-- Windows and macOS, including the VMP signing they need.
+- Windows, and a packaged macOS app, with the VMP signing they need. macOS runs from source.
 - Saved layouts, pop-out windows, translations and auto-update.

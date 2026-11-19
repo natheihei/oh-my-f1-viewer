@@ -1,14 +1,16 @@
 // Runs an OMFV of its own for checks and screenshots, apart from any other OMFV on the machine: a fresh
-// user data dir with copies of what it needs from ~/.config/oh-my-f1-viewer (see prepareProfile), its own Vite and
-// devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus. Driven over
+// user data dir with copies of what it needs from the main profile (see prepareProfile), its own Vite and
+// devtools ports, and on Hyprland it opens silently on workspace 3 and never takes focus; elsewhere it opens as usual. Driven over
 // the devtools protocol, since Playwright's own Electron launch would spawn the window where it pleases.
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
-import { execFileSync, spawn } from 'node:child_process';
-import os from 'node:os';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { createServer as netServer } from 'node:net';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { MAIN_PROFILE, ON_HYPRLAND, startElectron } from './platform.mjs';
+
+export { MAIN_PROFILE };
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
@@ -34,8 +36,6 @@ const until = async (what, ok, ms = 60_000) => {
   throw new Error(what);
 };
 
-/** The main profile, ~/.config/oh-my-f1-viewer. */
-export const MAIN_PROFILE = path.join(os.homedir(), '.config', 'oh-my-f1-viewer');
 
 /** Whether an OMFV is running on a user data dir: its single-instance lock names a live process. */
 export function profileInUse(dir) {
@@ -66,7 +66,7 @@ function writeSettings(dir, values) {
 }
 
 /**
- * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from ~/.config/oh-my-f1-viewer, and with
+ * Makes `dir` a profile for a run: copies of the F1 TV login and the DRM module from the main profile, and with
  * `agent`, of the agent's login and its settings too (not the rest of the settings: the run's volume and
  * background start from the defaults). The originals are never moved. The agent's login is written back after
  * the run if it was refreshed: see syncAgentLogin. Onboarding is marked finished, since a profile without the agent's
@@ -98,7 +98,7 @@ export function prepareProfile(dir, { agent = false, onboarding = false } = {}) 
 
 /**
  * A sign-in like ChatGPT's refreshes its token when it expires, and the refresh token can change with it, which
- * leaves the one in ~/.config/oh-my-f1-viewer no longer valid. So once a run's app has quit, a login it refreshed is
+ * leaves the one in the main profile no longer valid. So once a run's app has quit, a login it refreshed is
  * written back there, unless something changed that one meanwhile, such as an OMFV running on it.
  */
 export function syncAgentLogin(dir, log = console.log) {
@@ -145,7 +145,6 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   await server.listen();
   log(`vite on ${vitePort}, devtools on ${cdpPort}, user data in ${userData}`);
 
-  const electronBin = path.join(root, 'node_modules/electron/dist/electron');
   const [width, height] = [1600 * scale, 900 * scale];
   const electronArgs = [
     ...(inspectPort ? [`--inspect=127.0.0.1:${inspectPort}`] : []),
@@ -156,15 +155,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
   ];
   // The main process's own output: why a renderer went, what the agent and mods did.
   const mainLog = path.join(outDir, 'main.log');
-  let child = null;
-  if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
-    // Through Hyprland so its rules apply: `exec` keeps electron as the spawned pid the rules match.
-    const command = `sh -c 'exec env -u CHROME_DESKTOP ELECTRON_START_URL=http://127.0.0.1:${vitePort} ${[electronBin, ...electronArgs].join(' ')} >>${mainLog} 2>&1'`;
-    execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(command)}, { workspace = "3 silent", float = true, size = "${width} ${height}", no_initial_focus = true })`]);
-  } else {
-    const { CHROME_DESKTOP: _ignored, ...env } = process.env;
-    child = spawn(electronBin, electronArgs, { env: { ...env, ELECTRON_START_URL: `http://127.0.0.1:${vitePort}` }, stdio: ['ignore', openSync(mainLog, 'a'), openSync(mainLog, 'a')] });
-  }
+  const child = startElectron(electronArgs, { env: { ELECTRON_START_URL: `http://127.0.0.1:${vitePort}` }, width, height, log: mainLog });
 
   /** This instance's electron pids, found by its user data dir. */
   const ownPids = () => {
@@ -198,7 +189,7 @@ export async function startIsolatedApp(outDir, { name = 'isolated', scale = 1.5,
     syncAgentLogin(userData, log);
   };
 
-  if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+  if (ON_HYPRLAND) {
     const pids = new Set(ownPids());
     const clients = JSON.parse(execFileSync('hyprctl', ['clients', '-j']).toString());
     const mine = clients.find((c) => pids.has(c.pid));
@@ -257,7 +248,7 @@ export async function openRace(page, { sessionKey = null, year = 2026, telemetry
   const opened = await page.evaluate(
     async ({ sessionKey, year }) => {
       const { host, read } = await import('/src/host/index.ts');
-      if (!(await host.account.status()).f1tv.signedIn) return { error: 'F1 TV is not signed in in ~/.config/oh-my-f1-viewer: sign in in the app, then run this again.' };
+      if (!(await host.account.status()).f1tv.signedIn) return { error: 'F1 TV is not signed in in the main profile: sign in in the app, then run this again.' };
       host.audio.setVolume({ volume: 0 });
       let start = null;
       window.omfv.data.onStatus((status) => {

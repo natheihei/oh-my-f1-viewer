@@ -1,7 +1,7 @@
 // Checks forking an installed component in the real app, over a real replay race, with the real agent: the installed
 // sources copied into the mods folder, then in build mode a change asked of a tile of an installed component, pointed
 // at with @. The agent should fork it into a new mod, leave the installed one and its tile as they are, show the fork
-// in the strip, and say it made a fork. Needs F1 TV signed in and the agent set up in ~/.config/oh-my-f1-viewer.
+// in the strip, and say it made a fork. Needs F1 TV signed in and the agent set up in the main profile.
 // Prints what the agent says, which could give the race away: use a session you've watched.
 // With --no-agent it forks as the build agent's fork_component does, with the app's own forkComponent from
 // dist-electron (run npm run build:electron first), and checks what the app does with the fork, but not the agent.
