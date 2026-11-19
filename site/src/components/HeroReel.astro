@@ -6,6 +6,7 @@
  * Without JavaScript it's the first screenshot. Under reduced motion it starts paused, and prompts appear whole.
  */
 import { Image } from 'astro:assets';
+import Palette from './Palette.astro';
 import battle from '../assets/shots/page/hero-battle.webp';
 import onboards from '../assets/shots/page/hero-onboards.webp';
 import lead from '../assets/shots/page/hero-lead.webp';
@@ -37,7 +38,7 @@ const slides = [
 ---
 
 <div class="flex flex-col gap-2.5">
-  <div class="reel shot relative aspect-video overflow-hidden" data-reel>
+  <div class="reel shot" data-hero-reel>
     {
       slides.map((s, i) => (
         <Image
@@ -52,207 +53,31 @@ const slides = [
         />
       ))
     }
-    <div class="reel-palette mono" aria-hidden="true">
-      <div class="reel-sent"><span class="reel-mark">&gt;</span> <span data-sent></span></div>
-      <div class="reel-input">
-        <span class="reel-mark reel-arrow" data-mark>&gt;</span><span data-typed></span><span class="reel-caret"></span><span
-          class="reel-placeholder"
-          data-placeholder>ask for anything on screen</span
-        >
-      </div>
-    </div>
+    <Palette />
   </div>
   <div class="mono flex justify-end text-xs">
-    <button type="button" class="reel-toggle" data-toggle aria-pressed="false">pause</button>
+    <button type="button" class="reel-toggle" data-hero-toggle aria-pressed="false">pause</button>
   </div>
 </div>
 
-<style>
-  .reel {
-    container-type: inline-size;
-  }
-  /* <Image> renders outside this component's scope, so these rules reach it with :global */
-  .reel :global(.reel-img) {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 0.7s ease;
-  }
-  .reel :global(.reel-img.on) {
-    opacity: 1;
-  }
-  /* The palette as the app draws it, on an empty screen of its own between screenshots: centred, and bigger */
-  .reel-palette {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: min(88%, 820px);
-    background: #1b1b1b;
-    border: 1px solid #3a3a3a;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
-    font-size: clamp(13px, 2cqw, 24px);
-    line-height: 1.45;
-    color: #e7e7e7;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-  }
-  .reel.typing .reel-palette {
-    opacity: 1;
-  }
-  .reel-sent {
-    display: none;
-    padding: 0.55em 0.9em;
-    background: #262626;
-    border-bottom: 1px solid #2c2c2c;
-  }
-  .reel-sent .reel-mark {
-    color: #8f8f8f;
-  }
-  .reel.sent .reel-sent {
-    display: block;
-  }
-  /* Long prompts wrap, so the whole of one is readable */
-  .reel-input {
-    padding: 0.7em 0.9em;
-  }
-  .reel-arrow {
-    color: #ff3b30;
-    font-weight: 700;
-    margin-right: 0.6em;
-  }
-  /* While the agent works, the app's prompt mark is a pulsing "…" */
-  .reel.busy .reel-arrow {
-    animation: reel-pulse 1s steps(2) infinite;
-  }
-  .reel.busy .reel-caret {
-    display: none;
-  }
-  @keyframes reel-pulse {
-    50% {
-      opacity: 0.3;
-    }
-  }
-  .reel-caret {
-    display: inline-block;
-    width: 0.55em;
-    height: 1.1em;
-    background: #e7e7e7;
-    margin-left: 1px;
-    vertical-align: -0.2em;
-    animation: blink 1.1s steps(1) infinite;
-  }
-  .reel.keys .reel-caret {
-    animation: none;
-  }
-  .reel-placeholder {
-    color: #6f6f6f;
-    margin-left: 0.4em;
-  }
-  .reel.keys .reel-placeholder {
-    display: none;
-  }
-
-  .reel-toggle {
-    color: #8f8f8f;
-    background: none;
-    border: 0;
-    padding: 4px 2px;
-    min-height: 32px;
-    cursor: pointer;
-  }
-  .reel-toggle:hover {
-    color: #e7e7e7;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .reel :global(.reel-img),
-    .reel-palette {
-      transition: none;
-    }
-    .reel-caret,
-    .reel.busy .reel-arrow {
-      animation: none;
-    }
-  }
-</style>
-
 <script>
-  const reel = document.querySelector<HTMLElement>('[data-reel]');
-  const toggle = document.querySelector<HTMLButtonElement>('[data-toggle]');
+  import { clock, palette, showFrame } from '../scripts/reel';
+
+  const reel = document.querySelector<HTMLElement>('[data-hero-reel]');
+  const toggle = document.querySelector<HTMLButtonElement>('[data-hero-toggle]');
   if (reel && toggle) {
     const imgs = [...reel.querySelectorAll<HTMLImageElement>('.reel-img')];
-    const typed = reel.querySelector<HTMLElement>('[data-typed]')!;
-    const mark = reel.querySelector<HTMLElement>('[data-mark]')!;
-    const sent = reel.querySelector<HTMLElement>('[data-sent]')!;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    let paused = reduce;
-    let visible = true;
-    let wake: (() => void) | null = null;
-    const running = () => !paused && visible && !document.hidden;
-    const resume = () => {
-      if (running() && wake) {
-        wake();
-        wake = null;
-      }
-    };
-    // Waits, and keeps waiting while paused, off screen or in a hidden tab
-    const wait = async (ms: number) => {
-      await new Promise((r) => setTimeout(r, ms));
-      while (!running()) await new Promise<void>((r) => (wake = r));
-    };
-
-    const setPaused = (p: boolean) => {
-      paused = p;
-      toggle.textContent = p ? 'play' : 'pause';
-      toggle.setAttribute('aria-pressed', String(p));
-      toggle.setAttribute('aria-label', p ? 'Play the screenshots' : 'Pause the screenshots');
-      resume();
-    };
-    toggle.addEventListener('click', () => setPaused(!paused));
-    setPaused(paused);
-    new IntersectionObserver(([e]) => {
-      visible = e.isIntersecting;
-      resume();
-    }).observe(reel);
-    document.addEventListener('visibilitychange', resume);
-
-    const show = (i: number) => imgs.forEach((img, j) => img.classList.toggle('on', j === i));
+    const { ready, wait } = clock(reel, toggle, 'the screenshots');
+    const pal = palette(reel.querySelector<HTMLElement>('[data-palette]')!, wait);
 
     const play = async (i: number) => {
-      const prompt = imgs[i].dataset.prompt ?? '';
       // Paused on the screenshot it's showing, with nothing over it
-      while (!running()) await new Promise<void>((r) => (wake = r));
-      // An empty screen, and the palette, empty
-      reel.classList.remove('sent', 'keys', 'busy');
-      mark.textContent = '>';
-      typed.textContent = '';
-      show(-1);
-      reel.classList.add('typing');
-      await wait(900);
-      // The prompt types, a key at a time
-      reel.classList.add('keys');
-      if (reduce) typed.textContent = prompt;
-      else
-        for (let n = 1; n <= prompt.length; n++) {
-          typed.textContent = prompt.slice(0, n);
-          await wait(28 + Math.random() * 45);
-        }
-      await wait(reduce ? 1200 : 500);
-      // Enter: it goes up into the history, and the agent works, with the app's pulsing "…"
-      sent.textContent = prompt;
-      typed.textContent = '';
-      reel.classList.remove('keys');
-      reel.classList.add('sent', 'busy');
-      mark.textContent = '…';
-      await wait(1500);
-      // What it got
-      show(i);
-      reel.classList.remove('typing');
+      await ready();
+      // An empty screen, the prompt typed and sent, then what it got
+      showFrame(imgs, -1);
+      await pal.ask(imgs[i].dataset.prompt ?? '');
+      showFrame(imgs, i);
+      pal.hide();
       await wait(5200);
     };
 
