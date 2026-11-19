@@ -139,7 +139,15 @@ app
     }
     sessionState.startProactiveRefreshLoop();
 
-    Menu.setApplicationMenu(null);
+    if (process.platform === 'darwin') {
+      // macOS always shows a menu bar, and its key equivalents live in the menu: with none, Cmd+C, Cmd+V and Cmd+A
+      // do nothing in the palette, and Cmd+Q doesn't quit.
+      Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
+      // Unpackaged, the dock shows Electron's icon: the window's `icon` is ignored on macOS.
+      app.dock?.setIcon(path.join(__dirname, '..', '..', 'icons', 'omfv-icon.png'));
+    } else {
+      Menu.setApplicationMenu(null);
+    }
     createMainWindow();
     // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
     void data.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
