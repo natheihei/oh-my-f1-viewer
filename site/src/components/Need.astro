@@ -1,0 +1,32 @@
+---
+import { BETA_HREF } from '../site';
+---
+
+<section id="need" class="band">
+  <div class="wrap flex flex-col gap-10">
+    <div class="flex flex-col gap-[18px]">
+      <p class="eyebrow"><b>›</b> want to try it?</p>
+      <h2 class="disp h2">Please come help me test it.</h2>
+    </div>
+    <div class="-mb-5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span class="mono text-[11px] tracking-[0.08em] text-dim">YOU'LL NEED</span>
+      <p class="hand" style="font-size: 24px">no servers of mine in between. it all stays in your garage</p>
+    </div>
+    <div class="grid gap-px border border-[#232323] bg-[#232323]" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
+      <div class="flex flex-col gap-2 bg-ink p-6">
+        <span class="mono text-[11px] tracking-[0.08em] text-dim">VIDEO AND DATA</span>
+        <span class="disp text-[28px]">F1 TV subscription</span>
+        <span class="text-sm leading-normal text-[#9a9a9a]">Your own account. F1 TV's access and regional rules apply.</span>
+      </div>
+      <div class="flex flex-col gap-2 bg-ink p-6">
+        <span class="mono text-[11px] tracking-[0.08em] text-dim">THE AGENT</span>
+        <span class="disp text-[28px]">An LLM provider</span>
+        <span class="text-sm leading-normal text-[#9a9a9a]">A ChatGPT plan, or an API key.</span>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <a class="btn" href={BETA_HREF}>Join the beta</a>
+      <span class="mono pl-1 text-xs leading-relaxed text-dim">Open source after the beta.</span>
+    </div>
+  </div>
+</section>
