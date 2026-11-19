@@ -12,6 +12,10 @@ npm run build      # writes dist/
 npm run preview    # serve the built dist/
 ```
 
+## Deploy
+
+It runs on Cloudflare Workers: `main` builds staging (only the owner can open it), and publishing a `site-v*` release ships production at https://oh-my-f1-viewer.yueyao.run. See [DEPLOY.md](DEPLOY.md).
+
 ## Layout
 
 | Path | What's there |
@@ -26,3 +30,4 @@ npm run preview    # serve the built dist/
 | `src/assets/shots/page/` | The crops the page uses, from the raw shots on the `assets/landing-shots` branch (see `shots/hero/SHOTS.md`) |
 | `src/styles/global.css` | Tailwind import and `@theme` tokens |
 | `public/` | Copied as-is: favicon, OG image |
+| `wrangler.jsonc` | The production and staging Workers and their domains. See [DEPLOY.md](DEPLOY.md) |
