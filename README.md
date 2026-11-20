@@ -107,11 +107,10 @@ puts everything back. Mods are plain folders, so you can also write or change on
 
 ## Requirements
 
-| | |
-| --- | --- |
-| **Video and data** | An F1 TV subscription. You sign in with your own account, and F1 TV's access and regional rules apply. |
-| **Agent** | A ChatGPT plan (sign in with ChatGPT), or an OpenAI or Anthropic API key. |
-| **Platform** | Linux x64, or macOS on Apple silicon. Windows isn't supported yet. |
+- **Video and data:** an F1 TV subscription. You sign in with your own account, and F1 TV's access and regional rules
+  apply.
+- **Agent:** a ChatGPT plan (sign in with ChatGPT), or an OpenAI or Anthropic API key.
+- **Platform:** Linux x64, or macOS on Apple silicon. Windows isn't supported yet.
 
 ## Install
 
