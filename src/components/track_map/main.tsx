@@ -508,7 +508,6 @@ export default defineComponent({
   title: 'Track',
   description:
     'Every running car as a dot on the circuit, where it is right now, a ring in the pit lane. Retired cars are left off. Suggest it when the user asks where cars are on track, or wants to see traffic.',
-  replayOnly: true,
   args: Type.Object({ drivers: Type.Optional(Drivers) }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

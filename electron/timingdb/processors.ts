@@ -796,6 +796,9 @@ export const TIMING_FEEDS = [
 
 export const TELEMETRY_FEEDS = ['CarData.z', 'Position.z'] as const;
 
+/** What the live capture subscribes to. F1 sends the telemetry only on a socket that carries the F1 TV token. */
+export const LIVE_FEEDS = [...TIMING_FEEDS, ...TELEMETRY_FEEDS] as const;
+
 export interface SessionMeta {
   meetingKey: number;
   sessionKey: number;

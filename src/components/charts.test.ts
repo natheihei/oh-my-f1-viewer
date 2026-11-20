@@ -1184,7 +1184,7 @@ describe('the registry', () => {
     expect(byName.race_control.spec({})).toEqual({ key: 'race_control', label: 'Race control' });
     expect(byName.race_status.spec({})).toEqual({ key: 'race_status', label: 'Race status' });
     for (const name of ['track_map', 'car_telemetry', 'pedal_barcode', 'speed_ribbon']) {
-      expect(byName[name].replayOnly).toBe(true);
+      expect(byName[name].replayOnly).toBeFalsy();
       expect(byName[name].needs).toEqual(['telemetry']);
     }
     expect(byName.track_map.spec({})).toEqual({ key: 'track_map:all', label: 'Track' });

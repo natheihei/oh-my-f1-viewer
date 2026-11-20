@@ -93,8 +93,8 @@ as well. Panels share one interface: `mount`, `onSnapshot`, `onFrame`, `onSeek`,
 
 ## Still unknown
 
-- The live path as traffic: chunk contents, socket frames and how late messages arrive. Las Vegas FP1 on 2026-11-20 00:30 UTC is the next chance
-  to capture them.
+- The relay's live path: its chunk contents and how late its messages arrive. Our own socket was captured at 2026 Las Vegas FP1: see
+  [SESSION_DATA.md](SESSION_DATA.md).
 - What the relay does to OpenF1's data, and whether its `.z` topics are F1's own or rebuilt.
-- What F1's `Subscribe` returns for a client joining mid-race, measured on our own feed.
-- Whether live sessions need sign-in. The code has a sign-in prompt and an on/off check before connecting, and neither was exercised.
+- What F1's `Subscribe` returns for a client joining mid-race. At a practice it was current state except stints and race control, which hold the
+  whole session: see "Joining a live session late" in [SESSION_DATA.md](SESSION_DATA.md). A race should confirm it with lap counts and pits.

@@ -1,10 +1,10 @@
 /** Wires every ipcMain handler `window.omfv` talks to. Glue over the other main-process modules. */
 import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
-import type { AgentMode, F1TvStatus } from '../shared/api';
+import type { AgentMode, F1TvStatus, LiveItem } from '../shared/api';
 import type { PlaceHealth } from '../shared/health';
 import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
-import { listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
+import { classifySessionType, listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
 import { setUiState, uiState } from './settings';
 import type { Mods } from './mods';
@@ -244,7 +244,8 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   });
   handle('f1tv:liveNow', async () => {
     await ensureF1Client();
-    return f1tv.getLiveNow();
+    // Typed like a listed session, so a live race is a race to the charts and the capture.
+    return (await f1tv.getLiveNow()).map((item: LiveItem) => ({ ...item, type: classifySessionType(item.title) }));
   });
   handle('f1tv:upcoming', async () => {
     await ensureF1Client();
