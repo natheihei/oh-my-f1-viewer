@@ -14,6 +14,8 @@ export function dataMessage(data: SessionDataView, needs: readonly Dataset[]): s
       return data.reason;
     case 'loading':
       return 'Loading session data…';
+    case 'waiting':
+      return data.reason;
   }
   for (const dataset of needs) {
     const { state, reason } = data.datasets[dataset];
@@ -22,6 +24,11 @@ export function dataMessage(data: SessionDataView, needs: readonly Dataset[]): s
     if (state === 'loading') return `Loading ${dataset} data…`;
   }
   return null;
+}
+
+/** The longer explanation behind `dataMessage`, for a hover, or null when it says enough by itself. */
+export function dataDetail(data: SessionDataView): string | null {
+  return data.state === 'waiting' ? data.detail : null;
 }
 
 /** Why the queries can't be drawn yet, or null when they can. */

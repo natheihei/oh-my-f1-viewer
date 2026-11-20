@@ -72,6 +72,10 @@ names a tile. `live.health` and look-ahead approvals name tiles by id too.
 - `unsupported`, with a `reason`, such as a session from before 2023.
 - `loading`, with a `sessionKey` and `datasets` (null until known).
 - `failed`, with a `reason`.
+- `waiting`: there's data, but nothing at the frame on screen can be shown yet. The frame can't be placed on the data to within a second or
+  so, as on a replay MultiViewer hasn't published an anchor for, or the live video hasn't reached when the capture began. It holds `sessionKey`,
+  `datasets`, `tables`, a short `reason` and a longer `detail`. SQL at the playhead fails with both, and `asOf: 'session'` still reads.
+  See "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md).
 - `ready`. In this state it also holds:
   - `sessionKey`.
   - `datasets`: each dataset's (`timing`, `telemetry`, `results`) `state` (`absent`, `loading`, `partial`, `complete` or `failed`)
@@ -398,11 +402,12 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `set_audio` | `host.audio.set`. It takes a stream name, and picks the video: the one already heard if it shows that feed, else the one in the main tile, else the oldest. It refuses a feed no tile shows |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
+| `go_live` | `host.playback.goLive`, on a live session only. Asks the spoiler gate first, as a forward seek, unless playback is at the live edge |
 | `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
 `app_state` also carries the master volume next to the heard video and its tile, so the agent never calls a feed audible at volume 0. It carries the
-playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `goLive`, `changeVolumeBy` or `toggleMute`, isn't
+playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 
 With no session open, as on a countdown, messages go to the picking agent, which has only `list_sessions`, `list_live`, `list_upcoming`

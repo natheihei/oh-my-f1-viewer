@@ -66,6 +66,51 @@ Electron 42.11.18:
 - Restarting the app mid-session: the tables rebuilt from the kept messages, and the time it was closed was recorded as a gap.
 - Listing upcoming sessions during a live one.
 
+On 2026 Las Vegas FP2 (2026-11-20), joined at the start, with `scripts/live-check.mjs`: F1 LIVE and three onboards under DRM within 0.05s of each
+other, through a three-minute DVR seek and returning to live, and 4,052 rows held against about 4,500 expected for 49.6s of video lag. The check
+that rewinding hides rows found `position` empty both ways, three minutes into a practice before anyone had set a lap. The live stream's frame
+time was measured against the picture: see "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md). Run again 35 minutes in, after the
+data waited for the video, all 25 checks passed: the data waited, saying why, and lined up 17.6s after the streams were ready; a rewind before the
+capture waited again, and a read at the playhead was refused; back at the live edge it lined up at once; and 4,498 rows were held against about
+4,284 expected for 57.6s behind arrival.
+
+Also on FP2, in an isolated instance with the agent:
+
+- **Waiting for the video.** Joining, a timing tower read "Waiting for the video to reach the live data" for about 50s, its hover counting
+  down, then drew with the playhead 7.5s behind the stream's wall clock, in the broadcast's order. Rewinding before the capture waited again.
+  Reopening with the capture kept reached `ready` in 6s.
+- **Every chart on live data.** All 15 drew without an error, added by hand since each is offered for races only. The tower's order matched
+  the broadcast's. Its gaps are empty, as a practice has no intervals.
+- **The agent seeking on a live session.** Asked for when race control deleted a lap, it queried `race_control` and seeked to it.
+  `seekToDate` landed within 0.5s of the frame asked for, 1 and 5 minutes back.
+- **The agent opening the live session** said it was "already open" and "paused" at FP1. It was handed off to a new conversation that saw
+  only an open session, at a clock that hadn't ticked. The handoff now says this message opened it, playback reads "starting" until a stream
+  is ready, and on FP2 it replied that the session is open.
+- **Asking for a race-only chart.** Asked "Add the timing tower." in practice, it said it "isn't currently available in the tile list" after
+  trying it as a stream, or "can't add the timing tower with the available controls" without trying. Its component list left the tower out,
+  so it didn't know it existed. It's now told the components that don't fit and why, and replied "The timing tower isn't offered in practice
+  sessions; it's available for races and sprints." Named as a stream, `suggest_tiles` now says which component it is and why it isn't offered.
+- **Moving on the live timeline.** "Go back 2 minutes." queried the playhead and seeked back. "Back to live." had no tool to do it: the
+  agent tried to read ahead for the latest time, which the spoiler check refused. `go_live` now does it, asking the spoiler check as a
+  forward seek when behind the edge. On FP2 it asked, and after Allow once playback was at the edge, 8.7s behind.
+- **Answering from live data.** Asked who had the fastest lap, it read `laps` at the playhead, checked `race_control` for deleted laps, and
+  answered Leclerc by 0.096s from Hamilton, which the table agreed with. Deletion messages have no driver or lap number in F1's feed, only
+  in their text.
+- **Through the end of the session.** Sampled every 30s from 04:43Z to 05:11Z, through a red flag ("SESSION ABORTED" at 04:49Z), the
+  restart, the chequered flag at 05:00Z and 11 minutes after it: the stream stayed live and playing at the edge, 8.7s behind, with the data
+  `ready` and following race control and track status throughout. Its frames ran 43.7-43.9s behind real time, so the data was held that long.
+
+FP2 as a replay, 55 minutes after it ended, in an isolated instance with the agent and a fresh profile:
+
+- **Finding and playing it.** Asked "Open Las Vegas FP2 from the start.", the agent listed the season and loaded it from the start: a
+  1:42:43 replay under DRM. Leclerc's and Hamilton's onboards, suggested and added, held within 0.07s of F1 LIVE after a seek to 50:00.
+- **No data yet, and saying why.** F1's index listed FP2 with no archive path, so every feed failed as "Invalid archive path" and the data
+  read "The timing archive couldn't be downloaded.", for as long as it was open. The agent said only that the data "failed to load". Now the
+  data says F1 hasn't published the timing yet and is checked again every 5 minutes, the main process looked again 5 minutes later, at 06:05:33Z, and the
+  agent's state line carries the reason: it replied "F1 hasn't published this session's timing data. The viewer checks again every five
+  minutes." MultiViewer hadn't published FP2's `session_start` or `session_start_pdt` by 06:00Z, so once the archive comes, the data will
+  still wait for it.
+
 ## Verified for finding a session
 
 With nothing open, the real agent at medium reasoning, with the event list in its prompt, on 2026-11-15, each request in a fresh
@@ -308,13 +353,12 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
 
 - Capturing a live race: lap counts, pit stops and intervals, which a practice doesn't have. And the archive replacing a capture once it's published.
 
-- **How accurately live data lines up with the picture.** Rows are hidden until the video's wall clock reaches their arrival time.
-  At Las Vegas FP1 the wall clock ran 7.3 to 8.7s ahead of the picture, read against the broadcast's session clock, so live data shows about
-  7s early. Not corrected yet. See "Known limits" in [SESSION_DATA.md](SESSION_DATA.md).
+- **The live lead on a race.** The 7.6s the live playhead takes off the stream's wall clock was measured at the start of Las Vegas FP2, and
+  MultiViewer's leads for practice and qualifying agree. A race hasn't been checked, and MultiViewer's own lead is refused for one, since its
+  `session_start` is lights out. See "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md).
+- **A replay waiting for MultiViewer's anchor.** Unit-tested only: no replay without one was at hand. The live waiting is verified.
 - **The world feed on a live race.** It's now requested with no `channelId`, as F1 TV's play link says, and the license request is built
   from that. Only replays have run this way, and none of the sampled replays use DRM. Check it on the next live session.
-- **The agent seeking to a moment on a live session, or a replay placed by the wall clock.** `scripts/seek-check.mjs` has only run on a replay
-  with curated sync data. The other two paths are unit-tested.
 - **The countdown starting a session by itself.** The display is verified, and a unit test covers firing only for its own session and not
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 

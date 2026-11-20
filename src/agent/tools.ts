@@ -77,9 +77,12 @@ const sessionOpen = (): void => {
   if (!read().session) throw new Error('No session is open.');
 };
 
-const dataReady = (): void => {
+/** The data has to be ready. Reading the whole session, `asOf: "session"`, only needs it to be there: it doesn't depend on the frame on screen. */
+const dataReady = (args?: object): void => {
   const data = read().sessionData;
-  if (data.state === 'ready') return;
+  const wholeSession = (args as { asOf?: unknown } | undefined)?.asOf === 'session';
+  if (data.state === 'ready' || (data.state === 'waiting' && wholeSession)) return;
+  if (data.state === 'waiting') throw new Error(`The timing data can't be read at the frame on screen yet: ${data.reason}. ${data.detail}`);
   const why = 'reason' in data ? ` ${data.reason}` : data.state === 'loading' ? ' It is still loading.' : '';
   throw new Error(`This session's timing data isn't available.${why}`);
 };
@@ -151,7 +154,23 @@ function matchAll(refs: string[]): { feeds: Channel[]; missing: string[] } {
 }
 
 const videosOf = (feeds: Channel[]) => feeds.map((f) => ({ type: 'video', props: { feed: f.id } }));
-const missingNote = (missing: string[]) => (missing.length ? ` Not found: ${missing.join(', ')}. Use list_streams to see the options.` : '');
+/**
+ * What the model meant by a stream that isn't one, when it names a component this session doesn't offer: its list leaves
+ * those out, so asked for a race's timing tower in practice, it reaches for a stream of that name.
+ */
+function notOffered(ref: string): string | null {
+  const key = normalize(ref).replace(/[\s_-]+/g, ' ');
+  const c = componentsOf().find((x) => [x.name, x.title].some((n) => normalize(n).replace(/[\s_-]+/g, ' ') === key));
+  const why = c && misfit(c, read().session);
+  return why ? `"${ref}" is the ${c.name} component, not a stream, and it ${why}: tell the user so.` : null;
+}
+
+const missingNote = (missing: string[]) => {
+  if (!missing.length) return '';
+  const components = missing.map(notOffered).filter(Boolean);
+  const streams = missing.filter((ref) => !notOffered(ref));
+  return `${streams.length ? ` Not found: ${streams.join(', ')}. Use list_streams to see the options.` : ''}${components.length ? ` ${components.join(' ')}` : ''}`;
+};
 /** Whether a feed shows on screen: in its own tile, or in any component's. */
 const onScreen = (id: string) => {
   const { layout, streams } = read();
@@ -606,6 +625,25 @@ export const AGENT_TOOLS: AgentTool[] = [
     description: 'Go back to the very beginning of the open session. It can never skip anything forward.',
     gate: [sessionOpen],
     result: () => 'Back at the start.',
+  }),
+  expose(host.playback.goLive, {
+    name: 'go_live',
+    description:
+      "Return to the live edge of a live session. It skips what the user hasn't watched, so the app asks them first unless playback is already there: do not ask them yourself.",
+    gate: [
+      sessionOpen,
+      () => {
+        if (read().session?.status !== 'live') throw new Error('This session is not live, so there is no live edge. seek_to moves within it.');
+      },
+      async () => {
+        const { clock } = read();
+        if (clock.atLiveEdge) return;
+        const playhead = playheadMs();
+        const behindMs = Math.max(0, (clock.end - clock.timeSec) * 1000);
+        await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: (playhead ?? Date.now()) + behindMs });
+      },
+    ],
+    result: () => 'At the live edge.',
   }),
   querySession(true),
   seekTo(true),

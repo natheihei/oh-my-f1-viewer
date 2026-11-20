@@ -111,18 +111,22 @@ never touch a stream's time.
 ### Aligning data to video
 
 Neither timeline starts at the race start: replay video has a lead-in (lights out at 512.9s for the 2026 Mexico race), and the
-feed starts 13-60 minutes before lights out. In order of preference (`timeMap.ts`):
+feed starts 13-60 minutes before lights out. The video always plays. The data is only shown once the frame on screen can be placed on it to
+within a second or so (`timeMap.ts`):
 
-1. The curated `session_start` from the sync API, anchored to where the feed's session clock starts running.
-2. The stream's wall clock.
-3. The scheduled start, within about a minute.
+- **A replay** needs MultiViewer's curated `session_start`, the video second of lights out or green, anchored to where the feed's session clock
+  starts running. MultiViewer publishes it some time after the session, and the main process asks again every 5 minutes until it has.
+- **Live**, the stream's wall clock says what time each frame shows, but it runs ahead of the picture: 7.6-8.0s at Las Vegas FP2 2026, by the
+  countdown on screen. The playhead is the wall clock less MultiViewer's lead for the session, `session_start_pdt` less the feed's start, or
+  7.6s until that's published.
 
-This differs from F1 OpenViewer, which puts the wall clock first. Measured against curated lights-out it ran about 15s ahead
-(14.73s on 2024 Mexico, 14.99s on 2023 Mexico), which would show events before they happen on screen.
+Until then, `sessionData` is `waiting`, with a short `reason` and a longer `detail`: charts show the reason, with the detail on hover, and the
+agent's reads at the playhead fail with both. The scheduled start, good to about a minute, and a replay's wall clock, which F1 OpenViewer puts first
+and which ran about 15s ahead of curated lights-out, aren't used.
 
 Live data is held until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed (about 45s
 when measured). F1 OpenViewer applies records on arrival, and lists this as a known limitation. Each row stores when it arrived, so rewinding
-the video just changes which rows show.
+the video just changes which rows show. Until the video reaches when the capture began, `sessionData` is `waiting` too, and says how long.
 
 Live streams sit 8s behind the edge. Closer than that starves their buffers: at 2.2s back, onboards drifted over a second and stayed
 at low quality.

@@ -88,7 +88,9 @@ shows the result can spoil the race for the viewer.
 
 A component that fits only some session types lists them in `sessions`, such as `sessions: ['race', 'sprint']`. Left out, it fits every
 session; an empty list fits none, so the agent is never offered it. A component that can't work on a live session says `replayOnly: true`. Car telemetry (`car_data` and `location`) fills live too when F1 TV is signed in. The agent is
-only offered the components that fit the open session, and can't suggest one that doesn't. The build agent sees them all, and the grid
+only offered the components that fit the open session, and can't suggest one that doesn't. It's told the others by name, each with why
+it doesn't fit, so asked for one it says why: the timing tower "isn't offered in practice sessions; it's available for races and sprints",
+at Las Vegas FP2 2026. One that fits no session isn't named. The build agent sees them all, and the grid
 draws any of them.
 
 ## Installed and local

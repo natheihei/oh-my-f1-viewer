@@ -491,6 +491,9 @@ function loadSession(sessionPath, feeds) {
 
 // Public, no-auth sync API: the video-to-timing anchor (`session_start`, seconds) + per-channel
 // camera diffs, so the timing lines up with the video without the user hand-aligning it.
+// `session_start_pdt` is the stream's frame time (its program date time) at that moment: 7.4-7.8s after
+// the feed's own start on every 2026 session checked, and the picture agreed on FP2 at Las Vegas. Both are
+// published some time after the session, not while it's live.
 const SYNC_API_BASE = 'https://api.multiviewer.app/api/v1';
 
 function curlGetText(url, extraHeaders = {}) {
@@ -517,9 +520,9 @@ async function httpGetText(url, extraHeaders = {}) {
 }
 
 /**
- * Fetch the curated sync record for a session. Returns the video-to-timing offset in seconds
- * and per-channel diffs, or null if the session isn't synced / the request fails.
- * @returns {{sessionStartSec:number,
+ * Fetch the curated sync record for a session. Returns the video-to-timing offset in seconds, the
+ * stream's frame time at it, and per-channel diffs, or null if the session isn't synced / the request fails.
+ * @returns {{sessionStartSec:number, sessionStartPdtMs:number|null,
  * channelDiffs:Record<string,{diff:number,diffV2:number}>, contentId:string|null}|null}
  */
 async function fetchSyncData(meetingKey, sessionKey) {
@@ -536,7 +539,8 @@ async function fetchSyncData(meetingKey, sessionKey) {
       const cid = o && o.streamData && o.streamData.channelId;
       if (cid != null) channelDiffs[cid] = { diff: Number(o.diff) || 0, diffV2: Number(o.diffV2) || 0 };
     }
-    return { sessionStartSec: start, channelDiffs, contentId: j.f1tv_content_id || null };
+    const pdt = j.session_start_pdt ? Date.parse(j.session_start_pdt) : NaN;
+    return { sessionStartSec: start, sessionStartPdtMs: Number.isFinite(pdt) ? pdt : null, channelDiffs, contentId: j.f1tv_content_id || null };
   } catch (_) {
     return null;
   }

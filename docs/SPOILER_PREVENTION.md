@@ -34,7 +34,10 @@ Protection comes in layers, from the data up. Each one assumes the layer above i
 - **Charts read as of the playhead.** `useSql` does by default, and seeking back hides what had been shown. A component can ask it
   for the whole session, and its author decides whether to warn: with `looksAhead: true` in its definition, the grid shows a red `! spoiler`, "This tile
   looks ahead of where you are." and an Allow button in place of the tile until the viewer allows it. See [BUILD_MODE.md](BUILD_MODE.md).
-- **A live session waits for the video.** Rows are compared with the stream's wall clock, since F1 TV's video runs tens of seconds behind the feed.
+- **A live session waits for the video.** Rows are compared with the stream's wall clock, since F1 TV's video runs tens of seconds behind the feed,
+  less the 7.6-8.0s that clock runs ahead of the picture.
+- **Nothing shows until the video can be placed on the data.** A replay without MultiViewer's anchor, or a live stream without a wall clock, is
+  `waiting`: nothing at the playhead is visible, rather than an estimate that could be a minute early.
 
 Reading the whole session takes `host.data.sql({ asOf: 'session' })`, asked for by name. The host doesn't check who's calling: policy belongs to the caller.
 
@@ -54,7 +57,7 @@ Nothing that reaches the agent by default says how a session went:
 The gate runs in the agent's tools, before anything executes, so no row reaches the model and no stream moves unapproved. It's asked for two things:
 
 - **Reading ahead:** `query_session` with `asOf: 'session'`.
-- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known.
+- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known, and `go_live` behind the live edge.
 
 Both are ways of looking ahead. The viewer sees a red `! spoiler`, "The agent wants to look ahead of where you are.", and never the SQL, the target time or how far ahead it is, since any of those could give something away.
 
@@ -117,7 +120,6 @@ session or see a chart.
 - **The model's own memory.** It may know how a past race ended, and only the prompt stops it from saying so.
 - **Within the turn.** The rows are in context until the turn ends, so that turn's reply depends on the prompt.
 - **What the agent said.** Its replies stay in the history. If it disclosed something in an approved turn, later turns can repeat it.
-- **Live sessions with no wall clock.** With nothing to compare against, everything is visible.
 - **Mods.** A mod can read the whole session, with `useSql` or `host.data.sql` and `asOf: 'session'`, and show the result. Nothing
   gates that. A component that declares `looksAhead` asks the viewer once per tile, but declaring it is up to the author. See [MODS.md](MODS.md).
 - **Build mode.** Its agent reads the whole session with no check: entering build mode is the viewer's consent, said in red beside

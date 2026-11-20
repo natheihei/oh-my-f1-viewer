@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeClockStartOffset, computeFeedBaseUtc, readFeedClock } from '../../shared/feedTime';
-import { buildTimeMap, playheadOf, videoTimeOf, videoToFeedOffset } from './timeMap';
+import { buildTimeMap, LIVE_FRAME_LEAD_MS, playheadOf, videoTimeOf, videoToFeedOffset } from './timeMap';
 
 const UTC = '2026-11-01T20:00:00.000Z';
 const utcMs = Date.parse(UTC);
@@ -22,28 +22,16 @@ describe('time mapping', () => {
     expect(computeClockStartOffset(feeds)).toBe(2_000_000);
   });
 
-  it('uses the wall clock when there is no curated sync data', () => {
-    const map = mapOf(feeds, 9_000_000, null);
-    const frameUtc = utcMs + 60_000;
-    expect(videoToFeedOffset(map, 999, frameUtc)).toBe(61_000);
-  });
-
-  it('trusts curated sync data over a wall clock that runs ahead of it', () => {
-    const map = mapOf(feeds, 9_000_000, 512.9);
-    const lightsOutPlus15s = utcMs - 1_000 + 2_000_000 + 15_000;
-    expect(videoToFeedOffset(map, 512.9, lightsOutPlus15s)).toBeCloseTo(2_000_000);
-  });
-
-  it('maps lights out to lights out using the sync API anchor, without a wall clock', () => {
+  it('maps lights out to lights out using the sync API anchor', () => {
     const map = mapOf(feeds, 9_000_000, 512.9);
     // Video second 512.9 is lights out, which is feed offset 2,000,000.
-    expect(videoToFeedOffset(map, 512.9, null)).toBeCloseTo(2_000_000);
+    expect(videoToFeedOffset(map, 512.9)).toBeCloseTo(2_000_000);
   });
 
   it('never leaves the feed range', () => {
-    const map = mapOf(feeds, 3_000_000, null);
-    expect(videoToFeedOffset(map, 0, utcMs - 10 ** 9)).toBe(0);
-    expect(videoToFeedOffset(map, 0, utcMs + 10 ** 10)).toBe(3_000_000);
+    const map = mapOf(feeds, 3_000_000, 512.9);
+    expect(videoToFeedOffset(map, -(10 ** 6))).toBe(0);
+    expect(videoToFeedOffset(map, 10 ** 7)).toBe(3_000_000);
   });
 
   it('falls back to the scheduled start when there is no sync data', () => {
@@ -61,17 +49,32 @@ describe('the frame on the database clock', () => {
     expect(playheadOf(false, map, 512.9, null)).toBeCloseTo(utcMs - 1_000 + 2_000_000);
   });
 
-  it("shows nothing until a replay's frame can be placed", () => {
-    expect(playheadOf(false, null, 100, utcMs)).toBeNull();
-    expect(playheadOf(false, mapOf({}, 0, 100), 100, utcMs)).toBeNull();
+  it("says why a replay's frame can't be placed", () => {
+    expect(playheadOf(false, null, 100, null)).toBe('no-feed-clock');
+    expect(playheadOf(false, mapOf({}, 0, 100), 100, null)).toBe('no-feed-clock');
   });
 
-  it("uses a live stream's wall clock, so rows wait for the video", () => {
-    expect(playheadOf(true, null, 100, utcMs)).toBe(utcMs);
+  it("won't place a replay by its scheduled start, which is only good to a minute", () => {
+    const scheduled = {
+      ...feeds,
+      SessionInfo: [{ offsetMs: 0, data: { StartDate: '2026-11-01T14:00:00', GmtOffset: '-06:00:00' } }],
+    };
+    expect(playheadOf(false, mapOf(scheduled, 9_000_000, null), 1_234.5, null)).toBe('no-anchor');
+    expect(playheadOf(false, mapOf(feeds, 9_000_000, null), 1_234.5, utcMs)).toBe('no-anchor');
   });
 
-  it('releases everything when a live stream has no clock to align to', () => {
-    expect(playheadOf(true, null, 100, null)).toBe('everything');
+  it("takes a live stream's frame time back by how far it runs ahead of the picture", () => {
+    expect(LIVE_FRAME_LEAD_MS).toBe(7_600);
+    expect(playheadOf(true, null, 100, utcMs)).toBe(utcMs - LIVE_FRAME_LEAD_MS);
+  });
+
+  it("uses MultiViewer's own lead for the session once it's published", () => {
+    expect(playheadOf(true, null, 100, utcMs, 7_552)).toBe(utcMs - 7_552);
+  });
+
+  it("shows nothing when a live stream hasn't said what time it shows", () => {
+    expect(playheadOf(true, null, 100, null)).toBe('no-wall-clock');
+    expect(playheadOf(true, null, 100, null, 7_552)).toBe('no-wall-clock');
   });
 });
 
@@ -79,7 +82,7 @@ describe('a moment on the database clock, back to the video', () => {
   it('inverts a curated replay exactly', () => {
     const map = mapOf(feeds, 9_000_000, 512.9);
     for (const t of [0, 512.9, 3_600.25, 7_000]) {
-      const at = map.feedBaseUtc! + videoToFeedOffset(map, t, null);
+      const at = map.feedBaseUtc! + videoToFeedOffset(map, t);
       expect(videoTimeOf(false, map, at, 0, null)).toBeCloseTo(t);
     }
   });
@@ -90,16 +93,6 @@ describe('a moment on the database clock, back to the video', () => {
     expect(videoTimeOf(false, map, lightsOut, 4_000, utcMs + 10 ** 7)).toBeCloseTo(512.9);
   });
 
-  it('inverts a replay placed by its scheduled start', () => {
-    const scheduled = {
-      ...feeds,
-      SessionInfo: [{ offsetMs: 0, data: { StartDate: '2026-11-01T14:00:00', GmtOffset: '-06:00:00' } }],
-    };
-    const map = mapOf(scheduled, 9_000_000, null);
-    const at = playheadOf(false, map, 1_234.5, null) as number;
-    expect(videoTimeOf(false, map, at, 0, null)).toBeCloseTo(1_234.5);
-  });
-
   it('keeps a curated replay within the feed', () => {
     const map = mapOf(feeds, 3_000_000, 512.9);
     const base = map.feedBaseUtc!;
@@ -107,24 +100,20 @@ describe('a moment on the database clock, back to the video', () => {
     expect(videoTimeOf(false, map, base + 10 ** 10, 0, null)).toBeCloseTo((3_000_000 - map.leadInMs) / 1000);
   });
 
-  it('moves by the difference from the frame on screen on a wall clock', () => {
-    const map = mapOf(feeds, 9_000_000, null);
-    const frameUtc = utcMs + 60_000;
-    expect(videoTimeOf(false, map, frameUtc + 90_000, 1_000, frameUtc)).toBe(1_090);
-    expect(videoTimeOf(false, map, frameUtc - 30_000, 1_000, frameUtc)).toBe(970);
+  it('moves by the difference from the frame on screen when live, after its lead', () => {
+    const shown = utcMs - LIVE_FRAME_LEAD_MS;
+    expect(videoTimeOf(true, null, shown + 5_000, 300, utcMs)).toBe(305);
+    expect(videoTimeOf(true, null, shown - 20_000, 300, utcMs)).toBe(280);
+    expect(videoTimeOf(true, null, utcMs - 7_552 + 5_000, 300, utcMs, 7_552)).toBe(305);
     // Round trip: the frame it names is placed at that moment.
-    const target = videoTimeOf(false, map, frameUtc + 90_000, 1_000, frameUtc)!;
-    expect(playheadOf(false, map, target, frameUtc + 90_000)).toBe(frameUtc + 90_000);
-  });
-
-  it('moves by the difference from the frame on screen when live', () => {
-    expect(videoTimeOf(true, null, utcMs + 5_000, 300, utcMs)).toBe(305);
-    expect(videoTimeOf(true, null, utcMs - 20_000, 300, utcMs)).toBe(280);
+    const target = videoTimeOf(true, null, shown + 90_000, 300, utcMs)!;
+    expect(playheadOf(true, null, target, utcMs + 90_000)).toBe(shown + 90_000);
   });
 
   it("can't place a moment when the frame on screen can't be placed", () => {
     expect(videoTimeOf(false, null, utcMs, 100, utcMs)).toBeNull();
     expect(videoTimeOf(false, mapOf({}, 0, 100), utcMs, 100, utcMs)).toBeNull();
+    expect(videoTimeOf(false, mapOf(feeds, 9_000_000, null), utcMs, 100, utcMs)).toBeNull();
     expect(videoTimeOf(true, null, utcMs, 100, null)).toBeNull();
   });
 });
