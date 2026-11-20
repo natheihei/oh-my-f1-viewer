@@ -11,9 +11,9 @@ import { autoUpdater } from 'electron-updater';
 import { compareReleases, releaseName, type UpdateState } from '../shared/release';
 import { appSettings, type Settings } from './settings';
 
-/** The first check waits for the app to settle, then they come every few hours. */
+/** The first check waits for the app to settle, then they come every 10 minutes. */
 const FIRST_CHECK_MS = 60_000;
-const CHECK_EVERY_MS = 4 * 60 * 60_000;
+const CHECK_EVERY_MS = 10 * 60_000;
 
 /** What the settings keep under `update` between runs. */
 export interface SavedUpdate {
