@@ -130,6 +130,8 @@ describe("the tools sent with the agent's messages", () => {
     expect(opened.handoff).toMatchObject({ mode: 'view', tools: AGENT_TOOLS.map((t) => t.name).map((name) => expect.objectContaining({ name })) });
     expect(opened.handoff!.scope).toMatch(/^view-/);
     expect(opened.handoff!.appState).toMatch(/session: Race/);
+    // It was opened for this message, not already open, and isn't paused while it starts.
+    expect(opened.handoff!.appState).toMatch(/just opened: this message's own earlier step opened the session/);
     expect(opened.handoff!.reference).toMatch(/^Events on F1 TV/);
     expect(opened.tools).toBeUndefined();
     expect((await call('b')).handoff).toBeUndefined();

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionInfo } from '../../shared/api';
 import type { TimingQuery } from '../../shared/api';
 import type { CircuitView, DataStatus, SessionCoverage } from '../../shared/sessionData';
+import { LIVE_FRAME_LEAD_MS } from './timeMap';
 import { archiveQuery, openSessionData, sessionSql, useCircuit, useSessionData } from './sessionData';
 
 const session = { contentId: 1, title: '2026 Race', type: 'race', year: 2026, meetingKey: '10', sessionKey: '20', status: 'replay' } as SessionInfo;
@@ -11,7 +12,7 @@ const coverage = { source: 'archive', datasets: {}, missingFeeds: [], gaps: [], 
 const BASE = Date.UTC(2026, 0, 1);
 const clock = { feedBaseUtc: BASE, clockStartOffsetMs: 2_000_000, scheduledStartOffsetMs: 1_900_000, durationMs: 9_000_000 };
 const tables = [{ name: 'laps', columns: ['session_key', 'meeting_key', 'lap_number', 'visible_from'] }];
-const ready: DataStatus = { sessionKey: 20, state: 'ready', reason: null, coverage, clock, sessionStartSec: 500, tables };
+const ready: DataStatus = { sessionKey: 20, state: 'ready', reason: null, coverage, clock, sessionStartSec: 500, liveLeadMs: null, tables };
 const noObjects = { drivers: [] };
 
 describe('session data', () => {
@@ -55,7 +56,7 @@ describe('session data', () => {
 
   it('says why when there is no data', () => {
     const handle = openSessionData(session, false);
-    emit({ sessionKey: null, state: 'unsupported', reason: 'Session data covers 2023 onwards.', coverage: null, clock: null, sessionStartSec: null, tables: null });
+    emit({ sessionKey: null, state: 'unsupported', reason: 'Session data covers 2023 onwards.', coverage: null, clock: null, sessionStartSec: null, liveLeadMs: null, tables: null });
     expect(useSessionData.getState()).toEqual({ state: 'unsupported', reason: 'Session data covers 2023 onwards.' });
     handle.destroy();
   });
@@ -115,32 +116,67 @@ describe('session data', () => {
     handle.destroy();
   });
 
-  it('shows nothing until a replay frame can be placed', async () => {
+  it('waits, and says why, until a replay frame can be placed', async () => {
     const handle = openSessionData(session, false);
     emit({ ...ready, clock: null });
     handle.update(500, null);
     await flush();
     expect(data.objects).toHaveBeenLastCalledWith(20, -1);
-    expect(useSessionData.getState()).toMatchObject({ playheadMs: null });
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', sessionKey: 20, reason: "Can't line the data up with the video" });
     handle.destroy();
   });
 
-  it("holds a live session back to the video's wall clock", async () => {
+  it("waits for MultiViewer's anchor on a replay, then shows the frame once it's published", async () => {
+    const handle = openSessionData(session, false);
+    emit({ ...ready, sessionStartSec: null });
+    handle.update(500, null);
+    await flush();
+    const waiting = useSessionData.getState();
+    expect(waiting).toMatchObject({ state: 'waiting', reason: 'Not lined up with the video yet' });
+    expect(waiting.state === 'waiting' && waiting.detail).toMatch(/MultiViewer/);
+    await expect(sessionSql('SELECT 1')).rejects.toThrow('Not lined up with the video yet');
+    // The whole session doesn't depend on the frame.
+    await expect(sessionSql('SELECT 1', [], 'session')).resolves.toBeTruthy();
+    emit(ready);
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'ready', playheadMs: BASE + 2_000_000 });
+    handle.destroy();
+  });
+
+  it("holds a live session back to the picture: the stream's wall clock, less its lead", async () => {
     const handle = openSessionData({ ...session, status: 'live' }, true);
     emit({ ...ready, clock: null, sessionStartSec: null });
     handle.update(100, BASE + 123_000);
     await flush();
-    expect(data.objects).toHaveBeenLastCalledWith(20, BASE + 123_000);
+    expect(data.objects).toHaveBeenLastCalledWith(20, BASE + 123_000 - LIVE_FRAME_LEAD_MS);
+    emit({ ...ready, clock: null, sessionStartSec: null, liveLeadMs: 7_552 });
+    await flush();
+    expect(data.objects).toHaveBeenLastCalledWith(20, BASE + 123_000 - 7_552);
     handle.destroy();
   });
 
-  it("releases everything when a live stream has no clock, without calling that a time", async () => {
+  it("waits, rather than show everything, when a live stream has no clock", async () => {
     const handle = openSessionData({ ...session, status: 'live' }, true);
     emit({ ...ready, clock: null, sessionStartSec: null });
     handle.update(100, null);
     await flush();
-    expect(data.objects).toHaveBeenLastCalledWith(20, Number.MAX_SAFE_INTEGER);
-    expect(useSessionData.getState()).toMatchObject({ playheadMs: null });
+    expect(data.objects).toHaveBeenLastCalledWith(20, -1);
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', reason: 'Not lined up with the video yet' });
+    handle.destroy();
+  });
+
+  it('waits for the live video to reach when the capture began, counting down', async () => {
+    const handle = openSessionData({ ...session, status: 'live' }, true);
+    const capturedFrom = BASE + 200_000;
+    emit({ ...ready, clock: null, sessionStartSec: null, coverage: { ...coverage, source: 'live', capturedFrom } });
+    handle.update(100, capturedFrom - 30_000 + LIVE_FRAME_LEAD_MS);
+    await flush();
+    const state = useSessionData.getState();
+    expect(state).toMatchObject({ state: 'waiting', reason: 'Waiting for the video to reach the live data' });
+    expect(state.state === 'waiting' && state.detail).toMatch(/about 30s ahead/);
+    handle.update(130, capturedFrom + LIVE_FRAME_LEAD_MS);
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'ready', playheadMs: capturedFrom });
     handle.destroy();
   });
 
@@ -170,7 +206,7 @@ describe('session data', () => {
     const handle = openSessionData({ ...session, status: 'live' }, true);
     emit({ ...ready, clock: null, sessionStartSec: null });
     handle.update(100, BASE + 123_000);
-    expect(handle.videoTimeOf(BASE + 63_000)).toBe(40);
+    expect(handle.videoTimeOf(BASE + 63_000 - LIVE_FRAME_LEAD_MS)).toBe(40);
     handle.update(100, null);
     expect(handle.videoTimeOf(BASE + 63_000)).toBeNull();
     handle.destroy();

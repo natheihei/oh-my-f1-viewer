@@ -103,7 +103,7 @@ Each row stores when the feed revealed it, on the same clock as the playhead:
 
 - **Archive:** the clock base plus the message's offset. The replay's playhead uses the same base (`computeFeedBaseUtc`), so the two always agree. It
   matches OpenF1's timestamps exactly: the median difference was 0ms, as were the 5th and 95th percentiles, on 6 sessions.
-- **Live:** when the message arrived. The playhead is the video's wall clock.
+- **Live:** when the message arrived. The playhead is the video's wall clock less how far it runs ahead of the picture, below.
 
 A row's own `date` can't serve, because a message often reports something earlier than when it was sent.
 
@@ -154,18 +154,37 @@ The database knows nothing about video. Three things connect them:
 | **Which moment** | The video's position becomes a feed offset, then a UTC playhead, which is compared with `visible_from` | `timeMap.ts` |
 | **Which driver** | An onboard feed's `Channel.number` is `driver_number` | No code needed yet: any consumer can join on it |
 
-The moment is the hard one, because neither timeline starts at the race start. For a replay, in order of preference:
+The moment is the hard one, because neither timeline starts at the race start. The video always plays, and the data waits until the frame
+can be placed to within a second or so. MultiViewer's sync API (`api.multiviewer.app/api/v1/meetings/{meeting}/sessions/{session}`) gives two
+anchors, some time after the session ends; the main process asks again every 5 minutes while a session is open without them:
 
-1. **Curated:** F1 TV's sync API gives `session_start`, the video second of lights out (or green). The feed's `ExtrapolatedClock` shows the offset where the session clock starts. So
-   `feed offset = video seconds * 1000 + (clock start offset - session_start * 1000)`.
-2. **Wall clock:** the stream's frame time minus the feed's base. It runs about 15s ahead of curated, so data could show up to that early. It's only used when the sync API has nothing.
-3. **Scheduled start:** an estimate within about a minute, when the stream has no wall clock either.
+- `session_start`: the replay's video second of lights out (or green).
+- `session_start_pdt`: the live stream's frame time, its program date time, at that moment.
 
-A live session compares `visible_from`, its arrival time, with the stream's wall clock. F1 TV's live video runs tens of seconds behind the feed, so rows wait for it. With no wall clock at all, everything is visible, which risks spoilers.
+**A replay** is placed by `session_start`. The feed's `ExtrapolatedClock` shows the offset where the session clock starts, so
+`feed offset = video seconds * 1000 + (clock start offset - session_start * 1000)`. Without it, `sessionData` is `waiting`. A replay's video has no
+wall clock, and the scheduled start is only good to about a minute, so neither is used.
+
+**Live**, rows are compared by `visible_from`, their arrival time, with the stream's wall clock less how far that runs ahead of the picture.
+F1 TV's live video runs tens of seconds behind the feed, so rows wait for it. The lead is `session_start_pdt` less when the feed's `SessionData`
+says the session started, or 7.6s (`LIVE_FRAME_LEAD_MS`) until MultiViewer publishes that. A lead outside 3-15s is refused: a race's
+`session_start` is lights out, which isn't when its session status says it started.
+
+| Session | Feed start | Frame time at the start | Lead | Source |
+| --- | --- | --- | --- | --- |
+| Las Vegas FP1 2026 | 00:30:00.102 | 00:30:07.654 | 7.55s | MultiViewer's `session_start_pdt`, after the session |
+| Las Vegas FP2 2026 | 03:59:59.977 | 04:00:07.6-08.0 | 7.6-8.0s | The live picture: the Sphere's countdown and F1 TV's graphic reach 0:00 between the frames at +7.55s and +8.5s, and the session clock reads 59:56 at +12s |
+| 9 practice and qualifying sessions, 2026 | The scheduled start | `session_start_pdt` | 7.45-7.74s | MultiViewer, assuming each started on time as FP1 and FP2 did |
+
+MultiViewer's `live_timing_sync_delay`, 5.5s for every F1 session and set days ahead, isn't this lead, and isn't used. With no wall clock, or
+before the video reaches when the capture began, `sessionData` is `waiting` too.
+
+While it waits, nothing is visible and SQL at the playhead fails with the reason. `asOf: 'session'` still reads. Charts show `reason`, with
+`detail` on hover.
 
 All streams share one clock, kept in step by the sync engine, so one playhead serves every tile. The sync API's per-channel offsets (`channelDiffs`) aren't used. The link also runs the other way: `host.playback.seekToDate` turns a row's time into a video position, through
-`videoTimeOf` in `timeMap.ts`. A replay placed by the lead-in inverts the map exactly. One placed by the wall clock, and a live session, move by
-the difference from the frame on screen. The agent's `seek_to` uses it. `scripts/seek-check.mjs` checked it on a replay with curated sync data; the wall-clock and live paths are unit-tested only.
+`videoTimeOf` in `timeMap.ts`. A curated replay inverts the map exactly. A live session moves by the difference from the frame on screen. The
+agent's `seek_to` uses it. `scripts/seek-check.mjs` checked it on a replay with curated sync data; on Las Vegas FP2 live it landed within 0.5s of the frame asked for, 1 and 5 minutes back.
 
 A session F1 TV lists without keys falls back to matching by name and type, which could find the wrong session. See "Known limits".
 
@@ -213,12 +232,20 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
   `pit_lane`, `position`, `race_control`, `weather` and `drivers` filled; `intervals` and `pit` stayed empty, as in any practice. A race is still needed
   for lap counts, pit stops and intervals. Restarting the app mid-session rebuilt the tables from the kept messages and, since this check, records the
   time it was closed in `coverage.gaps`.
-- **Live data is shown about 8 seconds early.** Rows are shown once the video's wall clock (`getPlayheadTimeAsDate`) reaches when they arrived. At
-  FP1 that clock ran about 8 seconds ahead of the picture: the broadcast's session clock, read off the screen, matched `ExtrapolatedClock` 7.3 to 8.7
-  seconds before the app's wall clock, at the live edge and 2 minutes back alike. So a race control message or lap time can show about 7 seconds
-  before the video does. Not corrected yet.
+- **Live data is placed by a measured lead until MultiViewer publishes the session's own.** The video's wall clock (`getPlayheadTimeAsDate`) runs
+  7.6-8.0s ahead of the picture (see "Linking to the video"), and the playhead takes 7.6s off it. MultiViewer's exact lead hadn't been published
+  5 minutes into FP2, and FP1's was there an hour after it ended, so live it's usually the default.
+- **A replay waits for MultiViewer.** Its data stays hidden until MultiViewer publishes `session_start`, about an hour after FP1 ended at Las Vegas.
+  FP2's still wasn't there an hour after it ended. A session it never publishes for has no data on screen, only through `asOf: 'session'`.
+- **A replay waits for F1's archive too.** F1 lists a session in its season index before it publishes the files, with no `Path`: FP2 was listed
+  that way an hour after it ended. The data is then `failed` with "F1 hasn't published this session's timing yet. It's checked again every 5
+  minutes.", and the main process looks again every 5 minutes while the session is open (`archiveMissing` in `electron/timingdb/archive.ts`).
+  A session not in the index at all is looked for again too. Still without a path 3 days after its scheduled end, it has nothing, for good.
+- **A session watched live isn't used for its replay.** Opened as a replay, a session goes to the archive even when this profile captured it
+  live. Before the archive is published, the capture is left as it is but not shown. Using it would take placing the replay's video on the
+  capture's clock, which isn't built.
 - **Joining live shows no data for the video's lag.** Every row from the snapshot is stamped with when it arrived, so for the first 40 to 45 seconds,
-  how far the video runs behind the feed, nothing is visible. That keeps the snapshot from running ahead of the video, but the tower and charts are empty meanwhile.
+  how far the video runs behind the feed, nothing is visible. Charts say "Waiting for the video to reach the live data", and the hover says how long.
 - **Live telemetry needs the F1 TV sign-in.** Checked live at 2026 Las Vegas FP1: without the token, Subscribe leaves `CarData.z` and `Position.z` out of
   its result with no error, and only the timing feeds come. With `Authorization: Bearer <token>` on the negotiate requests and the socket, both come in the
   snapshot and then about once a second, for all 22 cars. The capture now sends the token when signed in and subscribes to both, so `car_data` and

@@ -477,6 +477,8 @@ Added 2026-11-13, replacing `sector_delta`, from direction D of its proposals.
   since pit". Pinning it under the header was proposed and not picked.
 - **The lap in progress is on top and lifted,** its sectors filling in as both set them, "…" until then. A sector the feed never
   sent is a dash.
+- **Until both have started a lap,** it says "No lap both drivers have started yet" rather than an empty table. Joining Las Vegas FP2
+  live showed it: the snapshot held only the latest sectors of each car's lap, so the two had no lap with a first sector in common.
 - **Size.** Columns at their own width, 44px for the lap and 60px a number, so 300 wide: wider tiles leave room empty. Least 300 by
   266: ten laps that count, the lap in progress, the average and a stop's two pit laps at 16px rows. Fit 300 by 322 at 20px rows.
   Below its least size it runs past the tile for the host's mark; under 150 high, in the suggestion strip, it fits its box at

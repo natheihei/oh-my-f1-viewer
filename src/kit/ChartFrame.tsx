@@ -1,7 +1,7 @@
 /** The shell every chart shares: it says what's missing instead of drawing, and keeps a broken chart in its tile. */
 import { Component, type ReactNode } from 'react';
 import { useLive, type Dataset, type SqlView } from '../host';
-import { dataMessage, viewMessage } from './status';
+import { dataDetail, dataMessage, viewMessage } from './status';
 
 interface BoundaryProps {
   /** Trying again when these change: a chart that broke on some data may draw the next. */
@@ -46,11 +46,16 @@ export function ChartFrame({
 }) {
   // A string, so the frame re-renders when the message changes, not on every revision.
   const data = useLive((s) => dataMessage(s.sessionData, needs));
+  const detail = useLive((s) => (data !== null ? dataDetail(s.sessionData) : null));
   const message = data ?? waits.find((w) => w !== null) ?? viewMessage(views);
   return (
     <div className="tile">
       {message !== null ? (
-        message ? <div className="chart-message">{message}</div> : null
+        message ? (
+          <div className={`chart-message${detail ? ' chart-message-detail' : ''}`} title={detail ?? undefined}>
+            {message}
+          </div>
+        ) : null
       ) : (
         <ChartBoundary views={views}>
           <Run render={children} />

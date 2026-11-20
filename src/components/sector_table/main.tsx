@@ -73,6 +73,14 @@ export interface SectorTable {
 const EMPTY: SectorTable = { rows: [], averages: [null, null, null], total: null, counted: 0, sinceStop: false, averageAt: 0 };
 
 /**
+ * What the tile says instead of an empty table: no lap yet that both have a first sector on. Early in a session, or
+ * joining one live, whose snapshot holds only the latest sectors of the lap each car was on.
+ */
+export function sectorTableMessage(m: SectorTable): string | null {
+  return m.rows.length === 0 ? 'No lap both drivers have started yet' : null;
+}
+
+/**
  * The rows of `SQL` for drivers `a` and `b`. Going back from the latest lap both have started, a lap counts when both
  * finished it clean: not in or out of the pits, not under a safety car, a virtual one or a red flag, and not lap 1's standing
  * start. The table goes back to ten laps that count, or stops at the pit laps of either driver's last stop, so the average is
@@ -247,7 +255,7 @@ function SectorTableView({ props }: { props: { driver_a: number; driver_b: numbe
     [view, styles, a, b],
   );
   return (
-    <ChartFrame needs={NEEDS} views={[view]}>
+    <ChartFrame needs={NEEDS} views={[view]} waits={[model && sectorTableMessage(model)]}>
       {() => model && <ChartCanvas model={model} draw={draw} extent={tableExtent} />}
     </ChartFrame>
   );

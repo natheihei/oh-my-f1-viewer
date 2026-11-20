@@ -195,6 +195,18 @@ export type SessionDataView =
   | { state: 'unsupported'; reason: string }
   | { state: 'loading'; sessionKey: number | null; datasets: Record<Dataset, DatasetState> | null }
   | { state: 'failed'; reason: string }
+  /**
+   * There's data, but the frame on screen can't be placed on it, or the live video hasn't reached it yet.
+   * Nothing is visible: `reason` says why in a few words, and `detail` explains it in full.
+   */
+  | {
+      state: 'waiting';
+      sessionKey: number;
+      datasets: Record<Dataset, DatasetState>;
+      reason: string;
+      detail: string;
+      tables: SqlTableInfo[];
+    }
   | ({
       state: 'ready';
       sessionKey: number;
@@ -222,8 +234,13 @@ export interface DataStatus {
   coverage: SessionCoverage | null;
   /** Where the feed's timeline sits, for placing a replay's video frames on it. */
   clock: FeedClock | null;
-  /** The video second of lights out, from F1 TV's own sync data. Null when it has none. */
+  /** The video second of lights out or green on a replay, from MultiViewer's sync data. Null until it has one. */
   sessionStartSec: number | null;
+  /**
+   * Live only: how far the stream's frame time runs ahead of the feed, from MultiViewer's frame time at the
+   * session's start. Null until it's published, which is usually after the session: a default stands in.
+   */
+  liveLeadMs: number | null;
   /** The tables SQL can read, as the database reports them. Null when there's no session to read. */
   tables: SqlTableInfo[] | null;
 }
