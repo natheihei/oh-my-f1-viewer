@@ -44,3 +44,24 @@ describe('the event index', () => {
     expect(f1tv.seasons).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a live session', () => {
+  const race = { contentId: 501, title: '2026 Las Vegas GP - Race', type: 'race' as const, meetingKey: '1300', sessionKey: '' };
+
+  it("keeps the live item's type, so a live race is a race", async () => {
+    vi.stubGlobal('window', { omfv: { f1tv: { liveNow: vi.fn(async () => [race]) } } });
+    await catalog.live();
+    expect(catalog.known(501)).toMatchObject({ type: 'race', status: 'live', meetingKey: '1300', sessionKey: null });
+  });
+
+  it('opened by a contentId never listed is live when F1 TV has it live, not a replay', async () => {
+    const item = { ...race, contentId: 502, type: 'practice' as const };
+    vi.stubGlobal('window', { omfv: { f1tv: { liveNow: vi.fn(async () => [item]) } } });
+    expect(await catalog.resolve(502, item.title)).toMatchObject({ status: 'live', type: 'practice', meetingKey: '1300' });
+  });
+
+  it('opened by a contentId never listed and not live is a replay', async () => {
+    vi.stubGlobal('window', { omfv: { f1tv: { liveNow: vi.fn(async () => []) } } });
+    expect(await catalog.resolve(503, '2025 Mexico City GP - Race')).toMatchObject({ status: 'replay', year: 2025 });
+  });
+});

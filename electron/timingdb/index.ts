@@ -16,7 +16,7 @@ import {
 } from '../../shared/sessionData';
 import { refreshCircuit } from './circuit';
 import type { FeedFiles, LiveRecord } from './ingest';
-import { TELEMETRY_FEEDS, TIMING_FEEDS, type SessionMeta } from './processors';
+import { LIVE_FEEDS, TELEMETRY_FEEDS, TIMING_FEEDS, type SessionMeta } from './processors';
 import { parseResults, parseStartingGrid, resultPages } from './results';
 import { fromSeasonIndex, fromUpcoming, mergeSchedule } from './schedule';
 import type { WorkerOperations } from './worker';
@@ -53,7 +53,7 @@ export class TimingDb {
   private generation = 0;
   /** The open session's video second of lights out. */
   private sessionStartSec: number | null = null;
-  private live: { meta: SessionMeta | null; buffer: LiveRecord[]; timer: ReturnType<typeof setInterval> | null; query: TimingQuery } | null = null;
+  private live: { meta: SessionMeta | null; buffer: LiveRecord[]; timer: ReturnType<typeof setInterval> | null; query: TimingQuery; telemetry: boolean } | null = null;
   /** The open session's circuit: fetched once its key is known. */
   private circuit: { generation: number; query: TimingQuery; year: number; started: boolean } | null = null;
 
@@ -273,11 +273,11 @@ export class TimingDb {
   // --- Live ---
 
   private async openLive(query: TimingQuery, year: number, generation: number): Promise<void> {
-    const session = { meta: null as SessionMeta | null, buffer: [] as LiveRecord[], timer: null as ReturnType<typeof setInterval> | null, query };
+    const session = { meta: null as SessionMeta | null, buffer: [] as LiveRecord[], timer: null as ReturnType<typeof setInterval> | null, query, telemetry: false };
     this.live = session;
     session.timer = setInterval(() => void this.flushLive(), LIVE_FLUSH_MS);
     this.deps.send('data:status', { sessionKey: null, state: 'loading', reason: null, coverage: null, clock: null, sessionStartSec: null, tables: null } satisfies DataStatus);
-    this.deps.connectLive(TIMING_FEEDS, (record) => this.liveRecord(record), (status) => this.liveConnection(status));
+    this.deps.connectLive(LIVE_FEEDS, (record) => this.liveRecord(record), (status) => this.liveConnection(status));
     const found = await this.deps.resolveSession(year, query).catch(() => null);
     if (this.live !== session) return;
     const sessionKey = Number(query.sessionKey ?? found?.sessionKey);
@@ -327,7 +327,15 @@ export class TimingDb {
     if (!session?.meta || session.buffer.length === 0) return;
     const records = session.buffer;
     session.buffer = [];
-    await this.call('liveAppend', records).catch((e: Error) => console.warn('[timingdb] live write failed:', e.message));
+    const written = await this.call('liveAppend', records).then(
+      () => true,
+      (e: Error) => (console.warn('[timingdb] live write failed:', e.message), false),
+    );
+    // Telemetry comes only on a socket with the F1 TV token, so the status sent on opening said it had none.
+    if (written && !session.telemetry && this.live === session && records.some((r) => (TELEMETRY_FEEDS as readonly string[]).includes(r.topic))) {
+      session.telemetry = true;
+      await this.status(session.meta.sessionKey, 'ready');
+    }
   }
 
   private endLive(): void {

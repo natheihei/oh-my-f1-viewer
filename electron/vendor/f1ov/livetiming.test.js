@@ -315,6 +315,15 @@ test('archive requests carry the F1 TV token as Bearer only when signed in', () 
   lt.setAuthTokenProvider(null);
 });
 
+test('the live socket carries the F1 TV token when signed in, which telemetry needs', () => {
+  lt.setAuthTokenProvider(() => null);
+  assert.deepEqual(lt.liveSocketHeaders('AWSALBCORS=x'), { 'User-Agent': 'BestHTTP', Cookie: 'AWSALBCORS=x' });
+  lt.setAuthTokenProvider(() => 'eyJhbGciOi.payload-part.signature-part');
+  assert.equal(lt.liveSocketHeaders(null).Authorization, 'Bearer eyJhbGciOi.payload-part.signature-part');
+  assert.equal(lt.liveSocketHeaders(null).Cookie, undefined);
+  lt.setAuthTokenProvider(null);
+});
+
 test('curl header config (stdin) cannot be broken out of by quotes or newlines', () => {
   const cfg = lt.curlHeaderConfig({ Authorization: 'Bearer a"b\nurl = "http://evil"' });
   assert.equal(cfg.split('\n').filter(Boolean).length, 1);

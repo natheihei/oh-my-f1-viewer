@@ -171,8 +171,20 @@ A session F1 TV lists without keys falls back to matching by name and type, whic
 
 ## Joining a live session late
 
-There's no backfill: the database holds what was captured. The main process records when the capture began and any gaps, but `sessionData` doesn't show them yet. The snapshot on joining gives the lap in progress, finished stints, race control and pit
-history. There's no lap-by-lap history from before, as a snapshot doesn't hold it.
+There's no backfill: the database holds what was captured. The main process records when the capture began and any gaps, but `sessionData` doesn't show them yet.
+
+Checked at 2026 Las Vegas FP1, joined about 30 minutes in. The snapshot is current state, not a log, except for two feeds:
+
+| Feed | In the snapshot |
+| --- | --- |
+| `TimingData` | Each car's `NumberOfLaps`, last and best lap, sectors and speeds now. No lap before the current one |
+| `TimingAppData` | Each car's whole stint list from the start |
+| `RaceControlMessages` | Every message from before the session started |
+| `PitLaneTimeCollection` | Only cars in the pit lane now |
+| `LapCount` | Not sent in practice |
+
+So the database starts with one lap per car that has set one, and stints and race control complete. It was a wet session in which 9 cars had set one
+lap each, so it couldn't show a lap-based chart starting late. A race would. The raw `Subscribe` response is saved by a probe that isn't checked in.
 
 ## How it was checked
 
@@ -194,11 +206,25 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 
 ## Known limits
 
-- **Live is untested.** No session was on while this was built, so the capture has only run in unit tests. It subscribes to more feeds than before, and any of them being refused
-  would show up only on a live session. Check at the next one.
-- **`TrackStatus` and `LapCount` are untested live.** They're in the same subscription as the other feeds, so they'd be refused or missing
-  the same way. Check at the next live session.
-- **No live telemetry.** `CarData.z` and `Position.z` likely need the token on the socket, which isn't sent.
+- **Live is checked on a practice session only.** At 2026 Las Vegas FP1 (session 11413, wet, joined about 30 minutes in), Subscribe returned no error
+  and the capture reached `ready` from `live`. `SessionInfo`, `DriverList`, `TimingData`, `TimingAppData`, `RaceControlMessages`, `SessionData`,
+  `PitLaneTimeCollection`, `WeatherData`, `TrackStatus` and `ExtrapolatedClock` came in the snapshot. `DriverRaceInfo`, `PitStop`,
+  `PitStopSeries`, `ChampionshipPrediction` and `LapCount` never came, in the snapshot or in 4 minutes of updates, and look race-only. `laps`, `stints`,
+  `pit_lane`, `position`, `race_control`, `weather` and `drivers` filled; `intervals` and `pit` stayed empty, as in any practice. A race is still needed
+  for lap counts, pit stops and intervals. Restarting the app mid-session rebuilt the tables from the kept messages and, since this check, records the
+  time it was closed in `coverage.gaps`.
+- **Live data is shown about 8 seconds early.** Rows are shown once the video's wall clock (`getPlayheadTimeAsDate`) reaches when they arrived. At
+  FP1 that clock ran about 8 seconds ahead of the picture: the broadcast's session clock, read off the screen, matched `ExtrapolatedClock` 7.3 to 8.7
+  seconds before the app's wall clock, at the live edge and 2 minutes back alike. So a race control message or lap time can show about 7 seconds
+  before the video does. Not corrected yet.
+- **Joining live shows no data for the video's lag.** Every row from the snapshot is stamped with when it arrived, so for the first 40 to 45 seconds,
+  how far the video runs behind the feed, nothing is visible. That keeps the snapshot from running ahead of the video, but the tower and charts are empty meanwhile.
+- **Live telemetry needs the F1 TV sign-in.** Checked live at 2026 Las Vegas FP1: without the token, Subscribe leaves `CarData.z` and `Position.z` out of
+  its result with no error, and only the timing feeds come. With `Authorization: Bearer <token>` on the negotiate requests and the socket, both come in the
+  snapshot and then about once a second, for all 22 cars. The capture now sends the token when signed in and subscribes to both, so `car_data` and
+  `location` fill live and the telemetry dataset is `partial` from `live`. Signed out, it stays absent. The live rows weren't yet compared with the
+  archive. A `track_map` drew the cars on that session, matching the broadcast's own map, so the four telemetry charts (`track_map`,
+  `car_telemetry`, `speed_ribbon`, `pedal_barcode`) are no longer `replayOnly`.
 - **Some archives are cut short.** F1's archive of the 2026 Mexico race (session 11404) ends about 2.2 hours in and never reports a finish, where OpenF1 has more rows from recording it live. A fresh
   download on 2026-11-09 was byte-identical to the cached copy in all 15 feeds checked, so this is F1's file and not a stale cache. It's still marked complete after 3 days, with nothing in `datasets` to say it's short.
   A scan of all 417 indexed sessions from 2023 to 2026 on 2026-11-09 found no others without a finish status, and 102 of 103 races agreed with OpenF1 on their last lap. It didn't look for holes mid-session.

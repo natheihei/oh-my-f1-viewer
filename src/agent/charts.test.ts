@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Channel, SessionInfo } from '../../shared/api';
 import type { DriverEntry, SessionDataView } from '../../shared/sessionData';
 
@@ -167,12 +167,28 @@ describe('suggesting charts', () => {
   });
 
   it('lists a replay-only chart as such, and refuses it in a live session', async () => {
-    expect(describeComponents(read().components)).toContain('car_telemetry, Telemetry, race/sprint, replays only: ');
+    const replayOnly = defineComponent({
+      name: 'test_replay_only',
+      title: 'Replay only',
+      description: 'One car.',
+      replayOnly: true,
+      args: Type.Object({ driver: Driver('The driver') }),
+      spec: ({ driver }) => ({ key: `test_replay_only:${driver}`, label: `Replay only ${driver}`, drivers: [driver as number] }),
+      View: () => null,
+    });
+    host.components.register({ components: [replayOnly] });
+    onTestFinished(() => void host.components.unregister({ names: ['test_replay_only'] }));
+    expect(describeComponents(read().components)).toContain('test_replay_only, Replay only, any session, replays only: ');
     useSession.setState({ session: { ...race, status: 'live' }, channels });
-    await expect(runTool('suggest_tiles', { components: [{ component: 'car_telemetry', props: { driver: 'HAM' } }] })).rejects.toThrow(
-      'car_telemetry works in replays only, and this session is live: leave it out. Nothing was suggested.',
+    await expect(runTool('suggest_tiles', { components: [{ component: 'test_replay_only', props: { driver: 'HAM' } }] })).rejects.toThrow(
+      'test_replay_only works in replays only, and this session is live: leave it out. Nothing was suggested.',
     );
     useSession.setState({ session: race, channels });
+    await expect(runTool('suggest_tiles', { components: [{ component: 'test_replay_only', props: { driver: 'HAM' } }] })).resolves.toContain('Suggested: Replay only');
+  });
+
+  it('offers the telemetry charts in a live session, now that the live feed has telemetry', async () => {
+    useSession.setState({ session: { ...race, status: 'live' }, channels });
     await expect(runTool('suggest_tiles', { components: [{ component: 'car_telemetry', props: { driver: 'HAM' } }] })).resolves.toContain('Suggested: Telemetry HAM');
   });
 
@@ -269,10 +285,10 @@ describe('suggesting charts', () => {
       expect(offered()).toEqual(['test_field', 'test_pit', 'test_weather']);
       expect(enumOf()).toEqual(['test_pit', 'test_field', 'test_weather']);
 
-      // A replay-only chart isn't offered while a race is live.
+      // While a race is live, the telemetry charts are offered too: the live feed has telemetry.
       useSession.setState({ session: { ...race, status: 'live' } });
       await askAgent('charts?');
-      expect(offered()).toEqual(['test_field', 'test_gap', 'test_pit', 'test_weather']);
+      expect(offered()).toEqual(['car_telemetry', 'test_field', 'test_gap', 'test_pit', 'test_weather']);
 
       // With no session open, the message goes to the picking agent, which suggests nothing.
       useSession.setState({ session: null });
