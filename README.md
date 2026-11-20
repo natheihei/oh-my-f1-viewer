@@ -172,5 +172,14 @@ companies. F1, Formula 1 and F1 TV are their trademarks.
 An active F1 TV subscription is required. OMFV does not bypass anything: you sign in with your own account, and F1 TV
 enforces its own access and regional rules.
 
-Parts of the F1 TV sign-in, playback and replay code come from [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer)
-(MIT), kept in `electron/vendor/f1ov` and `src/data/vendor`.
+OMFV is released under the MIT license: see [LICENSE](LICENSE).
+
+## Credits
+
+- [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer) (MIT) by npanu420. OMFV builds on its hard-won F1 TV sign-in,
+  entitlement, DRM licensing, playback, stream sync and timing work. It is vendored in `electron/vendor/f1ov` and
+  `src/data/vendor`, and `src/data/stream.ts`, `syncEngine.ts` and `timeMap.ts` are ported from it.
+- [pi](https://github.com/earendil-works/pi) (MIT) runs the agent. The build agent's output limits and edit matching in
+  `electron/agent/extensions/modFiles.ts` are ported from it.
+
+Their license notices are in [LICENSE](LICENSE).
