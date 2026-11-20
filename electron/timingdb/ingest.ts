@@ -10,12 +10,11 @@ import zlib from 'node:zlib';
 import { computeFeedBaseUtc, parseUtc, readFeedClock } from '../../shared/feedTime';
 import type { Dataset, SessionResultEntry, StartingGridEntry } from '../../shared/sessionData';
 import { telemetryRouter, TELEMETRY_FEEDS, timingRouter, TIMING_FEEDS, type Message, type SessionMeta } from './processors';
+import { ARCHIVE_SETTLE_MS } from './archive';
 import type { IngestDetail, TimingStore } from './store';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-/** A finished session's files can still change for a while. After this they're final even if the feed never said so. */
-const ARCHIVE_SETTLE_MS = 3 * 24 * 3600 * 1000;
 /** How many rows to write before letting queries in. */
 const TELEMETRY_BATCH_MESSAGES = 2_000;
 

@@ -179,7 +179,10 @@ function createTimingDb(file: string): TimingDb {
       if (!res.ok) throw new Error(`MultiViewer answered HTTP ${res.status}`);
       return res.json();
     },
-    fetchSessionStart: async (meetingKey, sessionKey) => (await livetiming.fetchSyncData(meetingKey, sessionKey))?.sessionStartSec ?? null,
+    fetchSync: async (meetingKey, sessionKey) => {
+      const sync = await livetiming.fetchSyncData(meetingKey, sessionKey);
+      return sync ? { sessionStartSec: sync.sessionStartSec, sessionStartPdtMs: sync.sessionStartPdtMs } : null;
+    },
     connectLive: (feeds, onRecord, onStatus) => {
       livetiming
         .connectLiveSocket(

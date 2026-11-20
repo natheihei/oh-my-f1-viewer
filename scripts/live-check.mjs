@@ -76,6 +76,23 @@ const show = (label, s) => {
   for (const x of s.streams) console.log(`  ${String(x.label).padEnd(14)} ${x.status.padEnd(9)} drift=${x.t != null ? (x.t - t0).toFixed(3) : '-'} encrypted=${x.encrypted} ready=${x.ready} frames=${x.frames} dropped=${x.dropped} ${x.size} rate=${x.rate}${x.error ? ` ERROR: ${x.error}` : ''}`);
 };
 
+// The data waits, with a reason, until the frame on screen reaches what this profile has captured.
+const dataState = () => page.evaluate(() => {
+  const d = window.m.sessionData.useSessionData.getState();
+  return { state: d.state, reason: d.reason, detail: d.detail };
+});
+const untilData = async (limit) => {
+  const t0 = Date.now();
+  const seen = new Set();
+  while (Date.now() - t0 < limit) {
+    const d = await dataState();
+    if (d.state === 'waiting') seen.add(`${d.reason}: ${(d.detail ?? '').replace(/\d+/g, 'N')}`);
+    if (d.state === 'ready') return { after: (Date.now() - t0) / 1000, waited: [...seen] };
+    await page.waitForTimeout(500);
+  }
+  return { after: null, waited: [...seen], last: await dataState() };
+};
+
 const untilReady = async (limit = 60_000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < limit) {
@@ -124,15 +141,29 @@ check('live streams stay in sync', spread < 0.5, `spread ${spread.toFixed(3)}s`)
 check('all still ready', s.streams.every((x) => x.status === 'ready'), s.streams.map((x) => x.status).join());
 await page.screenshot({ path: path.join(outDir, 'live-four.png') });
 
-// DVR
+// The data lines up with the video once the frame on screen reaches the capture, which started when this profile joined.
+const lined = await untilData(120_000);
+console.log('data:', JSON.stringify(lined));
+check('the data waits, saying why, then lines up with the video', lined.after != null && lined.waited.length > 0, JSON.stringify(lined));
+
+// DVR. Before the capture the data waits, and a read at the frame on screen is refused.
+s = await sample();
 const before = s.clock;
-const visibleRows = () => page.evaluate(async () => (await window.m.sessionData.sessionSql('SELECT COUNT(*) AS n FROM position')).rows[0].n);
+const visibleRows = () =>
+  page.evaluate(async () => {
+    try {
+      return (await window.m.sessionData.sessionSql('SELECT COUNT(*) AS n FROM position')).rows[0].n;
+    } catch (e) {
+      return `refused: ${e.message}`;
+    }
+  });
 const rowsBefore = await visibleRows();
 await page.evaluate((t) => window.m.session.sessionControl.seek(t), before.t - 180);
 await page.waitForTimeout(12000);
 const rowsAfterRewind = await visibleRows();
 console.log(`position rows visible: ${rowsBefore} at the edge, ${rowsAfterRewind} after rewinding`);
-check('rewinding hides what the video has not reached', rowsAfterRewind < rowsBefore);
+const afterRewind = await dataState();
+check('rewinding hides what the video has not reached', typeof rowsBefore === 'number' && (typeof rowsAfterRewind === 'number' ? rowsAfterRewind < rowsBefore : afterRewind.state === 'waiting'), `${afterRewind.state}: ${afterRewind.reason ?? ''}`);
 s = await sample();
 show('12s after seeking back 3 minutes', s);
 check('DVR seek landed', Math.abs(s.clock.t - (before.t - 180 + 12)) < 8, `wanted about ${(before.t - 168).toFixed(1)}, at ${s.clock.t}`);
@@ -148,6 +179,8 @@ show('12s after go live', s);
 check('returns to the live edge', s.clock.atEdge, `${s.clock.behind}s behind`);
 const liveTimes = s.streams.map((x) => x.t);
 check('streams followed back to live', Math.max(...liveTimes) - Math.min(...liveTimes) < 0.7, `spread ${(Math.max(...liveTimes) - Math.min(...liveTimes)).toFixed(3)}s`);
+const relined = await untilData(30_000);
+check('the data lines up again back at the live edge', relined.after != null, JSON.stringify(relined));
 
 // Pause, then resume
 await page.evaluate(() => window.m.session.sessionControl.pause());
@@ -180,7 +213,9 @@ const delay = await page.evaluate(async () => {
   const last = await everything();
   const visible = (await sessionSql(`SELECT ${count}`)).rows[0].n;
   const c = window.m.session.useSession.getState().clock;
-  return { rowsIn8s: last - first, held: last - visible, videoLagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs) / 1000).toFixed(1) : null };
+  // The frame on screen is the wall clock less the stream's lead, so the data is held back by both.
+  const lead = window.lastStatus?.liveLeadMs ?? 7_600;
+  return { rowsIn8s: last - first, held: last - visible, videoLagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs + lead) / 1000).toFixed(1) : null };
 });
 console.log('live feed:', JSON.stringify(delay));
 const expected = (delay.rowsIn8s / 8) * (delay.videoLagSec ?? 0);

@@ -415,6 +415,11 @@
   font-size: var(--text-s);
 }
 
+/* A message with more to it on hover: why the data is waiting. */
+.chart-message-detail {
+  cursor: help;
+}
+
 /*
  * Battle: two onboards stacked on the left, the fights on the right. In a tile taller than wide, the
  * pictures stack at their own shape and the fights go below. Each picture names its driver in a bar

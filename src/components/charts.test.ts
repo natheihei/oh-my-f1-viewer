@@ -10,7 +10,7 @@ const { towerModel, towerExtent } = await import('./timing_tower/main');
 const { degModel, degExtent, shadeOf } = await import('./tyre_deg/main');
 const { pitWindowExtent, LEAST: PIT_WINDOW_LEAST } = await import('./pit_window/main');
 const { pitWindowsModel, lossNow } = await import('./pit_windows/main');
-const { sectorTable } = await import('./sector_table/main');
+const { sectorTable, sectorTableMessage } = await import('./sector_table/main');
 const { messagesModel, markOf, lineText } = await import('./race_control/main');
 const { CLEAR_AIR, pitWindowModel, sentenceCase, shorten, signalOf, stageLabel, standing, withCars } = await import('../kit');
 type Line = import('./race_control/main').Line;
@@ -619,8 +619,17 @@ describe('sector_table', () => {
     expect(m.counted).toBe(2);
   });
 
-  it('has nothing before both have a sector', () => {
-    expect(sectorTable([sec(44, 1, [30, null, null])], [44, 1]).rows).toEqual([]);
+  it('has nothing before both have a sector, and says so', () => {
+    const m = sectorTable([sec(44, 1, [30, null, null])], [44, 1]);
+    expect(m.rows).toEqual([]);
+    expect(sectorTableMessage(m)).toBe('No lap both drivers have started yet');
+    expect(sectorTableMessage(sectorTable(rows, [44, 1]))).toBeNull();
+  });
+
+  it('says so too when joining live, each car on its own lap with the snapshot short of sectors', () => {
+    // Las Vegas FP2 2026, joined mid-session: 81's lap 13 came without its first two sectors, and 1 hasn't started lap 14.
+    const joined = [sec(1, 13, [31.691, 37.979, 46.469]), sec(81, 13, [null, null, 40.714]), sec(81, 14, [32.364, 38.55, null])];
+    expect(sectorTableMessage(sectorTable(joined, [1, 81]))).toBe('No lap both drivers have started yet');
   });
 });
 

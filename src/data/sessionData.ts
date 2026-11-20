@@ -18,7 +18,7 @@ import type {
   SqlRows,
   SqlTableInfo,
 } from '../../shared/sessionData';
-import { buildTimeMap, playheadOf, videoTimeOf, type TimeMap } from './timeMap';
+import { buildTimeMap, playheadOf, videoTimeOf, type TimeMap, type Unplaced } from './timeMap';
 
 /** A playhead past anything a session could hold. */
 const EVERYTHING_VISIBLE = Number.MAX_SAFE_INTEGER;
@@ -87,7 +87,55 @@ export interface SessionDataHandle {
   destroy(): void;
 }
 
-let current: { sessionKey: number; playhead(): number } | null = null;
+let current: { sessionKey: number; playhead(): number; waiting(): Waiting | null } | null = null;
+
+/** Why nothing is visible though there's data: the frame can't be placed, or the live video is behind the data. */
+export type WaitingFor = Unplaced | 'video-behind';
+
+export interface Waiting {
+  kind: WaitingFor;
+  reason: string;
+  detail: string;
+}
+
+const seconds = (ms: number): string => {
+  const s = Math.max(1, Math.ceil(ms / 1000));
+  return s < 90 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+/** What to tell the viewer, and the agent, while nothing is visible. `aheadMs` is how far the data's start is ahead of the frame. */
+export function waitingFor(kind: WaitingFor, aheadMs = 0): Waiting {
+  switch (kind) {
+    case 'no-anchor':
+      return {
+        kind,
+        reason: 'Not lined up with the video yet',
+        detail:
+          "MultiViewer hasn't published where this session starts on the video. It usually does within a few hours of the session " +
+          'ending, and the data appears by itself once it has. Until then it could be a minute out, so it stays hidden rather than show anything early.',
+      };
+    case 'no-feed-clock':
+      return {
+        kind,
+        reason: "Can't line the data up with the video",
+        detail: "This session's timing feed carries no time to match against the video, so its data stays hidden.",
+      };
+    case 'no-wall-clock':
+      return {
+        kind,
+        reason: 'Not lined up with the video yet',
+        detail: "The live video hasn't said what time it's showing yet. The data appears as soon as it does.",
+      };
+    case 'video-behind':
+      return {
+        kind,
+        reason: 'Waiting for the video to reach the live data',
+        detail:
+          'Live data shows when the video reaches the moment it arrived, so nothing appears early. ' +
+          `The data starts when it was first received, about ${seconds(aheadMs)} ahead of the frame on screen.`,
+      };
+  }
+}
 
 /** What a query sees: what the feed had revealed at the frame on screen, or everything the session holds. */
 export type SqlAsOf = 'playhead' | 'session';
@@ -95,6 +143,8 @@ export type SqlAsOf = 'playhead' | 'session';
 /** Runs a query against what's visible at the frame on screen, or across the session. Only reading is possible. */
 export async function sessionSql(sql: string, params: unknown[] = [], asOf: SqlAsOf = 'playhead'): Promise<SqlRows> {
   if (!current) throw new Error('No session data is open.');
+  const waiting = asOf === 'session' ? null : current.waiting();
+  if (waiting) throw new Error(`${waiting.reason}. ${waiting.detail}`);
   const playhead = asOf === 'session' ? EVERYTHING_VISIBLE : current.playhead();
   return deepFreeze(await window.omfv.data.sql(current.sessionKey, playhead, sql, params));
 }
@@ -105,6 +155,11 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let sessionKey: number | null = null;
   let datasets: Record<Dataset, DatasetState> | null = null;
   let map: TimeMap | null = null;
+  /** Live: MultiViewer's lead of the stream's frame time over the feed, once it's published. */
+  let liveLeadMs: number | null = null;
+  /** Live: when the capture began. Nothing before it can be shown. */
+  let capturedFrom: number | null = null;
+  let waiting: Waiting | null = null;
   let ready = false;
   let playhead = NOTHING_VISIBLE;
   /** The last position the video reported, for placing a moment relative to it. */
@@ -125,7 +180,25 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
 
   const publish = () => {
     if (destroyed || !ready || sessionKey === null || !datasets) return;
+    if (waiting) {
+      const { reason, detail } = waiting;
+      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, tables }), true);
+      return;
+    }
     useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);
+  };
+
+  /** Places the frame the video last reported. Returns whether what's published changed. */
+  const place = (): boolean => {
+    const at = playheadOf(live, map, videoSec, videoWallClockMs, liveLeadMs);
+    const next =
+      typeof at === 'string' ? waitingFor(at) : live && capturedFrom !== null && at < capturedFrom ? waitingFor('video-behind', capturedFrom - at) : null;
+    playhead = typeof at === 'number' ? at : NOTHING_VISIBLE;
+    const shown = typeof at === 'number' && !next ? at : null;
+    const changed = shown !== shownPlayhead || next?.reason !== waiting?.reason || next?.detail !== waiting?.detail;
+    shownPlayhead = shown;
+    waiting = next;
+    return changed;
   };
 
   const read = async () => {
@@ -166,6 +239,8 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     sessionKey = status.sessionKey;
     datasets = status.coverage?.datasets ?? null;
     if (status.clock) map = buildTimeMap(status.clock, status.sessionStartSec);
+    liveLeadMs = status.liveLeadMs ?? null;
+    if (live) capturedFrom = status.coverage?.capturedFrom ?? null;
     const sentTables = JSON.stringify(status.tables);
     if (status.tables && sentTables !== lastTables) {
       lastTables = sentTables;
@@ -177,7 +252,8 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     }
     if (sessionKey === null || !datasets) return;
     ready = true;
-    current = { sessionKey, playhead: () => playhead };
+    place();
+    current = { sessionKey, playhead: () => playhead, waiting: () => waiting };
     // Results and telemetry arrive after the first `ready`: what can be seen may have changed.
     void read();
   };
@@ -197,11 +273,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     update(timeSec, wallClockMs) {
       videoSec = timeSec;
       videoWallClockMs = wallClockMs;
-      const at = playheadOf(live, map, timeSec, wallClockMs);
-      playhead = at === 'everything' ? EVERYTHING_VISIBLE : (at ?? NOTHING_VISIBLE);
-      const shown = typeof at === 'number' ? at : null;
-      const moved = shown !== shownPlayhead;
-      shownPlayhead = shown;
+      const moved = place();
       // A new second reads the objects again and publishes a revision. In between, only the playhead is
       // published, ten times a second: telemetry shows each sample at its own date, about four a second, and
       // charts that pass the playhead to their query read again as it moves. Others still read once a second.
@@ -209,7 +281,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       else if (moved) publish();
     },
     videoTimeOf(dateMs) {
-      return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs);
+      return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs, liveLeadMs);
     },
     destroy() {
       destroyed = true;

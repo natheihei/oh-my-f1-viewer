@@ -79,8 +79,9 @@ describe('resolveChannel', () => {
 describe('agent tools', () => {
   it('seek through the spoiler gate, and have no other way forward', () => {
     const names = AGENT_TOOLS.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['seek_to', 'seek_to_start', 'query_session']));
-    for (const banned of ['seek', 'seek_back', 'seek_forward', 'seek_to_lap', 'go_live', 'get_race_state', 'get_standings']) {
+    // go_live asks the gate as seek_to does: see 'goes live only on a live session, asking first when behind the edge'.
+    expect(names).toEqual(expect.arrayContaining(['seek_to', 'seek_to_start', 'go_live', 'query_session']));
+    for (const banned of ['seek', 'seek_back', 'seek_forward', 'seek_to_lap', 'get_race_state', 'get_standings']) {
       expect(names).not.toContain(banned);
     }
   });
@@ -167,6 +168,15 @@ describe('suggested tiles', () => {
     expect(out).toMatch(/Suggested: HAM, VER/);
     expect(keys()).toEqual(['HAM', 'VER']);
     expect(layout.tiles().map((t) => t.component.label)).toEqual(['F1 LIVE']);
+  });
+
+  it("says why a component named as a stream isn't offered, rather than that no stream matches", async () => {
+    useSession.setState({ session: { ...open, type: 'practice' } });
+    await expect(runTool('suggest_tiles', { streams: ['timing tower'] })).rejects.toThrow(
+      /"timing tower" is the timing_tower component, not a stream, and it is for race, sprint sessions, and this is practice/,
+    );
+    await expect(runTool('suggest_tiles', { streams: ['timing tower'] })).rejects.not.toThrow(/Not found/);
+    await expect(runTool('suggest_tiles', { streams: ['nobody'] })).rejects.toThrow(/Not found: nobody\. Use list_streams/);
   });
 
   it('a stream already on screen is still suggested, and marked so', async () => {
@@ -484,6 +494,32 @@ describe('seeking to a moment', () => {
     expect(sessionSql).not.toHaveBeenCalled();
   });
 
+  it('goes live only on a live session, asking first when behind the edge', async () => {
+    const goLive = vi.spyOn(sessionControl, 'goLive').mockImplementation(() => {});
+    const clock = useSession.getState().clock;
+    try {
+      await expect(runTool('go_live', {})).rejects.toThrow(/not live/);
+
+      useSession.setState({ session: { ...open, status: 'live' }, clock: { ...clock, live: true, timeSec: 100, end: 160, atLiveEdge: false } });
+      spoilerGate.mockResolvedValueOnce({ approved: false });
+      await expect(runTool('go_live', {})).rejects.toThrow(/did not allow that/);
+      expect(spoilerGate).toHaveBeenCalledWith({ kind: 'seek_forward', session: 'Race', playheadMs: PLAYHEAD, targetMs: PLAYHEAD + 60_000 });
+      expect(goLive).not.toHaveBeenCalled();
+
+      await expect(runTool('go_live', {})).resolves.toBe('At the live edge.');
+      expect(goLive).toHaveBeenCalledTimes(1);
+
+      // Already there, it doesn't ask.
+      spoilerGate.mockClear();
+      useSession.setState({ clock: { ...clock, live: true, timeSec: 152, end: 160, atLiveEdge: true } });
+      await runTool('go_live', {});
+      expect(spoilerGate).not.toHaveBeenCalled();
+    } finally {
+      goLive.mockRestore();
+      useSession.setState({ clock });
+    }
+  });
+
   it('asks every time, not once per turn', async () => {
     await runTool('query_session', { sql: 'SELECT 1', asOf: 'session' });
     await runTool('query_session', { sql: 'SELECT 1', asOf: 'session' });
@@ -511,6 +547,19 @@ describe('seeking to a moment', () => {
     await expect(runTool('seek_to', { date: PLAYHEAD })).rejects.toThrow(/The archive was refused/);
     expect(sessionSql).not.toHaveBeenCalled();
     expect(seekToDate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a read at the frame on screen while the data waits for the video, but not a whole-session one', async () => {
+    const waiting = { state: 'waiting', sessionKey: 9, datasets: {}, tables: [], reason: 'Not lined up with the video yet', detail: 'MultiViewer has not published it.' };
+    useSessionData.setState(waiting as unknown as SessionDataView, true);
+    await expect(runTool('query_session', { sql: 'SELECT 1' })).rejects.toThrow(/at the frame on screen yet: Not lined up with the video yet\. MultiViewer/);
+    await expect(runTool('seek_to', { date: PLAYHEAD })).rejects.toThrow(/Not lined up/);
+    expect(sessionSql).not.toHaveBeenCalled();
+    sessionSql.mockResolvedValue({ columns: ['n'], rows: [{ n: 1 }] });
+    spoilerGate.mockResolvedValueOnce({ approved: true });
+    await runTool('query_session', { sql: 'SELECT 1 AS n', asOf: 'session' });
+    expect(sessionSql).toHaveBeenCalledWith('SELECT 1 AS n', undefined, 'session');
+    sessionSql.mockReset();
   });
 
   it('points to the table list in the system prompt, and lists no tables itself', () => {
@@ -603,6 +652,26 @@ describe('seeking to a moment', () => {
     expect(describeAppState()).not.toContain('playhead:');
     useSessionData.setState({ state: 'loading', sessionKey: 9, datasets: null }, true);
     expect(describeAppState()).not.toContain('drivers:');
+  });
+
+  it('says playback is starting, not paused, until a stream is ready', () => {
+    const before = useSession.getState();
+    const stream = { id: 'v1', feed: 'main', tile: null, quiet: false, status: 'loading', error: null };
+    useSession.setState({ streams: { v1: stream }, clock: { ...before.clock, playing: false } } as never);
+    expect(describeAppState()).toMatch(/playback: starting at/);
+    useSession.setState({ streams: { v1: { ...stream, status: 'ready' } } } as never);
+    expect(describeAppState()).toMatch(/playback: paused at/);
+    useSession.setState(before, true);
+  });
+
+  it('says the data is waiting, and why', () => {
+    useSessionData.setState({ state: 'waiting', sessionKey: 9, datasets: {}, tables: [], reason: 'Not lined up with the video yet', detail: 'MultiViewer has not published it.' } as never, true);
+    expect(describeAppState()).toContain('timing data: waiting, so nothing at the frame on screen can be read. Not lined up with the video yet: MultiViewer has not published it.');
+  });
+
+  it("says why there's no data", () => {
+    useSessionData.setState({ state: 'failed', reason: "F1 hasn't published this session's timing yet. It's checked again every 5 minutes." }, true);
+    expect(describeAppState()).toContain("timing data: failed. F1 hasn't published this session's timing yet. It's checked again every 5 minutes.");
   });
 });
 
