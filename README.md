@@ -14,8 +14,7 @@
 <p align="center">
   <a href="https://oh-my-f1-viewer.yueyao.run">Website</a> ·
   <a href="#install">Install</a> ·
-  <a href="docs/ARCHITECTURE.md">Architecture</a> ·
-  <a href="docs">Docs</a>
+  <a href="docs/ARCHITECTURE.md">Architecture</a>
 </p>
 
 ![The 2026 Mexico City Grand Prix in OMFV: the race feed and the Hamilton and Leclerc onboards, with their pit windows, gap, telemetry, pedals, sectors, tyres and track positions, all on one session clock.](site/src/assets/shots/page/hero-charts.webp)
