@@ -19,7 +19,19 @@ import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
 import { AUTO_HIDE_MS, palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
-import { isPaletteKey, PALETTE_KEY } from './paletteKey';
+import {
+  bindingLabel,
+  bindingOf,
+  DEFAULT_PALETTE_KEY,
+  isDefaultBinding,
+  isPaletteKey,
+  refusal,
+  sameBinding,
+  setPaletteKey,
+  usePaletteKey,
+  usePaletteKeyLabel,
+  type PaletteBinding,
+} from './paletteKey';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
@@ -73,6 +85,11 @@ export function CommandPalette() {
   /** The cap being dragged to, shown as the history's height until the drag ends. */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
   const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyLabel = usePaletteKeyLabel();
+  /** Waiting for the new shortcut, after a click on the key at the end of the input row. */
+  const [recordingKey, setRecordingKey] = useState(false);
+  /** Why the last key pressed while recording wasn't kept. */
+  const [keyRefused, setKeyRefused] = useState<string | null>(null);
 
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
@@ -184,6 +201,49 @@ export function CommandPalette() {
     if (box) box.scrollTop = box.scrollHeight;
     // Resizing keeps the latest lines in view too, as the box grows up from the input.
   }, [entries, showing, dragHeight, historyCap]);
+
+  // Recording takes the next key press before anything else sees it, Esc and the palette's own shortcut included.
+  useEffect(() => {
+    if (!recordingKey || !showing) return;
+    const stop = () => {
+      setRecordingKey(false);
+      setKeyRefused(null);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      const bare = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+      if (bare && e.key === 'Escape') return stop();
+      if (bare && e.key === 'Backspace') {
+        changePaletteKey(null);
+        return stop();
+      }
+      const pressed = bindingOf(e);
+      if (!pressed) return;
+      const why = refusal(pressed);
+      if (why) return setKeyRefused(why);
+      changePaletteKey(pressed);
+      stop();
+    };
+    // A click anywhere but the key leaves it as it was.
+    const onPointer = (e: Event) => {
+      if (!(e.target instanceof Element && e.target.closest('[data-testid=palette-key]'))) stop();
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onPointer, true);
+    };
+  }, [recordingKey, showing]);
+  useEffect(() => {
+    if (!showing || held) {
+      setRecordingKey(false);
+      setKeyRefused(null);
+    }
+  }, [showing, held]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -298,7 +358,7 @@ export function CommandPalette() {
       ) : null}
       {held ? null : (
         // No title: the chevron says what it does, and the key is written at the end of the input row.
-        <button type="button" className="palette-hide" data-testid="palette-hide" aria-label={`Hide the palette (${PALETTE_KEY})`} onClick={palette.hide}>
+        <button type="button" className="palette-hide" data-testid="palette-hide" aria-label={`Hide the palette (${keyLabel})`} onClick={palette.hide}>
           <Chevron />
         </button>
       )}
@@ -367,6 +427,11 @@ export function CommandPalette() {
         </>
       ) : null}
       {attached.length > 0 ? <AttachTray attached={attached} busy={busy} /> : null}
+      {recordingKey ? (
+        <div className={`strip-hint ${keyRefused ? 'palette-key-refused' : ''}`} data-testid="palette-key-hint" role="status">
+          {keyRefused ?? `press the new key · esc keep ${keyLabel} · backspace ${bindingLabel(DEFAULT_PALETTE_KEY)}`}
+        </div>
+      ) : null}
       {picker ? (
         <div
           className={`palette-suggestions palette-mentions ${picker.options.some((o) => o.kind !== 'driver') ? 'palette-mentions-wide' : ''}`}
@@ -499,9 +564,22 @@ export function CommandPalette() {
           </button>
         ) : null}
         {held ? null : (
-          <kbd className="palette-key" data-testid="palette-key">
-            {PALETTE_KEY}
-          </kbd>
+          // The key is also how it's changed: a click records the next one pressed.
+          <button
+            type="button"
+            className={`palette-key-button ${recordingKey ? 'palette-key-recording' : ''} ${keyRefused ? 'palette-key-refused' : ''}`}
+            data-testid="palette-key"
+            aria-label={recordingKey ? 'Press the new shortcut for the palette' : `Change the palette's shortcut (${keyLabel})`}
+            aria-pressed={recordingKey}
+            onClick={() => {
+              palette.keepOpen();
+              setKeyRefused(null);
+              setRecordingKey((r) => !r);
+            }}
+          >
+            {recordingKey ? null : <span className="palette-key-change">change</span>}
+            <kbd className="palette-key">{recordingKey ? 'press keys' : keyLabel}</kbd>
+          </button>
         )}
       </div>
     </div>
@@ -517,6 +595,7 @@ const BLOCK_FRESH_MS = 2500;
  */
 function PaletteBlock() {
   const [fresh, setFresh] = useState(true);
+  const keyLabel = usePaletteKeyLabel();
   useEffect(() => {
     const timer = setTimeout(() => setFresh(false), BLOCK_FRESH_MS);
     return () => clearTimeout(timer);
@@ -526,15 +605,25 @@ function PaletteBlock() {
       type="button"
       className={`palette-block ${fresh ? 'palette-block-fresh' : ''}`}
       data-testid="palette-block"
-      aria-label={`Show the palette (${PALETTE_KEY})`}
+      aria-label={`Show the palette (${keyLabel})`}
       onClick={palette.show}
     >
       <span className="palette-block-prompt">&gt;</span>
       <span className="palette-block-dots">…</span>
       <span className="palette-block-text">ask for anything</span>
-      <kbd className="palette-key">{PALETTE_KEY}</kbd>
+      <kbd className="palette-key">{keyLabel}</kbd>
     </button>
   );
+}
+
+/** Sets the palette's shortcut, null for the default, and says so in the history if it changed. */
+function changePaletteKey(next: PaletteBinding | null): void {
+  const before = usePaletteKey.getState().binding;
+  setPaletteKey(next && !isDefaultBinding(next) ? next : null);
+  const now = usePaletteKey.getState().binding;
+  if (sameBinding(before, now)) return;
+  const label = bindingLabel(now);
+  palette.push('system', isDefaultBinding(now) ? `${label} shows and hides the palette again, the default.` : `${label} shows and hides the palette now. Click it to change it again.`);
 }
 
 /** The chevron on the hide tab: points down, where the palette goes. */

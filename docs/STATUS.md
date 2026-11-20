@@ -312,7 +312,7 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
 - The castLabs CDM downloads and is ready. Signing in to F1 TV, connecting ChatGPT, playing a race and talking to the agent all
   work, by hand. Most replays don't use DRM, so whether F1 TV accepts the castLabs build's development VMP signature on macOS
   isn't known yet.
-- Ctrl+Shift+P toggles the palette (`scripts/layout-check.mjs`). macOS gets the app, Edit and Window menus for Cmd+C, Cmd+V,
+- Ctrl+K toggles the palette, and clicking the key on it changes it (`scripts/layout-check.mjs`). macOS gets the app, Edit and Window menus for Cmd+C, Cmd+V,
   Cmd+A and Cmd+Q, which haven't been tried by hand.
 - `scripts/layout-check.mjs`, `scripts/suggestions-check.mjs` and `scripts/overflow-check.mjs` pass, and so does
   `scripts/mods-check.mjs` on the 2026 United States race at lap 25. The checks' windows open in front and take focus.

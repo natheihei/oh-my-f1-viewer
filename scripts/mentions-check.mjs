@@ -107,7 +107,7 @@ const snap = async (name) => {
   console.log(`  -> ${file}`);
 };
 
-if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+if (!(await input.isVisible())) await page.keyboard.press('Control+K');
 await input.click();
 await page.keyboard.type('gap from @');
 check('a bare @ offers the roster', (await rows()).length >= 20, `${(await rows()).length} rows`);

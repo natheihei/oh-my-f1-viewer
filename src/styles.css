@@ -784,9 +784,74 @@
   letter-spacing: 0.02em;
 }
 
-.palette-input-row > .palette-key {
+.palette-input-row > .palette-key-button {
   margin-top: 3px;
   margin-left: 8px;
+}
+
+/*
+ * The key at the end of the input row is also how it's changed. Under the pointer it lifts and says "change"; a
+ * click turns it into a recorder for the next key pressed, framed in ink, or in red when that key isn't kept.
+ */
+.palette-key-button {
+  @apply flex shrink-0 cursor-pointer items-center bg-transparent;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  line-height: 16px;
+}
+
+.palette-key-change {
+  @apply hidden text-dim;
+  font-size: var(--text-s);
+}
+
+.palette-key-button:hover .palette-key-change,
+.palette-key-button:focus-visible .palette-key-change {
+  @apply inline;
+}
+
+.palette-key-button:hover .palette-key,
+.palette-key-button:focus-visible .palette-key {
+  @apply bg-select text-ink;
+  border-color: var(--color-rule);
+}
+
+.palette-key-button:focus-visible {
+  outline: none;
+}
+
+.palette-key-recording .palette-key,
+.palette-key-recording:hover .palette-key {
+  @apply bg-transparent text-ink;
+  border-color: var(--color-ink);
+}
+
+.palette-key-recording .palette-key::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 11px;
+  margin-left: 2px;
+  vertical-align: -1px;
+  background: currentColor;
+  animation: palette-key-caret 1s steps(1) infinite;
+}
+
+@keyframes palette-key-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.palette-key-recording.palette-key-refused .palette-key,
+.strip-hint.palette-key-refused {
+  @apply text-accent;
+}
+
+.palette-key-recording.palette-key-refused .palette-key {
+  border-color: var(--color-accent);
 }
 
 /*
@@ -922,6 +987,9 @@
   .palette-block *,
   .palette-hide {
     transition: none;
+  }
+  .palette-key-recording .palette-key::after {
+    animation: none;
   }
 }
 

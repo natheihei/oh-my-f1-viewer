@@ -93,7 +93,7 @@ await page.evaluate(() => {
   layout.add(window.spec('HAM'));
 });
 await settle();
-await page.keyboard.press('Control+Shift+P');
+await page.keyboard.press('Control+K');
 const before = await hostRects();
 // The body of a tile belongs to its component: the mouse reaches it, and pressing there drags nothing.
 await page.evaluate(() => {
@@ -191,23 +191,44 @@ check('tiles stay inside a resized window', small.maxBottom <= small.bottom + 2 
 
 // Palette keyboard behaviour, with the session from above still open.
 const openBefore = await page.locator('[data-testid=palette]').isVisible();
-await page.keyboard.press('Control+Shift+P');
+await page.keyboard.press('Control+K');
 await page.waitForTimeout(100);
 const openAfter = await page.locator('[data-testid=palette]').isVisible();
-check('Ctrl+Shift+P toggles the palette once a session is open', openBefore !== openAfter, `${openBefore} -> ${openAfter}`);
+check('Ctrl+K toggles the palette once a session is open', openBefore !== openAfter, `${openBefore} -> ${openAfter}`);
 
 // The mouse does the same: the chevron on the palette's top edge hides it, and the block it leaves brings it back.
-if (!(await page.locator('[data-testid=palette]').isVisible())) await page.keyboard.press('Control+Shift+P');
+if (!(await page.locator('[data-testid=palette]').isVisible())) await page.keyboard.press('Control+K');
 await page.waitForTimeout(300);
 await page.locator('[data-testid=palette-hide]').click();
 await page.waitForTimeout(300);
 const block = page.locator('[data-testid=palette-block]');
 check('the chevron hides the palette and leaves a block', !(await page.locator('[data-testid=palette]').isVisible()) && (await block.isVisible()));
-check('the block names the shortcut', /Ctrl\+Shift\+P|⌘⇧P/.test((await block.textContent()) ?? ''));
+check('the block names the shortcut', /Ctrl\+K|⌘K/.test((await block.textContent()) ?? ''));
 await page.screenshot({ path: path.join(outDir, 'palette-block.png') });
 await block.click();
 await page.waitForTimeout(300);
 check('clicking the block opens the palette, with the cursor in the input', await page.locator('[data-testid=palette]').isVisible() && (await page.evaluate(() => !!document.activeElement?.closest('[data-testid=palette]'))));
+
+// The key at the end of the input row changes the shortcut: a click records the next key, a taken one isn't kept.
+const key = page.locator('[data-testid=palette-key]');
+await key.click();
+await page.keyboard.press('Control+C');
+await page.waitForTimeout(100);
+check('a taken key is named and not kept', /copy/.test((await page.locator('[data-testid=palette-key-hint]').textContent()) ?? ''));
+await page.screenshot({ path: path.join(outDir, 'palette-key-refused.png') });
+await page.keyboard.press('Control+Shift+J');
+await page.waitForTimeout(100);
+check('a free key is kept and written on the palette', /Ctrl\+Shift\+J|⇧⌘J/.test((await key.textContent()) ?? ''));
+await page.screenshot({ path: path.join(outDir, 'palette-key-changed.png') });
+await page.keyboard.press('Control+Shift+J');
+await page.waitForTimeout(300);
+check('the new key hides the palette', !(await page.locator('[data-testid=palette]').isVisible()));
+await page.keyboard.press('Control+Shift+J');
+await page.waitForTimeout(300);
+await key.click();
+await page.keyboard.press('Backspace');
+await page.waitForTimeout(100);
+check('backspace while recording goes back to the default', /Ctrl\+K|⌘K/.test((await key.textContent()) ?? ''));
 
 await stop();
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');

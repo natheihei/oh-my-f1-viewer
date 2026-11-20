@@ -12,6 +12,7 @@ import * as omfv from './host';
 import { host, startBuild, startHealth, startMods, startPictures } from './host';
 import { App } from './shell/App';
 import { restoreBackground } from './shell/persistBackground';
+import { restorePaletteKey } from './shell/paletteKey';
 import { restorePaletteHeight } from './shell/persistPaletteHeight';
 import { restoreVolume } from './shell/persistVolume';
 
@@ -33,6 +34,8 @@ async function start(): Promise<void> {
   restoreBackground();
   // And the palette's history cap, so it opens at the height last chosen.
   restorePaletteHeight();
+  // And the palette's shortcut, so the key written on it is the one that works.
+  restorePaletteKey();
 
   // No StrictMode: effects own real streams, and a double mount would start each one twice.
   createRoot(document.getElementById('root')!).render(<App />);

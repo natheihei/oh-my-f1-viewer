@@ -136,7 +136,7 @@ try {
 
   // `/version`, in the palette.
   const input = page.locator('[data-testid=palette-input]');
-  if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+  if (!(await input.isVisible())) await page.keyboard.press('Control+K');
   await input.fill('/version');
   await input.press('Enter');
   const said = await until('/version said nothing', async () => {
@@ -160,7 +160,7 @@ try {
     120_000,
   ).catch((e) => ({ error: e.message }));
   check('video plays', !played.error, JSON.stringify(played));
-  await page.keyboard.press('Control+Shift+P').catch(() => {});
+  await page.keyboard.press('Control+K').catch(() => {});
   await page.screenshot({ path: path.join(outDir, 'packaged.png') });
   console.log(`  screenshot: ${path.join(outDir, 'packaged.png')}`);
 } catch (e) {

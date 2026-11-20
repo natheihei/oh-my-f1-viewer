@@ -68,7 +68,8 @@ from [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases), and see
 source. The AppImage and the Mac app update themselves: a new release downloads in the background and installs automatically next time you start oh-my-f1-viewer.
 
 On first launch the app walks you through signing in to F1 TV and connecting the agent's model. Then open a session.
-`Ctrl+Shift+P` (`Cmd+Shift+P` on macOS) shows or hides the palette.
+`Ctrl+K` (`Cmd+K` on macOS) shows or hides the palette. To change it, click the key written at the end of the
+palette's input row and press another.
 
 ### Run from source
 

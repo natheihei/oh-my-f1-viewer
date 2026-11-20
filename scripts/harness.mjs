@@ -77,7 +77,7 @@ export const paletteText = (page) => page.locator('[data-testid=palette-history]
 
 export async function typeInPalette(page, text) {
   const input = page.locator('[data-testid=palette-input]');
-  if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+  if (!(await input.isVisible())) await page.keyboard.press('Control+K');
   await input.fill(text);
   await input.press('Enter');
 }

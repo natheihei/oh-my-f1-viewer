@@ -87,7 +87,7 @@ const snap = async (name) => {
   log(`  -> ${file}`);
 };
 
-if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+if (!(await input.isVisible())) await page.keyboard.press('Control+K');
 await input.click();
 
 // A bare @: grouped, tiles first, the first tile outlined.
