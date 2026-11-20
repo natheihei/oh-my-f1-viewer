@@ -52,6 +52,13 @@ const api: OmfvApi = {
     ui: () => invoke('settings:ui'),
     setUi: (key, value) => ipcRenderer.send('settings:setUi', key, value),
   },
+  telemetry: {
+    status: () => invoke('telemetry:status'),
+    setEnabled: (enabled) => invoke('telemetry:setEnabled', enabled),
+    needsNotice: () => invoke('telemetry:needsNotice'),
+    noticed: () => ipcRenderer.send('telemetry:noticed'),
+    track: (event, props) => ipcRenderer.send('telemetry:track', event, props),
+  },
   ai: {
     status: () => invoke('ai:status'),
     providers: () => invoke('ai:providers'),

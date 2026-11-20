@@ -32,6 +32,7 @@ import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
 import { appSettings, type Settings } from '../settings';
 import { sendToRenderer } from '../windows';
 import { credentialStore, installId } from './credentials';
+import { track } from '../telemetry';
 import { forgetForSummary, forgetTurn, readAheadIn, SUMMARY_SYSTEM_PROMPT, summaryRequest } from './extensions/forgetReadAhead';
 import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
@@ -140,6 +141,8 @@ interface Turn {
   scope: AgentScope;
   cancelled: boolean;
   acted: boolean;
+  /** Tools it called, for the usage counts. */
+  toolCalls: number;
   /** A call opened a session: once this run ends, the message goes on in a new conversation for it. */
   handoff: AgentHandoff | null;
 }
@@ -512,6 +515,7 @@ export class Agent {
     if (switched || !entry.models.includes(stored.model ?? '')) {
       this.changeSettings({ provider: entry.provider, model: entry.recommended.model, thinking: entry.recommended.thinking });
     }
+    track('agent_connected', { provider: entry.provider, way });
     return this.status();
   }
 
@@ -641,6 +645,8 @@ export class Agent {
     const result = await this.runTool(call);
     emit({ type: 'tool_end', turnId: turn.id, name: call.name, ok: result.ok });
     turn.acted = turn.acted || result.ok;
+    turn.toolCalls += 1;
+    track('agent_tool', { mode: turn.mode, tool: call.name, ok: result.ok });
     return result;
   }
 
@@ -651,6 +657,8 @@ export class Agent {
     emit({ type: 'tool_start', turnId: turn.id, name, args: {} });
     emit({ type: 'tool_end', turnId: turn.id, name, ok, ...(note ? { note } : {}) });
     turn.acted = turn.acted || ok;
+    turn.toolCalls += 1;
+    track('agent_tool', { mode: turn.mode, tool: name, ok });
   }
 
   /** `scope` is what the message is about: one for another than the conversation's starts a new one. See AgentScope. */
@@ -659,7 +667,7 @@ export class Agent {
     const generation = this.generation;
     await this.stopTurn();
     if (generation !== this.generation) return;
-    const turn: Turn = { id: randomUUID(), mode, scope, cancelled: false, acted: false, handoff: null };
+    const turn: Turn = { id: randomUUID(), mode, scope, cancelled: false, acted: false, toolCalls: 0, handoff: null };
     this.turn = turn;
     const running = this.runTurn(turn, text, appState, definitions, reference);
     this.running = running;
@@ -752,10 +760,13 @@ export class Agent {
   private async runTurn(turn: Turn, text: string, appState: string, definitions: AgentToolDefinition[], reference: string): Promise<void> {
     emit({ type: 'turn_start', turnId: turn.id });
     let label: string | undefined;
+    let choice: Choice | null = null;
+    let outcome: 'done' | 'error' | 'cancelled' = 'cancelled';
+    let fix: AgentErrorFix | 'none' = 'none';
     try {
       // Only a credential stored through /settings-agent counts: a key in the environment, like
       // ANTHROPIC_API_KEY, would otherwise be used without anyone choosing it.
-      const choice = await this.current();
+      choice = await this.current();
       if (!choice) throw new Error(SETUP_NEEDED);
       label = choice.entry.label;
       this.policy = this.policyOf(choice.stored);
@@ -782,9 +793,24 @@ export class Agent {
         break;
       }
       emit({ type: 'turn_end', turnId: turn.id, acted: turn.acted });
+      outcome = 'done';
     } catch (e) {
       if (turn.cancelled) return;
-      emit({ type: 'error', turnId: turn.id, ...friendlyError(e, label) });
+      const error = friendlyError(e, label);
+      emit({ type: 'error', turnId: turn.id, ...error });
+      outcome = 'error';
+      fix = error.fix ?? 'none';
+    } finally {
+      track('agent_turn', {
+        mode: turn.mode,
+        provider: choice?.entry.provider,
+        model: choice?.model.id,
+        thinking: choice?.thinking,
+        tool_calls: turn.toolCalls,
+        acted: turn.acted,
+        outcome,
+        fix,
+      });
     }
   }
 

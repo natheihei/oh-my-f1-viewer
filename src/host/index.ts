@@ -21,6 +21,7 @@ import { layoutOps } from './layoutOps';
 import { query, write } from './op';
 import { suggestionOps } from './suggestions';
 import { closeViewingSession, openViewingSession, startCountdown } from './viewing';
+import { telemetryOps } from './telemetry';
 
 export { Backdrop } from './Backdrop';
 export {
@@ -215,4 +216,6 @@ export const host = {
   agent,
   /** Small UI state kept across restarts, in the profile's settings file. The shell restores and saves it. */
   savedState,
+  /** Anonymous usage counts, for the shell's notice and `/settings-usage`. Main checks every event before sending it. */
+  telemetry: telemetryOps,
 };

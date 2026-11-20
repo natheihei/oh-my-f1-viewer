@@ -14,6 +14,7 @@ import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
 import { releaseName, RELEASES_URL, type AppVersion } from '../shared/release';
 import { updateState } from './updates';
+import { telemetry, track } from './telemetry';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const f1tv = require('./vendor/f1ov/f1tv-bridge');
@@ -287,6 +288,17 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     if (isTrusted(evt) && typeof key === 'string') setUiState(key, value);
   });
 
+  // --- Telemetry: anonymous usage counts. See electron/telemetry.ts ---
+  handle('telemetry:status', () => telemetry().status());
+  handle('telemetry:setEnabled', (_e, enabled) => telemetry().setEnabled(enabled === true));
+  handle('telemetry:needsNotice', () => telemetry().needsNotice());
+  ipcMain.on('telemetry:noticed', (evt) => {
+    if (isTrusted(evt)) telemetry().noticed();
+  });
+  ipcMain.on('telemetry:track', (evt, event, props) => {
+    if (isTrusted(evt)) telemetry().fromRenderer(event, props);
+  });
+
   // --- Agent ---
   handle('ai:status', () => agent.status());
   handle('ai:providers', () => agent.providers());
@@ -333,9 +345,22 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     fork: (component, name, title, label) => mods.fork(component, name, title, { label }),
   });
   handle('build:state', () => mods.buildState());
-  handle('build:begin', () => mods.beginBuild());
-  handle('build:save', () => mods.saveBuild());
-  handle('build:undo', () => mods.undoBuild());
+  handle('build:begin', async () => {
+    const state = await mods.beginBuild();
+    track('build_started');
+    return state;
+  });
+  handle('build:save', async () => {
+    const { changes } = await mods.buildState();
+    const said = await mods.saveBuild();
+    track('build_ended', { how: 'save', mods: changes.length });
+    return said;
+  });
+  handle('build:undo', async () => {
+    const undone = await mods.undoBuild();
+    track('build_ended', { how: 'undo', mods: undone });
+    return undone;
+  });
 
   return { refreshSchedule: () => timingDb.refreshSchedule() };
 }

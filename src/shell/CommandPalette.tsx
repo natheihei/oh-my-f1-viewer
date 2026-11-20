@@ -35,6 +35,7 @@ import {
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
+import type { COMMANDS } from '../../shared/telemetry';
 
 /** While the agent is still working, a second Esc this soon after the first stops it. */
 const ESC_AGAIN_MS = 2000;
@@ -335,7 +336,10 @@ export function CommandPalette() {
         // Typed in full, since the list doesn't offer it without a session.
         if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
         // Done, the palette goes after a while, as it does once the agent has acted. A panel or build mode holds it.
-        else void Promise.resolve(command.run(rest)).then(() => palette.hideAfter(AUTO_HIDE_MS, free));
+        else {
+          host.telemetry.track('command_used', { command: command.name as (typeof COMMANDS)[number] });
+          void Promise.resolve(command.run(rest)).then(() => palette.hideAfter(AUTO_HIDE_MS, free));
+        }
       } else {
         palette.push('user', text);
         palette.push('error', `Unknown command. Available: ${availableCommands().map((c) => c.name).join(', ')}`);

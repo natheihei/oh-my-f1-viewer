@@ -3,9 +3,11 @@ import { COMPONENTS, DECLARATIONS } from './appFiles';
 import { app, BrowserWindow, Menu, protocol, session } from 'electron';
 import os from 'node:os';
 import path from 'node:path';
-import { promises as fsp } from 'node:fs';
+import fs, { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
-import { startUpdates } from './updates';
+import { startUpdates, updateState } from './updates';
+import { QUIT_FLUSH_MS, telemetry, track } from './telemetry';
+import { agent } from './agent/agent';
 import { appSettings } from './settings';
 import { MOD_SCHEME, Mods } from './mods';
 import { copyOldProfile, OLD_NAME } from './oldProfile';
@@ -97,6 +99,15 @@ app
   .whenReady()
   .then(async () => {
     if (!gotLock) return;
+    // First, before anything writes the settings: whether this profile was used before tells an install from an old one.
+    try {
+      const userData = app.getPath('userData');
+      const settings = appSettings();
+      const used = ['ui', 'agent', 'update'].some((key) => settings.get(key) !== undefined) || fs.existsSync(path.join(userData, 'omfv-session.json'));
+      telemetry().start(used);
+    } catch (e) {
+      console.warn('[telemetry] start:', (e as Error).message);
+    }
     session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
       callback(isPermissionAllowed(permission) || (permission === 'display-capture' && isAppWindow(wc))),
     );
@@ -140,6 +151,9 @@ app
       console.warn('[main] session restore failed:', (e as Error).message);
     }
     sessionState.startProactiveRefreshLoop();
+    void Promise.all([agent.status(), mods.list()])
+      .then(([ai, list]) => track('app_started', { f1tv_signed_in: !!sessionState.memSession.accessToken, agent_ready: ai.ready, mods: list.length }))
+      .catch((e: Error) => console.warn('[telemetry] start:', e.message));
 
     if (process.platform === 'darwin') {
       // macOS always shows a menu bar, and its key equivalents live in the menu: with none, Cmd+C, Cmd+V and Cmd+A
@@ -152,6 +166,7 @@ app
     }
     // Before the window, so the renderer's first question has what the last update did.
     startUpdates((state) => sendToRenderer('app:update', state));
+    if (updateState().updated) track('app_updated');
     createMainWindow();
     // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
     void data.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
@@ -165,6 +180,18 @@ app
     console.error('[main] startup failed:', e?.stack ?? e);
     if (gotLock && BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+
+// The last events go before quitting, for up to a couple of seconds: the open session's minutes, and what's waiting.
+let telemetrySent = false;
+app.on('before-quit', (event) => {
+  if (telemetrySent || !gotLock) return;
+  telemetrySent = true;
+  event.preventDefault();
+  void telemetry()
+    .close(QUIT_FLUSH_MS)
+    .catch(() => {})
+    .finally(() => app.quit());
+});
 
 // Closing the window quits, on macOS too. OMFV is one window, so staying in the dock would leave nothing to use, and an update
 // installs on quit: people who close the window and never press Cmd+Q would never get it.

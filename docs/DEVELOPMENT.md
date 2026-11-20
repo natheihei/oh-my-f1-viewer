@@ -85,6 +85,13 @@ This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an O
 node scripts/mods-check.mjs /tmp/mods-check
 ```
 
+This one needs only the F1 TV sign-in. It reads the usage counts a dev build logs, and checks the ones a session, its tiles and
+the `/` commands produce, and that `/settings-usage off` stops them: see [TELEMETRY.md](TELEMETRY.md):
+
+```bash
+npm run build:electron && node scripts/usage-counts-check.mjs /tmp/usage-counts-check
+```
+
 This one needs only the F1 TV sign-in. It opens a replay race and adds suggestions one by one: each re-tiles the grid until a
 tile is arranged by hand, and after that a new one goes into the biggest gap:
 

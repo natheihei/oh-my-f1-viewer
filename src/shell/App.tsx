@@ -11,6 +11,7 @@ import { usePersistBackground } from './persistBackground';
 import { usePersistVolume } from './persistVolume';
 import { Timeline } from './Timeline';
 import { watchUpdates } from './updates';
+import { showTelemetryNotice } from './telemetry';
 
 function formatRemaining(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -56,7 +57,8 @@ export function App() {
   useEffect(() => {
     const offAgent = connectAgent();
     const updates = watchUpdates();
-    void onboarding.start().then(() => updates.reported).then(reportReadiness);
+    void onboarding.start().then(() => updates.reported).then(reportReadiness).then(showTelemetryNotice);
+    const offTiles = host.telemetry.countTiles();
     const offExpired = host.account.onExpired(() => {
       host.session.close();
       palette.show();
@@ -66,6 +68,7 @@ export function App() {
       offAgent();
       updates.off();
       offExpired();
+      offTiles();
     };
   }, []);
 

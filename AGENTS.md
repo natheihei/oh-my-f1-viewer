@@ -33,6 +33,7 @@ Read the one that covers what you're changing. [README.md](README.md) has how to
 | [SESSION_DATA.md](docs/SESSION_DATA.md) | The session database: tables, `visible_from` and versioned rows, ingest and caching, linking it to the video, and quirks in F1's data |
 | [SPOILER_PREVENTION.md](docs/SPOILER_PREVENTION.md) | Each layer that keeps the race from the viewer, from the data up to the agent's prompt. Read it before changing what a chart or the agent can see |
 | [RELEASE.md](docs/RELEASE.md) | Releasing the app and the site: the actions, how a release is named, installing it, and what packaging changes |
+| [TELEMETRY.md](docs/TELEMETRY.md) | The anonymous usage counts: every event, what's never sent, and how to add one. Read it before sending anything new |
 | [STATUS.md](docs/STATUS.md) | What's verified on real sessions, what isn't, known issues, and what's deferred |
 | [PI_DURABLE.md](docs/PI_DURABLE.md) | Why the agent moved from pi-coding-agent to pi-durable, what each part became, and what changed |
 | [CAPTIONS.md](docs/CAPTIONS.md) | Research for a deferred feature: F1 TV's commentary caption tracks, by season. Captions contain the race |
