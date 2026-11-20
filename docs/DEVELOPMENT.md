@@ -7,7 +7,7 @@ it from source.
 
 | | |
 |---|---|
-| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. The chevron on its top edge hides it, and the `> …` block it leaves brings it back. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
+| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
