@@ -23,9 +23,12 @@ export const ELECTRON_BIN = createRequire(import.meta.url)('electron');
 /** Whether checks open their app through Hyprland. */
 export const ON_HYPRLAND = !!process.env.HYPRLAND_INSTANCE_SIGNATURE;
 
-/** Chromium aborts at startup with the CHROME_DESKTOP value Claude's desktop app sets. */
+/**
+ * Chromium aborts at startup with the CHROME_DESKTOP value Claude's desktop app sets. And a check's app never sends
+ * usage counts: without OMFV_POSTHOG_KEY it only logs them (docs/TELEMETRY.md).
+ */
 export function appEnv(extra = {}) {
-  const { CHROME_DESKTOP: _ignored, ...env } = process.env;
+  const { CHROME_DESKTOP: _ignored, OMFV_POSTHOG_KEY: _key, ...env } = process.env;
   return { ...env, ...extra };
 }
 
@@ -39,7 +42,7 @@ export function startElectron(args, { env = {}, width = 1600, height = 900, log 
   if (ON_HYPRLAND) {
     const vars = Object.entries(env).map(([k, v]) => `${k}=${v}`).join(' ');
     // `exec` keeps electron as the spawned pid that Hyprland's rules match.
-    const command = `sh -c 'exec env -u CHROME_DESKTOP ${vars} ${[bin, ...args].join(' ')}${log ? ` >>${log} 2>&1` : ''}'`;
+    const command = `sh -c 'exec env -u CHROME_DESKTOP -u OMFV_POSTHOG_KEY ${vars} ${[bin, ...args].join(' ')}${log ? ` >>${log} 2>&1` : ''}'`;
     execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(command)}, { workspace = "3 silent", float = true, size = "${width} ${height}", no_initial_focus = true })`]);
     return null;
   }

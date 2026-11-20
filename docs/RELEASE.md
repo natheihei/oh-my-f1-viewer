@@ -71,6 +71,12 @@ Closing the window quits, on macOS too, where Mac apps usually stay in the dock:
   quit, so the next start can say which it is now.
 - **Not**: the pacman package, a build made by hand (`npm run dist` without a release's version), or a run from source.
 
+### Usage counts
+
+A release sends anonymous usage counts to PostHog: see [TELEMETRY.md](TELEMETRY.md). The **Package** step adds the PostHog
+project's key as `-c.extraMetadata.omfvPosthogKey`, from the repo secret `POSTHOG_KEY`, and only when it's run by hand and isn't a
+dry run. Without the secret, a release sends nothing. Set it with `gh secret set POSTHOG_KEY`.
+
 ### Sign the Mac build
 
 A release's Mac app is signed with OMFV's **Developer ID Application** certificate, under the hardened runtime, and notarized by

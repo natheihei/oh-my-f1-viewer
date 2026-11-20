@@ -304,6 +304,10 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   `src/agent/bridge.ts` use it. `send` keeps `live.agentBusy` as messages go through it (`src/host/agentTurn.ts`).
 - `host.savedState`: small UI state kept across restarts in the profile's settings file (`load()`, `get(key)`, `set(key, value)`).
   `src/main.tsx` loads it once before the first render, and only the shell restores and saves through it (`src/shell/uiState.ts`).
+- `host.telemetry`: the anonymous usage counts. `track(event, props)` sends one of the events the page may send, which main
+  checks against `shared/telemetry.ts`. `countTiles()` counts each tile that's new on the grid. `status()`, `setEnabled(on)`,
+  `needsNotice()` and `noticed()` drive the notice and `/settings-usage`. Only the shell uses them (`src/shell/telemetry.ts`),
+  and `src/data/session.ts` counts sessions itself. See [TELEMETRY.md](TELEMETRY.md).
 - `startMods(shared)`: starts loading mods, with the modules they share with the app. `src/main.tsx` calls it once, after registering
   the app's own components.
 - `startHealth()`: answers the main process when it asks for `host.health.settled()`, which it does for the build agent. `src/main.tsx`

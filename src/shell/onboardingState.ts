@@ -35,6 +35,7 @@ export const onboarding = {
     if (!useOnboarding.getState().active) return;
     useOnboarding.setState({ active: false });
     saveUiState(KEY, true, storage);
+    host.telemetry.track('onboarding_finished', { how });
     if (how === 'skipped') palette.push('system', 'Onboarding skipped. /reset-onboarding brings it back.');
   },
   /** `/reset-onboarding`: shows it again, with the steps already done marked so. */

@@ -8,6 +8,7 @@ import { enterBuild } from './buildMode';
 import { agentFix, eventsFix, f1tvFix } from './fixes';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
+import { runTelemetryCommand } from './telemetry';
 
 export interface SlashCommand {
   name: string;
@@ -93,6 +94,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       palette.openPanel('agent');
     },
+  },
+  {
+    name: '/settings-usage',
+    description: 'See or turn off the anonymous usage counts',
+    // "/settings-usage off" turns them off.
+    takesText: true,
+    run: (text) => runTelemetryCommand(text),
   },
   {
     name: '/login-f1tv',

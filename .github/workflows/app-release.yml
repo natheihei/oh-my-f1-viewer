@@ -165,7 +165,10 @@ jobs:
           # electron-builder skips signing in a pull request's build unless told not to, so a pull request would check an
           # unsigned app. A fork's pull request gets no secrets, so it signs ad-hoc.
           CSC_FOR_PULL_REQUEST: 'true'
-        run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }} ${SIGN_AS:-}
+          # The PostHog project's key, for the anonymous usage counts (electron/telemetry.ts, docs/TELEMETRY.md). Only a
+          # release gets it: a pull request's or a dry run's build has none, so it never sends.
+          POSTHOG_KEY: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && secrets.POSTHOG_KEY || '' }}
+        run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }} -c.extraMetadata.omfvPosthogKey="$POSTHOG_KEY" ${SIGN_AS:-}
 
       # An update installs only over an app with the same identity, which for a Developer ID is its Team ID. Ad-hoc,
       # each build's is its own hash. The .dmg is what's downloaded, so its app is the one Gatekeeper has to accept.

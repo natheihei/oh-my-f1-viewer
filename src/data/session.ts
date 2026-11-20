@@ -10,6 +10,7 @@ import { LIVE_EDGE_OFFSET_SEC, LIVE_START_MARGIN_SEC, StreamHandle, type StreamS
 import { isStalled, pickReference, syncTick, type SyncEntry } from './syncEngine';
 import { openSessionData, type SessionDataHandle } from './sessionData';
 import { normalizeVolume, toggledVolume } from './volume';
+import { track } from './telemetry';
 
 const TICK_MS = 200;
 /**
@@ -478,11 +479,13 @@ export async function openSession(session: SessionInfo, options: { fromStart?: b
   closeSession();
   const channels = await window.omfv.f1tv.channels(session.contentId);
   useSession.setState({ ...INITIAL, session: { ...session }, channels });
+  track('session_opened', { session_type: session.type, live: session.status === 'live', year: session.year });
   runtime = new SessionRuntime(session, options.fromStart ?? false);
   return channels;
 }
 
 export function closeSession(): void {
+  if (runtime) track('session_closed');
   runtime?.destroy();
   runtime = null;
   useSession.setState(INITIAL);

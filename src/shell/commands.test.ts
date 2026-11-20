@@ -68,3 +68,10 @@ describe('/ commands', () => {
     layout.clear();
   });
 });
+
+describe('usage counts', () => {
+  it('may count every command by its name', async () => {
+    const { COMMANDS } = await import('../../shared/telemetry');
+    expect([...COMMANDS].sort()).toEqual(SLASH_COMMANDS.map((c) => c.name).sort());
+  });
+});

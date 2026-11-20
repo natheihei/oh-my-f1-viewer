@@ -103,6 +103,12 @@ OMFV is an Electron app with a React renderer.
 - **Agent.** The agent runs on [pi](https://github.com/earendil-works/pi) with your provider. It gets tools built on the
   host, and a spoiler check sits between it and anything ahead of the playhead.
 
+## Privacy
+
+OMFV is open source, and knowing people use it is what keeps me going. It sends anonymous usage counts so I can see what to
+improve, never who you are or what you type. `/settings-usage off` turns them off. [docs/TELEMETRY.md](docs/TELEMETRY.md)
+lists every event.
+
 ## Credits
 
 - [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer) (MIT) by npanu420. OMFV builds on its hard-won F1 TV sign-in,

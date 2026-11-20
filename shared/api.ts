@@ -254,6 +254,18 @@ export interface OmfvApi {
     /** Undefined removes it. */
     setUi(key: string, value: unknown): void;
   };
+  /** Anonymous usage counts, which main sends: see electron/telemetry.ts and docs/TELEMETRY.md. */
+  telemetry: {
+    status(): Promise<import('./telemetry').TelemetryStatus>;
+    /** Off forgets the id. Resolves to how it stands then. */
+    setEnabled(enabled: boolean): Promise<import('./telemetry').TelemetryStatus>;
+    /** Whether the palette should say it's on: once, the first time it would send. */
+    needsNotice(): Promise<boolean>;
+    /** The palette has said so. Nothing is sent before. */
+    noticed(): void;
+    /** Main sends only the events the renderer may send, with only the properties each may carry. */
+    track<E extends import('./telemetry').RendererEvent>(event: E, props?: import('./telemetry').TelemetryProps<E>): void;
+  };
   ai: {
     status(): Promise<AiStatus>;
     /** The providers `/settings-agent` offers, each with its ways to connect and its models. */
