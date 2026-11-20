@@ -335,8 +335,9 @@ On Omarchy (Arch, x64, Hyprland), 2026-11-20, with `npm run dist` named as relea
 - The `.pacman` package's metadata, launcher entry and install script were read, and its dependencies all exist in Arch's
   repositories. It hasn't been installed with `pacman -U`.
 
-Not verified: the macOS `.dmg`, which only CI builds (see [RELEASE.md](RELEASE.md#not-done-yet) for VMP), and the Release app action
-itself, which can only run once it's on `main`.
+The Release app action has since made `20261120.1` and `20261120.2`, and the macOS `.dmg` installs and opens: see
+[Verified for updates](#verified-for-updates). Not verified: playing a session in the installed Mac app, and DRM there (see
+[RELEASE.md](RELEASE.md#not-done-yet) for VMP).
 
 ## Verified for updates
 
@@ -344,8 +345,15 @@ On Omarchy, 2026-11-20, with `scripts/update-check.mjs`: an AppImage of release 
 `20261120.2` at its first check a minute after start, downloaded it, and the palette said it was ready. Closing the window put
 `omfv-20261120.2.0-linux-x86_64.AppImage` in the first one's place, and starting that said `Updated to OMFV 20261120.2.`
 
-Not verified: a Mac app updating itself, which needs a Mac and the certificate in [RELEASE.md](RELEASE.md#sign-the-mac-build), and
-updating from GitHub, which needs the repo public and a release made by the action.
+On a MacBook Air (Apple silicon), 2026-11-20, by hand, from GitHub: on a Mac with no OMFV profile or keychain entry, the `.dmg`
+of release `20261120.1`, made by the Release app action and signed with OMFV's certificate, was installed and opened. Then the
+action released the same commit as `20261120.2`. After a real quit and start (closing the window had left it running), the
+app found `20261120.2` a minute in, downloaded it, and recorded it to install. Quitting had Squirrel.Mac put it in
+`/Applications` ("Installation completed successfully" in its log), the new app passed `codesign --verify --deep --strict`, and
+its start recorded `20261120.2` as the release that ran last. That start asked for the keychain password: see Known issues.
+The palette's messages weren't checked by eye.
+
+Not verified: an AppImage updating itself from GitHub.
 
 ## Not verified
 
@@ -386,6 +394,11 @@ updating from GitHub, which needs the repo public and a release made by the acti
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 
 ## Known issues
+
+- **The Mac app asks for the keychain password after every update.** The sign-ins' keychain entry is partitioned by the hash of
+  the build that made it, since OMFV's certificate has no Team ID, so each new release is a stranger to it. Seen on 20261120.1 to
+  20261120.2: the entry's partition list named only `cdhash:` of the first. Only a Developer ID ends it. See
+  [RELEASE.md](RELEASE.md#sign-the-mac-build).
 
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
   reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.

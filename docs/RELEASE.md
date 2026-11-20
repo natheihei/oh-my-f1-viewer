@@ -59,6 +59,9 @@ OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names 
 didn't install on quit is named in red on the next start, and tried again.
 A failed check or download is only logged.
 
+On macOS, closing the window doesn't quit: the app stays in the dock, as Mac apps do, and the update waits for Cmd+Q, logging out
+or restarting. The next start then asks for the keychain password: see [Sign the Mac build](#sign-the-mac-build).
+
 - **The feed.** `publish` in `electron-builder.yml` names `releases/latest/download` on this repo, so the app reads
   `latest-linux.yml` or `latest-mac.yml` from the release marked latest, and electron-builder writes `app-update.yml` into the
   app. There's no GitHub API, so no token or rate limit, but the repo has to be public.
@@ -71,9 +74,16 @@ A failed check or download is only logged.
 ### Sign the Mac build
 
 Squirrel.Mac installs an update only if it's signed by the same identity as the running app. An ad-hoc signature is a hash of
-the build itself, so no two releases share one, and the keychain entry holding the F1 TV and agent sign-ins would also ask for the
-password after every update. So releases are signed with OMFV's own certificate: self-signed, free, and the same for every
-release. Apple doesn't know it, so Gatekeeper still asks once on the first install, as above.
+the build itself, so no two releases share one. So releases are signed with OMFV's own certificate: self-signed, free, and the
+same for every release. Apple doesn't know it, so Gatekeeper still asks once on the first install, as above.
+
+**The keychain still asks after every update.** The entry holding the key to the F1 TV and agent sign-ins, "oh-my-f1-viewer Safe
+Storage", has two locks. Its list of allowed apps names the certificate, so every release passes that one. Its partition list
+names the build: macOS gives an app signed with a Team ID the partition `teamid:…`, the same for every release, but an app
+without one, as ours is, gets `cdhash:…`, the hash of that very build. So the first start of each new release asks for the login
+password. **Always Allow** adds that build's hash, and the next release asks again; **Deny** leaves the sign-ins unread. The app
+can't add to the list itself, since that needs the password. Only a Developer ID, which carries a Team ID, ends it: see
+[Not done yet](#not-done-yet). A run from source is a different build again, so it asks too.
 
 Make it once, from a checkout, with `gh` signed in as someone who can set the repo's secrets:
 
@@ -131,7 +141,7 @@ waits a minute, so it takes a few.
 ### Not done yet
 
 - **A Developer ID on macOS.** The app is signed with OMFV's own certificate, not a Developer ID, and isn't notarized, so
-  Gatekeeper asks once.
+  Gatekeeper asks once, and the keychain asks after every update. A Developer ID (the Apple Developer Program) ends both.
 - **VMP on macOS.** castLabs' build carries a development VMP signature. Whether F1 TV's licence server accepts it for DRM streams
   isn't known: most replays aren't encrypted. If it doesn't, the macOS build needs signing through castLabs' EVS (free, with an
   account) before the Apple signature.
