@@ -49,7 +49,6 @@ It writes a [mod](docs/MODS.md) and runs it on the race you're watching as a dra
 puts everything back. Mods are plain folders, so you can also write or change one yourself. See
 [docs/BUILD_MODE.md](docs/BUILD_MODE.md).
 
-![Build mode on the 2026 Mexico City Grand Prix, under the safety car: a new tile, framed in yellow and marked DRAFT, shows Russell's onboard in the pit lane with "RUS pitting" over it.](site/src/assets/shots/page/hero-build.webp)
 
 ## Requirements
 
