@@ -396,9 +396,12 @@ Not verified: an AppImage updating itself from GitHub.
 
 ## Known issues
 
-- **The Mac app asks for the keychain password after every update.** The sign-ins' keychain entry is partitioned by the hash of
-  the build that made it, since OMFV's certificate has no Team ID, so each new release is a stranger to it. Seen on 20261120.1 to
-  20261120.2: the entry's partition list named only `cdhash:` of the first. Only a Developer ID ends it. See
+- **The Mac app asked for the keychain password after every update.** The sign-ins' keychain entry is partitioned by the hash of
+  the build that made it, since OMFV's own certificate has no Team ID, so each new release was a stranger to it. Seen on
+  20261120.1 to 20261120.2: the entry's partition list named only `cdhash:` of the first. Releases are now signed with a
+  Developer ID and notarized, which should end it and Gatekeeper's **Open Anyway**, but no Developer ID release has been made yet:
+  not verified that a `.dmg` opens without asking, that one release updates to the next without the keychain asking (the entry's
+  partition list should show `teamid:`), or that Widevine loads under the hardened runtime. See
   [RELEASE.md](RELEASE.md#sign-the-mac-build).
 
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
@@ -425,6 +428,6 @@ Not verified: an AppImage updating itself from GitHub.
 - Race-state tools for the agent.
 - More charts.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
-- Windows, and a signed and notarized macOS app with castLabs' VMP signing. See [RELEASE.md](RELEASE.md#not-done-yet).
+- Windows, and castLabs' VMP signing on macOS. See [RELEASE.md](RELEASE.md#not-done-yet).
 - Saved layouts, pop-out windows and translations.
 - Updates for the pacman package, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).

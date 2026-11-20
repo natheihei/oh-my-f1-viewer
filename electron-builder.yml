@@ -70,10 +70,13 @@ mac:
       arch: arm64
   icon: icons/omfv-app-icon.png
   category: public.app-category.entertainment
-  # Ad-hoc signed, not notarized: there's no Developer ID yet. Without a signature at all, Apple silicon won't
-  # run it, and a quarantined download says it's damaged. A release is signed with OMFV's own certificate instead,
-  # when the action has it: see the workflow and docs/RELEASE.md.
+  # Ad-hoc signed here, for `npm run dist`: without a signature at all, Apple silicon won't run it. A release is
+  # signed with OMFV's Developer ID instead, and notarized: the action passes the identity, and electron-builder
+  # notarizes when the APPLE_API_KEY variables are set. See the workflow and docs/RELEASE.md.
   identity: '-'
-  hardenedRuntime: false
+  # Notarizing requires the hardened runtime. The entitlements let V8 and the downloaded Widevine CDM run under it.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     CFBundleDisplayName: OMFV

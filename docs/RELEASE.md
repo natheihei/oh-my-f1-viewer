@@ -26,9 +26,10 @@ Or **Actions → Release app → Run workflow**. It refuses a commit that isn't 
    The notes list the pull requests since the release before. Marking it latest is what makes installed apps update to it: see
    [Updates](#updates).
 
-`dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. A pull request that
-changes the packaging (`electron-builder.yml`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow) builds both
-platforms the same way, also without releasing.
+`dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. `notes` is Markdown put
+before the generated notes, for what a release needs done by hand. A pull request that changes the packaging
+(`electron-builder.yml`, `build/entitlements.mac.plist`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow)
+builds both platforms the same way, also without releasing.
 
 electron-builder needs a semver version, so a release's package version is `20261119.1.0`. `shared/release.ts` turns it back into
 the name, and `/version` in the palette shows it. Built from a checkout, the app says it isn't a release.
@@ -42,7 +43,7 @@ its tag, so nobody downloads it.
 | --- | --- | --- |
 | Omarchy, Arch | `omfv-….pacman` | `sudo pacman -U omfv-20261119.1.0-linux-x64.pacman`. It installs to `/opt/oh-my-f1-viewer`, with `oh-my-f1-viewer` on the path and "OMFV" in the app launcher. `sudo pacman -R oh-my-f1-viewer` removes it |
 | Other Linux | `omfv-….AppImage` | `chmod +x` it and run it. It needs FUSE 2 (`fuse2` on Arch, `libfuse2` on Ubuntu) |
-| macOS | `omfv-….dmg` | Drag it to Applications. It isn't notarized, so the first time it's opened, macOS refuses: go to **System Settings → Privacy & Security** and choose **Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/oh-my-f1-viewer.app` |
+| macOS | `omfv-….dmg` | Drag it to Applications. It's signed with OMFV's Developer ID and notarized, so it opens like any other download |
 
 The AppImage and the Mac app update themselves from then on: see [Updates](#updates). The pacman package doesn't yet: a newer
 release installs over it the same way ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181) moves it to the AUR).
@@ -59,8 +60,7 @@ OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names 
 didn't install on quit is named in red on the next start, and tried again.
 A failed check or download is only logged.
 
-Closing the window quits, on macOS too, where Mac apps usually stay in the dock: an update waits for the app to quit. On macOS the
-next start then asks for the keychain password: see [Sign the Mac build](#sign-the-mac-build).
+Closing the window quits, on macOS too, where Mac apps usually stay in the dock: an update waits for the app to quit.
 
 - **The feed.** `publish` in `electron-builder.yml` names `releases/latest/download` on this repo, so the app reads
   `latest-linux.yml` or `latest-mac.yml` from the release marked latest, and electron-builder writes `app-update.yml` into the
@@ -73,28 +73,76 @@ next start then asks for the keychain password: see [Sign the Mac build](#sign-t
 
 ### Sign the Mac build
 
-Squirrel.Mac installs an update only if it's signed by the same identity as the running app. An ad-hoc signature is a hash of
-the build itself, so no two releases share one. So releases are signed with OMFV's own certificate: self-signed, free, and the
-same for every release. Apple doesn't know it, so Gatekeeper still asks once on the first install, as above.
+A release's Mac app is signed with OMFV's **Developer ID Application** certificate, under the hardened runtime, and notarized by
+Apple, with the ticket stapled to it. That does three things:
 
-**The keychain still asks after every update.** The entry holding the key to the F1 TV and agent sign-ins, "oh-my-f1-viewer Safe
-Storage", has two locks. Its list of allowed apps names the certificate, so every release passes that one. Its partition list
-names the build: macOS gives an app signed with a Team ID the partition `teamid:…`, the same for every release, but an app
-without one, as ours is, gets `cdhash:…`, the hash of that very build. So the first start of each new release asks for the login
-password. **Always Allow** adds that build's hash, and the next release asks again; **Deny** leaves the sign-ins unread. The app
-can't add to the list itself, since that needs the password. Only a Developer ID, which carries a Team ID, ends it: see
-[Not done yet](#not-done-yet). A run from source is a different build again, so it asks too.
+- **Updates install.** Squirrel.Mac installs an update only if it's signed by the same identity as the running app. A Developer
+  ID's designated requirement names the Team ID, which is the same for every release.
+- **The keychain doesn't ask.** The entry holding the key to the F1 TV and agent sign-ins, "oh-my-f1-viewer Safe Storage", has a
+  partition list that macOS sets from the app that made it: `teamid:<team>` for an app signed with a Team ID, which every
+  release passes. Without one it's `cdhash:<hash>`, that very build, so each release had to ask for the login password.
+- **Gatekeeper opens it.** A notarized app opens from a download with no **Open Anyway** step.
 
-Make it once, from a checkout, with `gh` signed in as someone who can set the repo's secrets:
+`build/entitlements.mac.plist` is what the app and its helpers may do under the hardened runtime: `allow-jit` and
+`allow-unsigned-executable-memory` for V8, and `disable-library-validation` for the Widevine CDM, which is downloaded into the
+profile at the first start and signed by Google, not by OMFV's team.
+
+The action signs and notarizes through electron-builder, which imports the certificate into a keychain of its own, signs as the
+identity with the Team ID in its name, and sends the app to Apple's notary service with an App Store Connect API key. It then
+checks the result: the signature verifies, the designated requirement names the Team ID, the hardened runtime is on, and the app
+in the `.dmg` has its ticket and is accepted by Gatekeeper as "Notarized Developer ID". A release refuses to run without the
+secrets below, since an ad-hoc build is a new identity that installed apps won't update to. A dry run or a pull request without
+them signs ad-hoc and warns, and so does `npm run dist` on your own Mac.
+
+#### Set it up
+
+Once, by the Apple Developer Program's account holder:
+
+1. **The certificate.** In Xcode, **Settings → Accounts**, pick the team, **Manage Certificates… → + → Developer ID
+   Application**. Or make it at [developer.apple.com](https://developer.apple.com/account/resources/certificates/list) from a
+   signing request made in Keychain Access. Then in Keychain Access, under **My Certificates**, export "Developer ID Application:
+   … (TEAMID)" with its key as a `.p12`, with a password.
+2. **The Team ID**, ten characters, from **Membership details** on [developer.apple.com](https://developer.apple.com/account).
+3. **A notary key.** In [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api), **Users and Access →
+   Integrations → App Store Connect API → Team Keys**, make a key with the **Developer** role. Download its `AuthKey_….p8`,
+   which can only be downloaded once, and note its Key ID and the Issuer ID above the list.
+4. **The secrets**, from a checkout with `gh` signed in as someone who can set them:
 
 ```bash
-scripts/mac-signing-cert.sh ~/omfv-signing.p12
+base64 -i ~/omfv-developer-id.p12 | gh secret set MAC_DEVELOPER_ID_P12
+gh secret set MAC_DEVELOPER_ID_PASSWORD             # asks for the .p12's password
+gh secret set APPLE_TEAM_ID --body ABCDE12345
+gh secret set APPLE_API_KEY_P8 < ~/AuthKey_ABC123DEFG.p8
+gh secret set APPLE_API_KEY_ID --body ABC123DEFG
+gh secret set APPLE_API_ISSUER --body 01234567-89ab-cdef-0123-456789abcdef
 ```
 
-It sets `MAC_CERT_P12` and `MAC_CERT_PASSWORD`, which the action signs with, and leaves a copy and its password with you. Keep
-both: a new certificate is a new identity, and Macs with OMFV would need the next release installed by hand, once. Without the
-secrets the action signs ad-hoc and warns, and those Mac apps don't update themselves. The action checks the signature either
-way.
+Keep the `.p12` and the `.p8` somewhere safe, like a password manager. A Developer ID certificate lasts five years; a new one
+from the same team keeps the Team ID, so installed apps still update.
+
+Then check it with a dry run, which signs and notarizes as a release would:
+
+```bash
+gh workflow run app-release.yml -f sha=main -f dry_run=true
+```
+
+#### Moving installed Macs over
+
+Releases up to the first Developer ID one were signed with OMFV's own self-signed certificate, so a Mac with one of those won't
+update itself to it: each start downloads it, and the install on quit fails. Install that release by hand, once, from its `.dmg`.
+Its first start may ask for the keychain password once more, and **Always Allow** adds it; releases after it shouldn't ask. Say
+so in its notes:
+
+```bash
+gh workflow run app-release.yml -f sha=main -f notes='**On a Mac with an earlier release, install this one by hand from its .dmg.** It is the first signed with a Developer ID, and earlier releases cannot update to it themselves.'
+```
+
+The old secrets, `MAC_CERT_P12` and `MAC_CERT_PASSWORD`, aren't read any more:
+
+```bash
+gh secret delete MAC_CERT_P12
+gh secret delete MAC_CERT_PASSWORD
+```
 
 ### What packaging changes
 
@@ -140,11 +188,10 @@ waits a minute, so it takes a few.
 
 ### Not done yet
 
-- **A Developer ID on macOS.** The app is signed with OMFV's own certificate, not a Developer ID, and isn't notarized, so
-  Gatekeeper asks once, and the keychain asks after every update. A Developer ID (the Apple Developer Program) ends both.
 - **VMP on macOS.** castLabs' build carries a development VMP signature. Whether F1 TV's licence server accepts it for DRM streams
   isn't known: most replays aren't encrypted. If it doesn't, the macOS build needs signing through castLabs' EVS (free, with an
-  account) before the Apple signature.
+  account) before the Apple signature: EVS in electron-builder's `afterPack`, which runs before it signs and notarizes
+  ([issue 174](https://github.com/natheihei/oh-my-f1-viewer/issues/174)).
 - **Intel Macs, Windows and Linux on arm64.**
 - **Updates for the pacman package**, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
 
