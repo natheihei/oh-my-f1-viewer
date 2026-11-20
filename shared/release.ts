@@ -19,6 +19,9 @@ export interface AppVersion {
 /** Where releases are published. Each is tagged `app-<name>`. */
 export const RELEASES_URL = 'https://github.com/natheihei/oh-my-f1-viewer/releases';
 
+/** The Linux feed on the release marked latest, which electron-builder writes: its `version` is that release's. */
+export const LINUX_FEED_URL = `${RELEASES_URL}/latest/download/latest-linux.yml`;
+
 /** Orders release names, oldest first: negative when `a` came before `b`. */
 export function compareReleases(a: string, b: string): number {
   const [aDay, aRun] = a.split('.').map(Number);
@@ -30,6 +33,8 @@ export function compareReleases(a: string, b: string): number {
 export interface UpdateState {
   /** A newer release, downloaded, that installs when the app quits. */
   ready: string | null;
+  /** A newer release, published, that the next system update installs: the AUR package doesn't update itself. */
+  out: string | null;
   /** The release this start updated to, once, on the first start after an update. */
   updated: string | null;
   /** A release that should have installed when the app last quit, and didn't. */

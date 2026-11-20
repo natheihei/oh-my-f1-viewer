@@ -5,7 +5,7 @@ pre-releases.
 
 | | Runs | Makes | Where it goes |
 | --- | --- | --- | --- |
-| App | [Release app](../.github/workflows/app-release.yml) | `.pacman` and AppImage for Linux (x64), `.dmg` and `.zip` for macOS (Apple silicon), and the update feed | A GitHub release, `app-YYYYMMDD.N`, marked latest |
+| App | [Release app](../.github/workflows/app-release.yml) | `.tar.gz` and AppImage for Linux (x64), `.dmg` and `.zip` for macOS (Apple silicon), the update feed, and the AUR package | A GitHub release, `app-YYYYMMDD.N`, marked latest, and `oh-my-f1-viewer-bin` on the AUR |
 | Site | [Release site](../.github/workflows/site-release.yml) | Nothing: it moves the `site-production` branch | Cloudflare Workers builds it. See [site/DEPLOY.md](../site/DEPLOY.md) |
 
 ## The app
@@ -25,10 +25,12 @@ Or **Actions → Release app → Run workflow**. It refuses a commit that isn't 
 3. Tags the commit `app-20261119.1` and publishes the GitHub release "OMFV 20261119.1" with the files and `SHA256SUMS`, marked latest.
    The notes list the pull requests since the release before. Marking it latest is what makes installed apps update to it: see
    [Updates](#updates).
+4. Moves the AUR package to the release: see [The AUR package](#the-aur-package).
 
-`dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. A pull request that
-changes the packaging (`electron-builder.yml`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow) builds both
-platforms the same way, also without releasing.
+`dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. It still builds the AUR
+package from the run's `.tar.gz`, and prints its `.SRCINFO`, without pushing. A pull request that changes the packaging
+(`electron-builder.yml`, `electron/appFiles.ts`, `package.json`, the lock file, `packaging/aur/` or the workflow) builds both
+platforms and the AUR package the same way, also without releasing.
 
 electron-builder needs a semver version, so a release's package version is `20261119.1.0`. `shared/release.ts` turns it back into
 the name, and `/version` in the palette shows it. Built from a checkout, the app says it isn't a release.
@@ -40,12 +42,15 @@ its tag, so nobody downloads it.
 
 | Platform | File | Install |
 | --- | --- | --- |
-| Omarchy, Arch | `omfv-….pacman` | `sudo pacman -U omfv-20261119.1.0-linux-x64.pacman`. It installs to `/opt/oh-my-f1-viewer`, with `oh-my-f1-viewer` on the path and "OMFV" in the app launcher. `sudo pacman -R oh-my-f1-viewer` removes it |
+| Omarchy, Arch | The AUR | `yay -S oh-my-f1-viewer-bin`. It installs to `/opt/oh-my-f1-viewer`, with `oh-my-f1-viewer` on the path and "OMFV" in the app launcher. `sudo pacman -R oh-my-f1-viewer-bin` removes it |
 | Other Linux | `omfv-….AppImage` | `chmod +x` it and run it. It needs FUSE 2 (`fuse2` on Arch, `libfuse2` on Ubuntu) |
 | macOS | `omfv-….dmg` | Drag it to Applications. It isn't notarized, so the first time it's opened, macOS refuses: go to **System Settings → Privacy & Security** and choose **Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/oh-my-f1-viewer.app` |
 
-The AppImage and the Mac app update themselves from then on: see [Updates](#updates). The pacman package doesn't yet: a newer
-release installs over it the same way ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181) moves it to the AUR).
+The AppImage and the Mac app update themselves from then on: see [Updates](#updates). The AUR package updates with the system:
+`omarchy update`, or `yay`, installs each release. The app only says when one is out.
+
+Releases up to `20261120.2` carried a `.pacman` file instead, installed with `sudo pacman -U` as the package `oh-my-f1-viewer`.
+`yay -S oh-my-f1-viewer-bin` replaces it, after asking to remove it, and keeps the profile: both are the same app.
 
 While the repo is private, downloading a release needs access to the repo, and nothing can update itself.
 
@@ -69,7 +74,61 @@ next start then asks for the keychain password: see [Sign the Mac build](#sign-t
   macOS Squirrel.Mac swaps the app in `/Applications` from the `.zip`. It only ever moves to a newer release.
 - **What's kept between runs**: `update` in `omfv-settings.json`, the release that ran last and the one that was to install on
   quit, so the next start can say which it is now.
-- **Not**: the pacman package, a build made by hand (`npm run dist` without a release's version), or a run from source.
+- **The AUR package** doesn't update itself: the system does. It reads `latest-linux.yml` the same way, a minute after it
+  starts and then every 10 minutes, and says once `OMFV 20261121.1 is out. Your next system update installs it.` It downloads
+  and installs nothing. `electron/updates.ts` knows it's the AUR package when it runs from `/opt/oh-my-f1-viewer` and pacman
+  has `oh-my-f1-viewer-bin` installed. The first start after the system installs a release says `Updated to OMFV …`, as above.
+- **Not**: the `.pacman` file of the earlier releases, a `.tar.gz` unpacked by hand, a build made by hand (`npm run dist`
+  without a release's version), or a run from source.
+
+### The AUR package
+
+[`oh-my-f1-viewer-bin`](https://aur.archlinux.org/packages/oh-my-f1-viewer-bin) is how Omarchy and Arch install OMFV:
+`omarchy update` upgrades AUR packages, so each release arrives with the system's updates. Its files are in
+[`packaging/aur/`](../packaging/aur), reviewed like the rest, and the action writes them to the AUR. Change them here: the next
+release overwrites what's on the AUR.
+
+- **The PKGBUILD** downloads the release's `omfv-….0-linux-x64.tar.gz`, checks its sha256, and installs it to
+  `/opt/oh-my-f1-viewer` with `oh-my-f1-viewer` on the path, the launcher entry (`oh-my-f1-viewer.desktop`), the icon and the
+  licence. It compiles nothing. The icon and licence are in the tar.gz for it: `linux.extraFiles` in `electron-builder.yml`.
+- **Its version** is the release's name, `20261120.2`, which pacman orders the same way releases are. `pkgrel` is always 1.
+- **Its dependencies** are what the binary links to, plus libsecret for the saved logins. electron-builder's own list for
+  Arch names packages it no longer has (http-parser).
+- **`packaging/aur/build.sh <release> <out> [tarball]`** fills in `pkgver` and the checksums, writes `.SRCINFO` with
+  `makepkg --printsrcinfo`, and builds the package with `makepkg`, then runs `namcap` if it's there. Without a tarball, it
+  downloads the release's. The action runs it in an `archlinux:base-devel` container, then clones
+  `ssh://aur@aur.archlinux.org/oh-my-f1-viewer-bin.git`, commits `PKGBUILD`, `.SRCINFO` and the launcher entry as
+  "OMFV 20261120.2", and pushes. The first push makes the package on the AUR. The AUR's host key is pinned in the workflow.
+- **If the push fails**, the GitHub release is already out. Run the failed job again: **Re-run failed jobs** on the run, or
+  `gh run rerun <run> --failed`. A push the AUR already has is skipped.
+
+Set it up once, by hand:
+
+1. Make an account on the [AUR](https://aur.archlinux.org/register). It's the package's maintainer.
+2. From a checkout, with `gh` signed in as someone who can set the repo's secrets:
+
+   ```bash
+   scripts/aur-ssh-key.sh
+   ```
+
+   It makes an SSH key, sets it as `AUR_SSH_PRIVATE_KEY`, and prints the public key. Nothing else keeps a copy.
+3. Add the public key to the AUR account: **My Account → SSH Public Key**.
+
+Without the secret, a release warns that the AUR package wasn't moved, and leaves it where it was.
+
+Check the package from a checkout, on Arch, from a build or a release:
+
+```bash
+npm run dist -- -c.extraMetadata.version=20261121.1.0
+```
+
+```bash
+packaging/aur/build.sh 20261121.1 release/aur release/omfv-20261121.1.0-linux-x64.tar.gz
+```
+
+```bash
+sudo pacman -U release/aur/oh-my-f1-viewer-bin-20261121.1-1-x86_64.pkg.tar.zst
+```
 
 ### Sign the Mac build
 
@@ -110,8 +169,7 @@ way.
 - **The developer switches are off** (`electron/vendor/f1ov/devFlags.js`): `ELECTRON_START_URL` and the rest only work unpackaged.
 - **Electron is castLabs' build** from `node_modules/electron/dist` (`electronDist`), so each platform is packaged on its own runner.
   The Widevine CDM is downloaded at the first start, into the profile, as it is from source.
-- **The pacman package's dependencies** are listed in `electron-builder.yml`: electron-builder's own list names packages Arch no longer
-  has.
+- **The AUR package's dependencies** are listed in `packaging/aur/PKGBUILD`: see [The AUR package](#the-aur-package).
 
 ### Check a build
 
@@ -146,7 +204,6 @@ waits a minute, so it takes a few.
   isn't known: most replays aren't encrypted. If it doesn't, the macOS build needs signing through castLabs' EVS (free, with an
   account) before the Apple signature.
 - **Intel Macs, Windows and Linux on arm64.**
-- **Updates for the pacman package**, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
 
 ## The site
 

@@ -1,14 +1,16 @@
 /**
  * Keeps a release of OMFV up to date: checks GitHub for a newer release, downloads it in the background, and
  * installs it when the app quits, so the next start is the new release. Never restarts the app, never asks.
- * Only the AppImage and the Mac app: the pacman package is installed by hand (issue 181). See docs/RELEASE.md.
+ * Only the AppImage and the Mac app. The AUR package, oh-my-f1-viewer-bin, is the system's to update: for it, the
+ * feed is only read to say that a release is out. See docs/RELEASE.md.
  *
  * electron-updater does the work, from the feed electron-builder.yml names under `publish`: `latest-linux.yml` or
  * `latest-mac.yml` on the release marked latest.
  */
-import { app } from 'electron';
+import { readdirSync } from 'node:fs';
+import { app, net } from 'electron';
 import { autoUpdater } from 'electron-updater';
-import { compareReleases, releaseName, type UpdateState } from '../shared/release';
+import { compareReleases, LINUX_FEED_URL, releaseName, type UpdateState } from '../shared/release';
 import { appSettings, type Settings } from './settings';
 
 /** The first check waits for the app to settle, then they come every 10 minutes. */
@@ -23,13 +25,37 @@ export interface SavedUpdate {
   installing?: string;
 }
 
-const NOTHING: UpdateState = { ready: null, updated: null, failed: null };
+const NOTHING: UpdateState = { ready: null, out: null, updated: null, failed: null };
 let state: UpdateState = NOTHING;
 
 /** Whether this build updates itself: a release, installed as an AppImage or a Mac app. */
 export function canUpdate(): boolean {
   if (!app.isPackaged || !releaseName(app.getVersion())) return false;
   return process.platform === 'darwin' || (process.platform === 'linux' && !!process.env.APPIMAGE);
+}
+
+/** Where the AUR package installs the app, and where pacman keeps what's installed. */
+const AUR_INSTALL = '/opt/oh-my-f1-viewer/';
+const PACMAN_DB = '/var/lib/pacman/local';
+
+/**
+ * Whether the system updates this build: a release that the AUR package installed, so `yay` or `omarchy update`
+ * installs the next. Not the .pacman file releases carried before, which installs to the same place by another name.
+ */
+export function fromSystem(pacmanDb = PACMAN_DB): boolean {
+  if (!app.isPackaged || !releaseName(app.getVersion())) return false;
+  if (process.platform !== 'linux' || process.env.APPIMAGE || !process.execPath.startsWith(AUR_INSTALL)) return false;
+  try {
+    return readdirSync(pacmanDb).some((d) => d.startsWith('oh-my-f1-viewer-bin-'));
+  } catch {
+    return false;
+  }
+}
+
+/** The release a feed names, from its `version` line: `version: 20261121.1.0` is `20261121.1`. */
+export function feedRelease(yml: string): string | null {
+  const version = /^version:\s*['"]?([^'"\s]+)/m.exec(yml)?.[1];
+  return version ? releaseName(version) : null;
 }
 
 /** Reads what the last run kept, ignoring anything that isn't a release name. */
@@ -61,9 +87,11 @@ export function updateState(): UpdateState {
  */
 export function startUpdates(send: (state: UpdateState) => void, settings: Settings & { flush?(): void } = appSettings()): void {
   const current = releaseName(app.getVersion());
-  if (!current || !canUpdate()) return;
-  state = { ready: null, ...afterStart(current, readSaved(settings.get('update'))) };
+  const self = canUpdate();
+  if (!current || (!self && !fromSystem())) return;
+  state = { ...NOTHING, ...afterStart(current, readSaved(settings.get('update'))) };
   settings.set('update', { last: current } satisfies SavedUpdate);
+  if (!self) return watchFeed(current, send);
 
   autoUpdater.logger = {
     info: (m: unknown) => console.log('[update]', m),
@@ -94,7 +122,28 @@ export function startUpdates(send: (state: UpdateState) => void, settings: Setti
     settings.flush?.();
   });
 
-  const check = () => void autoUpdater.checkForUpdates().catch((e: Error) => console.warn('[update] check:', e.message));
+  every(() => void autoUpdater.checkForUpdates().catch((e: Error) => console.warn('[update] check:', e.message)));
+}
+
+/** For the AUR package: reads the feed to say once that a newer release is out. Downloads and installs nothing. */
+function watchFeed(current: string, send: (state: UpdateState) => void): void {
+  every(async () => {
+    try {
+      const res = await net.fetch(LINUX_FEED_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`${LINUX_FEED_URL}: ${res.status}`);
+      const name = feedRelease(await res.text());
+      if (!name || compareReleases(name, current) <= 0 || name === state.out) return;
+      console.log(`[update] ${name} is out, and the next system update installs it`);
+      state = { ...state, out: name };
+      send(state);
+    } catch (e) {
+      // Tried again at the next check, so it's only logged.
+      console.warn('[update] check:', (e as Error).message);
+    }
+  });
+}
+
+function every(check: () => void): void {
   setTimeout(() => {
     check();
     setInterval(check, CHECK_EVERY_MS);

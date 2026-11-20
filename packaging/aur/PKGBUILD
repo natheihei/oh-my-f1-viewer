@@ -1,0 +1,37 @@
+# OMFV on the AUR, as oh-my-f1-viewer-bin: a release's Linux build, installed to /opt/oh-my-f1-viewer. Nothing is
+# compiled. The Release app action sets pkgver and the checksums, writes .SRCINFO and pushes it to the AUR, after each
+# release: see docs/RELEASE.md. Change it here, not on the AUR, where the next release overwrites it.
+# Maintainer: oh-my-f1-viewer <https://github.com/natheihei/oh-my-f1-viewer>
+
+pkgname=oh-my-f1-viewer-bin
+_name=oh-my-f1-viewer
+# The release's name, like 20261120.2. Its package version, in the file names, is 20261120.2.0.
+pkgver=20261120.2
+pkgrel=1
+pkgdesc='Agent-driven F1 multi-view player'
+arch=('x86_64')
+url='https://oh-my-f1-viewer.yueyao.run'
+license=('MIT')
+# Electron brings its own libraries: these are what the binary links to, plus libsecret for the saved logins.
+depends=('gtk3' 'nss' 'alsa-lib' 'mesa' 'libcups' 'libsecret' 'xdg-utils')
+# Replaces the .pacman file that releases carried before, which was called oh-my-f1-viewer. Both share the profile.
+provides=("$_name")
+conflicts=("$_name")
+# castLabs' Electron, with Widevine, as it was built.
+options=('!strip' '!debug')
+source=("https://github.com/natheihei/oh-my-f1-viewer/releases/download/app-$pkgver/omfv-$pkgver.0-linux-x64.tar.gz"
+        "$_name.desktop")
+# packaging/aur/build.sh fills them in.
+sha256sums=('SKIP' 'SKIP')
+
+package() {
+  install -d "$pkgdir/opt" "$pkgdir/usr/bin"
+  cp -a "omfv-$pkgver.0-linux-x64" "$pkgdir/opt/$_name"
+  # Chromium's sandbox needs it where unprivileged user namespaces are off, as on linux-hardened.
+  chmod 4755 "$pkgdir/opt/$_name/chrome-sandbox"
+  ln -s "/opt/$_name/$_name" "$pkgdir/usr/bin/$_name"
+
+  install -Dm644 "$_name.desktop" "$pkgdir/usr/share/applications/$_name.desktop"
+  install -Dm644 "$pkgdir/opt/$_name/resources/$_name.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/$_name.png"
+  install -Dm644 "$pkgdir/opt/$_name/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

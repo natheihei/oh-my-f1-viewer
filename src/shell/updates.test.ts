@@ -23,7 +23,7 @@ const fakeMain = (start: UpdateState) => {
   };
 };
 const lines = () => usePalette.getState().entries.map((e) => `${e.role}: ${e.text}`);
-const NOTHING: UpdateState = { ready: null, updated: null, failed: null };
+const NOTHING: UpdateState = { ready: null, out: null, updated: null, failed: null };
 
 describe('watchUpdates', () => {
   beforeEach(() => usePalette.setState({ entries: [] }));
@@ -51,5 +51,13 @@ describe('watchUpdates', () => {
     expect(lines()).toEqual(['system: OMFV 20261121.1 is ready. It automatically installs next time you start oh-my-f1-viewer.', 'system: OMFV 20261121.2 is ready. It automatically installs next time you start oh-my-f1-viewer.']);
     off();
     expect(listener).toBeNull();
+  });
+
+  it('says once that a release is out, for the AUR package', async () => {
+    fakeMain(NOTHING);
+    await watchUpdates().reported;
+    listener!({ ...NOTHING, out: '20261121.1' });
+    listener!({ ...NOTHING, out: '20261121.1' });
+    expect(lines()).toEqual(['system: OMFV 20261121.1 is out. Your next system update installs it.']);
   });
 });

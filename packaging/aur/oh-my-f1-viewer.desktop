@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=OMFV
+GenericName=F1 viewer
+Comment=Agent-driven F1 multi-view player
+Exec=/opt/oh-my-f1-viewer/oh-my-f1-viewer %U
+Terminal=false
+Type=Application
+Icon=oh-my-f1-viewer
+StartupWMClass=oh-my-f1-viewer
+Categories=AudioVideo;

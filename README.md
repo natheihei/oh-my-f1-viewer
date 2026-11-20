@@ -62,10 +62,15 @@ puts everything back. Mods are plain folders, so you can also write or change on
 
 ## Install
 
-Releases have a `.pacman` package for Omarchy and Arch, an AppImage for other Linux, and a `.dmg` for macOS. Download them
-from [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases), and see
-[docs/RELEASE.md](docs/RELEASE.md#install-it) for how to install each. Until the first app release is out, run it from
-source. The AppImage and the Mac app update themselves: a new release downloads in the background and installs automatically next time you start oh-my-f1-viewer.
+On Omarchy and Arch, install it from the AUR, and `omarchy update` (or `yay`) installs each new release:
+
+```bash
+yay -S oh-my-f1-viewer-bin
+```
+
+Elsewhere, [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases) have an AppImage for other Linux and a `.dmg` for
+macOS: see [docs/RELEASE.md](docs/RELEASE.md#install-it) for how to install each. The AppImage and the Mac app update
+themselves: a new release downloads in the background and installs automatically next time you start oh-my-f1-viewer.
 
 On first launch the app walks you through signing in to F1 TV and connecting the agent's model. Then open a session.
 `Ctrl+K` (`Cmd+K` on macOS) shows or hides the palette. To change it, click the key written at the end of the

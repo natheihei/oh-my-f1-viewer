@@ -127,9 +127,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: '/version',
     description: 'Show which release of OMFV this is',
     async run() {
-      const [{ release, packaged }, { ready }] = await Promise.all([host.app.version(), host.app.update()]);
+      const [{ release, packaged }, { ready, out }] = await Promise.all([host.app.version(), host.app.update()]);
       const which = release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.';
-      palette.push('system', ready ? `${which} ${ready} installs automatically next time you start oh-my-f1-viewer.` : which);
+      const next = ready
+        ? ` ${ready} installs automatically next time you start oh-my-f1-viewer.`
+        : out
+          ? ` ${out} is out: your next system update installs it.`
+          : '';
+      palette.push('system', which + next);
     },
   },
   {

@@ -6,6 +6,8 @@
 # - A pull request that changes the packaging builds both platforms the same way, without releasing.
 # - Each release carries latest-linux.yml and latest-mac.yml, which installed AppImages and Mac apps read to update
 #   themselves (electron/updates.ts), and the Mac zip they install.
+# - After a release, the AUR package oh-my-f1-viewer-bin is moved to it (packaging/aur), which Omarchy and Arch install
+#   and update with the system. A dry run or a pull request builds that package from its own tar.gz, without pushing.
 name: Release app
 
 on:
@@ -27,6 +29,7 @@ on:
       - electron/updates.ts
       - package.json
       - package-lock.json
+      - packaging/aur/**
 
 permissions:
   contents: write
@@ -104,11 +107,6 @@ jobs:
           node-version: 26
           cache: npm
 
-      # fpm, which builds the pacman package, needs bsdtar.
-      - name: Install packaging tools
-        if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
-
       # As in the README: the dependencies, then castLabs' Electron build with Widevine, whose install script npm
       # doesn't run by itself.
       - name: Install dependencies
@@ -169,7 +167,7 @@ jobs:
         with:
           name: omfv-${{ needs.version.outputs.name }}-${{ matrix.platform }}
           path: |
-            release/*.pacman
+            release/*.tar.gz
             release/*.AppImage
             release/*.dmg
             release/*.zip
@@ -202,3 +200,75 @@ jobs:
           if [ -n "$PREVIOUS" ]; then notes=(--generate-notes --notes-start-tag "$PREVIOUS"); else notes=(--notes "The first release of OMFV."); fi
           gh release create "app-$NAME" --repo "$REPO" --target "$COMMIT" --title "OMFV $NAME" --latest "${notes[@]}" -- *
           echo "### [OMFV $NAME](https://github.com/$REPO/releases/tag/app-$NAME) from \`${COMMIT:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # The AUR package, oh-my-f1-viewer-bin: packaging/aur/build.sh sets pkgver and the checksums, writes .SRCINFO and
+  # builds the package to check it, then a release pushes the files to the AUR. A dry run or a pull request builds it
+  # from this run's tar.gz, which isn't on a release, and prints what it would push.
+  aur:
+    needs: [version, build, release]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      NAME: ${{ needs.version.outputs.name }}
+      RELEASED: ${{ needs.release.result == 'success' }}
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git openssh namcap
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+          sparse-checkout: packaging/aur
+
+      - uses: actions/download-artifact@v4
+        if: env.RELEASED != 'true'
+        with:
+          name: omfv-${{ needs.version.outputs.name }}-linux
+          path: files
+
+      # makepkg won't run as root. The package's dependencies are installed so makepkg and namcap find them, as on a
+      # real system. A release's tar.gz is downloaded from the release, which checks the PKGBUILD's URL too.
+      - name: Build the package
+        run: |
+          set -euo pipefail
+          (source packaging/aur/PKGBUILD && pacman -S --noconfirm --needed "${depends[@]}")
+          useradd -m builder
+          chown -R builder .
+          tarball=
+          if [ "$RELEASED" != true ]; then tarball=$(ls files/*.tar.gz); fi
+          su builder -c "packaging/aur/build.sh '$NAME' aur $tarball"
+          echo '--- .SRCINFO'
+          cat aur/.SRCINFO
+
+      - name: Push to the AUR
+        if: env.RELEASED == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::warning::No AUR_SSH_PRIVATE_KEY secret, so the AUR package wasn't moved to $NAME. See docs/RELEASE.md."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # The AUR's published host key: https://aur.archlinux.org, under SSH fingerprints.
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+
+          # The first push makes the package on the AUR.
+          git clone ssh://aur@aur.archlinux.org/oh-my-f1-viewer-bin.git aur-repo
+          cp aur/PKGBUILD aur/.SRCINFO aur/oh-my-f1-viewer.desktop aur-repo/
+          cd aur-repo
+          git add PKGBUILD .SRCINFO oh-my-f1-viewer.desktop
+          if git diff --cached --quiet; then
+            echo "The AUR already has $NAME."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "OMFV $NAME"
+          git push origin HEAD:master
+          echo "### [oh-my-f1-viewer-bin $NAME](https://aur.archlinux.org/packages/oh-my-f1-viewer-bin) on the AUR" >> "$GITHUB_STEP_SUMMARY"

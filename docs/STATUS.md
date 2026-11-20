@@ -339,6 +339,21 @@ The Release app action has since made `20261120.1` and `20261120.2`, and the mac
 [Verified for updates](#verified-for-updates). Not verified: playing a session in the installed Mac app, and DRM there (see
 [RELEASE.md](RELEASE.md#not-done-yet) for VMP).
 
+## Verified for the AUR package
+
+On Omarchy, 2026-11-20, from a checkout, with `npm run dist` named as release `20261120.3` (its `.tar.gz` only):
+
+- `packaging/aur/build.sh 20261120.3 release/aur release/omfv-20261120.3.0-linux-x64.tar.gz` wrote the PKGBUILD and
+  `.SRCINFO` and built `oh-my-f1-viewer-bin-20261120.3-1`. It installs the same files as the `.pacman` package did: the app in
+  `/opt/oh-my-f1-viewer`, with `chrome-sandbox` setuid, `/usr/bin/oh-my-f1-viewer`, the launcher entry, the 512px icon, and the
+  licence.
+- `scripts/packaged-check.mjs` passes on the package's `/opt/oh-my-f1-viewer/oh-my-f1-viewer`, run from makepkg's `pkg/` folder:
+  as for packaging above, and the 2025 Mexico qualifying replay plays.
+
+Not verified: namcap, and the action's `archlinux:base-devel` job, until a pull request runs them. Installing it with
+`pacman -U` or `yay -S`, an `omarchy update` moving it to the next release, a push to the AUR, and the palette saying a release
+is out.
+
 ## Verified for updates
 
 On Omarchy, 2026-11-20, with `scripts/update-check.mjs`: an AppImage of release `20261120.1`, fed from localhost, found
@@ -427,4 +442,3 @@ Not verified: an AppImage updating itself from GitHub.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows, and a signed and notarized macOS app with castLabs' VMP signing. See [RELEASE.md](RELEASE.md#not-done-yet).
 - Saved layouts, pop-out windows and translations.
-- Updates for the pacman package, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).

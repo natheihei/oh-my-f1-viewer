@@ -42,12 +42,18 @@ publish:
 
 linux:
   target:
-    - pacman # Omarchy, and Arch: `sudo pacman -U`
+    - tar.gz # what the AUR package, oh-my-f1-viewer-bin, installs on Omarchy and Arch: packaging/aur/PKGBUILD
     - AppImage # other distributions
   executableName: oh-my-f1-viewer
   # The Mac and Linux icon: the tile on Apple's grid, with rounded corners and a shadow. It's omfv-app-icon.svg at
   # 1024px with a transparent background; render it again when the SVG changes.
   icon: icons/omfv-app-icon.png
+  # For the AUR package, which installs the tar.gz as it is: the licence, and the icon for the launcher entry.
+  extraFiles:
+    - from: LICENSE
+      to: LICENSE
+    - from: icons/omfv-app-icon.png
+      to: resources/oh-my-f1-viewer.png
   category: AudioVideo
   synopsis: Agent-driven F1 multi-view player
   maintainer: oh-my-f1-viewer
@@ -56,11 +62,6 @@ linux:
       Name: OMFV
       GenericName: F1 viewer
       StartupWMClass: oh-my-f1-viewer
-
-pacman:
-  # electron-builder's default list names packages Arch doesn't have any more (http-parser), so pacman refuses it.
-  # Electron brings its own libraries: these are what the binary links to, plus libsecret for the saved logins.
-  depends: [gtk3, nss, alsa-lib, mesa, libcups, libsecret, xdg-utils]
 
 mac:
   target:

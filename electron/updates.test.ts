@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ app: { isPackaged: false, getVersion: () => '0.1.0' } }));
 vi.mock('electron-updater', () => ({ autoUpdater: {} }));
 
-const { afterStart, canUpdate, readSaved } = await import('./updates');
+const { afterStart, canUpdate, feedRelease, fromSystem, readSaved } = await import('./updates');
 
 describe('afterStart', () => {
   it('says which release it updated to, once it runs a newer one', () => {
@@ -34,5 +34,18 @@ describe('readSaved', () => {
 describe('canUpdate', () => {
   it("is off for a build that isn't a packaged release", () => {
     expect(canUpdate()).toBe(false);
+    expect(fromSystem()).toBe(false);
+  });
+});
+
+describe('feedRelease', () => {
+  it("reads the release from electron-builder's feed", () => {
+    expect(feedRelease("version: 20261121.1.0\nfiles:\n  - url: omfv-20261121.1.0-linux-x86_64.AppImage\n")).toBe('20261121.1');
+    expect(feedRelease("version: '20261121.12.0'\n")).toBe('20261121.12');
+  });
+
+  it("is null for a feed that doesn't name a release", () => {
+    expect(feedRelease('version: 0.1.0\n')).toBeNull();
+    expect(feedRelease('<html>Not Found</html>')).toBeNull();
   });
 });
