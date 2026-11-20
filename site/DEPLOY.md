@@ -12,27 +12,27 @@ https://omfv.yueyao.run redirects to production. Neither Worker has a `workers.d
 ```
 merge to main (site/ changed) ─► Workers Builds builds omfv-site-staging ─► omfv-staging.yueyao.run
 
-publish a release tagged site-v* ─► "Release site" action moves site-production to the tag
-                                  ─► Workers Builds builds omfv-site ─► oh-my-f1-viewer.yueyao.run
+run "Release site" with a commit ─► the action moves site-production to it
+                                 ─► Workers Builds builds omfv-site ─► oh-my-f1-viewer.yueyao.run
 ```
 
 ## Ship to production
 
-Look at staging first: it always shows the latest `main`. Then publish a release for a commit on `main` with a tag that starts with `site-v`:
+Look at staging first: it always shows the latest `main`. Then run the [Release site](../.github/workflows/site-release.yml) action with
+the commit to ship, from **Actions → Release site → Run workflow** or:
 
 ```bash
-gh release create site-v1.2.0 --target main --title "Site v1.2.0" --generate-notes --notes-start-tag site-v1.1.0
+gh workflow run site-release.yml -f sha=main      # what staging shows now
+gh workflow run site-release.yml -f sha=1a2b3c4   # a particular commit
 ```
 
-Or use **Releases → Draft a new release** on GitHub. The [Release site](../.github/workflows/site-release.yml) action then fast-forwards `site-production` to the tag, and Workers Builds deploys it. The action skips:
-
-- tags without the `site-v` prefix, so the app's releases never touch the site
-- pre-releases
-- a tag whose commit isn't on `main`, so production only gets what staging has shown
+The action moves `site-production` to that commit and Workers Builds deploys it. It refuses a commit that isn't on `main`, so
+production only gets what staging has shown. Nothing is tagged and no GitHub release is made: `site-production` is the record of
+what's live, and the action's runs are the history.
 
 ## Roll back
 
-Go to **Actions → Release site → Run workflow** and enter an older tag, such as `site-v1.1.0`. Run by hand, the action may move `site-production` backwards, and only then does it force-push. Publishing a release never force-pushes.
+Run the same action with an older commit on `main`. Only then does it force-push, with a lease on where `site-production` was.
 
 For an instant rollback that skips the build, go to **Workers & Pages → omfv-site → Deployments** in the dashboard and roll back to an earlier version. The next release replaces it.
 
