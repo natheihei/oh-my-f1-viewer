@@ -775,6 +775,156 @@
   letter-spacing: 0.06em;
 }
 
+/* The shortcut that hides the palette, at the end of the input row while it can be hidden. */
+.palette-key {
+  @apply shrink-0 border border-line px-1 whitespace-nowrap text-mute;
+  font-family: inherit;
+  font-size: var(--text-s);
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+.palette-input-row > .palette-key {
+  margin-top: 3px;
+  margin-left: 8px;
+}
+
+/*
+ * Hiding the palette: a bare chevron on its top edge, faint until the pointer is on the palette. Its frame shows only
+ * under the pointer, with no tooltip: the key is written at the end of the input row. It sits over the resize grip
+ * where the two meet. With no frame it's drawn over the video, so it's light, with a dark edge to stand off a bright picture.
+ */
+.palette-hide {
+  @apply absolute left-1/2 flex -translate-x-1/2 cursor-pointer items-center justify-center bg-transparent text-ink;
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000);
+  top: -19px;
+  width: 40px;
+  height: 19px;
+  z-index: 11;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  opacity: 0.6;
+  transition:
+    opacity 0.15s,
+    color 0.12s;
+}
+
+.palette:hover .palette-hide,
+.palette-hide:focus-visible {
+  opacity: 1;
+}
+
+.palette-hide:hover,
+.palette-hide:focus-visible {
+  @apply bg-panel text-ink;
+  border-color: var(--color-rule);
+  filter: none;
+}
+
+.palette-hide-chevron {
+  width: 14px;
+  height: 8px;
+}
+
+/* Opening, the palette grows up and out of the stub it was hidden to. */
+.palette {
+  animation: palette-grow 0.22s ease-out;
+}
+
+@keyframes palette-grow {
+  from {
+    clip-path: inset(calc(100% - 28px) max(0px, calc(50% - 190px)) 0 max(0px, calc(50% - 190px)));
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+/*
+ * What the hidden palette leaves where it was: a faint `> …` block over the video. Pointing at it grows it to a stub
+ * that names the key, and a click opens the palette. Right after hiding it starts at that size, then shrinks.
+ */
+.palette-block {
+  @apply absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 cursor-pointer items-center overflow-hidden bg-panel whitespace-nowrap text-ink;
+  gap: 8px;
+  width: 46px;
+  height: 28px;
+  padding-inline: var(--pad);
+  border: 1px solid var(--color-rule);
+  box-shadow: 0 0 0 1px #000;
+  opacity: 0.3;
+  transition:
+    width 0.2s ease-out,
+    opacity 0.2s;
+}
+
+.palette-block > * {
+  @apply shrink-0;
+}
+
+.palette-block-dots {
+  @apply text-dim;
+  transition: opacity 0.1s;
+}
+
+.palette-block-text {
+  @apply min-w-0 flex-1 truncate text-left text-mute;
+}
+
+.palette-block-text,
+.palette-block > .palette-key {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.palette-block:hover,
+.palette-block:focus-visible,
+.palette-block-fresh {
+  width: min(380px, calc(100% - 32px));
+  opacity: 1;
+}
+
+.palette-block:hover .palette-block-dots,
+.palette-block:focus-visible .palette-block-dots,
+.palette-block-fresh .palette-block-dots {
+  width: 0;
+  margin-right: -8px;
+  opacity: 0;
+}
+
+.palette-block:hover .palette-block-text,
+.palette-block:hover > .palette-key,
+.palette-block:focus-visible .palette-block-text,
+.palette-block:focus-visible > .palette-key,
+.palette-block-fresh .palette-block-text,
+.palette-block-fresh > .palette-key {
+  opacity: 1;
+  transition-delay: 0.08s;
+}
+
+/* Hiding, the palette narrows into the stub. */
+.palette-block-fresh {
+  animation: palette-block-in 0.2s ease-out;
+}
+
+@keyframes palette-block-in {
+  from {
+    width: min(760px, calc(100% - 32px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette,
+  .palette-block-fresh {
+    animation: none;
+  }
+  .palette-block,
+  .palette-block *,
+  .palette-hide {
+    transition: none;
+  }
+}
+
 .palette-prompt {
   @apply w-[2ch] shrink-0 text-ink;
 }

@@ -19,6 +19,7 @@ import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
 import { AUTO_HIDE_MS, palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
+import { isPaletteKey, PALETTE_KEY } from './paletteKey';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
@@ -186,7 +187,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+      if (isPaletteKey(e)) {
         e.preventDefault();
         if (usePalette.getState().open && !blank) palette.hide();
         else palette.show();
@@ -223,7 +224,8 @@ export function CommandPalette() {
     grip.addEventListener('pointercancel', end);
   };
 
-  if (!showing) return null;
+  // Hidden, the palette leaves a small block in its place to bring it back. Only with a session open: without one it's held.
+  if (!showing) return <PaletteBlock />;
 
   if (panel === 'background') {
     const closePanel = () => {
@@ -294,6 +296,12 @@ export function CommandPalette() {
           </div>
         </div>
       ) : null}
+      {held ? null : (
+        // No title: the chevron says what it does, and the key is written at the end of the input row.
+        <button type="button" className="palette-hide" data-testid="palette-hide" aria-label={`Hide the palette (${PALETTE_KEY})`} onClick={palette.hide}>
+          <Chevron />
+        </button>
+      )}
       {entries.length > 0 ? (
         <div
           className={`palette-resize ${dragHeight != null ? 'palette-resize-active' : ''}`}
@@ -430,7 +438,7 @@ export function CommandPalette() {
           onPicker={setPicker}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+            if (isPaletteKey(e)) {
               e.preventDefault();
               if (!blank) palette.hide();
               return;
@@ -490,8 +498,51 @@ export function CommandPalette() {
             looks ahead · ×
           </button>
         ) : null}
+        {held ? null : (
+          <kbd className="palette-key" data-testid="palette-key">
+            {PALETTE_KEY}
+          </kbd>
+        )}
       </div>
     </div>
+  );
+}
+
+/** How long the block stays at the stub's size after the palette hides, naming the key, before it shrinks. */
+const BLOCK_FRESH_MS = 2500;
+
+/**
+ * What the hidden palette leaves in its place: a faint `> …` block. Pointing at it grows it to a stub that names the
+ * shortcut, and a click opens the palette from it. Right after hiding it starts at the stub's size, then shrinks.
+ */
+function PaletteBlock() {
+  const [fresh, setFresh] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setFresh(false), BLOCK_FRESH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <button
+      type="button"
+      className={`palette-block ${fresh ? 'palette-block-fresh' : ''}`}
+      data-testid="palette-block"
+      aria-label={`Show the palette (${PALETTE_KEY})`}
+      onClick={palette.show}
+    >
+      <span className="palette-block-prompt">&gt;</span>
+      <span className="palette-block-dots">…</span>
+      <span className="palette-block-text">ask for anything</span>
+      <kbd className="palette-key">{PALETTE_KEY}</kbd>
+    </button>
+  );
+}
+
+/** The chevron on the hide tab: points down, where the palette goes. */
+function Chevron() {
+  return (
+    <svg viewBox="0 0 14 8" className="palette-hide-chevron" aria-hidden="true">
+      <path d="M1 1l6 6 6-6" stroke="currentColor" strokeWidth="1.4" fill="none" />
+    </svg>
   );
 }
 
