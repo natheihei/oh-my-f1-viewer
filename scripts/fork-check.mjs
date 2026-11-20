@@ -66,7 +66,7 @@ try {
 
   // Build mode, then a change to the tower's tile, pointed at with @.
   const input = page.locator('[data-testid=palette-input]');
-  if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+  if (!(await input.isVisible())) await page.keyboard.press('Control+K');
   await input.fill('/build');
   await input.press('Enter');
   await page.waitForFunction(() => window.read().build.active, null, { timeout: 30_000 });

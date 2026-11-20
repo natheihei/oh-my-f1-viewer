@@ -26,7 +26,7 @@ const history = page.locator('[data-testid=palette-history]');
 const replies = () => history.locator('.palette-agent, .palette-error').count();
 
 async function say(text) {
-  if (!(await input.isVisible())) await page.keyboard.press('Control+Shift+P');
+  if (!(await input.isVisible())) await page.keyboard.press('Control+K');
   const before = await replies();
   await input.fill(text);
   await input.press('Enter');
@@ -129,15 +129,15 @@ await page.waitForTimeout(500);
 
 // Palette
 const wasOpen = await palette.isVisible();
-await page.keyboard.press('Control+Shift+P');
+await page.keyboard.press('Control+K');
 await page.waitForTimeout(200);
-check('Ctrl+Shift+P toggles the palette', (await palette.isVisible()) !== wasOpen);
-if (!(await palette.isVisible())) await page.keyboard.press('Control+Shift+P');
+check('Ctrl+K toggles the palette', (await palette.isVisible()) !== wasOpen);
+if (!(await palette.isVisible())) await page.keyboard.press('Control+K');
 await page.waitForTimeout(200);
 await input.press('Escape');
 await page.waitForTimeout(200);
 check('Escape hides the palette', !(await palette.isVisible()));
-await page.keyboard.press('Control+Shift+P');
+await page.keyboard.press('Control+K');
 await page.waitForTimeout(200);
 check('history is still there on reopening', (await history.locator('.palette-line').count()) > 2);
 const scrolls = await history.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, top: el.scrollTop }));
