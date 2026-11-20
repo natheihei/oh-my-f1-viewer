@@ -49,7 +49,6 @@ It writes a [mod](docs/MODS.md) and runs it on the race you're watching as a dra
 puts everything back. Mods are plain folders, so you can also write or change one yourself. See
 [docs/BUILD_MODE.md](docs/BUILD_MODE.md).
 
-
 ## Requirements
 
 - **Video and data:** an F1 TV subscription. You sign in with your own account, and F1 TV's access and regional rules
