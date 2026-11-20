@@ -318,7 +318,6 @@ export default defineComponent({
   title: 'Telemetry',
   description:
     "One car's speed, gear, revs, throttle and brake as the driver is driving, with its speed over the last lap and each corner's speed. Suggest it under that driver's onboard.",
-  replayOnly: true,
   args: Type.Object({ driver: Driver('The driver') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

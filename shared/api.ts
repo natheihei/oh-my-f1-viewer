@@ -49,6 +49,8 @@ export interface SessionInfo {
 export interface LiveItem {
   contentId: number;
   title: string;
+  /** From the title, as for a listed session. */
+  type?: SessionType;
   meetingKey?: string;
   sessionKey?: string;
 }

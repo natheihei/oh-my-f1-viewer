@@ -395,7 +395,6 @@ export default defineComponent({
   title: 'Speed ribbon',
   description:
     "Where on the track one driver is fast and where they brake: their last lap traced on the circuit, wider where faster, green on throttle and red on the brake, with their speed and gear now. Suggest it when the user asks how a driver takes the circuit. For where every car is, use track_map; for one car's pedals and revs over time, car_telemetry; for whether every lap is driven the same, pedal_barcode.",
-  replayOnly: true,
   args: Type.Object({ driver: Driver('The driver') }),
   sessions: ['race', 'sprint'],
   needs: NEEDS,

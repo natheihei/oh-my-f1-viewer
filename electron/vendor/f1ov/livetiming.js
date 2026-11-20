@@ -544,6 +544,8 @@ async function fetchSyncData(meetingKey, sessionKey) {
 
 // SignalR Core uses an ALB affinity cookie, a negotiate request, and a WebSocket handshake.
 // The socket runs in Electron, so application-based VPN split tunneling may not bypass its WAF.
+// Each of them carries the F1 TV token when signed in (archiveHeaders): without it, Subscribe leaves out
+// CarData.z and Position.z without an error, and sends the timing feeds only (checked live, 2026 Las Vegas FP1).
 
 const { createLiveConnection, SIGNALR_RS } = require('./liveConnection');
 
@@ -551,10 +553,8 @@ let liveConnection = null;
 
 function curlOptionsCookie(url) {
   return new Promise((resolve, reject) => {
-    const args = ['-s', '-S', '--max-time', '15', '-i', '-X', 'OPTIONS'];
-    for (const [k, v] of Object.entries(STATIC_HEADERS)) args.push('-H', `${k}: ${v}`);
-    args.push(url);
-    execFile(WIN_CURL, args, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
+    const args = ['-s', '-S', '--max-time', '15', '-i', '-X', 'OPTIONS', url];
+    execCurl(args, archiveHeaders(), { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
       if (err) return reject(new Error(`curl OPTIONS ${url} failed: ${err.message}`));
       resolve(stdout);
     });
@@ -563,10 +563,8 @@ function curlOptionsCookie(url) {
 
 function curlPostText(url, headers) {
   return new Promise((resolve, reject) => {
-    const args = ['-s', '-S', '--max-time', '15', '-X', 'POST', '-w', '\n%{http_code}'];
-    for (const [k, v] of Object.entries({ ...STATIC_HEADERS, ...headers })) args.push('-H', `${k}: ${v}`);
-    args.push(url);
-    execFile(WIN_CURL, args, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
+    const args = ['-s', '-S', '--max-time', '15', '-X', 'POST', '-w', '\n%{http_code}', url];
+    execCurl(args, { ...archiveHeaders(), ...headers }, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20000 }, (err, stdout) => {
       if (err) return reject(new Error(`curl POST ${url} failed: ${err.message}`));
       const nl = stdout.lastIndexOf('\n');
       const code = Number(stdout.slice(nl + 1).trim());
@@ -585,7 +583,7 @@ async function fetchAwsAlbCookie() {
       const m = raw.match(/^set-cookie:\s*(AWSALBCORS=[^;]+)/im);
       return m ? m[1] : null;
     }
-    const res = await undiciFetch(url, { method: 'OPTIONS', headers: STATIC_HEADERS, signal: AbortSignal.timeout(15000) });
+    const res = await undiciFetch(url, { method: 'OPTIONS', headers: archiveHeaders(), signal: AbortSignal.timeout(15000) });
     const getSetCookie = res.headers.getSetCookie;
     const cookies = typeof getSetCookie === 'function' ? getSetCookie.call(res.headers) : [res.headers.get('set-cookie')].filter(Boolean);
     const hit = cookies.find((c) => c && c.startsWith('AWSALBCORS='));
@@ -602,7 +600,7 @@ async function negotiateCore(cookie) {
   if (USE_CURL) {
     txt = await curlPostText(url, headers);
   } else {
-    const res = await undiciFetch(url, { method: 'POST', headers: { ...STATIC_HEADERS, ...headers }, signal: AbortSignal.timeout(15000) });
+    const res = await undiciFetch(url, { method: 'POST', headers: { ...archiveHeaders(), ...headers }, signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error(`POST ${url} returned HTTP ${res.status}`);
     txt = await res.text();
   }
@@ -666,11 +664,14 @@ async function negotiateLive() {
   return { token, cookie };
 }
 
+/** The live socket's headers: the account token when signed in, which telemetry needs, and the ALB cookie. */
+function liveSocketHeaders(cookie) {
+  return { ...archiveHeaders(), ...(cookie ? { Cookie: cookie } : {}) };
+}
+
 function createLiveSocket({ token, cookie }) {
   const wsUrl = `wss://livetiming.formula1.com/signalrcore?id=${encodeURIComponent(token)}`;
-  return new WebSocket(wsUrl, {
-    headers: { ...STATIC_HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
-  });
+  return new WebSocket(wsUrl, { headers: liveSocketHeaders(cookie) });
 }
 
 /**
@@ -706,6 +707,7 @@ function disconnectLiveSocket() {
 module.exports = {
   setAuthTokenProvider,
   archiveHeaders,
+  liveSocketHeaders,
   curlHeaderConfig,
   LIVETIMING_BASE,
   assembleSession,

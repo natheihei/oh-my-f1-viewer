@@ -50,18 +50,20 @@ function remember(sessions: SessionInfo[]): void {
   for (const s of sessions) known.set(s.contentId, s);
 }
 
+/** A live item as a session. What the schedule already listed for it, such as its type and times, is kept. */
 function liveToSession(item: LiveItem, now: number): SessionInfo {
+  const listed = known.get(item.contentId);
   return {
     contentId: item.contentId,
     title: item.title,
-    type: 'other',
-    year: new Date(now).getUTCFullYear(),
-    startMs: null,
-    endMs: null,
-    meetingKey: item.meetingKey ?? null,
-    sessionKey: item.sessionKey ?? null,
+    type: listed && listed.type !== 'other' ? listed.type : (item.type ?? 'other'),
+    year: listed?.year ?? new Date(now).getUTCFullYear(),
+    startMs: listed?.startMs ?? null,
+    endMs: listed?.endMs ?? null,
+    meetingKey: item.meetingKey || listed?.meetingKey || null,
+    sessionKey: item.sessionKey || listed?.sessionKey || null,
     hasOnboards: true,
-    series: 'FORMULA 1',
+    series: listed?.series ?? 'FORMULA 1',
     status: 'live',
   };
 }
@@ -107,9 +109,17 @@ export const catalog = {
 
   /**
    * The session behind a contentId, with its status as of now, since a listed session can have gone
-   * on air since. One that was never listed is assumed to be a replay.
+   * on air since. One that was never listed is live if F1 TV has it live, and otherwise assumed to be a replay.
    */
   async resolve(contentId: number, title?: string): Promise<SessionInfo> {
+    if (!known.has(contentId)) {
+      const item = (await window.omfv.f1tv.liveNow()).find((i) => i.contentId === contentId);
+      if (item) {
+        const session = liveToSession(item, Date.now());
+        remember([session]);
+        return session;
+      }
+    }
     const year = Number(title?.match(/\b(20\d{2})\b/)?.[1]) || new Date().getUTCFullYear();
     const session: SessionInfo = known.get(contentId) ?? {
       contentId,

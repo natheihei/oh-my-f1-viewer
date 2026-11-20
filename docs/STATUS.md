@@ -53,6 +53,19 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   spread 12s later and being corrected.
 - Live timing reaching the app and being held back, through the old `useTiming` path, since replaced: about 680 records held, against about 660 expected for 50s of video lag.
 
+## Verified on a live practice
+
+On 2026 Las Vegas FP1 (2026-11-20), wet, joined about 30 minutes in, with `scripts/live-check.mjs` and by hand in isolated instances, on castLabs
+Electron 42.11.18:
+
+- Opening it through the agent, DRM on F1 LIVE and two onboards, joining 8.2-8.5s behind the live edge, a three-minute DVR seek, returning to live,
+  and pause and resume. Three video tiles held 0.045-0.06s spread after the seek and after returning to live, sampled every 3s for 30s.
+- The capture into the database, from `live`, and held back to the video: 3,679 rows held against about 3,900 expected for 47s of video lag, and
+  rewinding hid what the video hadn't reached. See "Known limits" in [SESSION_DATA.md](SESSION_DATA.md) for the feeds and tables.
+- Car telemetry live, with the F1 TV sign-in on the socket, and a track map drawing the cars as the broadcast's own map did.
+- Restarting the app mid-session: the tables rebuilt from the kept messages, and the time it was closed was recorded as a gap.
+- Listing upcoming sessions during a live one.
+
 ## Verified for finding a session
 
 With nothing open, the real agent at medium reasoning, with the event list in its prompt, on 2026-11-15, each request in a fresh
@@ -75,7 +88,7 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 - Retired cars on the 2026 United States race (session 11396), with `scripts/charts-check.mjs` (2026-11-09): at laps 20, 30 and 53 the timing
   tower marked the same cars `OUT` as the broadcast's tower, and the track map, pace and pit window left them out.
 
-Live capture has only run in unit tests. See "Not verified".
+Live capture ran on a live practice: see "Verified on a live practice". A race is still to come.
 
 ## Verified for layout
 
@@ -293,16 +306,15 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
   still playing and ready, with the audio left on the main feed. That was before each holder got its own video (2026-11-15): the handoff
   is now a new holder taking over a video let go in the same render, covered by unit tests, and not yet run in the real strip. The real agent hasn't been asked for a stream since it lost `add_streams`.
 
-- Capturing a live session into the database, and the extra feeds it subscribes to. Check at the next live session.
+- Capturing a live race: lap counts, pit stops and intervals, which a practice doesn't have. And the archive replacing a capture once it's published.
 
 - **How accurately live data lines up with the picture.** Rows are hidden until the video's wall clock reaches their arrival time.
-  On replays with a wall clock it ran about 15s ahead of lights out, so if live behaves the same, data would be up to 15s early. Nothing
-  on screen shows it yet, and checking needs a lights-out or lap change to compare against.
+  At Las Vegas FP1 the wall clock ran 7.3 to 8.7s ahead of the picture, read against the broadcast's session clock, so live data shows about
+  7s early. Not corrected yet. See "Known limits" in [SESSION_DATA.md](SESSION_DATA.md).
 - **The world feed on a live race.** It's now requested with no `channelId`, as F1 TV's play link says, and the license request is built
   from that. Only replays have run this way, and none of the sampled replays use DRM. Check it on the next live session.
 - **The agent seeking to a moment on a live session, or a replay placed by the wall clock.** `scripts/seek-check.mjs` has only run on a replay
   with curated sync data. The other two paths are unit-tested.
-- **Rewinding live data.** Unit-tested, but it hasn't run on a live session. `scripts/live-check.mjs` now covers it, and that script's new data checks haven't run either.
 - **The countdown starting a session by itself.** The display is verified, and a unit test covers firing only for its own session and not
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 

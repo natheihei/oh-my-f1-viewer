@@ -215,7 +215,8 @@ Components drawn on a canvas with the kit, `src/kit`.
 
 - **Every chart is for races to start with: `sessions: ['race', 'sprint']`.** The agent is only offered what fits the open session,
   so a chart reaches qualifying or practice once it's been made to make sense there. (2026-11-12)
-- **A chart that needs car telemetry sets `replayOnly`.** The feed has no telemetry while a session is live. (2026-11-12)
+- **`replayOnly` is for a chart that can't work live.** The telemetry charts set it until the live feed had telemetry, which it has
+  had since 2026-11-20, so none sets it now. (2026-11-20)
 - **Telemetry moves with every sample.** `car_data` and `location` show each sample once the playhead reaches its `date`, about every
   260ms, so a chart that passes `playheadMs` to its query moves with the car on screen. Gated on when the feed sent them, in a batch once a
   second, the map's dots jumped once a second. (2026-11-18) A chart over a window of telemetry that moves with the playhead reads it
