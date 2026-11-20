@@ -347,7 +347,8 @@ On Omarchy, 2026-11-20, with `scripts/update-check.mjs`: an AppImage of release 
 
 On a MacBook Air (Apple silicon), 2026-11-20, by hand, from GitHub: on a Mac with no OMFV profile or keychain entry, the `.dmg`
 of release `20261120.1`, made by the Release app action and signed with OMFV's certificate, was installed and opened. Then the
-action released the same commit as `20261120.2`. After a real quit and start (closing the window had left it running), the
+action released the same commit as `20261120.2`. After a real quit and start (closing the window had left it running in the
+dock, which closing it no longer does), the
 app found `20261120.2` a minute in, downloaded it, and recorded it to install. Quitting had Squirrel.Mac put it in
 `/Applications` ("Installation completed successfully" in its log), the new app passed `codesign --verify --deep --strict`, and
 its start recorded `20261120.2` as the release that ran last. That start asked for the keychain password: see Known issues.
