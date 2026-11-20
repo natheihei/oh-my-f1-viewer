@@ -146,7 +146,7 @@ app
       // do nothing in the palette, and Cmd+Q doesn't quit.
       Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
       // Unpackaged, the dock shows Electron's icon: the window's `icon` is ignored on macOS.
-      app.dock?.setIcon(path.join(__dirname, '..', '..', 'icons', 'omfv-icon.png'));
+      app.dock?.setIcon(path.join(__dirname, '..', '..', 'icons', 'omfv-app-icon.png'));
     } else {
       Menu.setApplicationMenu(null);
     }

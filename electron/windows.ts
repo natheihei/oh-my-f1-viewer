@@ -109,7 +109,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: MIN_SIZE.height,
     backgroundColor: '#000000',
     title: 'oh-my-f1-viewer',
-    icon: path.join(__dirname, '..', '..', 'icons', 'omfv-icon.png'),
+    icon: path.join(__dirname, '..', '..', 'icons', 'omfv-app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

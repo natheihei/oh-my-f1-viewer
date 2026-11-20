@@ -15,7 +15,7 @@ directories:
 files:
   - dist/**
   - dist-electron/**
-  - icons/omfv-icon.png
+  - icons/omfv-app-icon.png
   - package.json
   - '!**/*.map'
   - '!**/*.test.*'
@@ -45,7 +45,9 @@ linux:
     - pacman # Omarchy, and Arch: `sudo pacman -U`
     - AppImage # other distributions
   executableName: oh-my-f1-viewer
-  icon: icons/omfv-icon.png
+  # The Mac and Linux icon: the tile on Apple's grid, with rounded corners and a shadow. It's omfv-app-icon.svg at
+  # 1024px with a transparent background; render it again when the SVG changes.
+  icon: icons/omfv-app-icon.png
   category: AudioVideo
   synopsis: Agent-driven F1 multi-view player
   maintainer: oh-my-f1-viewer
@@ -66,7 +68,7 @@ mac:
       arch: arm64
     - target: zip # what an update installs: Squirrel.Mac takes a zip
       arch: arm64
-  icon: icons/omfv-icon.png
+  icon: icons/omfv-app-icon.png
   category: public.app-category.entertainment
   # Ad-hoc signed, not notarized: there's no Developer ID yet. Without a signature at all, Apple silicon won't
   # run it, and a quarantined download says it's damaged. A release is signed with OMFV's own certificate instead,
