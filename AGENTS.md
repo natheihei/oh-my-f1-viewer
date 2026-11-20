@@ -19,10 +19,11 @@ Don't import across them. The site keeps its own copies of the logo from `icons/
 
 ## Docs
 
-Read the one that covers what you're changing. [README.md](README.md) has how to run the app and the check scripts.
+Read the one that covers what you're changing. [README.md](README.md) has how to install and run the app.
 
 | Doc | Read it for |
 | --- | --- |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | The app's commands and shortcuts, and the check scripts that run the real app |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | What exists today: the layers, the host, charts and their kit, streams and sync, aligning data to video, layout, the agent on pi, sign-in. Start here |
 | [DESIGN.md](docs/DESIGN.md) | Where the layering is heading and its rules: one read surface and one write path through `src/host`, and a host with no gates. Also the agent's tools, suggested tiles, mentions and the spoiler check in full |
 | [HOST.md](docs/HOST.md) | Every read, query, write and primitive in `src/host`, and the agent tool built on each |
