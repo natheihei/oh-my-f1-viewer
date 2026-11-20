@@ -7,6 +7,7 @@
 import Type from 'typebox';
 import type { Channel, SessionInfo } from '../../shared/api';
 import { account } from '../data/account';
+import { appInfo } from '../data/app';
 import { savedState } from '../data/savedState';
 import { agent } from './agentTurn';
 import { catalog, FIRST_SEASON } from '../data/catalog';
@@ -208,6 +209,8 @@ export const host = {
   data,
   /** Sign-ins, for the user's `/` commands. */
   account,
+  /** Which OMFV this is: its release, if it is one. */
+  app: appInfo,
   /** The link to the agent loop in the main process. */
   agent,
   /** Small UI state kept across restarts, in the profile's settings file. The shell restores and saves it. */

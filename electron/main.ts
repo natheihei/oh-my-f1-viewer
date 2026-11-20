@@ -1,3 +1,5 @@
+// First: it tells esbuild where its binary is, before anything requires esbuild.
+import { COMPONENTS, DECLARATIONS } from './appFiles';
 import { app, BrowserWindow, Menu, protocol, session } from 'electron';
 import os from 'node:os';
 import path from 'node:path';
@@ -117,11 +119,10 @@ app
     livetiming.setAuthTokenProvider(() => sessionState.memSession.accessToken);
     licenseProxy.startLicenseProxy();
     licenseProxy.installWebRequestHooks();
-    const root = path.join(__dirname, '..', '..');
     const mods = new Mods(
       path.join(app.getPath('userData'), 'mods'),
       (list) => sendToRenderer('mods:changed', list),
-      { declarations: path.join(root, 'dist-types'), installed: path.join(root, 'src', 'components') },
+      { declarations: DECLARATIONS, installed: COMPONENTS },
       path.join(app.getPath('userData'), 'mods-snapshot'),
       (state) => sendToRenderer('build:changed', state),
     );

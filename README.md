@@ -15,7 +15,12 @@ Removed: NOR, LEC.
 
 Every stream, and the session data, stays locked to one session clock. Needs an F1 TV subscription, and a ChatGPT plan or an OpenAI or Anthropic API key for the agent.
 
-## Run it
+## Install it
+
+Each release on GitHub has a `.pacman` package for Omarchy and Arch, an AppImage for other Linux, and a `.dmg` for macOS on
+Apple silicon. See [docs/RELEASE.md](docs/RELEASE.md#install-it) for how to install each, and how releases are made.
+
+## Run it from source
 
 Runs on Linux and macOS, from source: it needs [Node.js](https://nodejs.org) (`brew install node` on macOS).
 
@@ -45,6 +50,7 @@ that, when a sign-in needs doing again, the palette says so with a button that f
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
 | `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
 | `/reset-onboarding` | Show the steps to get started again |
+| `/version` | Show which release this is |
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
@@ -106,6 +112,12 @@ node scripts/seek-check.mjs
 
 ```bash
 npm run build && node scripts/prod-check.mjs
+```
+
+This one runs the packaged app that `npm run dist` makes, as a release installs it: see [docs/RELEASE.md](docs/RELEASE.md#check-a-build).
+
+```bash
+npm run dist && node scripts/packaged-check.mjs /tmp/packaged-check
 ```
 
 This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an OMFV of its own while it runs:

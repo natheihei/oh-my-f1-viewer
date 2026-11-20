@@ -41,6 +41,9 @@ const api: OmfvApi = {
     objects: (sessionKey, playheadMs) => invoke('data:objects', sessionKey, playheadMs),
     sql: (sessionKey, playheadMs, sql, params) => invoke('data:sql', sessionKey, playheadMs, sql, params),
   },
+  app: {
+    version: () => invoke('app:version'),
+  },
   settings: {
     ui: () => invoke('settings:ui'),
     setUi: (key, value) => ipcRenderer.send('settings:setUi', key, value),

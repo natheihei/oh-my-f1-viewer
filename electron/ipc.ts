@@ -1,5 +1,5 @@
 /** Wires every ipcMain handler `window.omfv` talks to. Glue over the other main-process modules. */
-import { ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, session, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { AgentMode, F1TvStatus, LiveItem } from '../shared/api';
 import type { PlaceHealth } from '../shared/health';
@@ -12,6 +12,7 @@ import { TimingDb } from './timingdb';
 import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
+import { releaseName, type AppVersion } from '../shared/release';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const f1tv = require('./vendor/f1ov/f1tv-bridge');
@@ -269,6 +270,9 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('data:close', () => timingDb.close());
   handle('data:objects', (_e, sessionKey, playheadMs) => timingDb.objects(Number(sessionKey), Number(playheadMs)));
   handle('data:sql', (_e, sessionKey, playheadMs, sql, params) => timingDb.sql(Number(sessionKey), Number(playheadMs), String(sql), Array.isArray(params) ? params : []));
+
+  // --- Which OMFV this is ---
+  handle('app:version', (): AppVersion => ({ release: releaseName(app.getVersion()), packaged: app.isPackaged }));
 
   // --- Settings: the renderer's small UI state, in the app's settings file ---
   handle('settings:ui', () => uiState());

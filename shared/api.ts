@@ -238,6 +238,10 @@ export interface OmfvApi {
     objects(sessionKey: number, playheadMs: number): Promise<import('./sessionData').SessionObjects>;
     sql(sessionKey: number, playheadMs: number, sql: string, params: unknown[]): Promise<import('./sessionData').SqlRows>;
   };
+  app: {
+    /** Which OMFV this is: its release, if it is one. */
+    version(): Promise<import('./release').AppVersion>;
+  };
   /** The renderer's small UI state, such as the volume, kept by main in the app's settings file (electron/settings.ts). */
   settings: {
     ui(): Promise<Record<string, unknown>>;
