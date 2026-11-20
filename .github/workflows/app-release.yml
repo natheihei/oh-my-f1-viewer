@@ -141,6 +141,9 @@ jobs:
           # Sign as electron-builder.yml says, or as OMFV above, without looking for a Developer ID in the keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          # electron-builder skips signing in a pull request's build unless told not to, so a pull request would check an
+          # unsigned app. A fork's pull request gets no secrets, so it signs ad-hoc.
+          CSC_FOR_PULL_REQUEST: 'true'
         run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }} ${SIGN_AS:-}
 
       # An update installs only over an app with the same identity. Ad-hoc, each build's is its own hash.
