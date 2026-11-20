@@ -19,10 +19,15 @@ on:
         description: 'Build only: keep the files as artifacts of this run, with no tag and no release.'
         type: boolean
         default: false
+      notes:
+        description: 'Markdown to put before the generated notes, such as what to do by hand for this release.'
+        required: false
+        default: ''
   pull_request:
     paths:
       - .github/workflows/app-release.yml
       - electron-builder.yml
+      - build/entitlements.mac.plist
       - electron/appFiles.ts
       - electron/updates.ts
       - package.json
@@ -91,9 +96,6 @@ jobs:
           - platform: mac
             runner: macos-latest # Apple silicon
     runs-on: ${{ matrix.runner }}
-    env:
-      # OMFV's own signing certificate for macOS, made by scripts/mac-signing-cert.sh. Without it, ad-hoc.
-      MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -119,51 +121,72 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Every release signed with the same certificate has the same identity, so Squirrel.Mac installs an update over
-      # the app, and the keychain entry holding the sign-ins keeps trusting it. Apple doesn't know the certificate, so
-      # it's trusted on the runner for electron-builder to find it; a Mac still asks once, on the first install.
-      - name: Trust OMFV's signing certificate
-        if: matrix.platform == 'mac' && env.MAC_CERT_P12 != ''
+      # Every release is signed with OMFV's Developer ID, so Squirrel.Mac installs an update over the app, and the
+      # keychain entry holding the sign-ins trusts every release by its Team ID. It's notarized, so Gatekeeper opens a
+      # download without asking. electron-builder imports the certificate into a keychain of its own (CSC_LINK), signs
+      # as the identity with the Team ID in its name, and notarizes with the API key (APPLE_API_KEY). See docs/RELEASE.md.
+      - name: Set up the Developer ID
+        if: matrix.platform == 'mac'
         env:
-          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          P12: ${{ secrets.MAC_DEVELOPER_ID_P12 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          RELEASING: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
         run: |
           set -euo pipefail
-          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/omfv.p12"
-          openssl pkcs12 -in "$RUNNER_TEMP/omfv.p12" -passin env:MAC_CERT_PASSWORD -nokeys -out "$RUNNER_TEMP/omfv.pem"
-          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/omfv.pem"
+          if [ -z "$P12" ] || [ -z "$TEAM_ID" ] || [ -z "$API_KEY" ]; then
+            # A new identity would strand every installed Mac app on the last release, so a release refuses.
+            if [ "$RELEASING" = true ]; then
+              echo "::error::The Developer ID secrets aren't all set: see docs/RELEASE.md, \"Sign the Mac build\"."
+              exit 1
+            fi
+            echo "::warning::No Developer ID: signed ad-hoc and not notarized. An installed Mac app won't update to this."
+            exit 0
+          fi
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$API_KEY" > "$RUNNER_TEMP/notary-key.p8"
           {
-            echo "CSC_LINK=$RUNNER_TEMP/omfv.p12"
-            echo "SIGN_AS=-c.mac.identity=OMFV"
+            echo "CSC_LINK=$RUNNER_TEMP/developer-id.p12"
+            echo "APPLE_API_KEY=$RUNNER_TEMP/notary-key.p8"
+            echo "SIGN_AS=-c.mac.identity=$TEAM_ID"
+            echo "SIGNED_BY=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
       - name: Package
         env:
-          # Sign as electron-builder.yml says, or as OMFV above, without looking for a Developer ID in the keychain.
+          # Sign as electron-builder.yml says, or as the Developer ID above, without looking in the runner's keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # electron-builder skips signing in a pull request's build unless told not to, so a pull request would check an
           # unsigned app. A fork's pull request gets no secrets, so it signs ad-hoc.
           CSC_FOR_PULL_REQUEST: 'true'
         run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }} ${SIGN_AS:-}
 
-      # An update installs only over an app with the same identity. Ad-hoc, each build's is its own hash.
+      # An update installs only over an app with the same identity, which for a Developer ID is its Team ID. Ad-hoc,
+      # each build's is its own hash. The .dmg is what's downloaded, so its app is the one Gatekeeper has to accept.
       - name: Check the Mac signature
         if: matrix.platform == 'mac'
         run: |
           set -euo pipefail
           app=release/mac-arm64/oh-my-f1-viewer.app
           codesign -d -r- "$app" 2>&1 | grep '^designated' || true
-          if [ -z "$MAC_CERT_P12" ]; then
-            echo "::warning::Signed ad-hoc, without OMFV's certificate: an installed Mac app won't update itself."
-            exit 0
-          fi
+          [ -n "${SIGNED_BY:-}" ] || exit 0
           codesign --verify --deep --strict "$app"
-          # The next release must satisfy this one's requirement, which names the certificate, not this build's hash.
+          # The next release must satisfy this one's requirement, which names the Team ID, not this build's hash.
           requirement=$(codesign -d -r- "$app" 2>&1 | grep '^designated')
-          if echo "$requirement" | grep -q cdhash; then
-            echo "::error::Signed ad-hoc although OMFV's certificate was there."
+          if ! echo "$requirement" | grep -Eq "subject\.OU\] = \"?$SIGNED_BY\"?"; then
+            echo "::error::The designated requirement doesn't name Team ID $SIGNED_BY."
             exit 1
           fi
+          codesign -dv "$app" 2>&1 | grep -q 'flags=.*runtime' || { echo "::error::Not signed with the hardened runtime."; exit 1; }
+          dmg=$(ls release/*.dmg)
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$dmg"
+          trap 'hdiutil detach "$RUNNER_TEMP/dmg"' EXIT
+          xcrun stapler validate "$RUNNER_TEMP/dmg/oh-my-f1-viewer.app"
+          spctl --assess --type execute -vv "$RUNNER_TEMP/dmg/oh-my-f1-viewer.app" 2>&1 | tee "$RUNNER_TEMP/spctl.txt"
+          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl.txt" || { echo "::error::Gatekeeper doesn't see it as notarized."; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -193,12 +216,18 @@ jobs:
           COMMIT: ${{ needs.version.outputs.commit }}
           NAME: ${{ needs.version.outputs.name }}
           PREVIOUS: ${{ needs.version.outputs.previous }}
+          NOTES: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           cd files
           sha256sum -- * > SHA256SUMS
           cat SHA256SUMS
           notes=()
-          if [ -n "$PREVIOUS" ]; then notes=(--generate-notes --notes-start-tag "$PREVIOUS"); else notes=(--notes "The first release of OMFV."); fi
+          if [ -n "$PREVIOUS" ]; then
+            # gh puts --notes before the generated ones.
+            notes=(--generate-notes --notes-start-tag "$PREVIOUS" ${NOTES:+--notes "$NOTES"})
+          else
+            notes=(--notes "${NOTES:-The first release of OMFV.}")
+          fi
           gh release create "app-$NAME" --repo "$REPO" --target "$COMMIT" --title "OMFV $NAME" --latest "${notes[@]}" -- *
           echo "### [OMFV $NAME](https://github.com/$REPO/releases/tag/app-$NAME) from \`${COMMIT:0:7}\`" >> "$GITHUB_STEP_SUMMARY"

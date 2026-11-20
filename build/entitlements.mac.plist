@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  What the Mac app may do under the hardened runtime, which notarizing requires. electron-builder.yml signs the app and
+  its helpers with this. See docs/RELEASE.md, "Sign the Mac build".
+-->
+<plist version="1.0">
+  <dict>
+    <!-- V8 compiles JavaScript to machine code as it runs. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!--
+      The Widevine CDM is downloaded into the profile at the first start and loaded from there. Google signs it, not
+      OMFV's team, so library validation would refuse it.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>
