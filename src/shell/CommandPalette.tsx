@@ -284,8 +284,8 @@ export function CommandPalette() {
     grip.addEventListener('pointercancel', end);
   };
 
-  // Hidden, the palette leaves a small block in its place to bring it back. Only with a session open: without one it's held.
-  if (!showing) return <PaletteBlock />;
+  // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with a session open: without one it's held.
+  if (!showing) return <FoldedPalette busy={busy} />;
 
   if (panel === 'background') {
     const closePanel = () => {
@@ -586,31 +586,16 @@ export function CommandPalette() {
   );
 }
 
-/** How long the block stays at the stub's size after the palette hides, naming the key, before it shrinks. */
-const BLOCK_FRESH_MS = 2500;
-
 /**
- * What the hidden palette leaves in its place: a faint `> …` block. Pointing at it grows it to a stub that names the
- * shortcut, and a click opens the palette from it. Right after hiding it starts at the stub's size, then shrinks.
+ * The hidden palette: folded to its input row, in the same place and as wide, see-through so the video shows
+ * behind it. It names the shortcut, and a click unfolds the palette with the cursor in the input.
  */
-function PaletteBlock() {
-  const [fresh, setFresh] = useState(true);
+function FoldedPalette({ busy }: { busy: boolean }) {
   const keyLabel = usePaletteKeyLabel();
-  useEffect(() => {
-    const timer = setTimeout(() => setFresh(false), BLOCK_FRESH_MS);
-    return () => clearTimeout(timer);
-  }, []);
   return (
-    <button
-      type="button"
-      className={`palette-block ${fresh ? 'palette-block-fresh' : ''}`}
-      data-testid="palette-block"
-      aria-label={`Show the palette (${keyLabel})`}
-      onClick={palette.show}
-    >
-      <span className="palette-block-prompt">&gt;</span>
-      <span className="palette-block-dots">…</span>
-      <span className="palette-block-text">ask for anything</span>
+    <button type="button" className="palette palette-folded" data-testid="palette-folded" aria-label={`Show the palette (${keyLabel})`} onClick={palette.show}>
+      <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
+      <span className="palette-folded-text">ask for anything on screen</span>
       <kbd className="palette-key">{keyLabel}</kbd>
     </button>
   );

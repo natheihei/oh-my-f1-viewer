@@ -891,14 +891,14 @@
   height: 8px;
 }
 
-/* Opening, the palette grows up and out of the stub it was hidden to. */
+/* Unfolding, the palette grows up from its input row, where it was folded. */
 .palette {
-  animation: palette-grow 0.22s ease-out;
+  animation: palette-unfold 0.18s ease-out;
 }
 
-@keyframes palette-grow {
+@keyframes palette-unfold {
   from {
-    clip-path: inset(calc(100% - 28px) max(0px, calc(50% - 190px)) 0 max(0px, calc(50% - 190px)));
+    clip-path: inset(calc(100% - var(--row) - 10px) 0 0 0);
   }
   to {
     clip-path: inset(0);
@@ -906,85 +906,41 @@
 }
 
 /*
- * What the hidden palette leaves where it was: a faint `> …` block over the video. Pointing at it grows it to a stub
- * that names the key, and a click opens the palette. Right after hiding it starts at that size, then shrinks.
+ * The hidden palette, folded to its input row: as wide and in the same place, but see-through, so the video shows
+ * behind it. Under the pointer it's the palette again, opaque. Folding, it needs no animation of its own.
  */
-.palette-block {
-  @apply absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 cursor-pointer items-center overflow-hidden bg-panel whitespace-nowrap text-ink;
-  gap: 8px;
-  width: 46px;
-  height: 28px;
-  padding-inline: var(--pad);
-  border: 1px solid var(--color-rule);
-  box-shadow: 0 0 0 1px #000;
-  opacity: 0.5;
+.palette-folded {
+  @apply cursor-pointer flex-row items-center text-left;
+  min-height: calc(var(--row) + 10px);
+  padding: 4px var(--pad);
+  background: color-mix(in srgb, var(--color-panel) 55%, transparent);
+  border-color: color-mix(in srgb, var(--color-rule) 70%, transparent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+  animation: none;
   transition:
-    width 0.2s ease-out,
-    opacity 0.2s;
+    background-color 0.15s,
+    border-color 0.15s;
 }
 
-.palette-block > * {
-  @apply shrink-0;
+.palette-folded:hover,
+.palette-folded:focus-visible {
+  @apply bg-panel;
+  border-color: var(--color-rule);
 }
 
-.palette-block-dots {
-  @apply text-dim;
-  transition: opacity 0.1s;
+.palette-folded-text {
+  @apply min-w-0 flex-1 truncate text-mute;
 }
 
-.palette-block-text {
-  @apply min-w-0 flex-1 truncate text-left text-mute;
-}
-
-.palette-block-text,
-.palette-block > .palette-key {
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.palette-block:hover,
-.palette-block:focus-visible,
-.palette-block-fresh {
-  width: min(380px, calc(100% - 32px));
-  opacity: 1;
-}
-
-.palette-block:hover .palette-block-dots,
-.palette-block:focus-visible .palette-block-dots,
-.palette-block-fresh .palette-block-dots {
-  width: 0;
-  margin-right: -8px;
-  opacity: 0;
-}
-
-.palette-block:hover .palette-block-text,
-.palette-block:hover > .palette-key,
-.palette-block:focus-visible .palette-block-text,
-.palette-block:focus-visible > .palette-key,
-.palette-block-fresh .palette-block-text,
-.palette-block-fresh > .palette-key {
-  opacity: 1;
-  transition-delay: 0.08s;
-}
-
-/* Hiding, the palette narrows into the stub. */
-.palette-block-fresh {
-  animation: palette-block-in 0.2s ease-out;
-}
-
-@keyframes palette-block-in {
-  from {
-    width: min(760px, calc(100% - 32px));
-  }
+.palette-folded > .palette-key {
+  margin-left: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .palette,
-  .palette-block-fresh {
+  .palette {
     animation: none;
   }
-  .palette-block,
-  .palette-block *,
+  .palette-folded,
   .palette-hide {
     transition: none;
   }

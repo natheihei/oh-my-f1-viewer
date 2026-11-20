@@ -196,18 +196,22 @@ await page.waitForTimeout(100);
 const openAfter = await page.locator('[data-testid=palette]').isVisible();
 check('Ctrl+K toggles the palette once a session is open', openBefore !== openAfter, `${openBefore} -> ${openAfter}`);
 
-// The mouse does the same: the chevron on the palette's top edge hides it, and the block it leaves brings it back.
+// The mouse does the same: the chevron on the palette's top edge folds it to its input row, and a click unfolds it.
 if (!(await page.locator('[data-testid=palette]').isVisible())) await page.keyboard.press('Control+K');
 await page.waitForTimeout(300);
+const openBox = await page.locator('[data-testid=palette]').boundingBox();
 await page.locator('[data-testid=palette-hide]').click();
 await page.waitForTimeout(300);
-const block = page.locator('[data-testid=palette-block]');
-check('the chevron hides the palette and leaves a block', !(await page.locator('[data-testid=palette]').isVisible()) && (await block.isVisible()));
-check('the block names the shortcut', /Ctrl\+K|⌘K/.test((await block.textContent()) ?? ''));
-await page.screenshot({ path: path.join(outDir, 'palette-block.png') });
-await block.click();
+const folded = page.locator('[data-testid=palette-folded]');
+check('the chevron folds the palette to its input row', !(await page.locator('[data-testid=palette]').isVisible()) && (await folded.isVisible()));
+const foldedBox = await folded.boundingBox();
+check('the folded palette is as wide as the palette, and one row high', foldedBox != null && Math.abs(foldedBox.width - openBox.width) <= 1 && Math.abs(foldedBox.x - openBox.x) <= 1 && foldedBox.height <= 34, JSON.stringify(foldedBox));
+check('the folded palette names the shortcut', /Ctrl\+K|⌘K/.test((await folded.textContent()) ?? ''));
+check('the folded palette is see-through', await folded.evaluate((b) => !/^rgb\(/.test(getComputedStyle(b).backgroundColor)));
+await page.screenshot({ path: path.join(outDir, 'palette-folded.png') });
+await folded.click();
 await page.waitForTimeout(300);
-check('clicking the block opens the palette, with the cursor in the input', await page.locator('[data-testid=palette]').isVisible() && (await page.evaluate(() => !!document.activeElement?.closest('[data-testid=palette]'))));
+check('clicking the folded palette opens the palette, with the cursor in the input', await page.locator('[data-testid=palette]').isVisible() && (await page.evaluate(() => !!document.activeElement?.closest('[data-testid=palette]'))));
 
 // The key at the end of the input row changes the shortcut: a click records the next key, a taken one isn't kept.
 const key = page.locator('[data-testid=palette-key]');
