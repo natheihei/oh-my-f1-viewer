@@ -15,7 +15,7 @@
   <a href="https://oh-my-f1-viewer.yueyao.run">Website</a> ·
   <a href="#install">Install</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
-  <a href="#documentation">Documentation</a>
+  <a href="docs">Docs</a>
 </p>
 
 ![The 2026 Mexico City Grand Prix in OMFV: the race feed and the Hamilton and Leclerc onboards, with their pit windows, gap, telemetry, pedals, sectors, tyres and track positions, all on one session clock.](site/src/assets/shots/page/hero-charts.webp)
@@ -97,22 +97,6 @@ OMFV is an Electron app with a React renderer.
   through the host (`src/host`), and mods use the same interface.
 - **Agent.** The agent runs on [pi](https://github.com/earendil-works/pi) with your provider. It gets tools built on the
   host, and a spoiler check sits between it and anything ahead of the playhead.
-
-## Documentation
-
-| Doc | Covers |
-| --- | --- |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | The layers, the host, charts, streams and sync, layout, the agent, sign-in. Start here |
-| [DESIGN.md](docs/DESIGN.md) | Where the design is heading, and its rules |
-| [HOST.md](docs/HOST.md) | Every read, query, write and primitive the host offers |
-| [COMPONENTS.md](docs/COMPONENTS.md) | How a tile's component behaves, and each chart's decisions |
-| [MODS.md](docs/MODS.md) | What a mod is, and how the app loads it |
-| [BUILD_MODE.md](docs/BUILD_MODE.md) | `/build`: the build agent, drafts, Save and Undo all |
-| [SESSION_DATA.md](docs/SESSION_DATA.md) | The session database, and quirks in F1's data |
-| [SPOILER_PREVENTION.md](docs/SPOILER_PREVENTION.md) | Each layer that keeps the race from the viewer |
-| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | The app's commands, and the checks |
-| [RELEASE.md](docs/RELEASE.md) | Releasing and installing the app and the site |
-| [STATUS.md](docs/STATUS.md) | What's verified, known issues, and what's deferred |
 
 ## Credits
 
