@@ -324,6 +324,20 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
   result left out that the tile needed a driver, though the agent still fixed the tile in that turn, having been refused by
   `edit_tile`. Case 25 passed in the first run, so it comes and goes, and why isn't known.
 
+## Verified for packaging
+
+On Omarchy (Arch, x64, Hyprland), 2026-11-20, with `npm run dist` named as release `20261119.1`:
+
+- `scripts/packaged-check.mjs` passes on `release/linux-unpacked`, which is what the `.pacman` package installs, and on the AppImage:
+  the app loads from `app.asar` and says it's release 20261119.1, the copied F1 TV and ChatGPT logins decrypt, the build agent's
+  files are copied, `lap_form` compiles with the unpacked esbuild, the Widevine CDM is there, and the 2025 Mexico qualifying replay
+  plays. The window opens on workspace 3 without focus, with the class `oh-my-f1-viewer`.
+- The `.pacman` package's metadata, launcher entry and install script were read, and its dependencies all exist in Arch's
+  repositories. It hasn't been installed with `pacman -U`.
+
+Not verified: the macOS `.dmg`, which only CI builds (see [RELEASE.md](RELEASE.md#not-done-yet) for VMP), and the Release app action
+itself, which can only run once it's on `main`.
+
 ## Not verified
 
 - **The window icon.** Hyprland shows none, so it hasn't been seen.
@@ -388,5 +402,5 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
 - Race-state tools for the agent.
 - More charts. How pitwall.info draws its charts is researched in [PITWALL.md](PITWALL.md).
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
-- Windows, and a packaged macOS app, with the VMP signing they need. macOS runs from source.
+- Windows, and a signed and notarized macOS app with castLabs' VMP signing. See [RELEASE.md](RELEASE.md#not-done-yet).
 - Saved layouts, pop-out windows, translations and auto-update.

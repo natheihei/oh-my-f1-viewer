@@ -124,6 +124,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    name: '/version',
+    description: 'Show which release of OMFV this is',
+    async run() {
+      const { release, packaged } = await host.app.version();
+      palette.push('system', release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.');
+    },
+  },
+  {
     name: '/logout-f1tv',
     description: 'Sign out of F1 TV',
     async run() {
