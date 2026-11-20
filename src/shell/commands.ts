@@ -129,7 +129,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       const [{ release, packaged }, { ready }] = await Promise.all([host.app.version(), host.app.update()]);
       const which = release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.';
-      palette.push('system', ready ? `${which} ${ready} installs when you quit.` : which);
+      palette.push('system', ready ? `${which} ${ready} installs automatically next time you start oh-my-f1-viewer.` : which);
     },
   },
   {

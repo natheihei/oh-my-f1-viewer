@@ -7,9 +7,9 @@ import type { UpdateState } from '../../shared/release';
 import { host } from '../host';
 import { palette } from './palette';
 
-export const readyLine = (release: string) => `OMFV ${release} is ready. It installs when you quit.`;
+export const readyLine = (release: string) => `OMFV ${release} is ready. It automatically installs next time you start oh-my-f1-viewer.`;
 export const updatedLine = (release: string) => `Updated to OMFV ${release}. /whats-new lists what changed.`;
-export const failedLine = (release: string) => `OMFV ${release} didn't install when you quit. It tries again next time.`;
+export const failedLine = (release: string) => `OMFV ${release} didn't install. It tries again next time you start oh-my-f1-viewer.`;
 
 /**
  * Says what the last update did, then each release once it's ready. `reported` settles once the start's lines are

@@ -53,9 +53,10 @@ While the repo is private, downloading a release needs access to the repo, and n
 
 An AppImage or a Mac app that's a release checks for a newer release a minute after it starts, then every 4 hours. It
 downloads one in the background and installs it when you quit, so the next start is the new release. There's no command,
-it never restarts on its own, and nothing appears over the video: the palette says `OMFV 20261121.1 is ready. It installs when
-you quit.` once, and on the next start, `Updated to OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version`
-names a release waiting to install. A release that didn't install on quit is named in red on the next start, and tried again.
+it never restarts on its own, and nothing appears over the video. The palette says once `OMFV 20261121.1 is ready. It
+automatically installs next time you start oh-my-f1-viewer.` (it's installed as the app quits), and on the next start, `Updated to
+OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names a release waiting to install. A release that
+didn't install on quit is named in red on the next start, and tried again.
 A failed check or download is only logged.
 
 - **The feed.** `publish` in `electron-builder.yml` names `releases/latest/download` on this repo, so the app reads
