@@ -149,12 +149,15 @@ jobs:
         run: |
           set -euo pipefail
           app=release/mac-arm64/oh-my-f1-viewer.app
-          codesign --verify --deep --strict "$app"
-          requirement=$(codesign -d -r- "$app" 2>&1 | grep '^designated')
-          echo "$requirement"
+          codesign -d -r- "$app" 2>&1 | grep '^designated' || true
           if [ -z "$MAC_CERT_P12" ]; then
             echo "::warning::Signed ad-hoc, without OMFV's certificate: an installed Mac app won't update itself."
-          elif echo "$requirement" | grep -q cdhash; then
+            exit 0
+          fi
+          codesign --verify --deep --strict "$app"
+          # The next release must satisfy this one's requirement, which names the certificate, not this build's hash.
+          requirement=$(codesign -d -r- "$app" 2>&1 | grep '^designated')
+          if echo "$requirement" | grep -q cdhash; then
             echo "::error::Signed ad-hoc although OMFV's certificate was there."
             exit 1
           fi
