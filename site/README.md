@@ -14,7 +14,7 @@ npm run preview    # serve the built dist/
 
 ## Deploy
 
-It runs on Cloudflare Workers: `main` builds staging (only the owner can open it), and publishing a `site-v*` release ships production at https://oh-my-f1-viewer.yueyao.run. See [DEPLOY.md](DEPLOY.md).
+It runs on Cloudflare Workers: `main` builds staging (only the owner can open it), and running the Release site action with a commit on `main` ships production at https://oh-my-f1-viewer.yueyao.run. See [DEPLOY.md](DEPLOY.md).
 
 ## Layout
 
