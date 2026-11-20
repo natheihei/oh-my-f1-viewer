@@ -10,6 +10,7 @@ import { palette } from './palette';
 import { usePersistBackground } from './persistBackground';
 import { usePersistVolume } from './persistVolume';
 import { Timeline } from './Timeline';
+import { watchUpdates } from './updates';
 
 function formatRemaining(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -54,7 +55,8 @@ export function App() {
 
   useEffect(() => {
     const offAgent = connectAgent();
-    void onboarding.start().then(reportReadiness);
+    const updates = watchUpdates();
+    void onboarding.start().then(() => updates.reported).then(reportReadiness);
     const offExpired = host.account.onExpired(() => {
       host.session.close();
       palette.show();
@@ -62,6 +64,7 @@ export function App() {
     });
     return () => {
       offAgent();
+      updates.off();
       offExpired();
     };
   }, []);

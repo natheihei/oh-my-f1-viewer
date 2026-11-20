@@ -14,6 +14,7 @@ it from source.
 | `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
 | `/reset-onboarding` | Show the steps to get started again |
 | `/version` | Show which release this is |
+| `/whats-new` | Open this release's notes in the browser |
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile | Move it; drop it on another tile to swap them |
 | Drag a tile's edge | Resize it |
@@ -70,6 +71,12 @@ This one runs the packaged app that `npm run dist` makes, as a release installs 
 
 ```bash
 npm run dist && node scripts/packaged-check.mjs /tmp/packaged-check
+```
+
+This one updates an AppImage from one release to the next, served from localhost: see [RELEASE.md](RELEASE.md#check-a-build).
+
+```bash
+npm run build && node scripts/update-check.mjs /tmp/update-check
 ```
 
 This one needs only the F1 TV sign-in, and puts a mod in the mods folder of an OMFV of its own while it runs:

@@ -1,6 +1,11 @@
-/** Which OMFV this is. See docs/RELEASE.md. */
-import type { AppVersion } from '../../shared/release';
+/** Which OMFV this is, and its updates. See docs/RELEASE.md. */
+import type { AppVersion, UpdateState } from '../../shared/release';
 
 export const appInfo = {
   version: (): Promise<AppVersion> => window.omfv.app.version(),
+  /** What the updater has to say: a release ready to install on quit, and what the last update did. */
+  update: (): Promise<UpdateState> => window.omfv.app.update(),
+  onUpdate: (cb: (state: UpdateState) => void): (() => void) => window.omfv.app.onUpdate(cb),
+  /** Opens this release's notes in the browser. */
+  whatsNew: (): Promise<void> => window.omfv.app.whatsNew(),
 };

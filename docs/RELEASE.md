@@ -5,7 +5,7 @@ pre-releases.
 
 | | Runs | Makes | Where it goes |
 | --- | --- | --- | --- |
-| App | [Release app](../.github/workflows/app-release.yml) | `.pacman` and AppImage for Linux (x64), `.dmg` for macOS (Apple silicon) | A GitHub release, `app-YYYYMMDD.N` |
+| App | [Release app](../.github/workflows/app-release.yml) | `.pacman` and AppImage for Linux (x64), `.dmg` and `.zip` for macOS (Apple silicon), and the update feed | A GitHub release, `app-YYYYMMDD.N`, marked latest |
 | Site | [Release site](../.github/workflows/site-release.yml) | Nothing: it moves the `site-production` branch | Cloudflare Workers builds it. See [site/DEPLOY.md](../site/DEPLOY.md) |
 
 ## The app
@@ -23,7 +23,8 @@ Or **Actions → Release app → Run workflow**. It refuses a commit that isn't 
    `20261119.2` the second. The count comes from the day's `app-20261119.*` tags.
 2. Builds the commit on Linux (`ubuntu-latest`) and macOS (`macos-latest`, Apple silicon) with `npm run build` and electron-builder.
 3. Tags the commit `app-20261119.1` and publishes the GitHub release "OMFV 20261119.1" with the files and `SHA256SUMS`, marked latest.
-   The notes list the pull requests since the release before.
+   The notes list the pull requests since the release before. Marking it latest is what makes installed apps update to it: see
+   [Updates](#updates).
 
 `dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. A pull request that
 changes the packaging (`electron-builder.yml`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow) builds both
@@ -43,9 +44,46 @@ its tag, so nobody downloads it.
 | Other Linux | `omfv-….AppImage` | `chmod +x` it and run it. It needs FUSE 2 (`fuse2` on Arch, `libfuse2` on Ubuntu) |
 | macOS | `omfv-….dmg` | Drag it to Applications. It isn't notarized, so the first time it's opened, macOS refuses: go to **System Settings → Privacy & Security** and choose **Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/oh-my-f1-viewer.app` |
 
-A newer release installs over an older one the same way. Nothing updates itself yet.
+The AppImage and the Mac app update themselves from then on: see [Updates](#updates). The pacman package doesn't yet: a newer
+release installs over it the same way ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181) moves it to the AUR).
 
-While the repo is private, downloading a release needs access to the repo.
+While the repo is private, downloading a release needs access to the repo, and nothing can update itself.
+
+### Updates
+
+An AppImage or a Mac app that's a release checks for a newer release a minute after it starts, then every 4 hours. It
+downloads one in the background and installs it when you quit, so the next start is the new release. There's no command,
+it never restarts on its own, and nothing appears over the video: the palette says `OMFV 20261121.1 is ready. It installs when
+you quit.` once, and on the next start, `Updated to OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version`
+names a release waiting to install. A release that didn't install on quit is named in red on the next start, and tried again.
+A failed check or download is only logged.
+
+- **The feed.** `publish` in `electron-builder.yml` names `releases/latest/download` on this repo, so the app reads
+  `latest-linux.yml` or `latest-mac.yml` from the release marked latest, and electron-builder writes `app-update.yml` into the
+  app. There's no GitHub API, so no token or rate limit, but the repo has to be public.
+- **The work** is electron-updater's, from `electron/updates.ts`: on Linux it replaces the AppImage file where it is, and on
+  macOS Squirrel.Mac swaps the app in `/Applications` from the `.zip`. It only ever moves to a newer release.
+- **What's kept between runs**: `update` in `omfv-settings.json`, the release that ran last and the one that was to install on
+  quit, so the next start can say which it is now.
+- **Not**: the pacman package, a build made by hand (`npm run dist` without a release's version), or a run from source.
+
+### Sign the Mac build
+
+Squirrel.Mac installs an update only if it's signed by the same identity as the running app. An ad-hoc signature is a hash of
+the build itself, so no two releases share one, and the keychain entry holding the F1 TV and agent sign-ins would also ask for the
+password after every update. So releases are signed with OMFV's own certificate: self-signed, free, and the same for every
+release. Apple doesn't know it, so Gatekeeper still asks once on the first install, as above.
+
+Make it once, from a checkout, with `gh` signed in as someone who can set the repo's secrets:
+
+```bash
+scripts/mac-signing-cert.sh ~/omfv-signing.p12
+```
+
+It sets `MAC_CERT_P12` and `MAC_CERT_PASSWORD`, which the action signs with, and leaves a copy and its password with you. Keep
+both: a new certificate is a new identity, and Macs with OMFV would need the next release installed by hand, once. Without the
+secrets the action signs ad-hoc and warns, and those Mac apps don't update themselves. The action checks the signature either
+way.
 
 ### What packaging changes
 
@@ -74,22 +112,30 @@ npm run dist
 node scripts/packaged-check.mjs /tmp/packaged-check
 ```
 
+```bash
+npm run build && node scripts/update-check.mjs /tmp/update-check
+```
+
 `npm run dist` builds and packages for the platform you're on, into `release/`, as version `0.1.0` (from `package.json`): pass
 `-- -c.extraMetadata.version=20261119.1.0` to name it like a release. `scripts/packaged-check.mjs` runs what it left in
 `release/linux-unpacked` or `release/mac-arm64`, or the executable or AppImage named after the folder, on an isolated profile with
 copies of both sign-ins. It checks that the app loads from `app.asar`, says it's packaged and which release it is, decrypts both
 sign-ins, copies the build agent's files, compiles a mod, has the Widevine CDM, and plays a session.
 
+`scripts/update-check.mjs` updates an AppImage from one release to the next, on Linux: it packages `20261120.1` and `20261120.2`
+with a feed on localhost, serves the second, and runs the first on an isolated profile. It checks that the palette says the
+second is ready, that quitting puts it in the first's place, and that the next start is the second and says so. The first check
+waits a minute, so it takes a few.
+
 ### Not done yet
 
-- **Signing on macOS.** The app is signed ad-hoc, not with a Developer ID, and not notarized. Gatekeeper asks once, and auto-update
-  would need a real signature.
+- **A Developer ID on macOS.** The app is signed with OMFV's own certificate, not a Developer ID, and isn't notarized, so
+  Gatekeeper asks once.
 - **VMP on macOS.** castLabs' build carries a development VMP signature. Whether F1 TV's licence server accepts it for DRM streams
   isn't known: most replays aren't encrypted. If it doesn't, the macOS build needs signing through castLabs' EVS (free, with an
   account) before the Apple signature.
 - **Intel Macs, Windows and Linux on arm64.**
-- **Auto-update** ([issue 171](https://github.com/natheihei/oh-my-f1-viewer/issues/171)). It would read from these releases, and
-  needs the macOS build signed.
+- **Updates for the pacman package**, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
 
 ## The site
 

@@ -33,8 +33,12 @@ asarUnpack:
   - node_modules/esbuild/**
   - node_modules/@esbuild/**
 
-# No auto-update yet, so no update files.
-publish: null
+# Where an installed AppImage or Mac app looks for the next release (electron/updates.ts): the release marked latest.
+# electron-builder writes latest-linux.yml and latest-mac.yml from it, and app-update.yml into the app. The release
+# action uploads them; `--publish never` keeps electron-builder from uploading anything itself.
+publish:
+  provider: generic
+  url: https://github.com/natheihei/oh-my-f1-viewer/releases/latest/download
 
 linux:
   target:
@@ -58,12 +62,15 @@ pacman:
 
 mac:
   target:
-    - target: dmg
+    - target: dmg # to install
+      arch: arm64
+    - target: zip # what an update installs: Squirrel.Mac takes a zip
       arch: arm64
   icon: icons/omfv-icon.png
   category: public.app-category.entertainment
   # Ad-hoc signed, not notarized: there's no Developer ID yet. Without a signature at all, Apple silicon won't
-  # run it, and a quarantined download says it's damaged.
+  # run it, and a quarantined download says it's damaged. A release is signed with OMFV's own certificate instead,
+  # when the action has it: see the workflow and docs/RELEASE.md.
   identity: '-'
   hardenedRuntime: false
   extendInfo:

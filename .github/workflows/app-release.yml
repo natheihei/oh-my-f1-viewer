@@ -4,6 +4,8 @@
 #   release named for the date and run, with the files attached. `dry_run` builds and keeps the files as the run's
 #   artifacts, with no tag and no release.
 # - A pull request that changes the packaging builds both platforms the same way, without releasing.
+# - Each release carries latest-linux.yml and latest-mac.yml, which installed AppImages and Mac apps read to update
+#   themselves (electron/updates.ts), and the Mac zip they install.
 name: Release app
 
 on:
@@ -22,6 +24,7 @@ on:
       - .github/workflows/app-release.yml
       - electron-builder.yml
       - electron/appFiles.ts
+      - electron/updates.ts
       - package.json
       - package-lock.json
 
@@ -88,6 +91,9 @@ jobs:
           - platform: mac
             runner: macos-latest # Apple silicon
     runs-on: ${{ matrix.runner }}
+    env:
+      # OMFV's own signing certificate for macOS, made by scripts/mac-signing-cert.sh. Without it, ad-hoc.
+      MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -113,11 +119,45 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Every release signed with the same certificate has the same identity, so Squirrel.Mac installs an update over
+      # the app, and the keychain entry holding the sign-ins keeps trusting it. Apple doesn't know the certificate, so
+      # it's trusted on the runner for electron-builder to find it; a Mac still asks once, on the first install.
+      - name: Trust OMFV's signing certificate
+        if: matrix.platform == 'mac' && env.MAC_CERT_P12 != ''
+        env:
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/omfv.p12"
+          openssl pkcs12 -in "$RUNNER_TEMP/omfv.p12" -passin env:MAC_CERT_PASSWORD -nokeys -out "$RUNNER_TEMP/omfv.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/omfv.pem"
+          {
+            echo "CSC_LINK=$RUNNER_TEMP/omfv.p12"
+            echo "SIGN_AS=-c.mac.identity=OMFV"
+          } >> "$GITHUB_ENV"
+
       - name: Package
         env:
-          # Sign ad-hoc as electron-builder.yml says, without looking for a Developer ID in the keychain.
+          # Sign as electron-builder.yml says, or as OMFV above, without looking for a Developer ID in the keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }} ${SIGN_AS:-}
+
+      # An update installs only over an app with the same identity. Ad-hoc, each build's is its own hash.
+      - name: Check the Mac signature
+        if: matrix.platform == 'mac'
+        run: |
+          set -euo pipefail
+          app=release/mac-arm64/oh-my-f1-viewer.app
+          codesign --verify --deep --strict "$app"
+          requirement=$(codesign -d -r- "$app" 2>&1 | grep '^designated')
+          echo "$requirement"
+          if [ -z "$MAC_CERT_P12" ]; then
+            echo "::warning::Signed ad-hoc, without OMFV's certificate: an installed Mac app won't update itself."
+          elif echo "$requirement" | grep -q cdhash; then
+            echo "::error::Signed ad-hoc although OMFV's certificate was there."
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -126,6 +166,8 @@ jobs:
             release/*.pacman
             release/*.AppImage
             release/*.dmg
+            release/*.zip
+            release/latest*.yml
           if-no-files-found: error
 
   release:

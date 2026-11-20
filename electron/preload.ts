@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AgentConnectEvent, AgentEvent, AgentToolCall, AgentToolResult, OmfvApi } from '../shared/api';
 import type { BuildState, ModStatus } from '../shared/mods';
+import type { UpdateState } from '../shared/release';
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const handler = (_event: unknown, payload: T) => {
@@ -43,6 +44,9 @@ const api: OmfvApi = {
   },
   app: {
     version: () => invoke('app:version'),
+    update: () => invoke('app:update'),
+    onUpdate: (cb) => subscribe<UpdateState>('app:update', cb),
+    whatsNew: () => invoke('app:whats-new'),
   },
   settings: {
     ui: () => invoke('settings:ui'),

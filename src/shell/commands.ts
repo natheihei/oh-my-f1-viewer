@@ -127,8 +127,17 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: '/version',
     description: 'Show which release of OMFV this is',
     async run() {
-      const { release, packaged } = await host.app.version();
-      palette.push('system', release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.');
+      const [{ release, packaged }, { ready }] = await Promise.all([host.app.version(), host.app.update()]);
+      const which = release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.';
+      palette.push('system', ready ? `${which} ${ready} installs when you quit.` : which);
+    },
+  },
+  {
+    name: '/whats-new',
+    description: "Open this release's notes in the browser",
+    async run() {
+      await host.app.whatsNew();
+      palette.push('system', 'Opened the release notes in your browser.');
     },
   },
   {

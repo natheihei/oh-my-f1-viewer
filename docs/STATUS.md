@@ -338,6 +338,15 @@ On Omarchy (Arch, x64, Hyprland), 2026-11-20, with `npm run dist` named as relea
 Not verified: the macOS `.dmg`, which only CI builds (see [RELEASE.md](RELEASE.md#not-done-yet) for VMP), and the Release app action
 itself, which can only run once it's on `main`.
 
+## Verified for updates
+
+On Omarchy, 2026-11-20, with `scripts/update-check.mjs`: an AppImage of release `20261120.1`, fed from localhost, found
+`20261120.2` at its first check a minute after start, downloaded it, and the palette said it was ready. Closing the window put
+`omfv-20261120.2.0-linux-x86_64.AppImage` in the first one's place, and starting that said `Updated to OMFV 20261120.2.`
+
+Not verified: a Mac app updating itself, which needs a Mac and the certificate in [RELEASE.md](RELEASE.md#sign-the-mac-build), and
+updating from GitHub, which needs the repo public and a release made by the action.
+
 ## Not verified
 
 - **The window icon.** Hyprland shows none, so it hasn't been seen.
@@ -403,4 +412,5 @@ itself, which can only run once it's on `main`.
 - More charts.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
 - Windows, and a signed and notarized macOS app with castLabs' VMP signing. See [RELEASE.md](RELEASE.md#not-done-yet).
-- Saved layouts, pop-out windows, translations and auto-update.
+- Saved layouts, pop-out windows and translations.
+- Updates for the pacman package, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).

@@ -1,5 +1,5 @@
 /** Wires every ipcMain handler `window.omfv` talks to. Glue over the other main-process modules. */
-import { app, ipcMain, session, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { AgentMode, F1TvStatus, LiveItem } from '../shared/api';
 import type { PlaceHealth } from '../shared/health';
@@ -12,7 +12,8 @@ import { TimingDb } from './timingdb';
 import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
-import { releaseName, type AppVersion } from '../shared/release';
+import { releaseName, RELEASES_URL, type AppVersion } from '../shared/release';
+import { updateState } from './updates';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const f1tv = require('./vendor/f1ov/f1tv-bridge');
@@ -273,6 +274,12 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
 
   // --- Which OMFV this is ---
   handle('app:version', (): AppVersion => ({ release: releaseName(app.getVersion()), packaged: app.isPackaged }));
+  handle('app:update', () => updateState());
+  // This release's notes, or every release's for a build that isn't one.
+  handle('app:whats-new', () => {
+    const release = releaseName(app.getVersion());
+    return shell.openExternal(release ? `${RELEASES_URL}/tag/app-${release}` : RELEASES_URL);
+  });
 
   // --- Settings: the renderer's small UI state, in the app's settings file ---
   handle('settings:ui', () => uiState());

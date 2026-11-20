@@ -241,6 +241,12 @@ export interface OmfvApi {
   app: {
     /** Which OMFV this is: its release, if it is one. */
     version(): Promise<import('./release').AppVersion>;
+    /** What the updater has to say. Only a release installed as an AppImage or a Mac app updates itself. */
+    update(): Promise<import('./release').UpdateState>;
+    /** Each change, such as a release becoming ready to install. */
+    onUpdate(cb: (state: import('./release').UpdateState) => void): () => void;
+    /** Opens this release's notes in the browser. */
+    whatsNew(): Promise<void>;
   };
   /** The renderer's small UI state, such as the volume, kept by main in the app's settings file (electron/settings.ts). */
   settings: {
