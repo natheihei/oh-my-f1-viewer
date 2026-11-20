@@ -1,0 +1,156 @@
+# Builds OMFV's installable files for Linux and macOS and releases them. See docs/RELEASE.md.
+#
+# - Run by hand with a commit on main (a SHA, or `main`): builds it, tags it `app-YYYYMMDD.N` and publishes a GitHub
+#   release named for the date and run, with the files attached. `dry_run` builds and keeps the files as the run's
+#   artifacts, with no tag and no release.
+# - A pull request that changes the packaging builds both platforms the same way, without releasing.
+name: Release app
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit on main to release: a SHA, or main.'
+        required: true
+        default: main
+      dry_run:
+        description: 'Build only: keep the files as artifacts of this run, with no tag and no release.'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/app-release.yml
+      - electron-builder.yml
+      - electron/appFiles.ts
+      - package.json
+      - package-lock.json
+
+permissions:
+  contents: write
+
+concurrency:
+  # Releases one at a time, so two runs can't take the same number. A pull request's builds replace each other.
+  group: ${{ github.event_name == 'pull_request' && format('app-build-{0}', github.ref) || 'app-release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.version.outputs.commit }}
+      name: ${{ steps.version.outputs.name }}
+      semver: ${{ steps.version.outputs.semver }}
+      previous: ${{ steps.version.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Name the release
+        id: version
+        env:
+          SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          commit=$(git rev-parse -q --verify "origin/$SHA^{commit}" || git rev-parse -q --verify "$SHA^{commit}") \
+            || fail "No commit $SHA."
+          if [ "$EVENT" = workflow_dispatch ]; then
+            git merge-base --is-ancestor "$commit" origin/main || fail "$SHA ($commit) is not on main."
+          fi
+
+          # YYYYMMDD.N: the UTC date, and one more than the day's last release.
+          day=$(date -u +%Y%m%d)
+          last=$(git tag -l "app-$day.*" | sed "s/^app-$day\.//" | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
+          name="$day.$(( ${last:-0} + 1 ))"
+          # The release before, for the notes: release names sort as versions.
+          previous=$(git tag -l 'app-*' | sort -V | tail -1 || true)
+
+          {
+            echo "commit=$commit"
+            echo "name=$name"
+            # electron-builder and Electron want semver.
+            echo "semver=$name.0"
+            echo "previous=$previous"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building $name from $commit${previous:+, after $previous}."
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: mac
+            runner: macos-latest # Apple silicon
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+
+      # fpm, which builds the pacman package, needs bsdtar.
+      - name: Install packaging tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
+      # As in the README: the dependencies, then castLabs' Electron build with Widevine, whose install script npm
+      # doesn't run by itself.
+      - name: Install dependencies
+        run: |
+          npm ci --allow-git=all
+          node node_modules/electron/install.js
+
+      - name: Build
+        run: npm run build
+
+      - name: Package
+        env:
+          # Sign ad-hoc as electron-builder.yml says, without looking for a Developer ID in the keychain.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --${{ matrix.platform }} --publish never -c.extraMetadata.version=${{ needs.version.outputs.semver }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omfv-${{ needs.version.outputs.name }}-${{ matrix.platform }}
+          path: |
+            release/*.pacman
+            release/*.AppImage
+            release/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMIT: ${{ needs.version.outputs.commit }}
+          NAME: ${{ needs.version.outputs.name }}
+          PREVIOUS: ${{ needs.version.outputs.previous }}
+        run: |
+          set -euo pipefail
+          cd files
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+          notes=()
+          if [ -n "$PREVIOUS" ]; then notes=(--generate-notes --notes-start-tag "$PREVIOUS"); else notes=(--notes "The first release of OMFV."); fi
+          gh release create "app-$NAME" --repo "$REPO" --target "$COMMIT" --title "OMFV $NAME" --latest "${notes[@]}" -- *
+          echo "### [OMFV $NAME](https://github.com/$REPO/releases/tag/app-$NAME) from \`${COMMIT:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
