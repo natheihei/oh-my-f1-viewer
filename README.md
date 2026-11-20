@@ -1,4 +1,9 @@
-<p align="center"><img src="icons/omfv-logo-framed.svg" alt="omfv, oh-my-f1-viewer" width="360"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="icons/omfv-wordmark-dark.svg">
+    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="456">
+  </picture>
+</p>
 
 <p align="center">
   <b>An agent-driven, multi-view F1 TV player.</b><br>
