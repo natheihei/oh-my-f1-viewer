@@ -196,21 +196,34 @@ export interface LiveRecord {
  * Builds a session from a live feed as it comes. Every message is also kept, since the processors'
  * state is only in memory: restarting the app mid-session rebuilds from them, then carries on.
  */
+/** Longer than this between a kept capture's last message and resuming it counts as a gap. Telemetry alone comes about once a second. */
+const RESUME_GAP_MS = 5000;
+
 export class LiveCapture {
   private router;
+  private telemetry;
+  private telemetryMarked = false;
   private seq = 0;
 
-  constructor(private store: TimingStore, readonly meta: SessionMeta, now: number) {
+  constructor(private store: TimingStore, readonly meta: SessionMeta, private now: number) {
     this.router = timingRouter(meta);
+    this.telemetry = telemetryRouter(meta);
     const kept = store.liveMessages(meta.sessionKey);
     store.transaction(() => {
       store.clearDataset(meta.sessionKey, 'timing');
+      store.clearDataset(meta.sessionKey, 'telemetry');
       for (const message of kept) {
         const parsed: Message = { topic: message.topic, content: JSON.parse(message.content), time: message.time, snapshot: message.snapshot === 1 };
-        store.write(this.router.process(parsed), message.visible_from);
+        this.write(parsed, message.visible_from);
         this.seq = message.seq + 1;
       }
       store.mark(meta.sessionKey, 'timing', 'partial', 'live', null, { reason: 'Captured live, so it may have gaps.' }, now);
+      // Resuming a capture, after a restart or reopening the session, leaves out what came while nothing listened.
+      if (kept.length) {
+        const last = kept.reduce((latest, message) => Math.max(latest, message.visible_from), -Infinity);
+        if (now - last > RESUME_GAP_MS) store.openGap(meta.sessionKey, last);
+        store.closeGap(meta.sessionKey, now);
+      }
     });
   }
 
@@ -219,9 +232,25 @@ export class LiveCapture {
       for (const { topic, data, ts, snapshot, receivedAt } of records) {
         const time = parseUtc(ts) ?? receivedAt;
         this.store.appendLiveMessage(this.meta.sessionKey, this.seq++, topic, time, receivedAt, snapshot === true, data);
-        this.store.write(this.router.process({ topic, content: data, time, snapshot }), receivedAt);
+        this.write({ topic, content: data, time, snapshot }, receivedAt);
       }
     });
+  }
+
+  /**
+   * Telemetry comes only when the socket carries the F1 TV token, so its dataset is marked once some arrives.
+   * Like the timing, a row is held back until the video reaches the moment it arrived.
+   */
+  private write(message: Message, visibleFrom: number): void {
+    if ((TELEMETRY_FEEDS as readonly string[]).includes(message.topic)) {
+      this.store.write(this.telemetry.process(message), visibleFrom);
+      if (!this.telemetryMarked) {
+        this.telemetryMarked = true;
+        this.store.mark(this.meta.sessionKey, 'telemetry', 'partial', 'live', null, { reason: 'Captured live, so it may have gaps.' }, this.now);
+      }
+      return;
+    }
+    this.store.write(this.router.process(message), visibleFrom);
   }
 }
 

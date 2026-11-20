@@ -62,8 +62,8 @@ const sample = () =>
       session: s.session && { title: s.session.title, status: s.session.status, year: s.session.year, meetingKey: s.session.meetingKey, sessionKey: s.session.sessionKey },
       clock: { t: +c.timeSec.toFixed(1), playing: c.playing, buffering: c.buffering, live: c.live, start: Math.round(c.start), end: Math.round(c.end), behind: +(c.end - c.timeSec).toFixed(1), atEdge: c.atLiveEdge, wall: c.wallClockMs, lagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs) / 1000).toFixed(1) : null },
       streams: Object.values(s.streams).map((v) => {
-        const label = s.channels.find((x) => x.id === v.channelId)?.label;
-        const el = videos.find((x) => x.dataset.channel === v.channelId);
+        const label = s.channels.find((x) => x.id === v.feed)?.label ?? v.feed;
+        const el = videos.find((x) => x.dataset.video === v.id);
         const q = el?.getVideoPlaybackQuality();
         return { label, status: v.status, error: v.error, t: el ? +el.currentTime.toFixed(2) : null, encrypted: !!el?.mediaKeys, ready: el?.readyState, frames: q?.totalVideoFrames, dropped: q?.droppedVideoFrames, size: el ? `${el.videoWidth}x${el.videoHeight}` : null, rate: el?.playbackRate };
       }),
@@ -86,7 +86,7 @@ const untilReady = async (limit = 60_000) => {
   return null;
 };
 
-await say('Open the race that is live now.');
+await say('Open the session that is live now.');
 let s = await sample();
 console.log('session:', JSON.stringify(s.session));
 check('agent opened a live session', s.session?.status === 'live');
@@ -172,11 +172,13 @@ check('a live capture is not marked complete', captured.timing === 'partial');
 const delay = await page.evaluate(async () => {
   const { useSessionData, sessionSql } = window.m.sessionData;
   const key = useSessionData.getState().sessionKey;
-  const everything = async () => (await window.omfv.data.sql(key, Number.MAX_SAFE_INTEGER, 'SELECT COUNT(*) AS n FROM intervals', [])).rows[0].n;
+  // Tables that fill in any session: `intervals` stays empty outside a race, and practice can go minutes without a lap.
+  const count = '(SELECT COUNT(*) FROM intervals) + (SELECT COUNT(*) FROM position) + (SELECT COUNT(*) FROM laps) + (SELECT COUNT(*) FROM car_data) AS n';
+  const everything = async () => (await window.omfv.data.sql(key, Number.MAX_SAFE_INTEGER, `SELECT ${count}`, [])).rows[0].n;
   const first = await everything();
   await new Promise((r) => setTimeout(r, 8000));
   const last = await everything();
-  const visible = (await sessionSql('SELECT COUNT(*) AS n FROM intervals')).rows[0].n;
+  const visible = (await sessionSql(`SELECT ${count}`)).rows[0].n;
   const c = window.m.session.useSession.getState().clock;
   return { rowsIn8s: last - first, held: last - visible, videoLagSec: c.wallClockMs ? +((Date.now() - c.wallClockMs) / 1000).toFixed(1) : null };
 });

@@ -512,6 +512,40 @@ describe('session database', () => {
       const second = new LiveCapture(store, META, BASE + 100_000);
       second.append([{ topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 22 } } }, receivedAt: BASE + 180_000 }]);
       expect(sql('SELECT lap_number FROM laps ORDER BY lap_number', BASE + 180_000).map((row) => row.lap_number)).toEqual([21, 22, 23]);
+      // Nothing was listening between the last message and the restart.
+      expect(store.coverage(META.sessionKey).gaps).toEqual([{ from: BASE + 90_000, to: BASE + 100_000 }]);
+    });
+
+    it('records no gap for a capture that starts fresh, or resumes straight away', () => {
+      new LiveCapture(store, META, BASE).append(snapshot(BASE));
+      new LiveCapture(store, META, BASE + 2_000);
+      expect(store.coverage(META.sessionKey).gaps).toEqual([]);
+    });
+
+    it('closes a gap the app quit during, on resuming', () => {
+      new LiveCapture(store, META, BASE).append(snapshot(BASE));
+      store.openGap(META.sessionKey, BASE + 10);
+      new LiveCapture(store, META, BASE + 60_000);
+      expect(store.coverage(META.sessionKey).gaps).toEqual([{ from: BASE + 10, to: BASE + 60_000 }]);
+    });
+
+    it('records live telemetry, shown at its date as from the archive, and rebuilds it on restart', () => {
+      const capture = new LiveCapture(store, META, BASE);
+      capture.append(snapshot(BASE));
+      expect(store.coverage(META.sessionKey).source).toBe('live');
+      expect(store.coverage(META.sessionKey).datasets.telemetry.state).toBe('absent');
+      capture.append([
+        { topic: 'CarData.z', data: { Entries: [{ Utc: utc(10_000), Cars: { '1': { Channels: { '0': 11000, '2': 300, '3': 7, '4': 100, '5': 0 } } } }] }, ts: utc(10_400), receivedAt: BASE + 10_500 },
+        { topic: 'Position.z', data: { Position: [{ Timestamp: utc(10_000), Entries: { '1': { Status: 'OnTrack', X: 100, Y: 200, Z: 3 } } }] }, ts: utc(10_400), receivedAt: BASE + 10_500 },
+      ]);
+      expect(sql('SELECT * FROM car_data', BASE + 9_999)).toEqual([]);
+      expect(sql('SELECT date, speed, n_gear FROM car_data', BASE + 10_000)).toEqual([{ date: BASE + 10_000, speed: 300, n_gear: 7 }]);
+      expect(sql('SELECT date, x, y FROM location', BASE + 10_500)).toEqual([{ date: BASE + 10_000, x: 100, y: 200 }]);
+      expect(store.coverage(META.sessionKey).datasets.telemetry.state).toBe('partial');
+      expect(store.isComplete(META.sessionKey, 'telemetry')).toBe(false);
+      new LiveCapture(store, META, BASE + 20_000);
+      expect(sql('SELECT speed FROM car_data', BASE + 20_000)).toEqual([{ speed: 300 }]);
+      expect(sql('SELECT x FROM location', BASE + 20_000)).toEqual([{ x: 100 }]);
     });
 
     it('records gaps while the connection is down', () => {
