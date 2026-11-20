@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Makes OMFV's own code-signing certificate for macOS, once, and gives it to the Release app action as two repo
 # secrets: MAC_CERT_P12 and MAC_CERT_PASSWORD. Every release signed with it has the same identity, so an installed Mac
-# app can update itself, and the keychain keeps trusting it across updates. See docs/RELEASE.md.
+# app can update itself. It has no Team ID, so the keychain still asks after each update. See docs/RELEASE.md.
 #
 # Usage: scripts/mac-signing-cert.sh <where to keep a copy, such as ~/omfv-signing.p12>
 #
