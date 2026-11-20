@@ -73,16 +73,16 @@ Each chart is a component that a tile can show. The agent picks the one that ans
 
 <table>
   <tr>
-    <td width="25%" valign="top"><img src="site/src/assets/shots/page/c1-battle.webp" alt="Hamilton's onboard over the list of fights: Verstappen and Hamilton for P1, 0.6 s apart."><br><b>Battle</b><br><sub>Two onboards from the closest fight on track.</sub></td>
-    <td width="25%" valign="top"><img src="site/src/assets/shots/page/c2-chase.webp" alt="Verstappen's onboard, with Hamilton 1.4 s ahead."><br><b>Chase</b><br><sub>One onboard, with the gap to the car ahead.</sub></td>
-    <td width="25%" valign="top"><img src="site/src/assets/shots/page/c4-gap.webp" alt="The gap from Verstappen to Hamilton over eight laps, closing to 0.5 s, in overtake range."><br><b>Gap</b><br><sub>Is the car behind closing, and close enough to attack?</sub></td>
-    <td width="25%" valign="top"><img src="site/src/assets/shots/page/c3-tower.webp" alt="The timing tower with Hamilton and Leclerc highlighted."><br><b>Timing tower</b><br><sub>The running order, with gaps and tyres.</sub></td>
+    <td width="25%" valign="top"><img height="110" src="site/src/assets/shots/page/c1-battle.webp" alt="Hamilton's onboard over the list of fights: Verstappen and Hamilton for P1, 0.6 s apart."><br><b>Battle</b><br><sub>Two onboards from the closest fight on track.</sub></td>
+    <td width="25%" valign="top"><img height="110" src="site/src/assets/shots/page/c2-chase.webp" alt="Verstappen's onboard, with Hamilton 1.4 s ahead."><br><b>Chase</b><br><sub>One onboard, with the gap to the car ahead.</sub></td>
+    <td width="25%" valign="top"><img height="110" src="site/src/assets/shots/page/c4-gap.webp" alt="The gap from Verstappen to Hamilton over eight laps, closing to 0.5 s, in overtake range."><br><b>Gap</b><br><sub>Is the car behind closing, and close enough to attack?</sub></td>
+    <td width="25%" valign="top"><img height="110" src="site/src/assets/shots/page/c3-tower.webp" alt="The timing tower with Hamilton and Leclerc highlighted."><br><b>Timing tower</b><br><sub>The running order, with gaps and tyres.</sub></td>
   </tr>
   <tr>
-    <td valign="top"><img src="site/src/assets/shots/page/c5-ribbon.webp" alt="Hamilton's lap of Suzuka, green on the throttle through the Esses and red where he brakes."><br><b>Speed ribbon</b><br><sub>One lap on the circuit: speed, throttle and brake.</sub></td>
-    <td valign="top"><img src="site/src/assets/shots/page/c7-deg.webp" alt="Tyre degradation for the whole field, with the top three on 31-lap softs highlighted."><br><b>Tyre deg</b><br><sub>How fast each set of tyres is falling off.</sub></td>
-    <td valign="top"><img src="site/src/assets/shots/page/c8-pit.webp" alt="If Hamilton pits now he rejoins P17, from P3, in traffic."><br><b>Pit window</b><br><sub>Where a driver would rejoin if they stopped now.</sub></td>
-    <td valign="top"><img src="site/src/assets/shots/page/c6-pedals.webp" alt="Hamilton's brake and throttle on each of his last six laps, lined up by turn."><br><b>Pedal barcode</b><br><sub>Brake and throttle, lap after lap.</sub></td>
+    <td valign="top"><img height="110" src="site/src/assets/shots/page/c5-ribbon.webp" alt="Hamilton's lap of Suzuka, green on the throttle through the Esses and red where he brakes."><br><b>Speed ribbon</b><br><sub>One lap on the circuit: speed, throttle and brake.</sub></td>
+    <td valign="top"><img height="110" src="site/src/assets/shots/page/c7-deg.webp" alt="Tyre degradation for the whole field, with the top three on 31-lap softs highlighted."><br><b>Tyre deg</b><br><sub>How fast each set of tyres is falling off.</sub></td>
+    <td valign="top"><img height="110" src="site/src/assets/shots/page/c8-pit.webp" alt="If Hamilton pits now he rejoins P17, from P3, in traffic."><br><b>Pit window</b><br><sub>Where a driver would rejoin if they stopped now.</sub></td>
+    <td valign="top"><img height="110" src="site/src/assets/shots/page/c6-pedals.webp" alt="Hamilton's brake and throttle on each of his last six laps, lined up by turn."><br><b>Pedal barcode</b><br><sub>Brake and throttle, lap after lap.</sub></td>
   </tr>
 </table>
 
@@ -103,7 +103,7 @@ It writes a [mod](docs/MODS.md) and runs it on the race you're watching as a dra
 puts everything back. Mods are plain folders, so you can also write or change one yourself. See
 [docs/BUILD_MODE.md](docs/BUILD_MODE.md).
 
-<p align="center"><img src="site/src/assets/shots/page/b1-draft.webp" width="820" alt="Build mode on the 2026 Mexico City Grand Prix, under the safety car: a new tile, framed in yellow and marked DRAFT, shows Russell's onboard in the pit lane with 'RUS pitting' over it."></p>
+![Build mode on the 2026 Mexico City Grand Prix, under the safety car: a new tile, framed in yellow and marked DRAFT, shows Russell's onboard in the pit lane with "RUS pitting" over it.](site/src/assets/shots/page/hero-build.webp)
 
 ## Requirements
 
