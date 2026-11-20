@@ -209,7 +209,7 @@ export const host = {
   data,
   /** Sign-ins, for the user's `/` commands. */
   account,
-  /** Which OMFV this is: its release, if it is one. */
+  /** Which OMFV this is, its release if it is one, and its updates. */
   app: appInfo,
   /** The link to the agent loop in the main process. */
   agent,

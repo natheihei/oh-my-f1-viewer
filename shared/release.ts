@@ -15,3 +15,23 @@ export interface AppVersion {
   /** Whether it runs as a packaged app, not from a checkout. */
   packaged: boolean;
 }
+
+/** Where releases are published. Each is tagged `app-<name>`. */
+export const RELEASES_URL = 'https://github.com/natheihei/oh-my-f1-viewer/releases';
+
+/** Orders release names, oldest first: negative when `a` came before `b`. */
+export function compareReleases(a: string, b: string): number {
+  const [aDay, aRun] = a.split('.').map(Number);
+  const [bDay, bRun] = b.split('.').map(Number);
+  return aDay - bDay || aRun - bRun;
+}
+
+/** What the updater has to say: a release ready to install, and what happened to the last one. See electron/updates.ts. */
+export interface UpdateState {
+  /** A newer release, downloaded, that installs when the app quits. */
+  ready: string | null;
+  /** The release this start updated to, once, on the first start after an update. */
+  updated: string | null;
+  /** A release that should have installed when the app last quit, and didn't. */
+  failed: string | null;
+}

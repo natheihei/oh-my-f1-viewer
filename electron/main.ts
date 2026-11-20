@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { setupIpc } from './ipc';
+import { startUpdates } from './updates';
 import { appSettings } from './settings';
 import { MOD_SCHEME, Mods } from './mods';
 import { copyOldProfile, OLD_NAME } from './oldProfile';
@@ -149,6 +150,8 @@ app
     } else {
       Menu.setApplicationMenu(null);
     }
+    // Before the window, so the renderer's first question has what the last update did.
+    startUpdates((state) => sendToRenderer('app:update', state));
     createMainWindow();
     // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
     void data.refreshSchedule().catch((e: Error) => console.warn('[timingdb] schedule:', e.message));
