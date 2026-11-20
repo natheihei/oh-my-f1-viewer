@@ -6,6 +6,7 @@
 import { forwardRef, useImperativeHandle, useRef, type KeyboardEvent } from 'react';
 import type { BuildOffer } from '../host';
 import { offerReason, stayInView, switchToBuild } from './buildMode';
+import { isPaletteKey } from './paletteKey';
 
 export interface BuildOfferPromptHandle {
   focus(): void;
@@ -21,8 +22,8 @@ export const BuildOfferPrompt = forwardRef<BuildOfferPromptHandle, { offer: Buil
   ];
 
   const onKeyDown = (e: KeyboardEvent, i: number) => {
-    // Ctrl+Shift+P still reaches the palette; nothing else leaves the prompt.
-    if (!(e.ctrlKey && e.shiftKey)) e.stopPropagation();
+    // The palette's shortcut still reaches the palette; nothing else leaves the prompt.
+    if (!isPaletteKey(e)) e.stopPropagation();
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
       buttons.current[(i + 1) % answers.length]?.focus();

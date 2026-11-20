@@ -196,6 +196,19 @@ await page.waitForTimeout(100);
 const openAfter = await page.locator('[data-testid=palette]').isVisible();
 check('Ctrl+Shift+P toggles the palette once a session is open', openBefore !== openAfter, `${openBefore} -> ${openAfter}`);
 
+// The mouse does the same: the chevron on the palette's top edge hides it, and the block it leaves brings it back.
+if (!(await page.locator('[data-testid=palette]').isVisible())) await page.keyboard.press('Control+Shift+P');
+await page.waitForTimeout(300);
+await page.locator('[data-testid=palette-hide]').click();
+await page.waitForTimeout(300);
+const block = page.locator('[data-testid=palette-block]');
+check('the chevron hides the palette and leaves a block', !(await page.locator('[data-testid=palette]').isVisible()) && (await block.isVisible()));
+check('the block names the shortcut', /Ctrl\+Shift\+P|⌘⇧P/.test((await block.textContent()) ?? ''));
+await page.screenshot({ path: path.join(outDir, 'palette-block.png') });
+await block.click();
+await page.waitForTimeout(300);
+check('clicking the block opens the palette, with the cursor in the input', await page.locator('[data-testid=palette]').isVisible() && (await page.evaluate(() => !!document.activeElement?.closest('[data-testid=palette]'))));
+
 await stop();
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);
