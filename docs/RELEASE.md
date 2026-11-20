@@ -91,8 +91,9 @@ The action signs and notarizes through electron-builder, which imports the certi
 identity with the Team ID in its name, and sends the app to Apple's notary service with an App Store Connect API key. It then
 checks the result: the signature verifies, the designated requirement names the Team ID, the hardened runtime is on, and the app
 in the `.dmg` has its ticket and is accepted by Gatekeeper as "Notarized Developer ID". A release refuses to run without the
-secrets below, since an ad-hoc build is a new identity that installed apps won't update to. A dry run or a pull request without
-them signs ad-hoc and warns, and so does `npm run dist` on your own Mac.
+secrets below, since an ad-hoc build is a new identity that installed apps won't update to. A dry run without them signs ad-hoc
+and warns. A pull request's build never gets them (see [Who can sign](#who-can-sign)) and always signs ad-hoc, and so does
+`npm run dist` on your own Mac.
 
 #### Set it up
 
@@ -106,25 +107,43 @@ Once, by the Apple Developer Program's account holder:
 3. **A notary key.** In [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api), **Users and Access →
    Integrations → App Store Connect API → Team Keys**, make a key with the **Developer** role. Download its `AuthKey_….p8`,
    which can only be downloaded once, and note its Key ID and the Issuer ID above the list.
-4. **The secrets**, from a checkout with `gh` signed in as someone who can set them:
+4. **The secrets**, in the `mac-signing` environment, not the repo's own secrets. From a checkout with `gh` signed in as the
+   repo's owner, or in **Settings → Environments → mac-signing → Add environment secret**:
 
 ```bash
-base64 -i ~/omfv-developer-id.p12 | gh secret set MAC_DEVELOPER_ID_P12
-gh secret set MAC_DEVELOPER_ID_PASSWORD             # asks for the .p12's password
-gh secret set APPLE_TEAM_ID --body ABCDE12345
-gh secret set APPLE_API_KEY_P8 < ~/AuthKey_ABC123DEFG.p8
-gh secret set APPLE_API_KEY_ID --body ABC123DEFG
-gh secret set APPLE_API_ISSUER --body 01234567-89ab-cdef-0123-456789abcdef
+base64 -i ~/omfv-developer-id.p12 | gh secret set MAC_DEVELOPER_ID_P12 --env mac-signing
+gh secret set MAC_DEVELOPER_ID_PASSWORD --env mac-signing    # asks for the .p12's password
+gh secret set APPLE_TEAM_ID --env mac-signing --body ABCDE12345
+gh secret set APPLE_API_KEY_P8 --env mac-signing < ~/AuthKey_ABC123DEFG.p8
+gh secret set APPLE_API_KEY_ID --env mac-signing --body ABC123DEFG
+gh secret set APPLE_API_ISSUER --env mac-signing --body 01234567-89ab-cdef-0123-456789abcdef
 ```
 
 Keep the `.p12` and the `.p8` somewhere safe, like a password manager. A Developer ID certificate lasts five years; a new one
 from the same team keeps the Team ID, so installed apps still update.
 
-Then check it with a dry run, which signs and notarizes as a release would:
+Then check it with a dry run, which signs and notarizes as a release would. Its Mac build waits for you to approve it, as
+below:
 
 ```bash
 gh workflow run app-release.yml -f sha=main -f dry_run=true
 ```
+
+#### Who can sign
+
+A Developer ID signs as OMFV's team, and Apple vouches for whatever it signs, so the certificate and the notary key are kept
+from everything but a release:
+
+- **The `mac-signing` environment** holds them. Only a run of the action from `main` can use it, and only the Mac build of a
+  release or dry run asks for it. That build then waits, with **Review deployments** on the run's page, until the owner
+  approves it. A pull request's build doesn't ask for it, so no pull request, from a fork or not, ever has the secrets.
+- **The ruleset on `main`** ("Protect main") stops `main` from being deleted or force-pushed, and has everything reach it
+  through a pull request. The owner can bypass it.
+
+Anyone given write access can still push a branch and run the action from it, but not from `main` without a pull request, and
+not with the secrets without the owner's approval. Before giving someone write access, raise the ruleset's required approvals
+from 0 to 1, so their pull requests need the owner's review too, and check each **Review deployments** request before approving
+it: approve only runs you started.
 
 #### Moving installed Macs over
 
@@ -137,7 +156,7 @@ so in its notes:
 gh workflow run app-release.yml -f sha=main -f notes='**On a Mac with an earlier release, install this one by hand from its .dmg.** It is the first signed with a Developer ID, and earlier releases cannot update to it themselves.'
 ```
 
-The old secrets, `MAC_CERT_P12` and `MAC_CERT_PASSWORD`, aren't read any more:
+The old repo secrets, `MAC_CERT_P12` and `MAC_CERT_PASSWORD`, aren't read any more:
 
 ```bash
 gh secret delete MAC_CERT_P12

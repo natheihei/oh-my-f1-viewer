@@ -96,6 +96,9 @@ jobs:
           - platform: mac
             runner: macos-latest # Apple silicon
     runs-on: ${{ matrix.runner }}
+    # The Developer ID and the notary key are secrets of the mac-signing environment, which only a run from main can
+    # use, and only once the owner approves it: see docs/RELEASE.md. A pull request's build doesn't ask, and signs ad-hoc.
+    environment: ${{ matrix.platform == 'mac' && github.event_name == 'workflow_dispatch' && 'mac-signing' || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
