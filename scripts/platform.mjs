@@ -32,18 +32,19 @@ export function appEnv(extra = {}) {
 /**
  * Starts Electron with `args` and `env` added to the environment. On Hyprland it opens on workspace 3, floating,
  * `width` by `height` and without focus. Elsewhere it's a detached process, sized by the app as usual. Either way the
- * app outlives this call: checks stop it by its user data dir. `log`, when given, gets the app's output.
+ * app outlives this call: checks stop it by its user data dir. `log`, when given, gets the app's output. `bin` is
+ * the executable: node_modules' Electron, or a packaged app's own.
  */
-export function startElectron(args, { env = {}, width = 1600, height = 900, log = null } = {}) {
+export function startElectron(args, { env = {}, width = 1600, height = 900, log = null, bin = ELECTRON_BIN } = {}) {
   if (ON_HYPRLAND) {
     const vars = Object.entries(env).map(([k, v]) => `${k}=${v}`).join(' ');
     // `exec` keeps electron as the spawned pid that Hyprland's rules match.
-    const command = `sh -c 'exec env -u CHROME_DESKTOP ${vars} ${[ELECTRON_BIN, ...args].join(' ')}${log ? ` >>${log} 2>&1` : ''}'`;
+    const command = `sh -c 'exec env -u CHROME_DESKTOP ${vars} ${[bin, ...args].join(' ')}${log ? ` >>${log} 2>&1` : ''}'`;
     execFileSync('hyprctl', ['eval', `hl.exec_cmd(${JSON.stringify(command)}, { workspace = "3 silent", float = true, size = "${width} ${height}", no_initial_focus = true })`]);
     return null;
   }
   const stdio = log ? ['ignore', openSync(log, 'a'), openSync(log, 'a')] : 'ignore';
-  const child = spawn(ELECTRON_BIN, args, { env: appEnv(env), detached: true, stdio });
+  const child = spawn(bin, args, { env: appEnv(env), detached: true, stdio });
   child.unref();
   return child;
 }
