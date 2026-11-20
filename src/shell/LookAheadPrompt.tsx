@@ -5,6 +5,7 @@
  */
 import { forwardRef, useImperativeHandle, useRef, type KeyboardEvent } from 'react';
 import { lookAhead, type LookAheadAnswer } from './lookAhead';
+import { isPaletteKey } from './paletteKey';
 
 export interface LookAheadPromptHandle {
   focus(): void;
@@ -22,8 +23,8 @@ export const LookAheadPrompt = forwardRef<LookAheadPromptHandle>(function LookAh
   useImperativeHandle(ref, () => ({ focus: () => buttons.current[0]?.focus() }), []);
 
   const onKeyDown = (e: KeyboardEvent, i: number) => {
-    // Ctrl+Shift+P still reaches the palette; nothing else leaves the prompt.
-    if (!(e.ctrlKey && e.shiftKey)) e.stopPropagation();
+    // The palette's shortcut still reaches the palette; nothing else leaves the prompt.
+    if (!isPaletteKey(e)) e.stopPropagation();
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
       const next = (i + (e.key === 'ArrowRight' ? 1 : -1) + ANSWERS.length) % ANSWERS.length;

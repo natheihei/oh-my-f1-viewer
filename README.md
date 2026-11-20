@@ -44,7 +44,7 @@ that, when a sign-in needs doing again, the palette says so with a button that f
 
 | | |
 |---|---|
-| `Ctrl+Shift+P` | Show or hide the palette, with its history |
+| `Ctrl+Shift+P` | Show or hide the palette, with its history. `Cmd+Shift+P` works too. The chevron on its top edge hides it, and the `> …` block it leaves brings it back |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
