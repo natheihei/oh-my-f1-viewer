@@ -118,7 +118,7 @@ try {
 
   // The first check is a minute after start, then the download.
   const ready = await until(`${NEW} never became ready`, async () => (await lines(page)).find((l) => l.includes(`OMFV ${NEW} is ready`)), 240_000).catch((e) => e.message);
-  check('the palette says the newer release is ready', ready === `OMFV ${NEW} is ready. It installs when you quit.`, ready);
+  check('the palette says the newer release is ready', ready === `OMFV ${NEW} is ready. It automatically installs next time you start oh-my-f1-viewer.`, ready);
   await page.screenshot({ path: path.join(outDir, 'ready.png') });
 
   // Quit as a viewer does: closing the window.

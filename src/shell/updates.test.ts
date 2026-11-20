@@ -37,7 +37,7 @@ describe('watchUpdates', () => {
   it("says, in red, which release didn't install", async () => {
     fakeMain({ ...NOTHING, failed: '20261121.1' });
     await watchUpdates().reported;
-    expect(lines()).toEqual(["error: OMFV 20261121.1 didn't install when you quit. It tries again next time."]);
+    expect(lines()).toEqual(["error: OMFV 20261121.1 didn't install. It tries again next time you start oh-my-f1-viewer."]);
   });
 
   it('says once that a release is ready, and again for a newer one', async () => {
@@ -48,7 +48,7 @@ describe('watchUpdates', () => {
     listener!({ ...NOTHING, ready: '20261121.1' });
     listener!({ ...NOTHING, ready: '20261121.1' });
     listener!({ ...NOTHING, ready: '20261121.2' });
-    expect(lines()).toEqual(['system: OMFV 20261121.1 is ready. It installs when you quit.', 'system: OMFV 20261121.2 is ready. It installs when you quit.']);
+    expect(lines()).toEqual(['system: OMFV 20261121.1 is ready. It automatically installs next time you start oh-my-f1-viewer.', 'system: OMFV 20261121.2 is ready. It automatically installs next time you start oh-my-f1-viewer.']);
     off();
     expect(listener).toBeNull();
   });
