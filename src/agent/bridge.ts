@@ -2,7 +2,7 @@
 import type { AgentHandoff, AgentMode, AgentScope, AgentToolCall, AgentToolDefinition, SessionInfo } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
 import type { SessionDataView } from '../../shared/sessionData';
-import { FIRST_SEASON, host, labelText, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
+import { FIRST_SEASON, host, labelText, misfit, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
 import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
 /**
@@ -41,6 +41,14 @@ function describeAudio(label: string | null, volume: number): string {
  * The state block sent with each user message. Contains nothing about how the race goes: the roster is
  * who is entered, not where they are. `note` is what the user did with the last turn's suggestions.
  */
+/** Playback in a word. Until a stream is ready, the clock hasn't moved and would read as paused. */
+function describePlayback(live: Live): string {
+  const { clock, streams } = live;
+  const shown = Object.values(streams);
+  if (shown.length > 0 && !shown.some((s) => s.status === 'ready')) return 'starting';
+  return clock.playing ? 'playing' : 'paused';
+}
+
 export function describeAppState(note: string | null = null, build: string | null = null): string {
   const live = read();
   const { session, volume, clock, streams, countdown, layout, sessionData } = live;
@@ -58,7 +66,7 @@ export function describeAppState(note: string | null = null, build: string | nul
   );
   lines.push(
     `session: ${session.title} (${session.status})`,
-    `playback: ${clock.playing ? 'playing' : 'paused'} at ${formatClock(clock.timeSec)}`,
+    `playback: ${describePlayback(live)} at ${formatClock(clock.timeSec)}`,
     `on screen: ${describeLayout(live)}`,
     `audio: ${describeAudio(heardLabel(live), volume)}`,
   );
@@ -69,6 +77,10 @@ export function describeAppState(note: string | null = null, build: string | nul
       .map((d) => `${d.name_acronym} ${d.driver_number}`)
       .join(', ');
     if (roster) lines.push(`drivers: ${roster}`);
+  } else if (sessionData.state === 'waiting') {
+    lines.push(`timing data: waiting, so nothing at the frame on screen can be read. ${sessionData.reason}: ${sessionData.detail}`);
+  } else if (sessionData.state === 'failed' || sessionData.state === 'unsupported') {
+    lines.push(`timing data: ${sessionData.state}. ${sessionData.reason}`);
   } else {
     lines.push(`timing data: ${sessionData.state}`);
   }
@@ -106,7 +118,9 @@ function scopeOf(session: SessionInfo | null): AgentScope {
 function referenceFor(mode: AgentMode): string {
   const { events, sessionData } = read();
   if (mode === 'pick') return describeEvents(events);
-  return [describeEvents(events), describeComponents(offeredComponents()), describeTables(sessionData)].filter(Boolean).join('\n\n');
+  return [describeEvents(events), [describeComponents(offeredComponents()), describeUnoffered()].filter(Boolean).join('\n'), describeTables(sessionData)]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 /**
@@ -122,7 +136,9 @@ function handoff(): AgentHandoff | undefined {
   turnMode = 'view';
   turnScope = scope;
   shownTools = namesOf(tools);
-  return { mode: 'view', scope, appState: describeAppState(), reference: referenceFor('view'), tools };
+  // The new conversation sees only an open session: without this, it tells the user it was already open.
+  const appState = `${describeAppState()}\njust opened: this message's own earlier step opened the session, a moment ago`;
+  return { mode: 'view', scope, appState, reference: referenceFor('view'), tools };
 }
 
 const namesOf = (tools: AgentToolDefinition[]): string => tools.map((t) => t.name).join(',');
@@ -206,15 +222,29 @@ export function describeComponents(components: ComponentInfo[], { origins = fals
   return lines.join('\n');
 }
 
+/**
+ * The components left out of the viewing agent's list because they don't fit the open session, by name and why, so
+ * asked for one it can say why rather than that it can't. Not one that declares no sessions, which isn't ready for any.
+ */
+export function describeUnoffered(): string {
+  const { components, session } = read();
+  const out = components.flatMap((c) => {
+    const why = c.name === 'video' || c.sessions?.length === 0 ? null : misfit(c, session);
+    return why ? [`${c.name} (${c.title}) ${why}`] : [];
+  });
+  return out.length ? `Not offered in this session, so not in suggest_tiles: ${out.join('; ')}. When the user asks for one, tell them why.` : '';
+}
+
 /** Columns said once for every table that has them, instead of on each line. */
 const EVERY_TABLE = ['session_key', 'meeting_key'];
 
 /**
  * Every table query_session can read, for the system prompt: one line each, with its columns as the
- * database reports them. Nothing until the session's data is ready, since only then can it be queried.
+ * database reports them. Nothing until the session's data is there to query: while it's waiting for the video,
+ * the whole session still can be.
  */
 export function describeTables(data: SessionDataView): string {
-  if (data.state !== 'ready' || data.tables.length === 0) return '';
+  if ((data.state !== 'ready' && data.state !== 'waiting') || data.tables.length === 0) return '';
   const shared = EVERY_TABLE.filter((column) => data.tables.every((t) => t.columns.includes(column)));
   const lines = [`Tables for query_session. Each line: name: columns.${shared.length ? ` Every table also has ${shared.join(' and ')}.` : ''}`];
   for (const t of data.tables) {

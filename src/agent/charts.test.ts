@@ -284,6 +284,8 @@ describe('suggesting charts', () => {
       await askAgent('charts?');
       expect(offered()).toEqual(['test_field', 'test_pit', 'test_weather']);
       expect(enumOf()).toEqual(['test_pit', 'test_field', 'test_weather']);
+      // It's told what it can't suggest here, and why, so it can say so when asked.
+      expect(send.mock.lastCall![3]).toMatch(/Not offered in this session, so not in suggest_tiles: .*test_gap \(Test gap\) is for race, sprint sessions, and this is qualifying/);
 
       // While a race is live, the telemetry charts are offered too: the live feed has telemetry.
       useSession.setState({ session: { ...race, status: 'live' } });

@@ -15,10 +15,12 @@ import {
   type SqlRows,
 } from '../../shared/sessionData';
 import { refreshCircuit } from './circuit';
+import { archiveMissing } from './archive';
 import type { FeedFiles, LiveRecord } from './ingest';
 import { LIVE_FEEDS, TELEMETRY_FEEDS, TIMING_FEEDS, type SessionMeta } from './processors';
 import { parseResults, parseStartingGrid, resultPages } from './results';
 import { fromSeasonIndex, fromUpcoming, mergeSchedule } from './schedule';
+import { anchorComplete, liveLeadMs, startedAt, type SyncAnchor } from './sync';
 import type { WorkerOperations } from './worker';
 
 /** What the database needs from the rest of the main process. */
@@ -27,8 +29,8 @@ export interface TimingDbDeps {
   /** A feed's text, or null when the archive doesn't have it. Throws if it couldn't be fetched. */
   fetchFeed(sessionPath: string, feed: string): Promise<string | null>;
   fetchSeasonIndex(year: number): Promise<unknown>;
-  /** The video second of lights out, from F1 TV's sync data, or null when there's none. */
-  fetchSessionStart(meetingKey: number, sessionKey: number): Promise<number | null>;
+  /** MultiViewer's anchor between the session and its video, or null when it has none yet. */
+  fetchSync(meetingKey: number, sessionKey: number): Promise<SyncAnchor | null>;
   /** Connects to F1's live feed. Problems arrive through `onStatus`. */
   connectLive(feeds: readonly string[], onRecord: (record: LiveRecord) => void, onStatus: (status: string) => void): void;
   disconnectLive(): void;
@@ -44,6 +46,10 @@ export interface TimingDbDeps {
 type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void };
 
 const LIVE_FLUSH_MS = 250;
+/** How often to ask MultiViewer again while a session's anchor isn't published. */
+const ANCHOR_RETRY_MS = 5 * 60_000;
+/** How often to look for a replay's archive again while F1 hasn't published it. */
+const ARCHIVE_RETRY_MS = 5 * 60_000;
 
 export class TimingDb {
   private worker: Worker | null = null;
@@ -51,8 +57,15 @@ export class TimingDb {
   private nextId = 0;
   /** Bumped per opened session, so work for one that's been closed stops. */
   private generation = 0;
-  /** The open session's video second of lights out. */
-  private sessionStartSec: number | null = null;
+  /** The open session's anchor to its video, from MultiViewer. */
+  private anchor: SyncAnchor | null = null;
+  private anchorTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Looks for the open replay's archive again, while F1 hasn't published it. */
+  private archiveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When the live session's clock first started, by the feed. */
+  private liveStartedUtc: number | null = null;
+  /** The session the last `ready` status was for: a newly published anchor is only sent after it. */
+  private readyKey: number | null = null;
   private live: { meta: SessionMeta | null; buffer: LiveRecord[]; timer: ReturnType<typeof setInterval> | null; query: TimingQuery; telemetry: boolean } | null = null;
   /** The open session's circuit: fetched once its key is known. */
   private circuit: { generation: number; query: TimingQuery; year: number; started: boolean } | null = null;
@@ -135,18 +148,21 @@ export class TimingDb {
 
   private async status(sessionKey: number, state: DataStatus['state'], reason: string | null = null): Promise<void> {
     const { coverage, clock, tables } = await this.call('status', sessionKey);
-    this.deps.send('data:status', { sessionKey, state, reason, coverage, clock, sessionStartSec: this.sessionStartSec, tables } satisfies DataStatus);
+    if (state === 'ready') this.readyKey = sessionKey;
+    const sessionStartSec = this.anchor?.sessionStartSec ?? null;
+    const lead = this.live ? liveLeadMs(this.anchor?.sessionStartPdtMs ?? null, this.liveStartedUtc) : null;
+    this.deps.send('data:status', { sessionKey, state, reason, coverage, clock, sessionStartSec, liveLeadMs: lead, tables } satisfies DataStatus);
   }
 
   private refuse(state: 'unsupported' | 'failed', reason: string): void {
-    this.deps.send('data:status', { sessionKey: null, state, reason, coverage: null, clock: null, sessionStartSec: null, tables: null } satisfies DataStatus);
+    this.deps.send('data:status', { sessionKey: null, state, reason, coverage: null, clock: null, sessionStartSec: null, liveLeadMs: null, tables: null } satisfies DataStatus);
   }
 
   /** Called when a session opens. Replies at once, and reports progress through `data:status`. */
   open(query: TimingQuery, live: boolean): void {
     const generation = ++this.generation;
     this.endLive();
-    this.sessionStartSec = null;
+    this.resetAnchor();
     const year = query.year ?? new Date().getUTCFullYear();
     this.circuit = { generation, query, year, started: false };
     this.sendCircuit(query, { state: 'loading' });
@@ -165,6 +181,37 @@ export class TimingDb {
     this.generation++;
     this.circuit = null;
     this.endLive();
+    this.resetAnchor();
+  }
+
+  // --- Lining up with the video ---
+
+  private resetAnchor(): void {
+    if (this.anchorTimer) clearTimeout(this.anchorTimer);
+    this.anchorTimer = null;
+    if (this.archiveTimer) clearTimeout(this.archiveTimer);
+    this.archiveTimer = null;
+    this.anchor = null;
+    this.liveStartedUtc = null;
+    this.readyKey = null;
+  }
+
+  /**
+   * Asks MultiViewer for the session's anchor, and again every few minutes until it has what this needs: it
+   * publishes some time after a session. Sends the status again when the anchor changes after `ready`.
+   */
+  private async fetchAnchor(meta: SessionMeta, generation: number, live: boolean): Promise<void> {
+    if (this.anchorTimer) clearTimeout(this.anchorTimer);
+    this.anchorTimer = null;
+    const anchor = await this.deps.fetchSync(meta.meetingKey, meta.sessionKey).catch(() => null);
+    if (generation !== this.generation) return;
+    if (anchor && JSON.stringify(anchor) !== JSON.stringify(this.anchor)) {
+      this.anchor = anchor;
+      if (this.readyKey === meta.sessionKey) await this.status(meta.sessionKey, 'ready');
+    }
+    if (generation === this.generation && !anchorComplete(this.anchor, live)) {
+      this.anchorTimer = setTimeout(() => void this.fetchAnchor(meta, generation, live), ANCHOR_RETRY_MS);
+    }
   }
 
   // --- The circuit ---
@@ -198,8 +245,18 @@ export class TimingDb {
   private async openArchive(query: TimingQuery, year: number, generation: number): Promise<void> {
     const found = await this.deps.resolveSession(year, query);
     if (generation !== this.generation) return;
-    if (!found) {
-      this.refuse('failed', "This session wasn't found in the timing archive.");
+    const missing = archiveMissing(found, Date.now());
+    if (missing || !found) {
+      this.refuse('failed', missing?.reason ?? "This session wasn't found in the timing archive.");
+      if (missing?.retry) {
+        this.archiveTimer = setTimeout(() => {
+          this.archiveTimer = null;
+          if (generation !== this.generation) return;
+          this.openArchive(query, year, generation).catch((e: Error) => {
+            if (generation === this.generation) this.refuse('failed', e.message);
+          });
+        }, ARCHIVE_RETRY_MS);
+      }
       return;
     }
     const meta: SessionMeta = { meetingKey: found.meetingKey, sessionKey: found.sessionKey, isRace: found.type ? found.type.toLowerCase() === 'race' : null };
@@ -218,7 +275,7 @@ export class TimingDb {
       this.refuse('failed', coverage.datasets.timing.reason ?? 'The session data could not be loaded.');
       return;
     }
-    this.sessionStartSec = await this.deps.fetchSessionStart(meta.meetingKey, meta.sessionKey).catch(() => null);
+    await this.fetchAnchor(meta, generation, false);
     if (stale()) return;
     await this.status(meta.sessionKey, 'ready');
 
@@ -276,7 +333,7 @@ export class TimingDb {
     const session = { meta: null as SessionMeta | null, buffer: [] as LiveRecord[], timer: null as ReturnType<typeof setInterval> | null, query, telemetry: false };
     this.live = session;
     session.timer = setInterval(() => void this.flushLive(), LIVE_FLUSH_MS);
-    this.deps.send('data:status', { sessionKey: null, state: 'loading', reason: null, coverage: null, clock: null, sessionStartSec: null, tables: null } satisfies DataStatus);
+    this.deps.send('data:status', { sessionKey: null, state: 'loading', reason: null, coverage: null, clock: null, sessionStartSec: null, liveLeadMs: null, tables: null } satisfies DataStatus);
     this.deps.connectLive(LIVE_FEEDS, (record) => this.liveRecord(record), (status) => this.liveConnection(status));
     const found = await this.deps.resolveSession(year, query).catch(() => null);
     if (this.live !== session) return;
@@ -294,6 +351,7 @@ export class TimingDb {
     session.meta = meta;
     await this.call('liveBegin', meta);
     await this.status(meta.sessionKey, 'ready');
+    if (this.live === session) void this.fetchAnchor(meta, this.generation, true);
   }
 
   /** A message from the live feed. */
@@ -301,6 +359,10 @@ export class TimingDb {
     const session = this.live;
     if (!session) return;
     session.buffer.push(record);
+    if (record.topic === 'SessionData' && this.liveStartedUtc === null) {
+      this.liveStartedUtc = startedAt(record.data);
+      if (this.liveStartedUtc !== null && this.anchor?.sessionStartPdtMs != null && session.meta) void this.status(session.meta.sessionKey, 'ready');
+    }
     // The catalog doesn't always know a live session's keys, nor the schedule its circuit, but the feed's own details do.
     if (record.topic === 'SessionInfo') {
       const circuitKey = Number((record.data as { Meeting?: { Circuit?: { Key?: unknown } } })?.Meeting?.Circuit?.Key);

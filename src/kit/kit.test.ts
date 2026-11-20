@@ -4,7 +4,7 @@ import { compactSmall } from './ChartCanvas';
 import { spreadLabels } from './labels';
 import { axisLaps, isCleanLap, median, neutralOf, tyreAgeNow } from './laps';
 import { linear, niceCeil, niceStep, ticks } from './scale';
-import { circuitMessage, dataMessage, viewMessage } from './status';
+import { circuitMessage, dataDetail, dataMessage, viewMessage } from './status';
 import { cachedProjector, fitOutline, outlineLength, projector, rotate } from './track';
 import { compoundLetter, formatGap, formatLapTime, gapSeconds, parseGap, stintAge } from './values';
 
@@ -118,6 +118,15 @@ describe('frame messages', () => {
     expect(dataMessage(datasets('failed', 'The archive refused the request'), ['timing'])).toBe('The archive refused the request');
     expect(dataMessage(datasets('absent'), ['timing'])).toBe('No timing data for this session');
     expect(dataMessage(datasets('absent'), ['telemetry'])).toBe('No telemetry data for this session');
+  });
+
+  it("says when the data isn't lined up with the video yet, with the why on hover", () => {
+    const waiting = { state: 'waiting', reason: 'Not lined up with the video yet', detail: "MultiViewer hasn't published…" } as unknown as SessionDataView;
+    expect(dataMessage(waiting, ['timing'])).toBe('Not lined up with the video yet');
+    // Even a chart that needs nothing in particular waits: what it would read isn't placed.
+    expect(dataMessage(waiting, [])).toBe('Not lined up with the video yet');
+    expect(dataDetail(waiting)).toBe("MultiViewer hasn't published…");
+    expect(dataDetail(datasets('complete'))).toBeNull();
   });
 
   it('lets a chart draw when what it needs is there, even in part', () => {
