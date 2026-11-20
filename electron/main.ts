@@ -166,6 +166,6 @@ app
     if (gotLock && BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+// Closing the window quits, on macOS too. OMFV is one window, so staying in the dock would leave nothing to use, and an update
+// installs on quit: people who close the window and never press Cmd+Q would never get it.
+app.on('window-all-closed', () => app.quit());

@@ -59,8 +59,8 @@ OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names 
 didn't install on quit is named in red on the next start, and tried again.
 A failed check or download is only logged.
 
-On macOS, closing the window doesn't quit: the app stays in the dock, as Mac apps do, and the update waits for Cmd+Q, logging out
-or restarting. The next start then asks for the keychain password: see [Sign the Mac build](#sign-the-mac-build).
+Closing the window quits, on macOS too, where Mac apps usually stay in the dock: an update waits for the app to quit. On macOS the
+next start then asks for the keychain password: see [Sign the Mac build](#sign-the-mac-build).
 
 - **The feed.** `publish` in `electron-builder.yml` names `releases/latest/download` on this repo, so the app reads
   `latest-linux.yml` or `latest-mac.yml` from the release marked latest, and electron-builder writes `app-update.yml` into the
