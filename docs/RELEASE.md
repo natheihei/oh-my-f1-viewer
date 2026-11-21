@@ -48,7 +48,7 @@ its tag, so nobody downloads it.
 The AppImage and the Mac app update themselves from then on: see [Updates](#updates). The pacman package doesn't yet: a newer
 release installs over it the same way ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181) moves it to the AUR).
 
-While the repo is private, downloading a release needs access to the repo, and nothing can update itself.
+The site's [download page](https://oh-my-f1-viewer.yueyao.run/download) links each of these from the release marked latest.
 
 ### Updates
 

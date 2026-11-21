@@ -20,12 +20,13 @@ It runs on Cloudflare Workers: `main` builds staging (only the owner can open it
 
 | Path | What's there |
 | --- | --- |
-| `src/pages/` | One file per route: `index.astro`, `404.astro` |
+| `src/pages/` | One file per route: `index.astro`, `download.astro`, `404.astro` |
 | `src/layouts/Base.astro` | `<head>`, meta and Open Graph tags, global CSS |
-| `src/components/` | Page sections, top to bottom: `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
+| `src/components/` | Page sections, top to bottom: `Header`, `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
 | `src/components/HeroReel.astro`, `Palette.astro` | The hero's reel, and the app's palette a reel types prompts into |
 | `src/scripts/reel.ts` | What the hero and `Moment` share to tell a story in frames: the clock with its pause button, typing into the palette, and switching frames |
-| `src/site.ts` | Where "Join the beta" goes, and team colours |
+| `src/site.ts` | Where Download and "Star on GitHub" go, the platforms a release builds for, and team colours |
+| `src/release.ts` | The latest app release for `/download`: read from GitHub as the site builds, and again in the browser, since the app is released apart from the site |
 | `src/assets/` | Images Astro optimises (import them) |
 | `src/assets/shots/page/` | The crops the page uses, from the raw shots on the `assets/landing-shots` branch (see `shots/hero/SHOTS.md`) |
 | `src/styles/global.css` | Tailwind import and `@theme` tokens |
