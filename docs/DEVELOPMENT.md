@@ -99,6 +99,13 @@ tile is arranged by hand, and after that a new one goes into the biggest gap:
 node scripts/auto-layout-add-check.mjs /tmp/auto-layout-add-check
 ```
 
+This one needs no sign-in and opens no session. It checks that a command named in a palette line runs when clicked: skipping
+onboarding, then clicking `/reset-onboarding` brings it back, and `/settings-usage` in its error runs with the word after it, or alone:
+
+```bash
+node scripts/command-click-check.mjs /tmp/command-click-check
+```
+
 This one runs [build mode](BUILD_MODE.md) with the real agent: it needs both sign-ins, and takes about a quarter of an
 hour:
 
