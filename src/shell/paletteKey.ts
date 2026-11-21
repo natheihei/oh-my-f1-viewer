@@ -36,7 +36,8 @@ export function isMacPlatform(platform: string): boolean {
   return /^Mac/.test(platform);
 }
 
-const MAC = typeof navigator !== 'undefined' && isMacPlatform(navigator.platform);
+/** Whether this machine is a Mac, which writes its keys its own way. */
+export const MAC = typeof navigator !== 'undefined' && isMacPlatform(navigator.platform);
 
 const PUNCTUATION: Record<string, string> = {
   Backquote: '`',

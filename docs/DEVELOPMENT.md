@@ -7,7 +7,7 @@ it from source.
 
 | | |
 |---|---|
-| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
+| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Folded, it shows a tip every 20 seconds in place of its placeholder, from the list in `src/shell/tips.ts`. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
@@ -16,7 +16,7 @@ it from source.
 | `/version` | Show which release this is |
 | `/whats-new` | Open this release's notes in the browser |
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
-| Drag a tile | Move it; drop it on another tile to swap them |
+| Drag a tile's title bar | Move it; drop it on another tile to swap them. With `Alt` held (`Option` on a Mac), drag it by any part |
 | Drag a tile's edge | Resize it |
 | `/auto-layout` | Re-tile the grid, undoing moves and resizes |
 

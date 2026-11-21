@@ -20,6 +20,7 @@ import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './men
 import { promptText, type PromptPart } from './mentions';
 import { AUTO_HIDE_MS, palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
 import {
+  MAC,
   bindingLabel,
   bindingOf,
   DEFAULT_PALETTE_KEY,
@@ -33,6 +34,7 @@ import {
   type PaletteBinding,
 } from './paletteKey';
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
+import { nextTip, TIP_MS, tipParts, type Tip } from './tips';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
 
@@ -629,12 +631,77 @@ export function CommandPalette() {
  */
 function FoldedPalette({ busy }: { busy: boolean }) {
   const keyLabel = usePaletteKeyLabel();
+  // Each fold starts on the placeholder, then a tip takes its place every so often.
+  const [tip, setTip] = useState<Tip | null>(null);
+  // Under the pointer or with focus the line holds, so it can be read to the end.
+  const held = useRef(false);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!held.current && !usePalette.getState().busy) setTip(nextTip());
+    }, TIP_MS);
+    return () => clearInterval(timer);
+  }, []);
+  // While the agent works the row says only what it's for.
+  const shown = busy ? null : tip;
+  // The line before this one, drawn under it while one fades into the other.
+  const [lines, setLines] = useState<{ now: Tip | null; before?: Tip | null }>({ now: null });
+  if (lines.now !== shown) setLines({ now: shown, before: lines.now });
+  const hold = (on: boolean) => () => {
+    held.current = on;
+  };
   return (
-    <button type="button" className="palette palette-folded" data-testid="palette-folded" aria-label={`Show the palette (${keyLabel})`} onClick={palette.show}>
+    <button
+      type="button"
+      className="palette palette-folded"
+      data-testid="palette-folded"
+      aria-label={`Show the palette (${keyLabel})`}
+      onClick={palette.show}
+      onMouseEnter={hold(true)}
+      onMouseLeave={hold(false)}
+      onFocus={hold(true)}
+      onBlur={hold(false)}
+    >
       <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
-      <span className="palette-folded-text">ask for anything on screen</span>
+      <span className="palette-folded-text">
+        {lines.before !== undefined ? (
+          <span key={`out:${lines.before?.id ?? ''}`} className="palette-folded-line palette-folded-line-out">
+            <FoldedLine tip={lines.before} keyLabel={keyLabel} />
+          </span>
+        ) : null}
+        <span
+          key={lines.now?.id ?? ''}
+          className={`palette-folded-line ${lines.before !== undefined ? 'palette-folded-line-in' : ''}`}
+          data-testid="palette-folded-line"
+          data-tip={lines.now?.id}
+        >
+          <FoldedLine tip={lines.now} keyLabel={keyLabel} />
+        </span>
+      </span>
       <kbd className="palette-key">{keyLabel}</kbd>
     </button>
+  );
+}
+
+/** What the folded palette says: a tip, or what it's for. */
+function FoldedLine({ tip, keyLabel }: { tip: Tip | null; keyLabel: string }) {
+  if (!tip) return <>ask for anything on screen</>;
+  return (
+    <>
+      <span className="palette-tip-label">tip</span>
+      {tipParts(tip.text, { palette: keyLabel, mac: MAC }).map((part, i) =>
+        typeof part === 'string' ? (
+          part
+        ) : 'key' in part ? (
+          <kbd key={i} className="palette-key palette-tip-key">
+            {part.key}
+          </kbd>
+        ) : (
+          <span key={i} className="palette-tip-command">
+            {part.command}
+          </span>
+        ),
+      )}
+    </>
   );
 }
 
