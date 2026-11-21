@@ -183,6 +183,12 @@
   pointer-events: auto;
 }
 
+/* While Alt is held, the whole tile is the grip. */
+.grid-surface.grid-alt-drag .grid-stack-item-content {
+  cursor: move;
+  pointer-events: auto;
+}
+
 /* Where a tile is dragged from. */
 .tile-grip {
   @apply absolute inset-x-0 top-0 cursor-move;

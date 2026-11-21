@@ -4,7 +4,8 @@
  * components live in the Stage underneath.
  *
  * Only each tile's title bar and resize handles take the mouse. Everything else passes through to
- * the component underneath, so it can handle its own clicks.
+ * the component underneath, so it can handle its own clicks. While Alt is held the whole tile takes it
+ * instead, and drags as its title bar does.
  */
 import { GridStack, type GridStackNode, type GridStackOptions } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
@@ -13,6 +14,8 @@ import { GRID_COLUMNS, GRID_ROWS, type ComponentSpec, type Rect, type Tile } fro
 import { layout, useLayout } from './store';
 
 const GRIP = 'tile-grip';
+/** On the grid while Alt alone is held: see styles.css. */
+const ALT_DRAG = 'grid-alt-drag';
 
 /**
  * What a tile's header says about it besides its label, in fixed slots on the right: which tile
@@ -147,7 +150,7 @@ export function GridSurface({
 
     const cellHeight = () => host.clientHeight / GRID_ROWS;
     const created = GridStack.init(
-      { ...baseOptions, column: GRID_COLUMNS, row: GRID_ROWS, cellHeight: cellHeight(), handle: `.${GRIP}` },
+      { ...baseOptions, column: GRID_COLUMNS, row: GRID_ROWS, cellHeight: cellHeight() },
       host,
     );
     if (!created) return;
@@ -166,11 +169,22 @@ export function GridSurface({
     // Dropped on another tile: swap them. Deferred because the swap rebuilds the placeholders, which
     // can't happen inside GridStack's own drag handling.
     const pointer = { x: 0, y: 0 };
+    // GridStack drags a tile by its content box, which only takes the mouse at the title bar. Holding Alt
+    // makes the whole box take it. Ctrl+Alt is left out because that is AltGr on Windows. Mouse moves set
+    // it too, since a key pressed while another window had the focus never arrives here.
+    const trackAlt = (e: KeyboardEvent | MouseEvent) => {
+      host.classList.toggle(ALT_DRAG, e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey);
+    };
+    const dropAlt = () => host.classList.remove(ALT_DRAG);
     const trackPointer = (e: PointerEvent | MouseEvent) => {
       pointer.x = e.clientX;
       pointer.y = e.clientY;
+      trackAlt(e);
     };
     window.addEventListener('mousemove', trackPointer, true);
+    window.addEventListener('keydown', trackAlt, true);
+    window.addEventListener('keyup', trackAlt, true);
+    window.addEventListener('blur', dropAlt);
     grid.on('dragstop', (_event: Event, el: HTMLElement) => {
       // Placeholders let the mouse through, so hit-test their boxes rather than elementsFromPoint.
       const target = [...(el.parentElement?.children ?? [])].find((item) => {
@@ -192,6 +206,9 @@ export function GridSurface({
 
     return () => {
       window.removeEventListener('mousemove', trackPointer, true);
+      window.removeEventListener('keydown', trackAlt, true);
+      window.removeEventListener('keyup', trackAlt, true);
+      window.removeEventListener('blur', dropAlt);
       observer.disconnect();
       gridRef.current = null;
       grid.destroy(false);

@@ -114,6 +114,32 @@ await settle();
 check('dragging inside a tile does not move it', (await hostRects()).HAM.x === before.HAM.x);
 check('the body shows no move cursor', await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)).cursor !== 'move', middle));
 
+// With Alt held the whole tile is the grip: the body drags it, and the component gets nothing.
+await page.keyboard.down('Alt');
+check('with Alt held the body shows the move cursor', await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)).cursor === 'move', middle));
+await page.mouse.move(middle.x, middle.y);
+await page.mouse.down();
+await page.mouse.move(before.MAIN.x + 200, before.MAIN.y + 300, { steps: 12 });
+await page.screenshot({ path: path.join(outDir, 'layout-alt-drag.png') });
+await page.mouse.up();
+await page.keyboard.up('Alt');
+await settle();
+const altDragged = await hostRects();
+check('Alt and a drag inside a tile moves it', altDragged.HAM.x < altDragged.MAIN.x, JSON.stringify({ before: [before.HAM.x, before.MAIN.x], after: [altDragged.HAM.x, altDragged.MAIN.x] }));
+check('the component got no click from the Alt drag', (await page.evaluate(() => window.innerClicks)) === 1);
+check('letting go of Alt gives the body back to the component', await page.evaluate(() => {
+  const r = document.querySelector('[data-tile-key=HAM]').getBoundingClientRect();
+  return getComputedStyle(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)).cursor !== 'move';
+}));
+// Put it back, so the title bar drag below starts from the same layout.
+await page.evaluate(() => {
+  const { layout } = window.layoutStore;
+  layout.clear();
+  layout.setMain(layout.add(window.spec('MAIN')));
+  layout.add(window.spec('HAM'));
+});
+await settle();
+
 // Drag by the title bar.
 await page.mouse.move(before.HAM.x + 40, before.HAM.y - TITLE / 2);
 await page.mouse.down();
