@@ -135,6 +135,18 @@
     background: #fff;
     color: #0d0d0d;
   }
+  /* The second button beside a .btn: outlined, so the first reads as the one to press */
+  .btn-ghost {
+    gap: 8px;
+    background: transparent;
+    color: #e7e7e7;
+    border-color: #3a3a3a;
+  }
+  .btn-ghost:hover {
+    background: #161616;
+    color: #fff;
+    border-color: #e7e7e7;
+  }
   .card {
     background: #111;
     border: 1px solid #232323;

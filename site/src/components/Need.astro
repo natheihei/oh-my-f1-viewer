@@ -1,12 +1,13 @@
 ---
-import { BETA_HREF } from '../site';
+import GitHubMark from './GitHubMark.astro';
+import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
 ---
 
 <section id="need" class="band">
   <div class="wrap flex flex-col gap-10">
     <div class="flex flex-col gap-[18px]">
       <p class="eyebrow"><b>›</b> want to try it?</p>
-      <h2 class="disp h2">Please help me test the beta.</h2>
+      <h2 class="disp h2">Take it out for a few laps.</h2>
     </div>
     <div class="-mb-5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
       <span class="mono text-[11px] tracking-[0.08em] text-dim">YOU'LL NEED</span>
@@ -25,8 +26,9 @@ import { BETA_HREF } from '../site';
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-3">
-      <a class="btn" href={BETA_HREF}>Join the beta</a>
-      <span class="mono pl-1 text-xs leading-relaxed text-dim">Open source after the beta.</span>
+      <a class="btn" href={DOWNLOAD_HREF}>Download</a>
+      <a class="btn btn-ghost" href={REPO_HREF}><GitHubMark />Star on GitHub</a>
+      <span class="mono pl-1 text-xs leading-relaxed text-dim">For {PLATFORMS} · MIT licensed. Issues and pull requests welcome.</span>
     </div>
   </div>
 </section>
