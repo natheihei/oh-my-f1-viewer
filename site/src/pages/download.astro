@@ -1,0 +1,173 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import GitHubMark from '../components/GitHubMark.astro';
+import { day, fetchLatest, megabytes, type Release, type Target } from '../release';
+import { RELEASES_HREF, REPO_HREF } from '../site';
+
+// The release that's latest as the site is built. Without it (GitHub down, or its rate limit) the links go to the
+// latest release's page, and the script below still tries from the browser.
+let release: Release | undefined;
+try {
+  release = await fetchLatest();
+} catch (err) {
+  console.warn(`[download] couldn't read the latest release, so the links go to its page: ${(err as Error).message}`);
+}
+
+const LATEST_HREF = `${RELEASES_HREF}/latest`;
+const href = (t: Target) => release?.files[t]?.url ?? LATEST_HREF;
+const size = (t: Target) => {
+  const f = release?.files[t];
+  return f ? megabytes(f.size) : '';
+};
+const filename = (t: Target, fallback: string) => release?.files[t]?.name ?? fallback;
+
+const cards: {
+  target: Target;
+  os: 'mac' | 'linux';
+  label: string;
+  title: string;
+  button: string;
+  body: string;
+  command?: { before: string; fallback: string };
+  updates: string;
+}[] = [
+  {
+    target: 'mac',
+    os: 'mac',
+    label: 'MACOS · APPLE SILICON',
+    title: 'macOS',
+    button: 'Download .dmg',
+    body: 'Drag it to Applications. It’s signed, and Apple has checked it for malware, so it opens like any other app. For M1 and later.',
+    updates: 'Updates itself',
+  },
+  {
+    target: 'appimage',
+    os: 'linux',
+    label: 'LINUX · X64',
+    title: 'AppImage',
+    button: 'Download .AppImage',
+    body: 'Make it executable and run it. It needs FUSE 2: fuse2 on Arch, libfuse2 on Ubuntu.',
+    command: { before: 'chmod +x ', fallback: 'omfv-….AppImage' },
+    updates: 'Updates itself',
+  },
+  {
+    target: 'pacman',
+    os: 'linux',
+    label: 'ARCH, OMARCHY · X64',
+    title: 'pacman',
+    button: 'Download .pacman',
+    body: 'Installs to /opt, with OMFV in the app launcher.',
+    command: { before: 'sudo pacman -U ', fallback: 'omfv-….pacman' },
+    updates: 'Doesn’t update itself yet: install the next one the same way',
+  },
+];
+---
+
+<Base title="Download · oh-my-f1-viewer" description="Download oh-my-f1-viewer for macOS (Apple silicon) and Linux. Free and open source.">
+  <Header />
+  <main data-download>
+    <div class="wrap flex flex-col gap-12 pt-14 pb-24">
+      <div class="flex flex-col gap-5">
+        <p class="eyebrow"><b>›</b> download</p>
+        <h1 class="disp h2">Download OMFV.</h1>
+        <p class="mono m-0 text-[13px] leading-relaxed text-dim" data-release hidden={!release}>
+          <span class="text-paper" data-name>{release?.name}</span> · released <span data-day
+            >{release && day(release.published)}</span
+          > · <a data-notes href={release?.url ?? LATEST_HREF}>what’s new</a>
+        </p>
+      </div>
+
+      <div class="grid gap-px border border-[#232323] bg-[#232323] lg:grid-cols-3">
+        {
+          cards.map((c) => (
+            <div class="flex flex-col gap-3 bg-ink p-6" data-os={c.os}>
+              <div class="flex items-center justify-between gap-3">
+                <span class="mono text-[11px] tracking-[0.08em] text-dim">{c.label}</span>
+                <span class="mono bg-paper px-1.5 py-0.5 text-[10px] tracking-[0.08em] text-ink" data-mine hidden>
+                  THIS COMPUTER
+                </span>
+              </div>
+              <span class="disp text-[28px]">{c.title}</span>
+              <span class="text-sm leading-normal text-[#9a9a9a]">{c.body}</span>
+              {c.command && (
+                <code class="mono block border border-[#2c2c2c] bg-black px-3 py-2 text-xs leading-relaxed text-[#cfcfcf] [overflow-wrap:anywhere]">
+                  <span class="text-signal select-none">$ </span>
+                  {c.command.before}
+                  <span data-filename={c.target}>{filename(c.target, c.command.fallback)}</span>
+                </code>
+              )}
+              <span class="mono text-xs text-dim">{c.updates}</span>
+              <div class="mt-auto flex flex-wrap items-center gap-3 pt-3">
+                <a class="btn" href={href(c.target)} data-file={c.target}>
+                  {c.button}
+                </a>
+                <span class="mono text-xs text-dim" data-size={c.target}>
+                  {size(c.target)}
+                </span>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+
+      <p class="mono -mt-6 text-xs leading-relaxed text-dim">
+        No Windows or Intel Mac build yet. You’ll need an F1 TV subscription and an LLM provider: a ChatGPT plan, or an
+        API key.
+      </p>
+    </div>
+
+    <section class="band">
+      <div class="wrap flex flex-col gap-6">
+        <p class="eyebrow"><b>›</b> follow along</p>
+        <h2 class="disp text-[clamp(26px,3vw,36px)]">Every release is on GitHub.</h2>
+        <p class="lead">
+          With its notes and checksums. Watch the repo for releases to hear about the next one, and star it if you like
+          it. It really helps me keep pushing.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+          <a class="btn btn-ghost" href={RELEASES_HREF}><GitHubMark />All releases</a>
+          <a class="btn btn-ghost" href={REPO_HREF}><GitHubMark />Star on GitHub</a>
+          <a class="mono pl-1 text-xs text-dim" href={release?.sums?.url ?? LATEST_HREF} data-sums>SHA256SUMS</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</Base>
+
+<script>
+  import { day, fetchLatest, megabytes } from '../release';
+
+  const root = document.querySelector<HTMLElement>('[data-download]')!;
+  const all = <T extends Element = HTMLElement>(selector: string) => root.querySelectorAll<T>(selector);
+
+  // Point out the file for this computer. A browser doesn't say whether a Mac is Apple silicon, so the card says it
+  const ua = navigator.userAgent;
+  const os = /Macintosh|Mac OS X/.test(ua) ? 'mac' : /Linux/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
+  if (os) {
+    for (const card of all('[data-os]')) {
+      const mine = card.dataset.os === os;
+      card.querySelector<HTMLElement>('[data-mine]')!.hidden = !mine;
+      if (!mine) card.querySelector('.btn')!.classList.add('btn-ghost');
+    }
+  }
+
+  // The site may have been built before the latest release, so ask again. If GitHub doesn't answer, the links from
+  // the build still download a release
+  fetchLatest()
+    .then((release) => {
+      for (const [target, file] of Object.entries(release.files)) {
+        for (const a of all<HTMLAnchorElement>(`a[data-file="${target}"]`)) a.href = file.url;
+        for (const el of all(`[data-size="${target}"]`)) el.textContent = megabytes(file.size);
+        for (const el of all(`[data-filename="${target}"]`)) el.textContent = file.name;
+      }
+      if (release.sums) for (const a of all<HTMLAnchorElement>('a[data-sums]')) a.href = release.sums.url;
+      for (const el of all('[data-name]')) el.textContent = release.name;
+      for (const el of all('[data-day]')) el.textContent = day(release.published);
+      for (const a of all<HTMLAnchorElement>('a[data-notes]')) a.href = release.url;
+      for (const el of all('[data-release]')) el.hidden = false;
+    })
+    .catch(() => {});
+</script>

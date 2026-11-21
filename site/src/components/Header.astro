@@ -1,0 +1,36 @@
+---
+import GitHubMark from './GitHubMark.astro';
+import { DOWNLOAD_HREF, REPO_HREF } from '../site';
+
+/** On the home page the links jump within it; anywhere else they go back to it first. */
+const home = Astro.url.pathname === '/';
+const base = home ? '' : '/';
+---
+
+<header class="wrap flex flex-wrap items-center justify-between gap-4 py-5">
+  <a href={home ? '#top' : '/'} class="flex items-center gap-2.5 no-underline">
+    <svg width="26.4" height="26" viewBox="30 30 132 130" aria-hidden="true" style="flex: none">
+      <path
+        fill="#161616"
+        stroke="#e7e7e7"
+        stroke-width="7"
+        stroke-linejoin="round"
+        d="M96 33.5C136 33.5 158.5 61 158.5 98L158.5 122C158.5 144 145 156.5 124 156.5L68 156.5C47 156.5 33.5 144 33.5 122L33.5 98C33.5 61 56 33.5 96 33.5Z"
+      ></path>
+      <rect fill="#e7e7e7" x="48" y="78" width="96" height="44" rx="18"></rect>
+      <path fill="#ff3b30" d="M68 88L78.08 88L90.08 100L78.08 112L68 112L80 100Z"></path>
+      <rect fill="#0d0d0d" x="103" y="88" width="13" height="24"></rect>
+      <rect fill="#e7e7e7" x="80" y="137" width="32" height="6"></rect>
+    </svg>
+    <span class="mono text-[15px] font-bold">oh-my-f1-viewer</span>
+  </a>
+  <nav class="mono flex flex-wrap items-center gap-6 text-[13px]">
+    <a href={`${base}#ask`} class="text-[#b9b9b9] no-underline">Features</a>
+    <a href={`${base}#build`} class="text-build no-underline">/build</a>
+    <a href={REPO_HREF} class="flex items-center gap-2 text-[#b9b9b9] no-underline hover:text-paper"><GitHubMark size={15} />GitHub</a>
+    <!-- On a phone the hero's own Download is just below, so the bar keeps to one row. The download page has no need of it -->
+    <span class:list={['max-sm:hidden', { hidden: Astro.url.pathname.startsWith(DOWNLOAD_HREF) }]}
+      ><a class="btn" href={DOWNLOAD_HREF} style="min-height: 36px; padding: 0 14px; font-size: 13px">Download</a></span
+    >
+  </nav>
+</header>
