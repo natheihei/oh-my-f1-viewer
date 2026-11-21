@@ -80,7 +80,7 @@ The agent is a consumer like any other. `src/agent/tools.ts` exposes host functi
 
 ```ts
 expose(host.suggestions.offer, { name: 'suggest_tiles', args: streamsAndCharts, adapt: matchNames, gate: [sessionOpen, chartsFit] });
-expose(host.playback.seekToDate, { name: 'seek_to', adapt: toDateMs, gate: [sessionOpen, dataReady, askIfForward] });
+expose(host.playback.seekToDate, { name: 'seek_to', adapt: toDateMs, gate: [sessionOpen, dataReady, askIfForward] }); // dataReady waits while the data loads
 ```
 
 The tool's name, model-facing wording, name matching ("Hamilton") and gates live here, not in the host. A tool that needs different wording or
@@ -115,6 +115,28 @@ described below:
 Once session data is ready, the tables `query_session` can read follow the components, from `sessionData.tables`. The tool's own description
 doesn't change, so opening a session only changes the end of the system prompt.
 
+### Waiting for the data
+
+A request made as a session opens, such as "2026 Mexico race, jump to the start", reaches `query_session` a few seconds before the data is
+there. So the tools that need the data wait for it inside the call, rather than refuse and leave the request undone (`src/agent/dataWait.ts`,
+2026-11-21). What's waited for is what clears by itself in seconds, and everything else is told to the agent at once, with the reason and
+that trying again in the turn won't help:
+
+| `sessionData` | A call |
+| --- | --- |
+| `loading` | Waits, up to 30s. Then it's refused, and the agent tells the viewer to ask again in a moment |
+| `waiting` with `brief`: a live video that hasn't said what time it shows | Waits, the same |
+| `waiting` otherwise: a replay MultiViewer hasn't lined up, a feed with no clock, a live video behind where the capture began | Refused at once. `asOf: 'session'` still reads |
+| `failed`, `unsupported` | Refused at once |
+
+`load_session` waits too, up to 20s and without ever failing for it: the conversation for the session starts from what's there when it
+returns, so it gets the tables, the playhead and the roster. A message sent while the data loads has no table list, so the bridge sends the
+reference again with the first tool result after the tables are there (`AgentToolResult.reference`).
+
+While a call waits, the palette says what for, and says when it's there: "Loading the timing data…", then "Timing data loaded." A wait ends
+with its turn, so a stopped turn's call never goes on to seek, and when the session changes. The waits are under the 60s a tool call gets
+in `electron/agent/agent.ts`. Waiting is the agent's policy, not the host's: `host.data.sql` and `seekToDate` still fail at once.
+
 ### A tile that isn't drawing
 
 The viewer can attach a tile's error to their next message, from the tile's "Attach error to agent". The agent reads it as data, not
@@ -136,7 +158,7 @@ come from `list_sessions`, since their status changes. If the events don't load,
 agent isn't asked anything until they're there.
 
 `load_session` opens whatever it's given: a replay or live session plays, and one that hasn't started shows a countdown and opens itself
-once F1 TV has it live.
+once F1 TV has it live. It returns once the session's timing data has settled: see "Waiting for the data".
 
 ### Suggested tiles
 
@@ -250,7 +272,7 @@ type SessionData =
   | { state: 'unsupported'; reason: string } // Before 2023
   | { state: 'loading'; datasets: Record<Dataset, DatasetState> | null }
   | { state: 'failed'; reason: string }
-  | { state: 'waiting'; reason: string; detail: string; drivers: DriverEntry[] } // Not lined up with the video yet: only the roster
+  | { state: 'waiting'; reason: string; detail: string; brief: boolean; drivers: DriverEntry[] } // Not lined up with the video yet: only the roster
   | { state: 'ready'; drivers: DriverEntry[] /* … */ };
 ```
 

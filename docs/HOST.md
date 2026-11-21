@@ -74,7 +74,8 @@ names a tile. `live.health` and look-ahead approvals name tiles by id too.
 - `failed`, with a `reason`.
 - `waiting`: there's data, but nothing at the frame on screen can be shown yet. The frame can't be placed on the data to within a second or
   so, as on a replay MultiViewer hasn't published an anchor for, or the live video hasn't reached when the capture began. It holds `sessionKey`,
-  `datasets`, `tables`, a short `reason` and a longer `detail`. SQL at the playhead fails with both, and `asOf: 'session'` still reads. It
+  `datasets`, `tables`, a short `reason` and a longer `detail`, and `brief`, true when it should clear by itself within seconds, as a live
+  video that hasn't said what time it shows does. SQL at the playhead fails with both, and `asOf: 'session'` still reads. It
   also holds `drivers`, the roster as the data last has it, so codes, team colours and `@` mentions work while waiting. `rosterOf(sessionData)` in
   `shared/sessionData.ts` gives the roster in either state.
   See "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md).
@@ -392,7 +393,7 @@ index (`live.events`) with every message, so it can work out which weekend the u
 The bridge lists every registered component but `video`, which `suggest_tiles` takes as `streams`, at the end of the system prompt, one line each: name, title,
 session types, description and props, each marked required or optional. With none registered, the list is left out. Once session data is ready, the
 tables `query_session` can read follow, from `sessionData.tables`: one line each with its columns, and `about` where a table has one.
-Before that the list is left out, and the tool refuses anyway. `suggest_tiles` takes components
+Before that the list is left out, and the tool waits for the data: the bridge sends the list with the first tool result after it's there. `suggest_tiles` takes components
 by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
 `drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
 without one. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
@@ -415,6 +416,9 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `go_live` | `host.playback.goLive`, on a live session only. Asks the spoiler gate first, as a forward seek, unless playback is at the live edge |
 | `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
+
+`query_session` and `seek_to` wait while the session's data is loading, and `load_session` returns once it has settled: see "Waiting for the
+data" in [DESIGN.md](DESIGN.md).
 
 `app_state` also carries the master volume next to the heard video and its tile, so the agent never calls a feed audible at volume 0. It carries the
 playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `changeVolumeBy` or `toggleMute`, isn't

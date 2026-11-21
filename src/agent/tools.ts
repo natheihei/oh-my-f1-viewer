@@ -17,6 +17,7 @@ import Type, { type Static, type TObject } from 'typebox';
 import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
 import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
+import { OPEN_WAIT_MS, requireData, settleData } from './dataWait';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 import { formatClock } from '../../shared/clock';
 import { rosterOf } from '../../shared/sessionData';
@@ -78,15 +79,11 @@ const sessionOpen = (): void => {
   if (!read().session) throw new Error('No session is open.');
 };
 
-/** The data has to be ready. Reading the whole session, `asOf: "session"`, only needs it to be there: it doesn't depend on the frame on screen. */
-const dataReady = (args?: object): void => {
-  const data = read().sessionData;
-  const wholeSession = (args as { asOf?: unknown } | undefined)?.asOf === 'session';
-  if (data.state === 'ready' || (data.state === 'waiting' && wholeSession)) return;
-  if (data.state === 'waiting') throw new Error(`The timing data can't be read at the frame on screen yet: ${data.reason}. ${data.detail}`);
-  const why = 'reason' in data ? ` ${data.reason}` : data.state === 'loading' ? ' It is still loading.' : '';
-  throw new Error(`This session's timing data isn't available.${why}`);
-};
+/**
+ * The data has to be ready, and a call made while it loads waits for it: see dataWait.ts. Reading the whole
+ * session, `asOf: "session"`, only needs it to be there: it doesn't depend on the frame on screen.
+ */
+const dataReady = (args?: object): Promise<void> => requireData((args as { asOf?: unknown } | undefined)?.asOf === 'session');
 
 /** Asks the spoiler gate, and refuses the call unless it approves. */
 async function approve(request: SpoilerRequest): Promise<void> {
@@ -121,7 +118,7 @@ export const QUERY_DESCRIPTION = [
 ].join('\n');
 
 export const BUILD_QUERY_DESCRIPTION = [
-  'Read the open session\'s timing data with SQLite, to get a query right before a component uses it. SELECT only. The tables and their columns are in the table list at the end of the system prompt, once the session\'s data is ready.',
+  'Read the open session\'s timing data with SQLite, to get a query right before a component uses it. SELECT only. The tables and their columns are in the table list at the end of the system prompt, once the session\'s data is ready. While the data is still loading, a call waits for it.',
   'By default (asOf "playhead") each table holds only what the feed had revealed at the frame on screen, which is what useSql sees. asOf "session" reads everything the session holds. Never tell the user what either shows.',
   'Times are UTC milliseconds. date, or date_start in laps, is when something happened; visible_from, in the tables that have it, is when the feed revealed the row. A laps, stints or pit row reads as it last stood at that point.',
   `At most ${MAX_QUERY_ROWS} rows come back, so aggregate or filter.`,
@@ -409,6 +406,7 @@ const querySession = (gated: boolean): AgentTool =>
         if (gated && asOf === 'session') await approve({ kind: 'read_ahead', session: sessionTitle(), playheadMs: playheadMs(), sql });
       },
     ],
+    hints: [[/no such (table|column)/, 'Use the table list at the end of the system prompt: it is there once the data has loaded.']],
     result: ({ columns, rows }, { asOf }) => {
       const shown = rows.slice(0, MAX_QUERY_ROWS).map((row) => columns.map((c) => row[c]));
       // Nothing at the playhead often just means it hasn't happened on screen yet.
@@ -449,6 +447,32 @@ const seekTo = (gated: boolean): AgentTool =>
 
 const MAX_UPCOMING = 16;
 
+const loadSession = expose(host.session.open, {
+  name: 'load_session',
+  description:
+    "Open one session, once the user has chosen it. A replay or live one starts the main broadcast and replaces whatever is open. One that hasn't started shows a countdown, and starts by itself when F1 TV goes live.",
+  args: Type.Object(
+    {
+      contentId: Type.Integer({ description: 'contentId from list_sessions, list_live or list_upcoming' }),
+      title: Type.String({ description: 'Session title to show the user' }),
+      fromStart: Type.Optional(
+        Type.Boolean({
+          description: 'For a live session: true starts at the beginning of the broadcast, otherwise it joins at the live edge. Replays always start at the beginning.',
+        }),
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  result: ({ session, feeds }, { fromStart }) =>
+    feeds == null
+      ? JSON.stringify({ countdown: session.title, note: 'It starts by itself when F1 TV goes live.' })
+      : JSON.stringify({
+          opened: session.title,
+          playingFrom: session.status === 'live' && fromStart !== true ? 'live edge' : 'start',
+          streams: feeds.map((f) => f.label),
+        }),
+});
+
 export const AGENT_TOOLS: AgentTool[] = [
   expose(host.catalog.sessions, {
     name: 'list_sessions',
@@ -479,31 +503,18 @@ export const AGENT_TOOLS: AgentTool[] = [
     result: (sessions) =>
       JSON.stringify(sessions.slice(0, MAX_UPCOMING).map((s) => ({ contentId: s.contentId, title: s.title, type: s.type, startsAt: isoDate(s.startMs) }))),
   }),
-  expose(host.session.open, {
-    name: 'load_session',
-    description:
-      "Open one session, once the user has chosen it. A replay or live one starts the main broadcast and replaces whatever is open. One that hasn't started shows a countdown, and starts by itself when F1 TV goes live.",
-    args: Type.Object(
-      {
-        contentId: Type.Integer({ description: 'contentId from list_sessions, list_live or list_upcoming' }),
-        title: Type.String({ description: 'Session title to show the user' }),
-        fromStart: Type.Optional(
-          Type.Boolean({
-            description: 'For a live session: true starts at the beginning of the broadcast, otherwise it joins at the live edge. Replays always start at the beginning.',
-          }),
-        ),
-      },
-      { additionalProperties: false },
-    ),
-    result: ({ session, feeds }, { fromStart }) =>
-      feeds == null
-        ? JSON.stringify({ countdown: session.title, note: 'It starts by itself when F1 TV goes live.' })
-        : JSON.stringify({
-            opened: session.title,
-            playingFrom: session.status === 'live' && fromStart !== true ? 'live edge' : 'start',
-            streams: feeds.map((f) => f.label),
-          }),
-  }),
+  {
+    ...loadSession,
+    /**
+     * Returns once the session's timing data has settled, or after a while without it: what the message asks next
+     * often needs it, and the conversation for the session starts from what is there when this returns.
+     */
+    async run(args) {
+      const out = await loadSession.run(args);
+      if (read().session) await settleData({ timeoutMs: OPEN_WAIT_MS });
+      return out;
+    },
+  },
   expose(host.session.feeds, {
     name: 'list_streams',
     description: 'List every stream the open session offers, and which are on screen.',

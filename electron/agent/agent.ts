@@ -361,6 +361,8 @@ export class Agent {
             }
             // A call that closes a session changes what the model can do next, in the same turn.
             if (result.tools) register(result.tools);
+            // The session's tables, once the data a call waited for has them. The prompt reads this on each request.
+            if (typeof result.reference === 'string' && result.reference) conversation.reference = result.reference;
             // The build agent reads the whole session by design, and its conversation ends with the build.
             if (!build && result.ok && result.pastPlayhead) conversation.readAhead.add(api.callId);
             return { output: [{ type: 'text', text: result.content }], isError: !result.ok };
