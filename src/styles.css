@@ -122,7 +122,7 @@
   background: var(--color-ground);
 }
 
-/* Layer order, bottom to top: components, grid placeholders, countdown, palette. */
+/* Layer order, bottom to top: components, grid placeholders, countdown, palette. The timeline's hover time (z-40, below) draws over them all. */
 .stage {
   @apply absolute inset-0 z-0 overflow-hidden;
 }
@@ -1138,9 +1138,10 @@
   color: inherit;
 }
 
-/* The transport: one row. Play, what's open, the scrub track, the time, the volume. */
+/* The transport: one row. Play, what's open, the scrub track, the time, the volume.
+   Above the palette's z-30, so the hover time that rises out of it into the surface isn't covered. */
 .timeline {
-  @apply z-20 flex shrink-0 items-center gap-3 bg-black text-dim;
+  @apply z-40 flex shrink-0 items-center gap-3 bg-black text-dim;
   height: 32px;
   padding-right: var(--pad);
   border-top: 1px solid var(--color-line);
