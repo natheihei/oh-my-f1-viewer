@@ -934,8 +934,60 @@
   border-color: var(--color-rule);
 }
 
+/*
+ * What it says: what it's for, or a tip. Both lines share one cell while one fades into the other, which is all the
+ * motion there is, since the row sits over the race.
+ */
 .palette-folded-text {
-  @apply min-w-0 flex-1 truncate text-mute;
+  @apply grid min-w-0 flex-1 text-mute;
+}
+
+.palette-folded-line {
+  @apply min-w-0 truncate;
+  grid-area: 1 / 1;
+}
+
+.palette-folded-line-in {
+  animation: palette-line-in 0.4s ease-out;
+}
+
+.palette-folded-line-out {
+  opacity: 0;
+  animation: palette-line-out 0.4s ease-out;
+}
+
+@keyframes palette-line-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes palette-line-out {
+  from {
+    opacity: 1;
+  }
+}
+
+.palette-tip-label {
+  @apply text-faint;
+  margin-right: 8px;
+  font-size: var(--text-s);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.palette-folded:hover .palette-tip-label,
+.palette-folded:focus-visible .palette-tip-label {
+  @apply text-mute;
+}
+
+.palette-tip-key {
+  @apply text-dim;
+  margin-inline: 1px;
+}
+
+.palette-tip-command {
+  @apply text-dim;
 }
 
 .palette-folded > .palette-key {
@@ -949,6 +1001,10 @@
   .palette-folded,
   .palette-hide {
     transition: none;
+  }
+  .palette-folded-line-in,
+  .palette-folded-line-out {
+    animation: none;
   }
   .palette-key-recording .palette-key::after {
     animation: none;
