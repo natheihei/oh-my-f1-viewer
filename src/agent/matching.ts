@@ -84,7 +84,7 @@ export interface Driver {
 }
 
 /** The drivers to match against: the session's roster when there is one, otherwise the onboard feeds. */
-export function driversOf(roster: DriverEntry[], channels: Channel[]): Driver[] {
+export function driversOf(roster: readonly DriverEntry[], channels: Channel[]): Driver[] {
   if (roster.length > 0) {
     return roster.map((d) => ({
       number: d.driver_number,

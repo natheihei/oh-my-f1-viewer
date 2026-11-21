@@ -4,7 +4,7 @@
  * text for the agent. A new kind is one more entry here. See src/shell/mentions.ts.
  */
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import type { DriverEntry } from '../../shared/sessionData';
+import { rosterOf, type DriverEntry } from '../../shared/sessionData';
 import { codeOf, driverCodeElement, DriverCode, fillTitle, host, read, tileTitle, useLive, type CodeLook } from '../host';
 import {
   sayDriver,
@@ -39,16 +39,12 @@ export interface MentionKind {
   tile?(id: string): string | null;
 }
 
-const NO_DRIVERS: DriverEntry[] = [];
-const rosterOf = (): readonly DriverEntry[] => {
-  const data = read().sessionData;
-  return data.state === 'ready' ? data.drivers : NO_DRIVERS;
-};
+const roster = (): readonly DriverEntry[] => rosterOf(read().sessionData);
 
 const driver: MentionKind = {
   name: 'driver',
   group: 'Drivers',
-  search: (query) => searchDrivers(rosterOf(), query),
+  search: (query) => searchDrivers(roster(), query),
   element: (id, look) => driverCodeElement(Number(id), look),
   render: (id, look) => <DriverCode number={Number(id)} {...look} />,
   say: (id) => sayDriver(codeOf(Number(id)), Number(id)),
@@ -56,7 +52,7 @@ const driver: MentionKind = {
 
 // Teams: from the roster, worked out again only when it changes.
 let teamCache: { drivers: readonly DriverEntry[]; teams: TeamEntry[] } | null = null;
-function teams(drivers: readonly DriverEntry[] = rosterOf()): TeamEntry[] {
+function teams(drivers: readonly DriverEntry[] = roster()): TeamEntry[] {
   if (teamCache?.drivers !== drivers) teamCache = { drivers, teams: teamsOf(drivers) };
   return teamCache.teams;
 }
@@ -82,7 +78,7 @@ const team: MentionKind = {
 };
 
 function TeamTag({ name, look }: { name: string; look: CodeLook }) {
-  const drivers = useLive((s) => (s.sessionData.state === 'ready' ? s.sessionData.drivers : NO_DRIVERS));
+  const drivers = useLive((s) => rosterOf(s.sessionData));
   const found = teams(drivers).find((t) => t.name === name);
   return (
     <span className={teamClass(look)} style={{ '--team': teamColour(found) } as CSSProperties}>

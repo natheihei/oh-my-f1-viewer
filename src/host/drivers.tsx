@@ -10,7 +10,7 @@
  * the same variants on a canvas (`drawCode`, `drawParts`), from the same sizes.
  */
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
-import type { DriverEntry } from '../../shared/sessionData';
+import { rosterOf, type DriverEntry } from '../../shared/sessionData';
 import { driverStyles, labelText as plainLabel, partsText as plainParts, styleOf, type CodeLook, type DriverStyle, type Part } from './codes';
 // The data stores themselves, not `live`: the host's own modules import this, and `live` imports them.
 import { useSession } from '../data/session';
@@ -18,11 +18,9 @@ import { useSessionData } from '../data/sessionData';
 
 export { CODE_BAR, CODE_WEIGHT, driverStyles, styleOf, type CodeLook, type CodeTone, type CodeVariant, type DriverStyle, type Part } from './codes';
 
-const NO_DRIVERS: DriverEntry[] = [];
-
 /** Each driver's code, team colour and dash, by car number, from the session's roster. */
 export function useDriverStyles(): Map<number, DriverStyle> {
-  const drivers = useSessionData((s) => (s.state === 'ready' ? s.drivers : NO_DRIVERS));
+  const drivers = useSessionData(rosterOf);
   return useMemo(() => driverStyles(drivers), [drivers]);
 }
 
@@ -30,7 +28,7 @@ export function useDriverStyles(): Map<number, DriverStyle> {
 export function codeOf(number: number): string {
   const sessionData = useSessionData.getState();
   const feeds = useSession.getState().channels;
-  const entry = sessionData.state === 'ready' ? sessionData.drivers.find((d) => d.driver_number === number) : undefined;
+  const entry = rosterOf(sessionData).find((d) => d.driver_number === number);
   return entry?.name_acronym ?? feeds.find((f) => f.number === number)?.label ?? String(number);
 }
 
@@ -44,7 +42,7 @@ export const labelText = (name: string, drivers: readonly number[], code: (numbe
 let last: { drivers: readonly DriverEntry[]; styles: Map<number, DriverStyle> } | null = null;
 function currentStyles(): Map<number, DriverStyle> {
   const sessionData = useSessionData.getState();
-  const drivers = sessionData.state === 'ready' ? sessionData.drivers : NO_DRIVERS;
+  const drivers = rosterOf(sessionData);
   if (last?.drivers !== drivers) last = { drivers, styles: driverStyles(drivers) };
   return last.styles;
 }

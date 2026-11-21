@@ -111,6 +111,28 @@ FP2 as a replay, 55 minutes after it ended, in an isolated instance with the age
   minutes." MultiViewer hadn't published FP2's `session_start` or `session_start_pdt` by 06:00Z, so once the archive comes, the data will
   still wait for it.
 
+## Verified on a live qualifying
+
+On 2026 Las Vegas qualifying (2026-11-21 UTC, session 11416), joined late in Q1 and watched through Q2, in an isolated instance on castLabs
+Electron with the agent:
+
+- **Joining, DRM and sync.** F1 LIVE and two onboards under DRM, 8.3-8.4s behind the live edge and within 0.04s of each other. A ten-minute DVR
+  seek and back, and a two-minute one through the agent's `seek_to`.
+- **The capture.** `drivers`, `laps`, `position`, `stints`, `race_control`, `weather`, `car_data` and `location` filled; `intervals` stayed
+  empty, as in practice. Joined between laps, every car's row from the snapshot had no lap time, so nothing was timed until a car finished a
+  lap after joining. An out lap's duration counts the wait in the garage since the lap before (10 to 16 minutes across Q1 and Q2).
+- **The tower against the broadcast.** With Q2's first laps in, the order and the lap times matched F1's own tower. One lap showed on the
+  broadcast before the tower moved that car up: how long before wasn't measured.
+- **Every chart on live data.** All 15 drew without an error, added by hand since each is offered for races only. The ones that need a race
+  say so in their own words: the tower has no gap or interval and shows the last lap, not the best; `sector_table` found no lap both drivers
+  had started.
+- **The agent.** It opened the session from "open the live session", answered who was fastest in this part by reading `race_control` for
+  when Q2 began and `laps` after it, suggested an onboard and went back two minutes in one turn, and `go_live`, unanswered for 50s, left
+  playback where it was and said so.
+- **`@` while the data waits.** A bare `@` listed only the tiles for the first 50s after joining, and whenever the video was behind when the
+  capture began: the roster was only published once the data was `ready`. `waiting` now holds the roster too, and codes, team tags and the
+  agent's `app_state` read it. Checked ten minutes behind the capture: 22 drivers and 11 teams listed.
+
 ## Verified for finding a session
 
 With nothing open, the real agent at medium reasoning, with the event list in its prompt, on 2026-11-15, each request in a fresh
