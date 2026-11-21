@@ -67,6 +67,11 @@ describe('calendar', () => {
     expect(meetings).toEqual([expect.objectContaining({ meeting_key: 1300, meeting_name: 'Las Vegas', round: 21 })]);
   });
 
+  it('names a meeting from its event when a show the day before the event comes first', () => {
+    const { meetings } = fromUpcoming([session({ sessionKey: '1', title: 'Weekend Warm-Up', startMs: 10 }), session({})], [event]);
+    expect(meetings).toEqual([expect.objectContaining({ meeting_key: 1300, meeting_name: 'Las Vegas', round: 21, date_start: 50 })]);
+  });
+
   it('prefers the earlier source, keeps old entries a refresh no longer lists, and sorts by time', () => {
     const fresh = fromSeasonIndex(INDEX, 2026);
     const old = { meetings: [{ ...fresh.meetings[0], meeting_name: 'Old name' }], sessions: [{ ...fresh.sessions[0], session_key: 1, date_start: 5 }] };

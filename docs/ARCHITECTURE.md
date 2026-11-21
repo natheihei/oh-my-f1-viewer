@@ -266,11 +266,19 @@ that refuse a call.
   2026-11-16. On the first start with the default profile, `electron/oldProfile.ts` copies the mods (with their `'f1a'` imports
   renamed), settings, conversations, the timing database and the caches from `~/.config/f1a`, but not the sign-ins, so both are
   signed in again. The old profile is left as it was.
-- **Onboarding** (`src/shell/Onboarding.tsx`) leads a first launch through both, then opening a session, over the empty screen. It
-  shows until a session opens or it's skipped, and not at all for a profile already set up; `/reset-onboarding` shows it again.
-  The `onboarded` flag is kept with the UI state (`src/shell/onboardingState.ts`). Its numbered steps keep one height as they
-  open, a finished step hands on to the next one not done, and on the last the palette lights up (`pointing`), since a
-  session is named there. A device code from a model's sign-in shows set apart, with Copy.
+- **Onboarding** (`src/shell/Onboarding.tsx`) leads a first launch through both, over the empty screen. It shows until both
+  are done or it's skipped, and not at all for a profile already set up; `/reset-onboarding` shows it again. When the second
+  step finishes it gives way to the landing page. The `onboarded` flag is kept with the UI state
+  (`src/shell/onboardingState.ts`). Its numbered steps keep one height as they open, and a finished step hands on to the
+  next one not done. A device code from a model's sign-in shows set apart, with Copy.
+- **The landing page** (`src/shell/Landing.tsx`) is the empty screen once onboarding is over: every session in the calendar
+  (`live.schedule`) as one column of time, with a line at now, what's coming above it and what's finished below, so scrolling
+  up shows the rest of the season and down the archive. F1 TV's shows aren't listed. A row clicked writes its session into
+  the palette's input (`palette.draft`) and opens to its suffixes, such as "jump to 30 seconds before lights out" or "with
+  onboards of the top 3 on the grid", which add to the prompt; nothing is sent until Enter, so it teaches what can be typed.
+  Only a live session's row starts open. The arrow keys in the input walk the sessions while it holds nothing of the
+  viewer's own. Rows, suffixes and the prompt are worked out in `src/shell/landingModel.ts`, from the calendar alone, which
+  says when a session is and never how it went; a suffix names only what's known before the start, the grid or the standings.
 - **Fixes.** After onboarding, anything that needs signing in or setting up again comes to the palette as a fix block
   (`src/shell/fixes.ts`): the error, what fixing it does, a button and the `/` command that does the same. That covers F1 TV
   ending its sign-in, F1 TV's events failing to load, the agent not set up, and a turn failing because the provider rejected
