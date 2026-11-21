@@ -2374,3 +2374,10 @@
   content: '';
   @apply h-px flex-1 bg-rule;
 }
+
+/* Over the landing page the palette casts a soft black edge, so the rows it cuts across fade out under it. */
+.landing ~ .palette {
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 44px 18px rgb(0 0 0 / 0.9);
+}
