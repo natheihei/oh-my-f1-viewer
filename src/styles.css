@@ -1923,11 +1923,19 @@
   height: 1em;
   width: auto;
 }
-.omfv-mark-arrow {
+.omfv-mark-shell {
+  fill: var(--color-raised);
+  stroke: var(--color-ink);
+}
+.omfv-mark-prompt {
   fill: var(--color-accent);
 }
-.omfv-mark-name,
 .omfv-mark-cursor {
+  fill: var(--color-ground);
+}
+.omfv-mark-visor,
+.omfv-mark-vent,
+.omfv-mark-name {
   fill: var(--color-ink);
 }
 
