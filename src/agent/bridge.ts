@@ -276,12 +276,12 @@ export function describeTables(data: SessionDataView): string {
   return lines.join('\n');
 }
 
-/** What a finished build changed, for the viewing agent's next message: the one line of it that agent ever sees. */
+/** What became of build mode, for the viewing agent's next message: a saved build's changes, the one line of it that agent ever sees, or an offer turned down. */
 let buildNote: string | null = null;
 
-/** `summary` is the app's own account of a saved build, such as "Built lap_stepper." */
-export function tellViewingAgent(summary: string): void {
-  buildNote = summary;
+/** `line` is the app's own account, such as "the user left it having saved this. Built lap_stepper." */
+export function tellViewingAgent(line: string): void {
+  buildNote = line;
 }
 
 /** What the build has changed so far, and every mod there is, for the build agent. */
@@ -320,7 +320,7 @@ export function askAgent(text: string): Promise<void> {
   const mode: AgentMode = session ? 'view' : 'pick';
   turnMode = mode;
   turnScope = scopeOf(session);
-  const fromBuild = buildNote ? `build mode: the user left it having saved this. ${buildNote}` : null;
+  const fromBuild = buildNote ? `build mode: ${buildNote}` : null;
   buildNote = null;
   const tools = toolDefinitions(mode);
   shownTools = namesOf(tools);

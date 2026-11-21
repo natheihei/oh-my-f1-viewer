@@ -67,7 +67,10 @@ export function offerReason(reason: string, start: boolean): string {
 
 /** Turns the viewing agent's offer down: the tiles stay as they are, and can be attached again. */
 export function stayInView(): void {
+  const { offer } = read().build;
   host.build.dismissOffer();
+  // So the viewing agent doesn't offer the same thing again on its own.
+  if (offer) tellViewingAgent(`the user turned down your offer to ${offerReason(offer.reason, false)}, and stayed in view mode.`);
   palette.push('system', 'Stayed in view mode.');
 }
 
@@ -95,7 +98,7 @@ export async function leaveBuild(how: 'save' | 'undo'): Promise<void> {
       const summary = await host.build.save();
       palette.push('system', summary ? `Saved. ${summary}` : 'Left build mode. Nothing was changed.');
       // The viewing agent learns of the build from this line and nothing else.
-      if (summary) tellViewingAgent(summary);
+      if (summary) tellViewingAgent(`the user left it having saved this. ${summary}`);
     } else {
       const count = await host.build.undo();
       palette.push('system', count ? `Undid ${count} ${count === 1 ? 'change' : 'changes'}.` : 'Left build mode. Nothing was changed.');

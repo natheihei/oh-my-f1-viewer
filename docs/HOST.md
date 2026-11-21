@@ -409,7 +409,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `suggest_tiles` | `host.suggestions.offer`, for streams and components |
 | `remove_tiles` | `host.layout.remove`, for any tile |
 | `edit_tile` | `host.layout.setProps`, for one component that isn't video |
-| `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer asks for that no component does |
+| `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer wants to follow, or a tile to keep doing, that no component does |
 | `set_audio` | `host.audio.set`. It takes a stream name, and picks the video: the one already heard if it shows that feed, else the one in the main tile, else the oldest. It refuses a feed no tile shows |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |

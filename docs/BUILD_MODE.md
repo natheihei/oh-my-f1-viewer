@@ -3,7 +3,9 @@
 # Build mode
 
 The app's agent normally drives viewing: it finds sessions, suggests tiles and seeks. In build mode it writes mods instead. The viewer
-types `/build`, asks for a controller that can go back and forward laps, and the agent builds it.
+asks to follow something, such as how often NOR opens DRS, the viewing agent finds that no tile shows it and offers to build one, and
+on a yes the build agent builds it (2026-11-21). `/build` goes straight there, for a viewer who already knows they want something
+built or changed. Onboarding, the README and the site still show `/build` as the way in.
 
 Agreed and built on 2026-11-11. [STATUS.md](STATUS.md) says what's verified. [MODS.md](MODS.md) describes mods themselves, and
 [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) the rules build mode changes.
@@ -103,11 +105,34 @@ only happens when a mod's args change while its tile is on screen, such as a mod
 
 ### Offered from view mode
 
-The viewing agent can't write code, so when something needs it, it offers build mode with `offer_build`, and the viewer decides. It
-offers it for two things (#105, #110):
-- **A fix:** a tile whose render error is in its component's code, from an attached `<error>` block.
-- **Something to build or change:** the viewer clearly asks for something no chart can do, with any props, or that a close one
-  wouldn't do, such as "how many times NOR opens DRS each lap". It never offers unasked, or for what a chart with other props would do.
+The viewing agent can't write code, so when something needs it, it offers build mode with `offer_build`, and the viewer decides.
+This is the main way into build mode: the viewer says what they want, never that it needs building. The agent offers it for a fix,
+which is a tile whose render error is in its component's code, from an attached `<error>` block (#105), and for something to build
+(#110).
+
+Whether a request needs a build is decided in the order `VIEW_PROMPT` gives, taking the first that fits:
+
+1. **Something to do on screen now:** a stream, a seek, a tile to remove or change. It does it.
+2. **A fact:** a question with one answer as of the playhead, such as "when did HAM last pit". It answers in a line from
+   `query_session`. A fact never gets a tile or a build.
+3. **Something to follow:** the viewer wants to keep seeing it as the session goes on, such as "track how often NOR opens DRS". It
+   needs a tile, and which one is decided in order too:
+   - a component covers it, with some props: it suggests that, and never builds a second of what one already shows
+   - a component covers it but isn't offered in this session: it says why
+   - none covers it and the session's tables hold the data: it offers the build
+   - the tables don't hold it, such as tyre temperature: it says so, and offers nothing
+4. **Something to keep doing, or a control to press:** "always show the leader's onboard", "buttons to skip a lap". The viewing
+   agent acts once per message, so it can't keep it up, but a tile can. A mod defines one component, so this is a tile too, decided
+   as in 3. The prompt says nothing can be built that changes the app with no tile on screen, so the agent doesn't offer that.
+
+A request that could be a fact or something to follow, such as "how is HAM's pace", gets a component if one covers it and the fact if
+none does, with no offer. The offer comes if the viewer then says that wasn't what they wanted. Asked outright to build or change
+something, it offers that, unless a component with other props already does it.
+
+Until 2026-11-21 it offered a build only when the viewer clearly asked for one, and never unasked. The offer is a question the viewer
+answers, with the spoiler warning on it, so offering it for what they want to follow costs them one keypress, and saves them knowing
+that `/build` exists. **Stay in view mode** tells the viewing agent, in its next `app_state`, what was turned down, and it doesn't
+offer that again unless asked.
 
 `offer_build` takes:
 - `reason`: what build mode would do, for the viewer, as a few words that start with a verb: "fix the gap chart", "build a chart of
@@ -129,7 +154,14 @@ to fix. The palette says "went to the build agent." with the tiles' tags, or "As
 DRS." for an offer with none. The tray stays for the viewer's own next message.
 
 `node scripts/offer-check.mjs <out-dir>` checks an offer with no tiles in the app, and with `--agent` the real models: a request a chart
-covers gets the chart and no offer, one nothing covers gets an offer, and switching starts the build agent on the note.
+covers gets the chart and no offer, a question gets its answer and no offer, one to follow that nothing covers gets an offer without
+the word build in it, and switching starts the build agent on the note.
+
+`node scripts/decide-check.mjs <out-dir> --runs 3 --qualifying` checks the decision itself with the real viewing agent, a new
+conversation for each case and each case several times: facts, something to follow that a component covers or none does in several
+wordings, a request that could be either and then says which, an offer turned down, something to keep doing, something no tile can
+do, data the session lacks, and a race chart asked for in qualifying. It never switches to build mode. All 16 cases passed 3 of 3
+on 2026-11-21.
 
 ### Trying it
 
