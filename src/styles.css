@@ -1259,6 +1259,13 @@
   width: 22px;
 }
 
+/* Last in the row, flush with its right edge as play is with the left. */
+.timeline-close {
+  width: 40px;
+  margin-right: calc(-1 * var(--pad));
+  border-left: 1px solid var(--color-line);
+}
+
 .timeline-speaker {
   @apply h-3.5 w-3.5;
 }
@@ -1300,6 +1307,13 @@
 .countdown-time {
   @apply tabular-nums;
   font-size: 40px;
+}
+
+.countdown-close {
+  @apply mt-3 cursor-pointer border border-line bg-transparent px-2 text-dim uppercase hover:border-rule hover:text-ink;
+  font-size: var(--text-s);
+  letter-spacing: 0.06em;
+  line-height: 20px;
 }
 
 /* Suggested tiles: a strip between the transcript and the input. Cards shrink to fit before it scrolls. */

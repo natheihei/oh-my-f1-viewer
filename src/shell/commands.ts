@@ -6,6 +6,7 @@
 import { FIRST_SEASON, host, read } from '../host';
 import { enterBuild } from './buildMode';
 import { agentFix, eventsFix, f1tvFix } from './fixes';
+import { goHome } from './home';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 import { runTelemetryCommand } from './telemetry';
@@ -19,6 +20,8 @@ export interface SlashCommand {
   warning?: string;
   /** It works on an open session, so it isn't offered without one. */
   needsSession?: boolean;
+  /** It closes what's open, a session or the countdown to one, so it isn't offered with neither. */
+  needsOpen?: boolean;
   /** `text` is what followed the name, for a command that `takesText`. */
   run(text: string): Promise<void>;
 }
@@ -80,6 +83,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
       host.layout.autoLayout();
       palette.push('system', 'Grid re-tiled.');
     },
+  },
+  {
+    name: '/close-session',
+    description: 'Close the session and go back to the list of sessions',
+    needsOpen: true,
+    run: () => goHome(),
   },
   {
     name: '/settings-background',
@@ -166,7 +175,10 @@ export function parseCommand(input: string): { name: string; rest: string } {
 }
 
 /** The commands that do something now: with no session open, not the ones that work on it. */
-export const availableCommands = (): SlashCommand[] => SLASH_COMMANDS.filter((c) => !c.needsSession || read().session != null);
+export function availableCommands(): SlashCommand[] {
+  const { session, countdown } = read();
+  return SLASH_COMMANDS.filter((c) => (!c.needsSession || session != null) && (!c.needsOpen || session != null || countdown != null));
+}
 
 /** The commands the input could become. Once something follows the name, only one that takes it. */
 export function matchCommands(input: string): SlashCommand[] {

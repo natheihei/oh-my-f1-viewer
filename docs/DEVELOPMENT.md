@@ -19,8 +19,10 @@ it from source.
 | Drag a tile's title bar | Move it; drop it on another tile to swap them. With `Alt` held (`Option` on a Mac), drag it by any part |
 | Drag a tile's edge | Resize it |
 | `/auto-layout` | Re-tile the grid, undoing moves and resizes |
+| `/close-session` | Close the session, or stop a countdown, and go back to the list of sessions. The × at the right end of the timeline and "stop waiting" under a countdown do the same, and so does asking the agent to "take me home" |
 
-`/build` and `/auto-layout` work on an open session, so the command list leaves them out until there is one.
+`/build` and `/auto-layout` work on an open session, so the command list leaves them out until there is one. `/close-session` is left out
+until a session or a countdown is open.
 
 Everything else goes to the agent in plain words. Before it looks ahead of where you are, by reading ahead or moving playback forward, the palette
 shows a spoiler check: answer Allow once, Allow for this session or Don't allow. The timeline goes anywhere without asking.
@@ -97,6 +99,14 @@ tile is arranged by hand, and after that a new one goes into the biggest gap:
 
 ```bash
 node scripts/auto-layout-add-check.mjs /tmp/auto-layout-add-check
+```
+
+This one needs only the F1 TV sign-in, and sends nothing to the agent. It opens a replay race and leaves it by the timeline's ×,
+then by `/close-session`, then stops a countdown with "stop waiting". Each goes back to the landing page with no tiles and no timeline,
+and "Allow for this session" ends with the session:
+
+```bash
+npm run build:electron && node scripts/close-session-check.mjs /tmp/close-session-check
 ```
 
 This one opens no session and sends nothing to the agent. It checks the landing page: onboarding's two steps give way to it,

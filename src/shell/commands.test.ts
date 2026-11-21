@@ -8,6 +8,10 @@ vi.mock('gridstack', () => ({ GridStack: {} }));
 const { matchCommands, parseCommand, SLASH_COMMANDS } = await import('./commands');
 const { layout } = await import('../layout/store');
 const { useSession } = await import('../data/session');
+const { useCountdown } = await import('../host/viewing');
+const { useBuild } = await import('../host/build');
+const { usePalette } = await import('./palette');
+const { useLookAhead } = await import('./lookAhead');
 
 const names = (input: string) => matchCommands(input).map((c) => c.name);
 const openSession = () => useSession.setState({ session: { contentId: 1, title: 'x', type: 'race', status: 'replay' } as SessionInfo, channels: [] });
@@ -34,7 +38,7 @@ describe('/ commands', () => {
     expect(names('/b')).toEqual([]);
     expect(names('/a')).toEqual([]);
     expect(names('/build a controller')).toEqual([]);
-    expect(names('/')).toEqual(SLASH_COMMANDS.filter((c) => !c.needsSession).map((c) => c.name));
+    expect(names('/')).toEqual(SLASH_COMMANDS.filter((c) => !c.needsSession && !c.needsOpen).map((c) => c.name));
     expect(SLASH_COMMANDS.filter((c) => c.needsSession).map((c) => c.name)).toEqual(['/build', '/auto-layout']);
     openSession();
     expect(names('/b')).toEqual(['/build']);
@@ -66,6 +70,60 @@ describe('/ commands', () => {
     expect(after.manual).toBe(false);
     expect(after.tiles[0]).toMatchObject({ x: a.x, y: a.y, w: a.w, h: a.h });
     layout.clear();
+  });
+});
+
+describe('/close-session', () => {
+  const close = () => SLASH_COMMANDS.find((c) => c.name === '/close-session')!;
+  const lastLine = () => usePalette.getState().entries.at(-1)?.text;
+  const countdown = { title: 'Las Vegas Race', startMs: Date.now() + 3_600_000, session: { contentId: 2, title: 'Las Vegas Race' } as SessionInfo };
+  afterEach(() => {
+    useSession.setState({ session: null, channels: [] });
+    useCountdown.setState({ countdown: null });
+    useBuild.setState({ active: false });
+    layout.clear();
+  });
+
+  it('is offered while a session or a countdown is open, and not with neither', () => {
+    expect(names('/close')).toEqual([]);
+    openSession();
+    expect(names('/close')).toEqual(['/close-session']);
+    useSession.setState({ session: null, channels: [] });
+    useCountdown.setState({ countdown });
+    expect(names('/close')).toEqual(['/close-session']);
+  });
+
+  it('closes the session, clearing the grid', async () => {
+    openSession();
+    layout.add({ key: 'A', label: 'A', type: 'test', props: {} });
+    await close().run('');
+    expect(useSession.getState().session).toBeNull();
+    expect(layout.snapshot().tiles).toEqual([]);
+    expect(lastLine()).toBe('Closed x.');
+  });
+
+  it('stops a countdown', async () => {
+    useCountdown.setState({ countdown });
+    await close().run('');
+    expect(useCountdown.getState().countdown).toBeNull();
+    expect(lastLine()).toBe('Stopped the countdown to Las Vegas Race.');
+  });
+
+  it('leaves build mode to its own way out', async () => {
+    openSession();
+    useBuild.setState({ active: true });
+    await close().run('');
+    expect(useSession.getState().session).not.toBeNull();
+    expect(lastLine()).toBe('Leave build mode first: Save or Undo all.');
+  });
+});
+
+describe('looking ahead for this session', () => {
+  it('ends with the session', async () => {
+    const { lookAhead } = await import('./lookAhead');
+    useLookAhead.setState({ sessionAllowed: 1 });
+    lookAhead.sessionChanged();
+    expect(useLookAhead.getState().sessionAllowed).toBeNull();
   });
 });
 
