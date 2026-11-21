@@ -5,7 +5,7 @@ import type { SessionInfo } from '../../shared/api';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { matchCommands, parseCommand, SLASH_COMMANDS } = await import('./commands');
+const { matchCommands, parseCommand, SLASH_COMMANDS, splitCommands } = await import('./commands');
 const { layout } = await import('../layout/store');
 const { useSession } = await import('../data/session');
 
@@ -66,6 +66,44 @@ describe('/ commands', () => {
     expect(after.manual).toBe(false);
     expect(after.tiles[0]).toMatchObject({ x: a.x, y: a.y, w: a.w, h: a.h });
     layout.clear();
+  });
+});
+
+describe('commands named in a line', () => {
+  /** The line as the palette draws it, with each command it picked out in brackets, and what it runs with. */
+  const marked = (text: string) =>
+    splitCommands(text)
+      .map((p) => (typeof p === 'string' ? p : `[${p.text}]`))
+      .join('');
+  const runs = (text: string) => splitCommands(text).flatMap((p) => (typeof p === 'string' ? [] : [[p.command.name, p.rest]]));
+
+  it('picks out each command a line names', () => {
+    expect(marked('Onboarding skipped. /reset-onboarding brings it back.')).toBe('Onboarding skipped. [/reset-onboarding] brings it back.');
+    expect(marked('Sign in again with /login-f1tv.')).toBe('Sign in again with [/login-f1tv].');
+    expect(marked('Updated to OMFV 0.9.0. /whats-new lists what changed.')).toBe('Updated to OMFV 0.9.0. [/whats-new] lists what changed.');
+    expect(runs('Onboarding skipped. /reset-onboarding brings it back.')).toEqual([['/reset-onboarding', '']]);
+  });
+
+  it('takes the word after a command only when it takes that word', () => {
+    const line = 'Use /settings-usage on, /settings-usage off, or /settings-usage alone to see how it stands.';
+    expect(marked(line)).toBe('Use [/settings-usage on], [/settings-usage off], or [/settings-usage] alone to see how it stands.');
+    expect(runs(line)).toEqual([
+      ['/settings-usage', 'on'],
+      ['/settings-usage', 'off'],
+      ['/settings-usage', ''],
+    ]);
+    expect(marked('/settings-usage off turns them off.')).toBe('[/settings-usage off] turns them off.');
+  });
+
+  it("leaves a name that's part of something longer", () => {
+    expect(marked('see docs/build and /buildings or /build-x, a/version')).toBe('see docs/build and /buildings or /build-x, a/version');
+    expect(marked('/version/whats-new')).toBe('/version/whats-new');
+    expect(marked('no commands here')).toBe('no commands here');
+  });
+
+  it('picks out commands added later', () => {
+    // Every command in the set is picked out by its name alone.
+    for (const c of SLASH_COMMANDS) expect(runs(`try ${c.name}.`)).toEqual([[c.name, '']]);
   });
 });
 

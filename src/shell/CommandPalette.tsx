@@ -12,7 +12,7 @@ import { BackgroundPanel } from './BackgroundPanel';
 import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPrompt';
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
-import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
+import { availableCommands, matchCommands, parseCommand, reportReadiness, runCommand, SLASH_COMMANDS, splitCommands, type NamedCommand } from './commands';
 import { useOnboarding } from './onboardingState';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
@@ -35,7 +35,6 @@ import {
 import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
-import type { COMMANDS } from '../../shared/telemetry';
 
 /** While the agent is still working, a second Esc this soon after the first stops it. */
 const ESC_AGAIN_MS = 2000;
@@ -47,6 +46,26 @@ const ROLE_MARK: Record<EntryRole, string> = {
   system: '#',
   error: '!',
 };
+
+/**
+ * A system or error line's text, with each command it names as a button that runs it. The viewer's own lines
+ * and the agent's aren't: what's typed isn't a suggestion, and the agent doesn't know the commands.
+ */
+function CommandText({ text, onRun }: { text: string; onRun: (named: NamedCommand) => void }) {
+  return (
+    <>
+      {splitCommands(text).map((part, i) =>
+        typeof part === 'string' ? (
+          part
+        ) : (
+          <button key={i} type="button" className="palette-command" data-testid="palette-command" title={`Run ${part.text}`} onClick={() => onRun(part)}>
+            {part.text}
+          </button>
+        ),
+      )}
+    </>
+  );
+}
 
 /** The prompt without the spaces around it, as `text.trim()` leaves its text. */
 function trimParts(parts: PromptPart[]): PromptPart[] {
@@ -320,6 +339,22 @@ export function CommandPalette() {
     );
   }
 
+  // Done, the palette goes after a while, as it does once the agent has acted. A panel or build mode holds it.
+  const ranCommand = () => palette.hideAfter(AUTO_HIDE_MS, free);
+
+  /**
+   * A command a line names, clicked: it runs as if typed. One with a warning goes in the input instead, where the
+   * list shows the warning beside it and Enter runs it.
+   */
+  const clickCommand = ({ command, rest }: NamedCommand) => {
+    if (command.warning) {
+      inputRef.current?.setText(`${command.name} `);
+      inputRef.current?.focus();
+      return;
+    }
+    runCommand(command, rest, ranCommand);
+  };
+
   const submit = () => {
     // Said now, not as of the last render: a tile mentioned may have closed since.
     const text = promptText(parts, sayMention).trim();
@@ -331,16 +366,8 @@ export function CommandPalette() {
     if (text.startsWith('/')) {
       const { name, rest } = parseCommand(text);
       const command = SLASH_COMMANDS.find((c) => c.name === name) ?? (rest ? undefined : suggestions[selected]);
-      if (command && (!rest || command.takesText)) {
-        palette.push('user', rest ? `${command.name} ${rest}` : command.name);
-        // Typed in full, since the list doesn't offer it without a session.
-        if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
-        // Done, the palette goes after a while, as it does once the agent has acted. A panel or build mode holds it.
-        else {
-          host.telemetry.track('command_used', { command: command.name as (typeof COMMANDS)[number] });
-          void Promise.resolve(command.run(rest)).then(() => palette.hideAfter(AUTO_HIDE_MS, free));
-        }
-      } else {
+      if (command && (!rest || command.takesText)) runCommand(command, rest, ranCommand);
+      else {
         palette.push('user', text);
         palette.push('error', `Unknown command. Available: ${availableCommands().map((c) => c.name).join(', ')}`);
       }
@@ -401,7 +428,13 @@ export function CommandPalette() {
                     <AttachTag tag={tag} />{' '}
                   </Fragment>
                 ))}
-                {entry.parts ? <MentionParts parts={entry.parts} /> : entry.text}
+                {entry.parts ? (
+                  <MentionParts parts={entry.parts} />
+                ) : entry.role === 'system' || entry.role === 'error' ? (
+                  <CommandText text={entry.text} onRun={clickCommand} />
+                ) : (
+                  entry.text
+                )}
                 {entry.action ? (
                   <>
                     {' '}
