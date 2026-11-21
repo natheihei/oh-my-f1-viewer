@@ -207,6 +207,8 @@ export type SessionDataView =
       datasets: Record<Dataset, DatasetState>;
       reason: string;
       detail: string;
+      /** It should clear by itself within seconds, as a live video that hasn't said what time it shows does. */
+      brief: boolean;
       tables: SqlTableInfo[];
       drivers: DriverEntry[];
     }

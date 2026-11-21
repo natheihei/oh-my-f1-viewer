@@ -1,8 +1,9 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
-import type { AgentHandoff, AgentMode, AgentScope, AgentToolCall, AgentToolDefinition, SessionInfo } from '../../shared/api';
+import type { AgentHandoff, AgentMode, AgentScope, AgentToolCall, AgentToolDefinition, AgentToolResult, SessionInfo } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
 import { rosterOf, type SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, labelText, misfit, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
+import { beginTurn } from './dataWait';
 import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
 /**
@@ -83,7 +84,7 @@ export function describeAppState(note: string | null = null, build: string | nul
   } else if (sessionData.state === 'failed' || sessionData.state === 'unsupported') {
     lines.push(`timing data: ${sessionData.state}. ${sessionData.reason}`);
   } else {
-    lines.push(`timing data: ${sessionData.state}`);
+    lines.push('timing data: loading. query_session and seek_to wait for it, so call them as usual');
   }
   if (failed.length) lines.push(`failed streams: ${failed.join('; ')}`);
   if (note) lines.push(`suggestions: ${note}`);
@@ -95,6 +96,8 @@ let turnMode: AgentMode = 'pick';
 let turnScope: AgentScope = 'pick';
 /** The names of the tools the model has now, to tell when a call changed them. */
 let shownTools = '';
+/** Whether the model has the session's table list. It's sent with a call's result once the data that was loading has it. */
+let shownTables = true;
 
 /** Each opening of a session, by the object it opened with: the data layer makes a new one every time. */
 const openings = new WeakMap<SessionInfo, AgentScope>();
@@ -137,6 +140,7 @@ function handoff(): AgentHandoff | undefined {
   turnMode = 'view';
   turnScope = scope;
   shownTools = namesOf(tools);
+  shownTables = hasTables();
   // The new conversation sees only an open session: without this, it tells the user it was already open.
   const appState = `${describeAppState()}\njust opened: this message's own earlier step opened the session, a moment ago`;
   return { mode: 'view', scope, appState, reference: referenceFor('view'), tools };
@@ -152,22 +156,39 @@ function changedTools(mode: AgentMode): AgentToolDefinition[] | undefined {
   return tools;
 }
 
+const hasTables = (): boolean => describeTables(read().sessionData) !== '';
+
+/**
+ * The reference to send with a call's result: the whole of it again, once the table list it went without is
+ * there. A message sent while the session's data was loading has no tables to write a query from until then.
+ */
+function changedReference(mode: AgentMode): string | undefined {
+  if (shownTables || mode === 'pick' || !hasTables()) return undefined;
+  shownTables = true;
+  return mode === 'build' ? buildReference() : referenceFor(mode);
+}
+
+/** What changed for the model with a call, whether it worked or not: a handoff, or new tools and the table list. */
+function changes(mode: AgentMode): Pick<AgentToolResult, 'handoff' | 'tools' | 'reference'> {
+  const next = handoff();
+  if (next) return { handoff: next };
+  return { tools: changedTools(mode), reference: changedReference(mode) };
+}
+
 async function handleToolCall(call: AgentToolCall): Promise<void> {
   const mode = turnMode;
   try {
     const content = await runTool(call.name, call.args, mode);
     const pastPlayhead = readsPastPlayhead(call.name, call.args, mode);
-    const next = handoff();
-    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead, ...(next ? { handoff: next } : { tools: changedTools(mode) }) });
+    host.agent.toolResult({ callId: call.callId, ok: true, content, pastPlayhead, ...changes(mode) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // Even a call that failed may have opened a session, part way.
-    const next = handoff();
     host.agent.toolResult({
       callId: call.callId,
       ok: false,
       content: message.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, ''),
-      ...(next ? { handoff: next } : { tools: changedTools(mode) }),
+      ...changes(mode),
     });
   }
 }
@@ -274,19 +295,27 @@ function describeBuild(): string {
   return `build changes so far: ${changes}\nmods: ${all}${broken.join('')}`;
 }
 
+/** What the build agent knows up front: every component, and the tables. */
+function buildReference(): string {
+  const { components, sessionData } = read();
+  return [describeComponents(components, { origins: true }), describeTables(sessionData)].filter(Boolean).join('\n\n');
+}
+
 /**
  * A message starts a new turn, which clears the suggestion strip. While build mode is on it goes to the
  * build agent, with its own tools and no event list. See docs/BUILD_MODE.md.
  */
 export function askAgent(text: string): Promise<void> {
   const note = host.suggestions.newTurn();
-  const { components, sessionData, build, session } = read();
+  const { build, session } = read();
+  // The turn's waits for data end with it, however it ends.
+  const endTurn = beginTurn();
+  shownTables = hasTables();
   if (build.active) {
     turnMode = 'build';
-    const reference = [describeComponents(components, { origins: true }), describeTables(sessionData)].filter(Boolean).join('\n\n');
     const tools = toolDefinitions('build');
     shownTools = namesOf(tools);
-    return host.agent.send(text, describeAppState(note, describeBuild()), tools, reference, 'build');
+    return host.agent.send(text, describeAppState(note, describeBuild()), tools, buildReference(), 'build').finally(endTurn);
   }
   const mode: AgentMode = session ? 'view' : 'pick';
   turnMode = mode;
@@ -295,5 +324,5 @@ export function askAgent(text: string): Promise<void> {
   buildNote = null;
   const tools = toolDefinitions(mode);
   shownTools = namesOf(tools);
-  return host.agent.send(text, describeAppState(note, fromBuild), tools, referenceFor(mode), mode, turnScope);
+  return host.agent.send(text, describeAppState(note, fromBuild), tools, referenceFor(mode), mode, turnScope).finally(endTurn);
 }

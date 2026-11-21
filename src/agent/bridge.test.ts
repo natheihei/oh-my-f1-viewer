@@ -120,6 +120,30 @@ describe("the tools sent with the agent's messages", () => {
     stop();
   });
 
+  it('send the table list with a call\'s result once the data that was loading has it, once', async () => {
+    const { useSessionData } = await import('../data/sessionData');
+    const { sent, call, stop } = connect();
+    useSession.setState({ session: race(), channels: [] });
+    useSessionData.setState({ state: 'loading', sessionKey: 9, datasets: null }, true);
+    await askAgent('jump to the start');
+    expect(sent[0].reference).not.toMatch(/Tables for query_session/);
+    expect((await call('a')).reference).toBeUndefined();
+
+    const tables = [{ name: 'laps', columns: ['driver_number', 'lap_number'] }];
+    useSessionData.setState({ state: 'ready', tables, drivers: [], playheadMs: 1 } as unknown as SessionDataView, true);
+    const loaded = await call('b');
+    expect(loaded.reference).toMatch(/^Events on F1 TV/);
+    expect(loaded.reference).toMatch(/Tables for query_session[^\n]*\nlaps: driver_number, lap_number/);
+    expect((await call('c')).reference).toBeUndefined();
+
+    // A message sent with the tables has nothing to send again.
+    await askAgent('and now?');
+    expect(sent[1].reference).toMatch(/Tables for query_session/);
+    expect((await call('d')).reference).toBeUndefined();
+    useSessionData.setState({ state: 'idle' }, true);
+    stop();
+  });
+
   it('hand the message on to a viewing conversation when a call opens a session, once', async () => {
     const { sent, call, stop } = connect();
     await askAgent('last race');

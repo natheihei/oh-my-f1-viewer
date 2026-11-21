@@ -184,8 +184,9 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   const publish = () => {
     if (destroyed || !ready || sessionKey === null || !datasets) return;
     if (waiting) {
-      const { reason, detail } = waiting;
-      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, tables, drivers: roster }), true);
+      const { reason, detail, kind } = waiting;
+      const brief = kind === 'no-wall-clock';
+      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, brief, tables, drivers: roster }), true);
       return;
     }
     useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);

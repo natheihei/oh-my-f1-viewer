@@ -128,6 +128,13 @@ loads or what it asks:
 node scripts/picking-check.mjs /tmp/picking-check
 ```
 
+This one asks the real agent for a session and a moment in it in one message, on a profile with no timing data yet, and checks
+that the tools wait for the data, that the palette says so, and that playback is moved. It needs both sign-ins and plays the session:
+
+```bash
+node scripts/data-wait-check.mjs /tmp/data-wait-check
+```
+
 ```bash
 node scripts/stream-soak.mjs 10
 ```
