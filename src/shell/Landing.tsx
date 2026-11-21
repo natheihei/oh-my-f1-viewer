@@ -7,7 +7,7 @@
  */
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLive } from '../host';
-import { landing, liveSession, useLanding } from './landing';
+import { landing, liveSession, useLanding } from './landingState';
 import { relative, suffixesFor, tapeRows, tapeSessions } from './landingModel';
 import { useOnboarding } from './onboardingState';
 
