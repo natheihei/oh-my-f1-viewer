@@ -28,7 +28,7 @@ Or **Actions → Release app → Run workflow**. It refuses a commit that isn't 
 
 `dry_run` stops after the builds and keeps the files as the run's artifacts, with no tag and no release. `notes` is Markdown put
 before the generated notes, for what a release needs done by hand. A pull request that changes the packaging
-(`electron-builder.yml`, `build/entitlements.mac.plist`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow)
+(`electron-builder.yml`, `build/`, `electron/appFiles.ts`, `package.json`, the lock file or the workflow)
 builds both platforms the same way, also without releasing.
 
 electron-builder needs a semver version, so a release's package version is `20261119.1.0`. `shared/release.ts` turns it back into
@@ -151,6 +151,34 @@ not with the secrets without the owner's approval. Before giving someone write a
 from 0 to 1, so their pull requests need the owner's review too, and check each **Review deployments** request before approving
 it: approve only runs you started.
 
+#### VMP-sign the Mac build
+
+castLabs' Electron comes with a development VMP signature, which says who built the browser the Widevine CDM runs in. F1 TV's
+licence server refuses it on macOS for a DRM stream, which every live session is: "Widevine license generation failed
+(DEVELOPMENT_CERTIFICATE_NOT_ALLOWED)". Seen on 2026 Las Vegas qualifying. Most replays aren't encrypted and play anyway, and
+Linux has no VMP.
+
+castLabs' [EVS](https://github.com/castlabs/electron-releases/wiki/EVS) signs it for production, free, with an account.
+`build/vmp-sign.js` does it as electron-builder's `afterPack`, since the Apple signature has to come after and seal it, and then
+verifies it. It signs as `EVS_ACCOUNT_NAME` and `EVS_PASSWD`, or as the account last signed in on the machine. Without either
+it warns and packages the app unsigned, as a pull request's build and a dry run without the secrets do. A release refuses.
+
+Once, by the owner:
+
+```bash
+python3 -m pip install --user --upgrade castlabs-evs
+python3 -m castlabs_evs.account signup    # asks for an email, a name, an account name and a password, then the emailed code
+gh secret set EVS_ACCOUNT_NAME --env mac-signing    # asks for the account name
+gh secret set EVS_PASSWD --env mac-signing          # asks for the password
+```
+
+After `signup`, or `python3 -m castlabs_evs.account reauth` on another Mac, `npm run dist` there VMP-signs too. A run from source
+needs its own Electron signed, again after each `node node_modules/electron/install.js`:
+
+```bash
+npm run vmp:sign
+```
+
 #### Moving installed Macs over
 
 Releases up to the first Developer ID one were signed with OMFV's own self-signed certificate, so a Mac with one of those won't
@@ -182,7 +210,8 @@ gh secret delete MAC_CERT_PASSWORD
   `electron/appFiles.ts` sets `ESBUILD_BINARY_PATH` to it before anything loads esbuild. `main.ts` imports it first for that reason.
 - **The developer switches are off** (`electron/vendor/f1ov/devFlags.js`): `ELECTRON_START_URL` and the rest only work unpackaged.
 - **Electron is castLabs' build** from `node_modules/electron/dist` (`electronDist`), so each platform is packaged on its own runner.
-  The Widevine CDM is downloaded at the first start, into the profile, as it is from source.
+  The Widevine CDM is downloaded at the first start, into the profile, as it is from source. The Mac app is VMP-signed for it:
+  see [VMP-sign the Mac build](#vmp-sign-the-mac-build).
 - **The pacman package's dependencies** are listed in `electron-builder.yml`: electron-builder's own list names packages Arch no longer
   has.
 
@@ -213,10 +242,9 @@ waits a minute, so it takes a few.
 
 ### Not done yet
 
-- **VMP on macOS.** castLabs' build carries a development VMP signature. Whether F1 TV's licence server accepts it for DRM streams
-  isn't known: most replays aren't encrypted. If it doesn't, the macOS build needs signing through castLabs' EVS (free, with an
-  account) before the Apple signature: EVS in electron-builder's `afterPack`, which runs before it signs and notarizes
-  ([issue 174](https://github.com/natheihei/oh-my-f1-viewer/issues/174)).
+- **A VMP-signed Mac release.** The signing is in place, but the EVS account and its secrets aren't, and no release has been
+  made with it: see [VMP-sign the Mac build](#vmp-sign-the-mac-build) and
+  [issue 174](https://github.com/natheihei/oh-my-f1-viewer/issues/174).
 - **Intel Macs, Windows and Linux on arm64.**
 - **Updates for the pacman package**, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
 
