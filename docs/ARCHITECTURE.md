@@ -150,7 +150,8 @@ changes.
   each as a driver code, from the roster, and is drawn again when the roster changes. A component may replace the label and drivers
   with its own, from `useTileHeader`. The slots say which tile carries the sound and when a stream is loading or catching up, both as
   the component reports them, and when a tile may look ahead, so nothing floats over the content. Only the title bar drags
-  and only the edges resize: everything else on the grid lets the mouse through to the component underneath.
+  and only the edges resize: everything else on the grid lets the mouse through to the component underneath. Holding Alt
+  (Option on a Mac) makes the whole tile drag as its title bar does, and the component gets no mouse until it's let go.
 - A tile draws a hairline on its right and bottom edges only, so neighbours share one seam. Tiles are black on a slightly lifted
   ground, which is what separates them where there's no neighbour.
 - A full grid has no empty cells to drag into, so dropping a tile on another swaps them.
