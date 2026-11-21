@@ -223,9 +223,12 @@ has two steps and no "Open a session": the landing page follows it.
 now the tape showed 6 sessions coming up and 421 finished, back to 2023, opened on the line at now with no row open (nothing
 was live), and left F1 TV's shows out. Clicking the last finished race wrote "2026 São Paulo race" in the input and opened its
 suffixes; two of them made it "…, jump to 30 seconds before lights out, with onboards of the top 3 on the grid"; the arrow keys
-moved to the session before and back, and left typed text alone. Not checked: a row starting open while a session is live,
-onboarding finishing by its second step and handing over, the tape signed out of F1 TV, and what the agent does with each
-suffix, since no prompt was sent.
+moved to the session before and back, and left typed text alone. Tonight's race sent as its row wrote it, with the real model,
+opened its countdown in place of the page. On a new profile signed out of F1 TV there was no landing page, only the fix blocks:
+F1's archive answers 401 without the sign-in, so there's no calendar until one is made, and signing in refreshes it. The calendar
+also stayed `loading` there, since its first refresh finished before the window had loaded and the renderer missed it; nothing
+reads that state yet. Not checked: a row starting open while a session is live, onboarding finishing by its second step and
+handing over, and what the agent does with each suffix.
 
 **The rename to oh-my-f1-viewer** (2026-11-16). The first start on the default profile copied the real `~/.config/f1a`:
 mods, conversations, settings, the 538 MB timing database, the caches and the DRM module. `scripts/login.mjs` then signed in to F1
