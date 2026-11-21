@@ -9,11 +9,8 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
       <p class="eyebrow"><b>›</b> want to try it?</p>
       <h2 class="disp h2">Take it out for a few laps.</h2>
     </div>
-    <div class="-mb-5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
-      <span class="mono text-[11px] tracking-[0.08em] text-dim">YOU'LL NEED</span>
-      <p class="hand" style="font-size: 24px">no servers of mine in between. it all stays in your garage</p>
-    </div>
-    <div class="grid gap-px border border-[#232323] bg-[#232323]" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
+    <span class="mono -mb-5 text-[11px] tracking-[0.08em] text-dim">YOU'LL NEED</span>
+    <div class="grid gap-px border border-[#232323] bg-[#232323] sm:grid-cols-2">
       <div class="flex flex-col gap-2 bg-ink p-6">
         <span class="mono text-[11px] tracking-[0.08em] text-dim">VIDEO AND DATA</span>
         <span class="disp text-[28px]">F1 TV subscription</span>
@@ -24,6 +21,39 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
         <span class="disp text-[28px]">An LLM provider</span>
         <span class="text-sm leading-normal text-[#9a9a9a]">A ChatGPT plan, or an API key.</span>
       </div>
+      <!-- Where the two sign-ins go, as docs/ARCHITECTURE.md (sign-in) and docs/TELEMETRY.md have it. Keep it true to them -->
+      <div class="flex flex-col gap-8 bg-ink p-6 lg:flex-row lg:items-center lg:justify-between" style="grid-column: 1 / -1">
+        <div class="flex max-w-[62ch] flex-col gap-2">
+          <span class="mono text-[11px] tracking-[0.08em] text-dim">BOTH SIGN-INS</span>
+          <span class="disp text-[28px]">Stay on your computer</span>
+          <span class="text-sm leading-normal text-[#9a9a9a]">
+            OMFV has no server and no account. Your F1 TV sign-in and your provider's key are kept on your computer,
+            encrypted by your system's keychain, and only ever sent to F1 TV and your provider. The video, the timing data
+            and the agent's replies come straight from them.
+          </span>
+          <span class="mono pt-1 text-xs leading-relaxed text-dim">
+            It also sends anonymous usage counts, with nothing about who you are or what you type.{' '}
+            <a class="text-dim underline" href={`${REPO_HREF}/blob/main/docs/TELEMETRY.md`}>What's sent</a>, and how to turn it off.
+          </span>
+        </div>
+
+        <div class="flow mono" aria-label="F1 TV and your provider talk to your computer directly, with no OMFV server in between">
+          <span class="node">F1 TV</span>
+          <span class="wire" aria-hidden="true"></span>
+          <span class="node you"
+            ><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"
+              ><rect x="0.5" y="5" width="10" height="6.5" fill="currentColor"></rect><path
+                d="M2.5 5V3.5a3 3 0 0 1 6 0V5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"></path></svg
+            >YOUR COMPUTER</span
+          >
+          <span class="wire" aria-hidden="true"></span>
+          <span class="node">YOUR PROVIDER</span>
+          <span class="none">no OMFV server in between</span>
+        </div>
+      </div>
     </div>
     <div class="flex flex-wrap items-center gap-3">
       <a class="btn" href={DOWNLOAD_HREF}>Download</a>
@@ -32,3 +62,101 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
     </div>
   </div>
 </section>
+
+<style>
+  /* F1 TV ↔ your computer ↔ your provider: across on a wide screen, down on a phone */
+  .flow {
+    display: grid;
+    grid-template-columns: auto 40px auto 40px auto;
+    align-items: center;
+    row-gap: 12px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    flex: none;
+    align-self: flex-start;
+  }
+  @media (min-width: 1024px) {
+    .flow {
+      align-self: center;
+    }
+  }
+  .node {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid #2c2c2c;
+    color: #cfcfcf;
+    white-space: nowrap;
+  }
+  .node.you {
+    background: #e7e7e7;
+    border-color: #e7e7e7;
+    color: #0d0d0d;
+    font-weight: 700;
+  }
+  /* A line with an arrowhead at each end */
+  .wire {
+    height: 1px;
+    background: #5a5a5a;
+    position: relative;
+  }
+  .wire::before,
+  .wire::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    border: 3.5px solid transparent;
+  }
+  .wire::before {
+    left: -1px;
+    border-right-color: #5a5a5a;
+    border-left: 0;
+  }
+  .wire::after {
+    right: -1px;
+    border-left-color: #5a5a5a;
+    border-right: 0;
+  }
+  .none {
+    grid-column: 1 / -1;
+    justify-self: center;
+    font-family: var(--font-hand);
+    font-size: 20px;
+    letter-spacing: 0;
+    color: #e7e7e7;
+    transform: rotate(-2deg);
+  }
+  @media (max-width: 520px) {
+    .flow {
+      grid-template-columns: auto;
+      justify-items: center;
+      row-gap: 0;
+    }
+    .wire {
+      width: 1px;
+      height: 24px;
+    }
+    .wire::before,
+    .wire::after {
+      top: auto;
+      left: -3px;
+      right: auto;
+      border: 3.5px solid transparent;
+    }
+    .wire::before {
+      top: -1px;
+      border-bottom-color: #5a5a5a;
+      border-top: 0;
+    }
+    .wire::after {
+      bottom: -1px;
+      border-top-color: #5a5a5a;
+      border-bottom: 0;
+    }
+    .none {
+      margin-top: 12px;
+    }
+  }
+</style>
