@@ -171,7 +171,7 @@ into a tile with the component's own key and label, and throws on a type that is
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `open` | `contentId: integer`, `title?: string`, `fromStart?: boolean` | Replaces whatever is open with this replay or live session and puts its main feed on screen. `fromStart` starts a live session at the beginning instead of the live edge. For a session that hasn't started, it shows a countdown instead and opens the session once F1 TV has it live. Returns `{ session, feeds }`, where `feeds` is `null` while counting down |
-| `close` | none | Closes the open session and clears the screen |
+| `close` | none | Closes the open session, or stops the countdown to one, and clears the screen. `/close-session`, the timeline's × and the viewing agent's `close_session` run it |
 
 ### `host.catalog`
 
@@ -406,6 +406,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | --- | --- |
 | `list_sessions`, `list_live`, `list_upcoming` | `host.catalog.sessions`, `.live`, `.upcoming` |
 | `load_session`, `list_streams` | `host.session.open`, `.feeds` |
+| `close_session` | `host.session.close`, when the user asks to leave the session. `load_session` already replaces it with another |
 | `suggest_tiles` | `host.suggestions.offer`, for streams and components |
 | `remove_tiles` | `host.layout.remove`, for any tile |
 | `edit_tile` | `host.layout.setProps`, for one component that isn't video |

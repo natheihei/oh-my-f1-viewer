@@ -160,6 +160,15 @@ agent isn't asked anything until they're there.
 `load_session` opens whatever it's given: a replay or live session plays, and one that hasn't started shows a countdown and opens itself
 once F1 TV has it live. It returns once the session's timing data has settled: see "Waiting for the data".
 
+### Leaving a session
+
+Closing the session goes back to the screen the app starts on with nothing open: the landing page lists sessions, and the next message
+starts a picking conversation. `/close-session`, the × at the right end of the timeline and "stop waiting" under a countdown all run
+`goHome` (`src/shell/home.ts`). It says what it closed in the palette, and stops a viewing turn still running, since that turn is about the
+session that's going. In build mode it refuses, and asks for Save or Undo all first: build mode works on the open session and has its own
+way out. The viewing agent's `close_session` calls `host.session.close` in its own turn, when the user asks to leave ("take me home"). After
+it, the turn's tools are the picking ones. "Allow for this session" ends with that opening of the session, whichever way it closes.
+
 ### Suggested tiles
 
 `suggest_tiles` puts streams and charts in a strip between the palette's history and its input, and returns at once: the turn doesn't wait for the user.
@@ -247,7 +256,7 @@ target time or how far ahead it is, since any of those could give something away
 The viewer answers:
 
 - **Allow once:** allowed for the rest of the agent's turn, since one request often takes a few queries and then a seek.
-- **Allow for this session:** allowed until another session opens. A `looks ahead · ×` tag beside the input shows it, and clicking it asks
+- **Allow for this session:** allowed until the session closes or another opens. A `looks ahead · ×` tag beside the input shows it, and clicking it asks
   again next time.
 - **Don't allow**, or Esc: refused.
 

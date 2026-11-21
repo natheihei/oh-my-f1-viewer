@@ -1,6 +1,7 @@
 /** The session's transport, fixed at the bottom. It drives the clock, so it controls every stream. */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { host, useLive } from '../host';
+import { goHome } from './home';
 
 function formatTime(sec: number): string {
   if (!Number.isFinite(sec)) return '--:--:--';
@@ -171,7 +172,26 @@ export function Timeline() {
         />
         <span className="timeline-volume-value">{muted ? 'mute' : String(Math.round(volume * 100))}</span>
       </div>
+      <button
+        type="button"
+        className="timeline-button timeline-close"
+        data-testid="timeline-close"
+        aria-label="Close session"
+        title="Close the session and go back to the list of sessions (/close-session)"
+        onPointerUp={(e) => e.currentTarget.blur()}
+        onClick={() => void goHome()}
+      >
+        <CloseGlyph />
+      </button>
     </div>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg viewBox="0 0 10 10" className="timeline-glyph" aria-hidden="true">
+      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" fill="none" />
+    </svg>
   );
 }
 

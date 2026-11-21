@@ -63,7 +63,7 @@ The gate runs in the agent's tools, before anything executes, so no row reaches 
 Both are ways of looking ahead. The viewer sees a red `! spoiler`, "The agent wants to look ahead of where you are.", and never the SQL, the target time or how far ahead it is, since any of those could give something away.
 
 - **Allow once** lasts for the agent's turn.
-- **Allow for this session** lasts until another session opens.
+- **Allow for this session** lasts until the session closes or another opens, even the same one again.
 - **Don't allow**, Esc, or 50 seconds without an answer refuses. So does the turn ending. The tool call fails and the query or seek never runs.
 
 Reading ahead at the live edge doesn't ask, since it only sees the seconds the feed is ahead of the video. The viewer's own timeline is never gated.

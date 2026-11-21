@@ -79,6 +79,13 @@ export const lookAhead = {
     turnAllowed = false;
     if (pending) settle({ approved: false, reason: 'the request ended' });
   },
+  /**
+   * The open session changed: closed, or another opened, or the same one opened again. Its allow ended with
+   * it, and the viewer who said it was there, so nothing says so.
+   */
+  sessionChanged(): void {
+    if (useLookAhead.getState().sessionAllowed != null) useLookAhead.setState({ sessionAllowed: null });
+  },
   revokeSession(): void {
     useLookAhead.setState({ sessionAllowed: null });
     palette.push('system', 'The agent will ask before looking ahead again.');

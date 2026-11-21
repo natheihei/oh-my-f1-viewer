@@ -657,6 +657,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     ],
     result: () => 'At the live edge.',
   }),
+  expose(host.session.close, {
+    name: 'close_session',
+    description:
+      'Close the open session and go back to the screen with nothing open, where the user picks a session. Only when they ask to leave it, such as "close this" or "take me home". To watch another session, load_session replaces this one instead.',
+    gate: [sessionOpen],
+    result: () => 'Closed. No session is open now, and the user sees the list of sessions.',
+  }),
   querySession(true),
   seekTo(true),
 ];
