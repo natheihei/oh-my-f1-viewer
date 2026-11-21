@@ -1,6 +1,7 @@
 /** Connects the agent to the palette: what the user types goes to it, and what it says comes back. */
 import type { AgentEvent } from '../../shared/api';
 import { askAgent, connectTools } from '../agent/bridge';
+import { setWaitNotifier } from '../agent/dataWait';
 import { setSpoilerAsker } from '../agent/spoilerGate';
 import { errorBlock } from '../../shared/health';
 import { host, read, type Attachment } from '../host';
@@ -70,7 +71,10 @@ export function connectAgent(): () => void {
   const offEvent = host.agent.onEvent(onEvent);
   const offTools = connectTools();
   const offAsker = setSpoilerAsker(askViewer);
+  // What a tool call is waiting on, and when it's there, so a wait doesn't look like nothing happening.
+  const offWait = setWaitNotifier((text) => palette.push('system', text));
   return () => {
+    offWait();
     offEvent();
     offTools();
     offAsker();

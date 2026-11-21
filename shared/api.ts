@@ -153,6 +153,8 @@ export interface AgentToolResult {
   pastPlayhead?: boolean;
   /** The tools the model has from the next request on, when the call changed them, as opening a session does. */
   tools?: AgentToolDefinition[];
+  /** The conversation's reference from the next request on, when the call waited for data that brought the table list. */
+  reference?: string;
   /** The call opened a session, so the message goes on in a conversation for it. See AgentHandoff. */
   handoff?: AgentHandoff;
 }
