@@ -13,7 +13,7 @@ import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPromp
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
 import { availableCommands, matchCommands, parseCommand, reportReadiness, runCommand, SLASH_COMMANDS, splitCommands, type NamedCommand } from './commands';
-import { landing } from './landing';
+import { landing } from './landingState';
 import { useLandingShown } from './Landing';
 import { useOnboarding } from './onboardingState';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
