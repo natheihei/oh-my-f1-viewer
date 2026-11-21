@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="OMFV">
+<title>OMFV</title>
+<rect width="192" height="192" fill="#000000"/>
+<rect x="1" y="1" width="190" height="190" fill="none" stroke="#2c2c2c" stroke-width="2"/>
+<path fill="#e7e7e7" fill-rule="evenodd" d="M96 30C138 30 162 60 162 98L162 122C162 146 146 160 124 160L68 160C46 160 30 146 30 122L30 98C30 60 54 30 96 30ZM42 96Q42 78 60 78L132 78Q150 78 150 96L150 104Q150 122 132 122L60 122Q42 122 42 104ZM80 138L112 138L112 144L80 144Z"/>
+<path fill="#ff3b30" d="M68 87L78.92 87L91.92 100L78.92 113L68 113L81 100Z"/>
+<rect fill="#e7e7e7" x="103" y="87" width="14" height="26"/>
+</svg>
