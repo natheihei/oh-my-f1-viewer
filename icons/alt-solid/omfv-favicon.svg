@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="OMFV">
+<title>OMFV</title>
+<rect width="32" height="32" fill="#000000"/>
+<g transform="translate(-3.2 -3) scale(0.20000)">
+<path fill="#e7e7e7" fill-rule="evenodd" d="M96 30C138 30 162 60 162 98L162 122C162 146 146 160 124 160L68 160C46 160 30 146 30 122L30 98C30 60 54 30 96 30ZM40 96Q40 74 62 74L130 74Q152 74 152 96L152 104Q152 126 130 126L62 126Q40 126 40 104Z"/>
+<path fill="#ff3b30" d="M63 84L76.44 84L92.44 100L76.44 116L63 116L79 100Z"/>
+<rect fill="#e7e7e7" x="105" y="84" width="17" height="32"/>
+</g>
+</svg>

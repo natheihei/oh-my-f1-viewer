@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* The app's own look: one dark page, with the logo's prompt (red arrow, block cursor) as the one bold device.
+/* The app's own look: one dark page, with the prompt (red arrow, block cursor) as the one bold device.
    ground #0d0d0d · panel #161616 · tile #000 · line #2c2c2c · ink #e7e7e7 · dim #8f8f8f
    red #ff3b30 is for asking and spoilers, yellow #ffd12e for /build only, Ferrari red #e8002d for the radio line in #build. */
 @theme {
