@@ -74,7 +74,9 @@ names a tile. `live.health` and look-ahead approvals name tiles by id too.
 - `failed`, with a `reason`.
 - `waiting`: there's data, but nothing at the frame on screen can be shown yet. The frame can't be placed on the data to within a second or
   so, as on a replay MultiViewer hasn't published an anchor for, or the live video hasn't reached when the capture began. It holds `sessionKey`,
-  `datasets`, `tables`, a short `reason` and a longer `detail`. SQL at the playhead fails with both, and `asOf: 'session'` still reads.
+  `datasets`, `tables`, a short `reason` and a longer `detail`. SQL at the playhead fails with both, and `asOf: 'session'` still reads. It
+  also holds `drivers`, the roster as the data last has it, so codes, team colours and `@` mentions work while waiting. `rosterOf(sessionData)` in
+  `shared/sessionData.ts` gives the roster in either state.
   See "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md).
 - `ready`. In this state it also holds:
   - `sessionKey`.

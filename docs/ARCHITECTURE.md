@@ -127,6 +127,7 @@ and which ran about 15s ahead of curated lights-out, aren't used.
 Live data is held until the video reaches it, because F1 TV's live video runs tens of seconds behind the feed (about 45s
 when measured). F1 OpenViewer applies records on arrival, and lists this as a known limitation. Each row stores when it arrived, so rewinding
 the video just changes which rows show. Until the video reaches when the capture began, `sessionData` is `waiting` too, and says how long.
+Waiting, it still has the roster, so driver codes and `@` mentions work from the moment a live session opens.
 
 Live streams sit 8s behind the edge. Closer than that starves their buffers: at 2.2s back, onboards drifted over a second and stayed
 at low quality.

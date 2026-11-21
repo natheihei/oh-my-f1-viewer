@@ -174,6 +174,9 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let revision = 0;
   let lastObjects = '';
   let objects: SessionObjects = NO_OBJECTS;
+  /** The roster while waiting: as the data last has it, since nothing is visible at the playhead. */
+  let lastRoster = '';
+  let roster: SessionObjects['drivers'] = NO_OBJECTS.drivers;
   let lastTables = '';
   /** Kept as one object while it's unchanged, so it never makes anything render again. */
   let tables: SqlTableInfo[] = [];
@@ -182,7 +185,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     if (destroyed || !ready || sessionKey === null || !datasets) return;
     if (waiting) {
       const { reason, detail } = waiting;
-      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, tables }), true);
+      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, tables, drivers: roster }), true);
       return;
     }
     useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);
@@ -210,6 +213,17 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     reading = true;
     readSecond = Math.floor(playhead / 1000);
     try {
+      // Waiting, nothing is visible at the playhead, the roster included: it's read as the data last has it.
+      if (waiting) {
+        const { drivers } = await window.omfv.data.objects(sessionKey, EVERYTHING_VISIBLE);
+        const serialized = JSON.stringify(drivers);
+        if (serialized !== lastRoster) {
+          lastRoster = serialized;
+          roster = drivers;
+          publish();
+        }
+        return;
+      }
       const next = await window.omfv.data.objects(sessionKey, playhead);
       const serialized = JSON.stringify(next);
       if (serialized !== lastObjects) {

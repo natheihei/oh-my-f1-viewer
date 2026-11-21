@@ -19,6 +19,7 @@ import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, misfit, read, 
 import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 import { formatClock } from '../../shared/clock';
+import { rosterOf } from '../../shared/sessionData';
 
 export interface AgentTool extends AgentToolDefinition {
   run(args: Record<string, unknown>): Promise<string>;
@@ -259,7 +260,7 @@ type Item = { type: string; props: Record<string, unknown> };
 
 const rosterNow = () => {
   const { sessionData, feeds } = read();
-  return driversOf(sessionData.state === 'ready' ? sessionData.drivers : [], feeds);
+  return driversOf(rosterOf(sessionData), feeds);
 };
 
 /**

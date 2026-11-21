@@ -3,6 +3,7 @@ import type { SessionInfo } from '../../shared/api';
 import type { TimingQuery } from '../../shared/api';
 import type { CircuitView, DataStatus, SessionCoverage } from '../../shared/sessionData';
 import { LIVE_FRAME_LEAD_MS } from './timeMap';
+import { rosterOf } from '../../shared/sessionData';
 import { archiveQuery, openSessionData, sessionSql, useCircuit, useSessionData } from './sessionData';
 
 const session = { contentId: 1, title: '2026 Race', type: 'race', year: 2026, meetingKey: '10', sessionKey: '20', status: 'replay' } as SessionInfo;
@@ -121,8 +122,8 @@ describe('session data', () => {
     emit({ ...ready, clock: null });
     handle.update(500, null);
     await flush();
-    expect(data.objects).toHaveBeenLastCalledWith(20, -1);
     expect(useSessionData.getState()).toMatchObject({ state: 'waiting', sessionKey: 20, reason: "Can't line the data up with the video" });
+    expect(useSessionData.getState()).not.toHaveProperty('lapCount');
     handle.destroy();
   });
 
@@ -160,8 +161,21 @@ describe('session data', () => {
     emit({ ...ready, clock: null, sessionStartSec: null });
     handle.update(100, null);
     await flush();
-    expect(data.objects).toHaveBeenLastCalledWith(20, -1);
     expect(useSessionData.getState()).toMatchObject({ state: 'waiting', reason: 'Not lined up with the video yet' });
+    expect(useSessionData.getState()).not.toHaveProperty('lapCount');
+    handle.destroy();
+  });
+
+  it('keeps the roster while waiting, and nothing else', async () => {
+    const driver = { driver_number: 44, name_acronym: 'HAM' };
+    data.objects.mockResolvedValueOnce({ drivers: [driver], lapCount: { current: 30, total: 50 } } as never);
+    const handle = openSessionData({ ...session, status: 'live' }, true);
+    emit({ ...ready, clock: null, sessionStartSec: null });
+    await flush();
+    const view = useSessionData.getState();
+    expect(view).toMatchObject({ state: 'waiting', drivers: [driver] });
+    expect(view).not.toHaveProperty('lapCount');
+    expect(rosterOf(view)).toEqual([driver]);
     handle.destroy();
   });
 

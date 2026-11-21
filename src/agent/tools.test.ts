@@ -665,8 +665,9 @@ describe('seeking to a moment', () => {
   });
 
   it('says the data is waiting, and why', () => {
-    useSessionData.setState({ state: 'waiting', sessionKey: 9, datasets: {}, tables: [], reason: 'Not lined up with the video yet', detail: 'MultiViewer has not published it.' } as never, true);
+    useSessionData.setState({ state: 'waiting', sessionKey: 9, datasets: {}, tables: [], reason: 'Not lined up with the video yet', detail: 'MultiViewer has not published it.', drivers: [{ driver_number: 44, name_acronym: 'HAM' }] } as never, true);
     expect(describeAppState()).toContain('timing data: waiting, so nothing at the frame on screen can be read. Not lined up with the video yet: MultiViewer has not published it.');
+    expect(describeAppState()).toContain('drivers: HAM 44');
   });
 
   it("says why there's no data", () => {

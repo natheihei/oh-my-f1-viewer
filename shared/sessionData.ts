@@ -197,7 +197,9 @@ export type SessionDataView =
   | { state: 'failed'; reason: string }
   /**
    * There's data, but the frame on screen can't be placed on it, or the live video hasn't reached it yet.
-   * Nothing is visible: `reason` says why in a few words, and `detail` explains it in full.
+   * Nothing at the playhead is visible: `reason` says why in a few words, and `detail` explains it in full.
+   * `drivers` is still the roster, as the data last has it: who is entered isn't news, and codes, colours
+   * and mentions need it. Empty until the data has one.
    */
   | {
       state: 'waiting';
@@ -206,6 +208,7 @@ export type SessionDataView =
       reason: string;
       detail: string;
       tables: SqlTableInfo[];
+      drivers: DriverEntry[];
     }
   | ({
       state: 'ready';
@@ -220,6 +223,13 @@ export type SessionDataView =
     } & SessionObjects);
 
 import type { FeedClock } from './feedTime';
+
+const NO_DRIVERS: readonly DriverEntry[] = Object.freeze([]);
+
+/** The session's roster: at the playhead once the data is `ready`, as the data last has it while `waiting`, else empty. */
+export function rosterOf(data: SessionDataView): readonly DriverEntry[] {
+  return data.state === 'ready' || data.state === 'waiting' ? data.drivers : NO_DRIVERS;
+}
 
 export interface SqlRows {
   columns: string[];

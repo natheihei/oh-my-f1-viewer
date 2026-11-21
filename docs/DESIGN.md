@@ -250,7 +250,7 @@ type SessionData =
   | { state: 'unsupported'; reason: string } // Before 2023
   | { state: 'loading'; datasets: Record<Dataset, DatasetState> | null }
   | { state: 'failed'; reason: string }
-  | { state: 'waiting'; reason: string; detail: string } // Not lined up with the video yet
+  | { state: 'waiting'; reason: string; detail: string; drivers: DriverEntry[] } // Not lined up with the video yet: only the roster
   | { state: 'ready'; drivers: DriverEntry[] /* … */ };
 ```
 

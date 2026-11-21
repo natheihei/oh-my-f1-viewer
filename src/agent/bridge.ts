@@ -1,7 +1,7 @@
 /** Runs the agent's tool calls, and tells it what the app looks like with each message. */
 import type { AgentHandoff, AgentMode, AgentScope, AgentToolCall, AgentToolDefinition, SessionInfo } from '../../shared/api';
 import { describePlace, notDrawing } from '../../shared/health';
-import type { SessionDataView } from '../../shared/sessionData';
+import { rosterOf, type SessionDataView } from '../../shared/sessionData';
 import { FIRST_SEASON, host, labelText, misfit, read, tilesOf, type ComponentInfo, type EventIndex, type Live, type Tile } from '../host';
 import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, toolDefinitions } from './tools';
 
@@ -70,15 +70,16 @@ export function describeAppState(note: string | null = null, build: string | nul
     `on screen: ${describeLayout(live)}`,
     `audio: ${describeAudio(heardLabel(live), volume)}`,
   );
+  const roster = rosterOf(sessionData)
+    .filter((d) => d.name_acronym)
+    .map((d) => `${d.name_acronym} ${d.driver_number}`)
+    .join(', ');
   if (sessionData.state === 'ready') {
     if (sessionData.playheadMs != null) lines.push(`playhead: ${Math.round(sessionData.playheadMs)} (UTC ms, as in date columns)`);
-    const roster = sessionData.drivers
-      .filter((d) => d.name_acronym)
-      .map((d) => `${d.name_acronym} ${d.driver_number}`)
-      .join(', ');
     if (roster) lines.push(`drivers: ${roster}`);
   } else if (sessionData.state === 'waiting') {
     lines.push(`timing data: waiting, so nothing at the frame on screen can be read. ${sessionData.reason}: ${sessionData.detail}`);
+    if (roster) lines.push(`drivers: ${roster}`);
   } else if (sessionData.state === 'failed' || sessionData.state === 'unsupported') {
     lines.push(`timing data: ${sessionData.state}. ${sessionData.reason}`);
   } else {
