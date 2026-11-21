@@ -1,21 +1,20 @@
 /**
- * Onboarding, on the empty screen above the palette: sign in to F1 TV, connect the agent's model, then open a
- * session. The steps are numbered, and an accordion: the open one says why it's needed and has its button, and
- * the picture beside it shows what it unlocks, at one height for all three so the card doesn't move. It opens on
- * the first step not done, and moves on when one finishes. Each button does what a `/` command does, and names
- * it. On the last step the palette lights up, since that's where it's done. See onboardingState.ts for when it
- * shows.
+ * Onboarding, on the empty screen above the palette: sign in to F1 TV, then connect the agent's model. The steps
+ * are numbered, and an accordion: the open one says why it's needed and has its button, and the picture beside
+ * it shows what it unlocks, at one height for both so the card doesn't move. It opens on the first step not
+ * done, and moves on when one finishes. Each button does what a `/` command does, and names it. When the second
+ * finishes the card goes and the landing page takes its place, with sessions to pick. See onboardingState.ts
+ * for when it shows.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { AgentProviderOption, AiStatus } from '../../shared/api';
-import { FIRST_SEASON, host, useLive } from '../host';
-import { sendToAgent } from './agentFeed';
+import { host, useLive } from '../host';
 import { errorText, reportReadiness } from './commands';
 import { OmfvMark } from './OmfvMark';
-import { onboarding, useOnboarding } from './onboardingState';
+import { onboarding } from './onboardingState';
 import { palette } from './palette';
 
-type StepId = 'f1tv' | 'agent' | 'watch';
+type StepId = 'f1tv' | 'agent';
 type Mark = 'todo' | 'busy' | 'done' | 'error';
 
 interface Action {
@@ -39,17 +38,14 @@ interface StepView {
   command?: string;
 }
 
-const STEPS: StepId[] = ['f1tv', 'agent', 'watch'];
+const STEPS: StepId[] = ['f1tv', 'agent'];
 
-const TITLES: Record<StepId, string> = { f1tv: 'Sign in to F1 TV', agent: 'Connect a model', watch: 'Open a session' };
+const TITLES: Record<StepId, string> = { f1tv: 'Sign in to F1 TV', agent: 'Connect a model' };
 
 const WHY: Record<StepId, string> = {
   f1tv: 'Every feed and all the timing come from your F1 TV subscription. OMFV keeps the sign-in on this computer only.',
   agent: 'You tell the agent what to watch. It opens the session and suggests tiles. OMFV can use the model or subscription you already have.',
-  watch: `Name any session from ${FIRST_SEASON} on, in your own words. The agent finds it and opens the feeds.`,
 };
-
-const EXAMPLES = ['2025 Mexico race', 'last qualifying', '2024 Monaco onboard LEC'];
 
 interface Connecting {
   message: string;
@@ -149,11 +145,21 @@ export function Onboarding() {
   const agentDone = agent?.ready === true;
   const eventCount = events.seasons.reduce((n, s) => n + s.events.length, 0);
 
-  // A step that finishes hands on to the next one not done, even if it was opened by hand.
+  const allDone = f1Done && agentDone;
+  const done = () => {
+    onboarding.finish('done');
+    palette.push('system', "You're set. Pick a session above, or name one here.");
+  };
+
+  // A step that finishes hands on to the next one not done, even if it was opened by hand. The last one to
+  // finish ends onboarding. Brought back with both already done, it stays until its button is pressed.
   const was = useRef({ f1Done, agentDone });
   useEffect(() => {
-    if ((f1Done && !was.current.f1Done) || (agentDone && !was.current.agentDone)) setOpen(null);
+    const finished = (f1Done && !was.current.f1Done) || (agentDone && !was.current.agentDone);
     was.current = { f1Done, agentDone };
+    if (!finished) return;
+    if (allDone) done();
+    else setOpen(null);
   }, [f1Done, agentDone]);
 
   const f1View = (): StepView => {
@@ -204,48 +210,40 @@ export function Onboarding() {
     return { mark: agentError ? 'error' : 'todo', status: agentError ? "Didn't connect" : 'Not connected', message: agentError ?? undefined, actions, command: '/settings-agent' };
   };
 
-  const locked = !(f1Done && agentDone);
-  const watchView = (): StepView =>
-    locked
-      ? { mark: 'todo', status: 'Needs 1 and 2', message: 'Sign in to F1 TV and connect a model first.', actions: [] }
-      : { mark: 'todo', status: '', actions: EXAMPLES.map((text, i) => ({ label: text, run: () => void sendToAgent(text), main: i === 0 })) };
-
-  const views: Record<StepId, StepView> = { f1tv: f1View(), agent: agentView(), watch: watchView() };
-  const shown: StepId = open ?? (!f1Done ? 'f1tv' : !agentDone ? 'agent' : 'watch');
-
-  // The last step is done in the palette, so it lights up while that step is open.
-  const pointing = shown === 'watch' && !locked;
-  useEffect(() => {
-    useOnboarding.setState({ pointing });
-  }, [pointing]);
-  useEffect(() => () => useOnboarding.setState({ pointing: false }), []);
+  const views: Record<StepId, StepView> = { f1tv: f1View(), agent: agentView() };
+  const shown: StepId = open ?? (!f1Done ? 'f1tv' : 'agent');
 
   return (
     <div className="onboarding" data-testid="onboarding" role="region" aria-label="Get started">
       <div className="onboarding-head">
         <OmfvMark className="onboarding-logo" />
         <span className="onboarding-title">Get started</span>
-        <span className="onboarding-sub">Three steps, about a minute</span>
-        <button type="button" className="onboarding-skip" data-testid="onboarding-skip" onClick={() => {
-            onboarding.finish('skipped');
-            // What's still missing now comes as fixes in the palette.
-            void reportReadiness();
-          }}>
-          Skip for now
-        </button>
+        <span className="onboarding-sub">Two steps, about a minute</span>
+        {allDone ? (
+          <button type="button" className="onboarding-skip" data-testid="onboarding-done" onClick={done}>
+            Pick a session
+          </button>
+        ) : (
+          <button type="button" className="onboarding-skip" data-testid="onboarding-skip" onClick={() => {
+              onboarding.finish('skipped');
+              // What's still missing now comes as fixes in the palette.
+              void reportReadiness();
+            }}>
+            Skip for now
+          </button>
+        )}
       </div>
       <div className="onboarding-steps">
         {STEPS.map((id, index) => {
           const view = views[id];
           const isOpen = id === shown;
-          const dim = id === 'watch' && locked;
           return (
             <div key={id} className={`onboarding-step ${isOpen ? 'onboarding-step-open' : ''}`} data-testid={`onboarding-step-${id}`} data-mark={view.mark}>
               <button type="button" className="onboarding-step-head" aria-expanded={isOpen} onClick={() => setOpen(id)}>
-                <span className={`onboarding-mark onboarding-mark-${view.mark} ${dim ? 'onboarding-mark-locked' : ''}`} role="img" aria-label={MARK_LABELS[view.mark]}>
+                <span className={`onboarding-mark onboarding-mark-${view.mark}`} role="img" aria-label={MARK_LABELS[view.mark]}>
                   {view.mark === 'done' ? '✓' : view.mark === 'error' ? '!' : index + 1}
                 </span>
-                <span className={dim ? 'onboarding-dim' : ''}>{TITLES[id]}</span>
+                <span>{TITLES[id]}</span>
                 {!isOpen ? <span className={`onboarding-status ${view.mark === 'error' ? 'onboarding-error' : ''}`}>{view.status}</span> : null}
               </button>
               {isOpen ? (
@@ -277,8 +275,6 @@ export function Onboarding() {
                     <span className="onboarding-command">
                       or type <kbd>{view.command}</kbd> in the palette
                     </span>
-                  ) : id === 'watch' && !locked ? (
-                    <span className="onboarding-command">or type your own in the palette below</span>
                   ) : null}
                 </div>
               ) : null}
@@ -312,7 +308,7 @@ function Tower({ rows, gaps }: { rows: number; gaps: boolean }) {
   );
 }
 
-/** What a step unlocks, drawn small: tiles for F1 TV, a conversation for the agent, a session opening for the last. */
+/** What a step unlocks, drawn small: tiles for F1 TV, a conversation for the agent. */
 function Preview({ step }: { step: StepId }) {
   if (step === 'f1tv') {
     return (
@@ -339,64 +335,38 @@ function Preview({ step }: { step: StepId }) {
       </div>
     );
   }
-  if (step === 'agent') {
-    return (
-      <div className="onboarding-preview">
-        <span className="onboarding-preview-label">Unlocks · the agent</span>
-        <div className="onboarding-preview-chat">
-          <div className="palette-line palette-user">
-            <span className="palette-mark">&gt;</span>
-            <span className="palette-text">2025 Mexico race</span>
-          </div>
-          <div className="palette-line palette-agent">
-            <span className="palette-mark" />
-            <span className="palette-text">Opened the race at the start, with the world feed.</span>
-          </div>
-          <div className="palette-line palette-user">
-            <span className="palette-mark">&gt;</span>
-            <span className="palette-text">add the gap between the top two</span>
-          </div>
-          <div className="palette-line palette-agent">
-            <span className="palette-mark" />
-            <span className="palette-text">Suggested a gap chart beside the feed.</span>
-          </div>
-          <div className="palette-line palette-user onboarding-preview-build">
-            <span className="palette-mark">&gt;</span>
-            <span className="palette-text">
-              <b>/build</b> a strip of each driver's tyre age
-            </span>
-          </div>
-          <div className="palette-line palette-agent">
-            <span className="palette-mark" />
-            <span className="palette-text">Built a tyre-age strip, and showed it on a tile under the tower.</span>
-          </div>
-        </div>
-        <span>It keeps to where you are in the session, and asks before it looks further. In build mode it makes new charts for you.</span>
-      </div>
-    );
-  }
   return (
     <div className="onboarding-preview">
-      <span className="onboarding-preview-label">What happens</span>
-      <div className="onboarding-preview-flow">
-        <div className="onboarding-preview-sent">&gt; {EXAMPLES[0]}</div>
-        <span className="onboarding-preview-arrow">↓</span>
-        <div className="onboarding-preview-tiles">
-          <div className="onboarding-preview-tile onboarding-preview-big">
-            <div className="onboarding-preview-bar">World feed</div>
-            <div className="onboarding-preview-video" />
-          </div>
-          <div className="onboarding-preview-tile">
-            <div className="onboarding-preview-bar">Timing</div>
-            <Tower rows={5} gaps={false} />
-          </div>
-          <div className="onboarding-preview-tile">
-            <div className="onboarding-preview-bar">Onboard</div>
-            <div className="onboarding-preview-video" />
-          </div>
+      <span className="onboarding-preview-label">Unlocks · the agent</span>
+      <div className="onboarding-preview-chat">
+        <div className="palette-line palette-user">
+          <span className="palette-mark">&gt;</span>
+          <span className="palette-text">2025 Mexico race</span>
+        </div>
+        <div className="palette-line palette-agent">
+          <span className="palette-mark" />
+          <span className="palette-text">Opened the race at the start, with the world feed.</span>
+        </div>
+        <div className="palette-line palette-user">
+          <span className="palette-mark">&gt;</span>
+          <span className="palette-text">add the gap between the top two</span>
+        </div>
+        <div className="palette-line palette-agent">
+          <span className="palette-mark" />
+          <span className="palette-text">Suggested a gap chart beside the feed.</span>
+        </div>
+        <div className="palette-line palette-user onboarding-preview-build">
+          <span className="palette-mark">&gt;</span>
+          <span className="palette-text">
+            <b>/build</b> a strip of each driver's tyre age
+          </span>
+        </div>
+        <div className="palette-line palette-agent">
+          <span className="palette-mark" />
+          <span className="palette-text">Built a tyre-age strip, and showed it on a tile under the tower.</span>
         </div>
       </div>
-      <span>It opens at the start, with the world feed. Ask for more tiles any time.</span>
+      <span>It keeps to where you are in the session, and asks before it looks further. In build mode it makes new charts for you.</span>
     </div>
   );
 }

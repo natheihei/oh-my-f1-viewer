@@ -57,6 +57,8 @@ export function fromSeasonIndex(index: any, year: number): { meetings: Meeting[]
 /** Sessions F1 TV has listed as coming up. Without keys there's nothing to attach data to later. */
 export function fromUpcoming(upcoming: SessionInfo[], events: EventInfo[]): { meetings: Meeting[]; sessions: ScheduleSession[] } {
   const meetings = new Map<number, Meeting>();
+  /** Meetings whose event has been found. A show the day before the event starts falls outside it, so a later session names it. */
+  const matched = new Set<number>();
   const sessions: ScheduleSession[] = [];
   for (const s of upcoming) {
     if (s.series !== 'FORMULA 1') continue;
@@ -74,8 +76,10 @@ export function fromUpcoming(upcoming: SessionInfo[], events: EventInfo[]): { me
       gmt_offset: null,
       path: null,
     });
-    if (!meetings.has(meetingKey)) {
-      const event = events.find((e) => s.startMs !== null && e.startMs <= s.startMs && s.startMs <= e.endMs);
+    const event = matched.has(meetingKey) ? undefined : events.find((e) => s.startMs !== null && e.startMs <= s.startMs && s.startMs <= e.endMs);
+    if (event) matched.add(meetingKey);
+    const listed = meetings.get(meetingKey);
+    if (!listed || event) {
       meetings.set(meetingKey, {
         meeting_key: meetingKey,
         meeting_name: event?.shortName ?? s.title,
@@ -89,8 +93,8 @@ export function fromUpcoming(upcoming: SessionInfo[], events: EventInfo[]): { me
         circuit_key: null,
         circuit_short_name: null,
         gmt_offset: null,
-        date_start: event?.startMs ?? s.startMs,
-        date_end: event?.endMs ?? s.endMs,
+        date_start: event?.startMs ?? listed?.date_start ?? s.startMs,
+        date_end: event?.endMs ?? listed?.date_end ?? s.endMs,
       });
     }
   }

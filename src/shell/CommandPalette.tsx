@@ -13,12 +13,14 @@ import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPromp
 import { sendToAgent, stopTurn } from './agentFeed';
 import { leaveBuild } from './buildMode';
 import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
+import { landing } from './landing';
+import { useLandingShown } from './Landing';
 import { useOnboarding } from './onboardingState';
 import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
-import { AUTO_HIDE_MS, palette, usePalette, type EntryRole, type PaletteEntry } from './palette';
+import { AUTO_HIDE_MS, palette, usePalette, usePaletteDraft, type EntryRole, type PaletteEntry } from './palette';
 import {
   MAC,
   bindingLabel,
@@ -63,14 +65,20 @@ export function CommandPalette() {
   const { open, busy, entries, panel } = usePalette();
   const blank = useLive((s) => s.session == null);
   const onboardingActive = useOnboarding((s) => s.active);
-  // Onboarding's last step is done here, so the palette lights up and offers an example while it's open.
-  const pointing = useOnboarding((s) => s.active && s.pointing) && blank;
+  // The landing page's rows are the examples, and write into the input here.
+  const landingShown = useLandingShown();
+  const draftSeq = usePaletteDraft((s) => s.seq);
   /** The prompt, with its mentions, and as text: a mention as the agent reads it. */
   const [parts, setParts] = useState<PromptPart[]>([]);
   const value = promptText(parts, sayMention);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<PromptInputHandle | null>(null);
+  useEffect(() => {
+    if (draftSeq === 0) return;
+    inputRef.current?.setText(usePaletteDraft.getState().text);
+    inputRef.current?.focus();
+  }, [draftSeq]);
   const historyRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<SuggestionStripHandle | null>(null);
   const promptRef = useRef<LookAheadPromptHandle | null>(null);
@@ -352,13 +360,21 @@ export function CommandPalette() {
   };
 
   return (
-    <div className={`palette ${building ? 'palette-building' : ''} ${pointing ? 'palette-pointing' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
+    <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
       {blank && entries.length <= 1 && !onboardingActive ? (
         <div className="palette-intro" data-testid="palette-intro">
           <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>
           <div className="palette-intro-try">
-            try <span className="palette-example">2025 Mexico race</span> <span className="palette-example">last qualifying</span>{' '}
-            <span className="palette-example">/</span> for commands
+            {landingShown ? (
+              <>
+                pick a session above, or name one here · <span className="palette-example">/</span> for commands
+              </>
+            ) : (
+              <>
+                try <span className="palette-example">2025 Mexico race</span> <span className="palette-example">last qualifying</span>{' '}
+                <span className="palette-example">/</span> for commands
+              </>
+            )}
           </div>
         </div>
       ) : null}
@@ -499,7 +515,7 @@ export function CommandPalette() {
         <PromptInput
           ref={inputRef}
           placeholder={
-            building ? 'describe a tile to build, or a change to one' : pointing ? 'name a session, like 2025 Mexico race' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'
+            building ? 'describe a tile to build, or a change to one' : blank ? 'name a session, or / for commands' : 'ask for anything on screen'
           }
           onChange={(next) => {
             setParts(next);
@@ -531,6 +547,10 @@ export function CommandPalette() {
             } else if (e.key === 'ArrowUp' && suggestions.length > 0) {
               e.preventDefault();
               setSelected((selected - 1 + suggestions.length) % suggestions.length);
+            } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && landingShown && !hasTiles && landing.move(e.key === 'ArrowUp' ? 1 : -1, e.currentTarget.textContent ?? '')) {
+              // On the landing page the arrows walk its sessions, later upwards as they're drawn. The text is read off
+              // the input, since a key held down arrives before the last row's text has been rendered as `value`.
+              e.preventDefault();
             } else if (e.key === 'ArrowUp' && hasTiles && !value) {
               e.preventDefault();
               stripRef.current?.focus();
