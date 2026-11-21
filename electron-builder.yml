@@ -9,6 +9,9 @@ artifactName: omfv-${version}-${os}-${arch}.${ext}
 # castLabs' Widevine build, already in node_modules for this platform: each platform is packaged on its own.
 electronDist: node_modules/electron/dist
 
+# VMP-signs the Mac app through castLabs' EVS before it's signed for Apple, so F1 TV licenses its DRM streams.
+afterPack: build/vmp-sign.js
+
 directories:
   output: release
 

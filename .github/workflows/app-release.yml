@@ -27,7 +27,7 @@ on:
     paths:
       - .github/workflows/app-release.yml
       - electron-builder.yml
-      - build/entitlements.mac.plist
+      - build/**
       - electron/appFiles.ts
       - electron/updates.ts
       - package.json
@@ -155,8 +155,36 @@ jobs:
             echo "SIGNED_BY=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
+      # castLabs' EVS, which build/vmp-sign.js signs with before the Apple signature: F1 TV's licence server refuses the
+      # development VMP signature castLabs' Electron comes with. The account is in the mac-signing environment too.
+      - name: Set up VMP signing
+        if: matrix.platform == 'mac'
+        env:
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+          RELEASING: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EVS_ACCOUNT_NAME" ] || [ -z "$EVS_PASSWD" ]; then
+            # Without it the Mac app can't play a live session, so a release refuses.
+            if [ "$RELEASING" = true ]; then
+              echo "::error::The EVS secrets aren't set: see docs/RELEASE.md, \"VMP-sign the Mac build\"."
+              exit 1
+            fi
+            echo "::warning::No EVS account: not VMP-signed. This Mac app won't play live sessions or other DRM streams."
+            exit 0
+          fi
+          python3 -m venv "$RUNNER_TEMP/evs"
+          "$RUNNER_TEMP/evs/bin/pip" install --quiet castlabs-evs
+          {
+            echo "EVS_PYTHON=$RUNNER_TEMP/evs/bin/python"
+            echo "VMP_REQUIRED=true"
+          } >> "$GITHUB_ENV"
+
       - name: Package
         env:
+          EVS_ACCOUNT_NAME: ${{ matrix.platform == 'mac' && secrets.EVS_ACCOUNT_NAME || '' }}
+          EVS_PASSWD: ${{ matrix.platform == 'mac' && secrets.EVS_PASSWD || '' }}
           # Sign as electron-builder.yml says, or as the Developer ID above, without looking in the runner's keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           CSC_KEY_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_PASSWORD }}

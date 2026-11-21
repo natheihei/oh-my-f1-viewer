@@ -12,6 +12,7 @@
     "build:electron": "tsc -p tsconfig.electron.json && npm run build:types",
     "start": "npm run build && env -u CHROME_DESKTOP electron .",
     "dist": "npm run build && electron-builder",
+    "vmp:sign": "python3 -m castlabs_evs.vmp sign-pkg node_modules/electron/dist",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",

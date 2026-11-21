@@ -310,8 +310,8 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
 - Install, build, typecheck and unit tests. One unit test is flaky on macOS: "finds new mods and drops removed ones" in
   `electron/mods/mods.test.ts` timed out in 1 of 3 full runs and passes alone, likely the folder watcher starting late under load.
 - The castLabs CDM downloads and is ready. Signing in to F1 TV, connecting ChatGPT, playing a race and talking to the agent all
-  work, by hand. Most replays don't use DRM, so whether F1 TV accepts the castLabs build's development VMP signature on macOS
-  isn't known yet.
+  work, by hand. Most replays don't use DRM. A live session does, and F1 TV refuses the castLabs build's development VMP
+  signature on macOS, so the checkout's Electron has to be VMP-signed first: see Known issues.
 - Ctrl+K toggles the palette, and clicking the key on it changes it (`scripts/layout-check.mjs`). macOS gets the app, Edit and Window menus for Cmd+C, Cmd+V,
   Cmd+A and Cmd+Q, which haven't been tried by hand.
 - `scripts/layout-check.mjs`, `scripts/suggestions-check.mjs` and `scripts/overflow-check.mjs` pass, and so does
@@ -404,6 +404,13 @@ Not verified: an AppImage updating itself from GitHub.
   partition list should show `teamid:`), or that Widevine loads under the hardened runtime. See
   [RELEASE.md](RELEASE.md#sign-the-mac-build).
 
+- **A live session doesn't play on macOS.** Seen on 2026 Las Vegas qualifying (2026-11-20): "F1 TV: Widevine license generation
+  failed (DEVELOPMENT_CERTIFICATE_NOT_ALLOWED)". F1 TV's licence server refuses the development VMP signature of castLabs'
+  Electron, so every DRM stream fails; unencrypted replays play. Signing it through castLabs' EVS fixes a run from source: after
+  `npm run vmp:sign`, the same session's main feed and an onboard got their licences, with 200 through the proxy. Packaging
+  VMP-signs the Mac app the same way, but that hasn't run with an EVS account, and no release has been made with it: not verified
+  that a released Mac app plays a live session. See [RELEASE.md](RELEASE.md#vmp-sign-the-mac-build).
+
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
   reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.
 
@@ -428,6 +435,6 @@ Not verified: an AppImage updating itself from GitHub.
 - Race-state tools for the agent.
 - More charts.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
-- Windows, and castLabs' VMP signing on macOS. See [RELEASE.md](RELEASE.md#not-done-yet).
+- Windows. See [RELEASE.md](RELEASE.md#not-done-yet).
 - Saved layouts, pop-out windows and translations.
 - Updates for the pacman package, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
