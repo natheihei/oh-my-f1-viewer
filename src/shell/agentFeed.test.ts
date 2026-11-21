@@ -9,6 +9,7 @@ const { defineComponent, host, read } = await import('../host');
 const { health, useHealth } = await import('../host/health');
 const { useBuild } = await import('../host/build');
 const { layout } = await import('../layout/store');
+const { useEventIndex } = await import('../data/catalog');
 const { sendToAgent } = await import('./agentFeed');
 const { stayInView, switchToBuild } = await import('./buildMode');
 const { palette, usePalette } = await import('./palette');
@@ -133,5 +134,19 @@ describe('taking up an offer of build mode', () => {
     expect(read().build.active).toBe(false);
     expect(usePalette.getState().entries.at(-1)).toMatchObject({ role: 'system', text: 'Stayed in view mode.' });
     palette.hide();
+  });
+
+  it('tells the viewing agent what was turned down, once', async () => {
+    useBuild.setState({ offer: { reason: 'Build a DRS chart for NOR.', note: '', tiles: [] } });
+    stayInView();
+    useBuild.setState({ active: false });
+    const events = useEventIndex.getState();
+    useEventIndex.setState({ state: 'ready' } as never);
+    await sendToAgent('ok', { echo: false, attach: false });
+    await sendToAgent('and now', { echo: false, attach: false });
+    const states = send.mock.calls.map((call: unknown[]) => String(call[1]));
+    expect(states[0]).toContain('build mode: the user turned down your offer to build a DRS chart for NOR, and stayed in view mode.');
+    expect(states[1]).not.toContain('turned down');
+    useEventIndex.setState(events);
   });
 });
