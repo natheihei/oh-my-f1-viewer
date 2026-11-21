@@ -4,7 +4,9 @@ import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { f1tvFix } from './fixes';
+import { goHome } from './home';
 import { Landing, useLandingShown } from './Landing';
+import { lookAhead } from './lookAhead';
 import { Onboarding } from './Onboarding';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
@@ -37,12 +39,16 @@ function Countdown() {
     <div className="countdown" data-testid="countdown">
       <div className="countdown-title">{countdown.title}</div>
       <div className="countdown-time">{remaining > 0 ? formatRemaining(remaining) : 'waiting for F1 TV to go live…'}</div>
+      <button type="button" className="countdown-close" data-testid="countdown-close" onClick={() => void goHome()}>
+        stop waiting
+      </button>
     </div>
   );
 }
 
 export function App() {
-  const hasSession = useLive((s) => s.session != null);
+  const session = useLive((s) => s.session);
+  const hasSession = session != null;
   const onboardingActive = useOnboarding((s) => s.active);
   const landingShown = useLandingShown();
   usePersistVolume();
@@ -55,6 +61,9 @@ export function App() {
     if (opened && !wasOpen.current) onboarding.finish('done');
     wasOpen.current = opened;
   }, [opened]);
+
+  // "Allow for this session" lasts as long as this opening of it. The data layer makes a new one each time.
+  useEffect(() => lookAhead.sessionChanged(), [session]);
 
   useEffect(() => {
     const offAgent = connectAgent();

@@ -194,7 +194,7 @@ Messages go to one of three agents, each with its own prompt and conversation, a
 - **Picking**, with no session open: `PICK_PROMPT` (`shared/viewPrompt.ts`), the event list for reference, and only the tools that
   find and open a session, `list_sessions`, `list_live`, `list_upcoming` and `load_session`.
 - **Viewing**, once one is: `VIEW_PROMPT`, then the events, the components and the tables, and every viewing tool. It keeps the
-  picking tools, to switch sessions.
+  picking tools, to switch sessions, and `close_session` leaves the session for the picking agent's screen.
 - **Building**, in build mode: see [BUILD_MODE.md](BUILD_MODE.md).
 
 A message also carries its scope: `pick`, or one opening of a session, which the renderer tells apart by the session object the data

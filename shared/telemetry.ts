@@ -48,6 +48,7 @@ export const BUILT_IN_TILES = [
 export const COMMANDS = [
   '/build',
   '/auto-layout',
+  '/close-session',
   '/settings-background',
   '/settings-agent',
   '/settings-usage',

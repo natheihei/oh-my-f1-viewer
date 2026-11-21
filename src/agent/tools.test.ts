@@ -421,6 +421,17 @@ describe('upcoming sessions', () => {
     await expect(runTool('seek_to_start', {})).resolves.toMatch(/start/);
   });
 
+  it('closes the open session, leaving only the picking tools', async () => {
+    f1tv.sessions.mockResolvedValue([session(5, 'Race', 'replay')]);
+    await runTool('list_sessions', { pageId: 1, year: 2026 });
+    await runTool('load_session', { contentId: 5, title: 'Race' });
+    expect(toolDefinitions('view').map((t) => t.name)).toContain('close_session');
+    await expect(runTool('close_session', {})).resolves.toMatch(/^Closed\./);
+    expect(useSession.getState().session).toBeNull();
+    expect(toolDefinitions('view').map((t) => t.name).sort()).toEqual([...PICKING_TOOLS].sort());
+    await expect(runTool('close_session', {})).rejects.toThrow(/No session is open/);
+  });
+
   it('list_sessions refuses seasons before the first supported one', async () => {
     await expect(runTool('list_sessions', { pageId: 1, year: 2022 })).rejects.toThrow(/Only 2023 on/);
     expect(f1tv.sessions).not.toHaveBeenCalledWith(1, 2022);
