@@ -4,6 +4,7 @@ import { connectAgent } from './agentFeed';
 import { CommandPalette } from './CommandPalette';
 import { reportReadiness } from './commands';
 import { f1tvFix } from './fixes';
+import { Landing, useLandingShown } from './Landing';
 import { Onboarding } from './Onboarding';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
@@ -43,10 +44,11 @@ function Countdown() {
 export function App() {
   const hasSession = useLive((s) => s.session != null);
   const onboardingActive = useOnboarding((s) => s.active);
+  const landingShown = useLandingShown();
   usePersistVolume();
   usePersistBackground();
 
-  // Opening a session is onboarding's last step: once one opens, or its countdown starts, it's over.
+  // A session opened from the palette while onboarding shows ends it too, as does a countdown starting.
   const opened = useLive((s) => s.session != null || s.countdown != null);
   const wasOpen = useRef(opened);
   useEffect(() => {
@@ -78,6 +80,7 @@ export function App() {
         <Backdrop />
         <Grid />
         {onboardingActive && !opened ? <Onboarding /> : null}
+        {landingShown ? <Landing /> : null}
         <Countdown />
         <CommandPalette />
       </div>

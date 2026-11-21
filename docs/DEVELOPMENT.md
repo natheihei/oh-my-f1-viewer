@@ -99,6 +99,14 @@ tile is arranged by hand, and after that a new one goes into the biggest gap:
 node scripts/auto-layout-add-check.mjs /tmp/auto-layout-add-check
 ```
 
+This one opens no session and sends nothing to the agent. It checks the landing page: onboarding's two steps give way to it,
+it opens on now with no row open unless a session is live, a row clicked writes its session in the input and opens to its
+suffixes, and the arrow keys walk the sessions:
+
+```bash
+node scripts/landing-check.mjs /tmp/landing-check
+```
+
 This one needs no sign-in and opens no session. It checks that a command named in a palette line runs when clicked: skipping
 onboarding, then clicking `/reset-onboarding` brings it back, and `/settings-usage` in its error runs with the word after it, or alone:
 

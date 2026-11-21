@@ -216,7 +216,16 @@ race" called `list_sessions` then `load_session` and opened the race in 8.3s, an
 **Onboarding** (2026-11-16), in isolated instances. On an empty profile it opened on the F1 TV step, the agent step offered
 "Sign in with ChatGPT" and Other providers, and Skip for now left fix blocks in the palette for F1 TV and the agent; Dismiss turned one
 into a line naming `/login-f1tv`. On a profile with both signed in it didn't show at start, and `/reset-onboarding` brought it back
-with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block.
+with both steps done and "Open a session" open. No sign-in was completed from onboarding or a fix block. Since 2026-11-21 it
+has two steps and no "Open a session": the landing page follows it.
+
+**Landing page** (2026-11-21), in an isolated instance signed in to F1 TV with no agent, by `landing-check.mjs`. After Skip for
+now the tape showed 6 sessions coming up and 421 finished, back to 2023, opened on the line at now with no row open (nothing
+was live), and left F1 TV's shows out. Clicking the last finished race wrote "2026 São Paulo race" in the input and opened its
+suffixes; two of them made it "…, jump to 30 seconds before lights out, with onboards of the top 3 on the grid"; the arrow keys
+moved to the session before and back, and left typed text alone. Not checked: a row starting open while a session is live,
+onboarding finishing by its second step and handing over, the tape signed out of F1 TV, and what the agent does with each
+suffix, since no prompt was sent.
 
 **The rename to oh-my-f1-viewer** (2026-11-16). The first start on the default profile copied the real `~/.config/f1a`:
 mods, conversations, settings, the 538 MB timing database, the caches and the DRM module. `scripts/login.mjs` then signed in to F1

@@ -1,6 +1,6 @@
 /**
- * Onboarding: the steps to get from a first launch to watching. It shows on the empty screen until it's
- * finished or skipped, and `/reset-onboarding` brings it back. Once it's over, a sign-in or setup that needs
+ * Onboarding: the steps to get from a first launch to the landing page, which has sessions to pick. It shows on
+ * the empty screen until both are done or it's skipped, and `/reset-onboarding` brings it back. Once it's over, a sign-in or setup that needs
  * doing again comes to the viewer as a fix block in the palette instead (fixes.ts).
  */
 import { create } from 'zustand';
@@ -10,8 +10,7 @@ import { loadUiState, saveUiState, type UiStorage } from './uiState';
 
 const KEY = 'onboarded';
 
-/** `pointing`: its last step is open, which is done in the palette, so the palette lights up. */
-export const useOnboarding = create<{ active: boolean; pointing: boolean }>(() => ({ active: false, pointing: false }));
+export const useOnboarding = create<{ active: boolean }>(() => ({ active: false }));
 
 /**
  * Whether to show onboarding at start. Once finished or skipped, never again on its own. Before that, a
@@ -30,7 +29,7 @@ export const onboarding = {
     if (shouldOnboard(onboarded, f1tv.signedIn && agent.ready)) useOnboarding.setState({ active: true });
     else saveUiState(KEY, true, storage);
   },
-  /** Over: by opening a session, or skipped. Either way it doesn't show again on its own. */
+  /** Over: both steps done or a session opened, or skipped. Either way it doesn't show again on its own. */
   finish(how: 'done' | 'skipped', storage?: UiStorage | null): void {
     if (!useOnboarding.getState().active) return;
     useOnboarding.setState({ active: false });

@@ -2078,14 +2078,6 @@
   @apply border-accent bg-accent text-black;
 }
 
-.onboarding-step .onboarding-mark-locked {
-  @apply border-line text-faint;
-}
-
-.onboarding-dim {
-  @apply text-mute;
-}
-
 .onboarding-step-body {
   @apply grid gap-3;
   padding: 0 12px 16px 40px;
@@ -2234,46 +2226,6 @@
   @apply font-normal text-medium;
 }
 
-/* The last step: a session named in the palette, and below it the tiles it opens. */
-.onboarding-preview-flow {
-  @apply grid min-h-0 gap-1;
-  grid-template-rows: auto auto minmax(0, 1fr);
-}
-
-.onboarding-preview-sent {
-  @apply justify-self-start border border-ink bg-raised text-ink;
-  padding: 4px 8px;
-}
-
-.onboarding-preview-arrow {
-  @apply text-mute;
-  padding-left: 9px;
-  line-height: 12px;
-}
-
-/* The palette while onboarding's last step is open: that step is done here. */
-.palette-pointing {
-  border-color: var(--color-ink);
-  box-shadow:
-    0 0 0 1px #000,
-    0 0 0 4px rgb(231 231 231 / 0.08);
-}
-
-.palette-pointing::after {
-  @apply absolute whitespace-nowrap text-ink;
-  content: '← type here';
-  left: calc(100% + 12px);
-  bottom: 6px;
-  font-size: var(--text-s);
-  pointer-events: none;
-}
-
-@media (max-width: 1000px) {
-  .palette-pointing::after {
-    content: none;
-  }
-}
-
 @media (max-width: 760px) {
   .onboarding {
     grid-template-columns: minmax(0, 1fr);
@@ -2287,4 +2239,138 @@
   .onboarding-media {
     @apply hidden;
   }
+}
+
+/*
+ * The landing page, over the empty screen (z-20, under the palette's z-30). It's wider than the palette and runs
+ * down behind it, so the palette sits over its lower edge like a sheet; the tape keeps room at its end to scroll
+ * its last rows clear. Black like a tile. One column of time that scrolls: a weekend's name sticks to the top while its sessions pass, a
+ * line marks now, and the open row carries its suffixes as chips. Red is the live session only.
+ */
+.landing {
+  @apply absolute z-20 flex flex-col bg-black;
+  top: 12px;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1080px, calc(100% - 32px));
+  border: 1px solid var(--color-line);
+}
+
+.landing-edge {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b border-line text-mute;
+  height: calc(var(--row) + 4px);
+  padding-inline: var(--pad);
+  font-size: var(--text-s);
+}
+
+.landing-jump {
+  @apply flex;
+}
+
+.landing-jump button {
+  @apply relative border border-line px-1.5 text-dim hover:border-rule hover:text-ink;
+  margin-left: -1px;
+  line-height: 16px;
+}
+
+.landing-tape {
+  @apply relative min-h-0 flex-1 overflow-y-auto tabular-nums;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+  padding-bottom: 120px;
+}
+
+.landing-year {
+  @apply text-faint;
+  padding: 12px var(--pad) 0;
+  font-size: var(--text-l);
+  line-height: 28px;
+}
+
+.landing-meeting {
+  @apply sticky top-0 z-10 grid bg-black text-mute;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 6px var(--pad) 0;
+  font-size: var(--text-s);
+}
+
+.landing-meeting b {
+  @apply font-medium text-ink;
+  font-size: var(--text-m);
+}
+
+.landing-row {
+  @apply grid w-full cursor-pointer text-left text-mute hover:bg-select;
+  grid-template-columns: 36px 88px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: var(--row);
+  padding-inline: var(--pad);
+  scroll-margin-block: 34px 8px;
+}
+
+/* A race weighs more than qualifying, and qualifying more than practice. What's finished steps back. */
+.landing-what {
+  @apply text-dim;
+}
+.landing-row[data-kind='qualifying'] .landing-what,
+.landing-row[data-kind='race'] .landing-what {
+  @apply text-ink;
+}
+.landing-row[data-kind='race'] .landing-what {
+  @apply font-medium;
+}
+.landing-row[data-status='past'] .landing-what {
+  @apply font-normal text-dim;
+}
+.landing-row[data-status='past'][data-kind='race'] .landing-what,
+.landing-row:hover .landing-what,
+.landing-row-open .landing-what {
+  @apply text-ink;
+}
+
+.landing-rel {
+  @apply whitespace-nowrap;
+}
+.landing-row[data-next] .landing-rel {
+  @apply text-ink;
+}
+.landing-row[data-status='live'] .landing-rel {
+  @apply text-accent;
+}
+.landing-row[data-status='live'] .landing-rel::before {
+  content: '● ';
+}
+
+.landing-row-open,
+.landing-chips {
+  @apply bg-select;
+  box-shadow: inset 2px 0 0 var(--color-ink);
+}
+
+.landing-chips {
+  @apply flex flex-wrap gap-1.5;
+  padding: 4px var(--pad) 8px calc(var(--pad) + 148px);
+}
+
+.landing-chip {
+  @apply cursor-pointer border border-line bg-transparent px-2 text-dim hover:border-rule hover:text-ink;
+  font-size: var(--text-s);
+  line-height: 18px;
+}
+.landing-chip[aria-pressed='true'] {
+  @apply border-ink bg-ink text-black;
+}
+
+.landing-now {
+  @apply flex items-center gap-2.5 text-ink uppercase;
+  padding: 5px var(--pad);
+  font-size: var(--text-s);
+  letter-spacing: 0.08em;
+}
+.landing-now::before,
+.landing-now::after {
+  content: '';
+  @apply h-px flex-1 bg-rule;
 }

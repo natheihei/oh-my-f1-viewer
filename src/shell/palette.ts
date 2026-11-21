@@ -61,6 +61,9 @@ interface PaletteState {
 
 export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [], panel: null }));
 
+/** Text for the input from outside the palette, such as a row picked on the landing page. `seq` counts each one. */
+export const usePaletteDraft = create<{ text: string; seq: number }>(() => ({ text: '', seq: 0 }));
+
 /** How long the palette stays once it's done with, or once focus leaves it: long enough to read the last line. */
 export const AUTO_HIDE_MS = 10_000;
 
@@ -127,6 +130,10 @@ export const palette = {
   setBusy(busy: boolean): void {
     usePalette.setState({ busy });
     if (busy) cancelHide();
+  },
+  /** Puts text in the input in place of what's there, and the caret after it. Nothing is sent. */
+  draft(text: string): void {
+    usePaletteDraft.setState((s) => ({ text, seq: s.seq + 1 }));
   },
   show(): void {
     cancelHide();
