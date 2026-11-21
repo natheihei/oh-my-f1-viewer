@@ -1707,6 +1707,22 @@
 }
 
 /* A line in the history the viewer can act on. */
+/* A command a system or error line names: click to run it. Underlined as the fix block's dismiss is, solid on hover. */
+.palette-command {
+  @apply cursor-pointer border-0 bg-transparent p-0 text-ink underline decoration-faint underline-offset-3 hover:decoration-ink;
+  font: inherit;
+}
+
+.palette-command:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+}
+
+.palette-error .palette-command {
+  @apply text-accent hover:decoration-accent;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
 .palette-action {
   @apply cursor-pointer border border-rule bg-transparent px-1.5 text-ink hover:border-ink;
   line-height: 18px;

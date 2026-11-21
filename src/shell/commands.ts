@@ -9,12 +9,18 @@ import { agentFix, eventsFix, f1tvFix } from './fixes';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 import { runTelemetryCommand } from './telemetry';
+import type { COMMANDS } from '../../shared/telemetry';
 
 export interface SlashCommand {
   name: string;
   description: string;
   /** Whether text may follow the name. The command list doesn't say so: it's a shortcut, not the way in. */
   takesText?: boolean;
+  /**
+   * The words that may follow it where a line names it, such as "/settings-usage off", so clicking the
+   * command there runs it with that word. Any other text after the name in a line is the sentence, not its text.
+   */
+  args?: string[];
   /** What running it means that the viewer should know first. Shown in red beside it, after "! spoiler". */
   warning?: string;
   /** It works on an open session, so it isn't offered without one. */
@@ -100,6 +106,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'See or turn off the anonymous usage counts',
     // "/settings-usage off" turns them off.
     takesText: true,
+    args: ['on', 'off'],
     run: (text) => runTelemetryCommand(text),
   },
   {
@@ -175,4 +182,54 @@ export function matchCommands(input: string): SlashCommand[] {
   const available = availableCommands();
   if (rest || /\s$/.test(input)) return available.filter((c) => c.name === name && c.takesText);
   return available.filter((c) => c.name.startsWith(name));
+}
+
+/**
+ * Runs a command as Enter on it does: echoes it as the viewer's line, then runs it, or says it needs a session.
+ * `done` runs once it has, such as hiding the palette after a while. Typing it and clicking it in a line both come here.
+ */
+export function runCommand(command: SlashCommand, rest: string, done?: () => void): void {
+  palette.push('user', rest ? `${command.name} ${rest}` : command.name);
+  // Typed in full, or named in a line, since the list doesn't offer it without a session.
+  if (!availableCommands().includes(command)) {
+    palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
+    return;
+  }
+  host.telemetry.track('command_used', { command: command.name as (typeof COMMANDS)[number] });
+  void Promise.resolve(command.run(rest)).then(done);
+}
+
+/** A command a line names, and the word after it that it takes there, if any. */
+export interface NamedCommand {
+  command: SlashCommand;
+  rest: string;
+  /** As the line says it, such as "/settings-usage off". */
+  text: string;
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A line's text, with each command it names picked out, so the palette can make it clickable. A name only
+ * counts on its own: not inside a path or a longer word. Only the commands in `SLASH_COMMANDS` count, so one
+ * added later is picked out too.
+ */
+export function splitCommands(text: string): (string | NamedCommand)[] {
+  // Longest first, so a name that starts another doesn't take its place.
+  const commands = [...SLASH_COMMANDS].sort((a, b) => b.name.length - a.name.length);
+  const names = commands.map((c) => escapeRegExp(c.name)).join('|');
+  const pattern = new RegExp(`(?<![\\w/-])(${names})(?:\\s+([\\w-]+))?(?![\\w/-])`, 'g');
+  const out: (string | NamedCommand)[] = [];
+  let at = 0;
+  for (const match of text.matchAll(pattern)) {
+    const command = commands.find((c) => c.name === match[1])!;
+    const word = match[2];
+    const rest = word && command.args?.includes(word) ? word : '';
+    const said = rest ? match[0] : match[1];
+    if (match.index > at) out.push(text.slice(at, match.index));
+    out.push({ command, rest, text: said });
+    at = match.index + said.length;
+  }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
 }

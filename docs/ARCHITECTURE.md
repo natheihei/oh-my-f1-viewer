@@ -159,7 +159,10 @@ changes.
 
 ## Commands and agent tools are separate
 
-- **`/` commands** (`src/shell/commands.ts`) are for the user: account actions.
+- **`/` commands** (`src/shell/commands.ts`) are for the user: account actions. A system or error line in the palette that
+  names one shows it as a button that runs it, as Enter on it does (`splitCommands` and `runCommand`), with the word after it when
+  the command lists that word in `args`, such as `/settings-usage off`. A command with a `warning` goes in the input instead, where
+  the list shows the warning. The viewer's own lines and the agent's aren't scanned.
 - **Agent tools** (`src/agent/tools.ts`) are for the model. Users never invoke them.
 
 Both use the host, but neither can call the other.
