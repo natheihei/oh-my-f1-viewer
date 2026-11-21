@@ -235,6 +235,18 @@ check('the folded palette is as wide as the palette, and one row high', foldedBo
 check('the folded palette names the shortcut', /Ctrl\+K|⌘K/.test((await folded.textContent()) ?? ''));
 check('the folded palette is see-through', await folded.evaluate((b) => !/^rgb\(/.test(getComputedStyle(b).backgroundColor)));
 await page.screenshot({ path: path.join(outDir, 'palette-folded.png') });
+
+// Left alone, the folded palette shows a tip in place of its placeholder. A tip stays 20s, so the first takes that long.
+const foldedLine = page.locator('[data-testid=palette-folded-line]');
+check('the folded palette starts on its placeholder', (await foldedLine.textContent()) === 'ask for anything on screen' && (await foldedLine.getAttribute('data-tip')) == null);
+await page.mouse.move(5, 5);
+const tipShown = await page.waitForSelector('[data-testid=palette-folded-line][data-tip]', { timeout: 25_000 }).catch(() => null);
+const tipText = (await foldedLine.textContent()) ?? '';
+check('the folded palette shows a tip after a while', tipShown != null && /^tip/.test(tipText), tipText);
+const tipBox = await folded.boundingBox();
+check('a tip keeps the folded palette one row high, and fits it', tipBox != null && tipBox.height === foldedBox.height && (await foldedLine.evaluate((el) => el.scrollWidth <= el.clientWidth)), JSON.stringify(tipBox));
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(outDir, 'palette-folded-tip.png') });
 await folded.click();
 await page.waitForTimeout(300);
 check('clicking the folded palette opens the palette, with the cursor in the input', await page.locator('[data-testid=palette]').isVisible() && (await page.evaluate(() => !!document.activeElement?.closest('[data-testid=palette]'))));
