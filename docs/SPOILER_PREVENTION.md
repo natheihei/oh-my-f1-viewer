@@ -125,7 +125,7 @@ session or see a chart.
   gates that. A component that declares `looksAhead` asks the viewer once per tile, but declaring it is up to the author. See [MODS.md](MODS.md).
 - **Build mode.** Its agent reads the whole session with no check: entering build mode is the viewer's consent, said in red beside
   `/build`: "! spoiler the agent looks ahead without asking". The viewing agent can offer build mode, to fix a tile's code or
-  build something no chart does (`offer_build`), and the offer says the same in red beside **Switch to build**, so switching from it is
+  build what the viewer wants to follow and no chart shows (`offer_build`), without being asked to build, and the offer says the same in red beside **Switch to build**, so switching from it is
   the same consent. Its reason, which the offer shows, comes from the viewing agent, under its own rules. What the viewing agent hands
   over is a note of its own and any tiles' errors. The build agent's conversation is its own, ends with the build, and reaches the viewing agent only as one line the app writes. What it
   says to the viewer while building depends on its prompt. See [BUILD_MODE.md](BUILD_MODE.md).

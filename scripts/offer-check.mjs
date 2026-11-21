@@ -3,7 +3,8 @@
 //
 // By default there's no agent sign-in: it offers build mode as offer_build would, with no tiles, catches what
 // would go to the build agent, and switches. With --agent the real models answer. A request a chart covers
-// gets the chart and no offer. A request none covers gets an offer with a reason and a handoff note, and the
+// gets the chart and no offer. A question gets its answer, and data the session lacks gets told so, with no offer.
+// Something to follow that none covers gets an offer with a reason and a handoff note, unasked, and the
 // check switches and waits for the build agent's turn, with the agent's login copied in. It puts the mods
 // folder back with Undo all.
 // Needs the F1 TV sign-in. Prints race data: use a race you've watched.
@@ -125,14 +126,33 @@ if (!agent) {
   check('and no offer of build mode', !covered.calls.some((c) => c.name === 'offer_build') && !(await page.evaluate(async () => (await import('/src/host/index.ts')).read().build.offer)));
   await shot('covered');
 
-  // Nothing covers it: offer build mode.
-  const asked = await say(`I want to see how many times ${code} opens DRS each lap`);
+  const noOffer = async (turn) => !turn.calls.some((c) => c.name === 'offer_build') && !(await page.evaluate(async () => (await import('/src/host/index.ts')).read().build.offer));
+
+  // A fact: answer it, with no tile and no offer.
+  const fact = await say(`how many laps has ${code} done on these tyres?`);
+  check('a question gets an answer', fact.reply.trim().length > 0 && fact.calls.some((c) => c.name === 'query_session'));
+  check('and no offer of build mode', await noOffer(fact));
+  await shot('fact');
+
+  // Something to follow that the session's data doesn't hold: say so, and offer nothing.
+  const absent = await say(`track ${code}'s tyre temperatures`);
+  check('data the session lacks gets no offer of build mode', await noOffer(absent), absent.reply);
+  await shot('absent');
+
+  // Something to keep doing: only a tile can, so it's an offer to build one, and no claim that the app will do it by itself.
+  const standing = await say("always show the leader's onboard");
+  const tile = standing.calls.find((c) => c.name === 'offer_build');
+  check('something to keep doing gets an offer to build a tile', tile != null, `${JSON.stringify(tile?.args)} ${standing.reply}`);
+  await shot('standing');
+
+  // Something to follow that nothing covers: offer build mode, though the user never said to build.
+  const asked = await say(`keep track of how many times ${code} opens DRS each lap`);
   const call = asked.calls.find((c) => c.name === 'offer_build');
-  check('a request nothing covers gets an offer of build mode', call != null, JSON.stringify(call?.args));
+  check('something to follow that nothing covers gets an offer of build mode, unasked', call != null, JSON.stringify(call?.args));
   if (!call) await fail('No offer.');
   check('with no tiles', !call.args.error_tiles?.length);
   const offer = await page.evaluate(async () => (await import('/src/host/index.ts')).read().build.offer);
-  check('the note is enough to start on: the driver and the data', offer && offer.note.includes(code) && /DRS/i.test(offer.note), offer?.note);
+  check('the note is enough to start on: the driver and the data', offer && (offer.note.includes(code) || new RegExp(`driver ${leader}\\b`).test(offer.note)) && /DRS/i.test(offer.note), offer?.note);
   log(`offer: ${await offerText()}`);
   await shot('offer');
   await page.locator('[data-testid=offer-switch]').click();

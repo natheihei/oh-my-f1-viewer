@@ -563,7 +563,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.build.offer, {
     name: 'offer_build',
     description:
-      "Offer the user build mode, where the build agent writes components' code: to fix tiles whose render error is in it, or to build a component or change one when that is what the user asks for. The user answers in the palette. If they switch, the build agent gets the errors of the tiles you name and your note, and starts on them at once. It returns straight away: end your turn saying in a few words why it needs build mode.",
+      "Offer the user build mode, where the build agent writes components' code: to fix tiles whose render error is in it, or to build a component for something the user wants to follow, keep happening or have controls for, that no component does. What it builds is always something a tile shows. The user need not have asked for a build. The user answers in the palette. If they switch, the build agent gets the errors of the tiles you name and your note, and starts on them at once. It returns straight away: end your turn saying in a few words that it was offered, and why.",
     args: Type.Object(
       {
         reason: Type.String({
@@ -572,7 +572,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         }),
         note: Type.String({
           description:
-            "The handoff, for the build agent, which sees nothing else of this conversation: what the user asked for, in their words where they matter, the drivers or tiles it is about, and what you found. One to three sentences.",
+            "The handoff, for the build agent, which sees nothing else of this conversation: what the user wants the tile to show or do, in their words where they matter, the drivers or tiles it is about, the tables you expect it to read, and what you found. One to three sentences.",
         }),
         error_tiles: Type.Optional(Type.Array(TileId, { description: "Tiles on screen whose errors the build agent should get, to fix. Leave it out when nothing is broken." })),
       },
