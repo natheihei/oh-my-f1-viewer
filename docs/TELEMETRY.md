@@ -33,8 +33,8 @@ two. Turning counts off deletes it.
 
 ## Every event
 
-Each event also carries `build` (`release` or `dev`), `release` (the release name, or `none`), `os`, `arch` and `install` (`appimage`, `pacman`, `mac`, or
-`checkout`).
+Each event also carries `build` (`release` or `dev`), `release` (the release name, or `none`), `os`, `arch` and `install` (`appimage`, `pacman`, `mac`,
+`windows`, or `checkout`).
 
 | Event | Properties | When |
 | --- | --- | --- |

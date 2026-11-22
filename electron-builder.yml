@@ -9,8 +9,10 @@ artifactName: omfv-${version}-${os}-${arch}.${ext}
 # castLabs' Widevine build, already in node_modules for this platform: each platform is packaged on its own.
 electronDist: node_modules/electron/dist
 
-# VMP-signs the Mac app through castLabs' EVS before it's signed for Apple, so F1 TV licenses its DRM streams.
+# VMP-sign the app through castLabs' EVS, so F1 TV licenses its DRM streams: the Mac app after packing, before it's
+# signed for Apple, and the Windows app after its .exe is edited and signed, which would break the VMP signature.
 afterPack: build/vmp-sign.js
+afterSign: build/vmp-sign-win.js
 
 directories:
   output: release
@@ -36,8 +38,8 @@ asarUnpack:
   - node_modules/esbuild/**
   - node_modules/@esbuild/**
 
-# Where an installed AppImage or Mac app looks for the next release (electron/updates.ts): the release marked latest.
-# electron-builder writes latest-linux.yml and latest-mac.yml from it, and app-update.yml into the app. The release
+# Where an installed AppImage, Mac app or Windows app looks for the next release (electron/updates.ts): the release marked latest.
+# electron-builder writes latest-linux.yml, latest-mac.yml and latest.yml (Windows) from it, and app-update.yml into the app. The release
 # action uploads them; `--publish never` keeps electron-builder from uploading anything itself.
 publish:
   provider: generic
@@ -83,3 +85,20 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     CFBundleDisplayName: OMFV
+
+win:
+  target:
+    - target: nsis # to install, and what an update installs
+      arch: x64
+  # electron-builder makes the .ico from it. Editing the .exe's icon and details needs Windows, or Wine elsewhere.
+  icon: icons/omfv-app-icon.png
+  # No Authenticode certificate yet: the .exe is unsigned, so SmartScreen warns on the first run.
+
+nsis:
+  # Installs for this user, into %LOCALAPPDATA%\Programs, with no admin prompt, so an update can install over it.
+  oneClick: true
+  perMachine: false
+  shortcutName: OMFV
+  uninstallDisplayName: OMFV
+  # The profile in %APPDATA%\oh-my-f1-viewer, with the sign-ins, stays when the app is removed.
+  deleteAppDataOnUninstall: false

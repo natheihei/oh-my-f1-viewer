@@ -51,8 +51,8 @@ node node_modules/electron/install.js
 npm run dev
 ```
 
-On macOS, live sessions and other DRM streams also need that Electron build VMP-signed, with a free castLabs EVS account:
-see [VMP-sign the Mac build](docs/RELEASE.md#vmp-sign-the-mac-build).
+On macOS and Windows, live sessions and other DRM streams also need that Electron build VMP-signed, with a free castLabs EVS
+account: see [VMP-sign the app](docs/RELEASE.md#vmp-sign-the-app).
 
 ## Credits
 

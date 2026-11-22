@@ -224,6 +224,7 @@ export function installType(): string {
   if (!app.isPackaged) return 'checkout';
   if (process.platform === 'darwin') return 'mac';
   if (process.platform === 'linux') return process.env.APPIMAGE ? 'appimage' : 'pacman';
+  if (process.platform === 'win32') return 'windows';
   return process.platform;
 }
 
