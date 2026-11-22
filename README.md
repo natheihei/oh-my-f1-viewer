@@ -7,8 +7,7 @@
 
 <p align="center">
   <b>An agent-driven, multi-view F1 TV player.</b><br>
-  Tell it what you want to watch, and it opens the session and lays out the onboards and live charts on one clock.<br>
-  Ask for a view it doesn't have yet, and the agent builds it.
+  Onboards, charts, insights: one ask away.
 </p>
 
 <p align="center">
