@@ -142,7 +142,7 @@ offer that again unless asked.
   carries them.
 - `error_tiles`, optional: tiles on screen whose errors go along, for a fix.
 
-It returns at once, and the palette shows the offer where the spoiler check would be, taking focus as it does: "Build a chart of when NOR opens DRS in build
+It returns at once, and the palette shows the offer where the spoiler check would be, taking focus or waiting folded as it does: "Build a chart of when NOR opens DRS in build
 mode?", the reason with its first letter raised, and under it `/build`'s red "! spoiler the build agent looks ahead without asking", since
 entering build mode is that consent. **Switch to build** is in build mode's yellow, beside **Stay in view mode**. The offer goes once
 it's answered, or when the viewer sends another message.

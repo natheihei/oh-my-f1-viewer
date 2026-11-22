@@ -116,14 +116,17 @@ await settle();
 const busy = await page.evaluate(async () => (await import('/src/shell/palette.ts')).usePalette.getState().busy);
 check('a second esc dismisses and stops the turn', (await labels()).length === 0 && !busy);
 
-// Suggestions keep the palette from hiding.
+// Hidden, the palette keeps its suggestions folded, says they're there, and its key brings the viewer to them.
 await page.evaluate(() => {
   window.host.suggestions.newTurn();
   window.host.suggestions.offer({ items: window.videos(['1:4']) });
   window.palette.hide();
 });
 await settle();
-check('the palette stays open while there are suggestions', await page.locator('[data-testid=suggestion-strip]').isVisible());
+check('hidden, the suggestions wait in the folded palette', /suggested\s*NOR/i.test(await page.locator('[data-testid=palette-folded-line]').innerText()));
+await page.keyboard.press('Control+K');
+await settle();
+check("the palette's key brings the viewer to them", (await page.locator('[data-testid=suggestion-strip]').isVisible()) && (await focused()) === '1:4', String(await focused()));
 
 // Resizing a preview by hand: it neither adds nor drags the card.
 await page.evaluate(() => {

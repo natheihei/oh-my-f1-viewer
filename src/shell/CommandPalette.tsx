@@ -4,14 +4,14 @@
  * tiles and the tiles' errors attached to the next message. Older history is a scroll away. Sits above
  * the timeline, over the video. It stays open while any of those wait on the viewer.
  */
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode } from 'react';
 import { host, read, useLive } from '../host';
 import { AgentPanel, describeAgent } from './AgentPanel';
 import { AttachTag, AttachTray } from './AttachTray';
 import { BackgroundPanel } from './BackgroundPanel';
 import { BuildOfferPrompt, type BuildOfferPromptHandle } from './BuildOfferPrompt';
 import { sendToAgent, stopTurn } from './agentFeed';
-import { leaveBuild } from './buildMode';
+import { leaveBuild, offerReason } from './buildMode';
 import { availableCommands, matchCommands, parseCommand, reportReadiness, SLASH_COMMANDS } from './commands';
 import { landing } from './landingState';
 import { useLandingShown } from './Landing';
@@ -105,8 +105,13 @@ export function CommandPalette() {
   // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
   // While building, the tag beside the input is the only way out, so the palette stays.
-  // Attached errors and an offer of build mode wait on the viewer, so the palette stays for them too.
-  const held = blank || hasTiles || asking || building || panel != null || attached.length > 0 || offer != null;
+  // A panel, and errors the viewer attached, are theirs to finish, so the palette stays for them too.
+  const held = blank || building || panel != null || attached.length > 0;
+  /**
+   * What the agent asks the viewer: suggestions, the spoiler check, an offer of build mode. Open, the palette
+   * shows them. Folded, they wait there, and it says what's waiting until the viewer comes to them.
+   */
+  const waiting = hasTiles || asking || (offer != null && !building);
   const showing = open || held;
   const suggestions = matchCommands(value);
 
@@ -173,24 +178,23 @@ export function CommandPalette() {
     if (summoned > 0) requestAnimationFrame(focusWaiting);
   }, [summoned]);
 
-  // New suggestions keep the palette open. They take focus from in the palette, and are unread from elsewhere.
+  // New suggestions show, and take focus, with the viewer in the palette. From elsewhere they wait, unread.
   useEffect(() => {
     if (!hasTiles) {
       disarm();
       return;
     }
-    palette.show();
-    if (palette.isAway()) palette.asks();
-    else if (!useLookAhead.getState().asking) requestAnimationFrame(() => stripRef.current?.focus());
+    palette.ask();
+    if (!palette.isAway() && !useLookAhead.getState().asking) requestAnimationFrame(() => stripRef.current?.focus());
   }, [hasTiles]);
 
-  // A spoiler check takes focus from in the palette, and gives it back once answered. From elsewhere, it's unread.
+  // A spoiler check takes focus from in the palette, and gives it back once answered. From elsewhere it waits,
+  // unread: lookAhead asks the palette, as a tool call does.
   const askedBefore = useRef(false);
   useEffect(() => {
     if (asking) {
       askedBefore.current = true;
-      if (palette.isAway()) palette.asks();
-      else requestAnimationFrame(() => promptRef.current?.focus());
+      if (!palette.isAway()) requestAnimationFrame(() => promptRef.current?.focus());
     } else if (askedBefore.current && !palette.isAway()) {
       requestAnimationFrame(() => (read().suggestions.items.length > 0 ? stripRef.current?.focus() : inputRef.current?.focus()));
     }
@@ -208,13 +212,13 @@ export function CommandPalette() {
     attachedBefore.current = attached.length;
   }, [attached.length]);
 
-  // An offer of build mode takes focus, or is unread, as the spoiler check is, and gives focus back once answered.
+  // An offer of build mode shows and takes focus, or waits unread, as the spoiler check does, and gives focus back once answered.
   const offeredBefore = useRef(false);
   useEffect(() => {
     if (offer) {
       offeredBefore.current = true;
-      if (palette.isAway()) palette.asks();
-      else if (!useLookAhead.getState().asking) offerRef.current?.focus();
+      palette.ask();
+      if (!palette.isAway() && !useLookAhead.getState().asking) offerRef.current?.focus();
     } else if (offeredBefore.current) {
       offeredBefore.current = false;
       if (!palette.isAway()) requestAnimationFrame(() => inputRef.current?.focus());
@@ -336,7 +340,7 @@ export function CommandPalette() {
   };
 
   // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with a session open: without one it's held.
-  if (!showing) return <FoldedPalette busy={busy} unread={unread ? lastWord(entries) : null} />;
+  if (!showing) return <FoldedPalette busy={busy} unread={unread} line={waiting ? <WaitingLine /> : unread ? lastWord(entries) : null} />;
   // Marked until the viewer comes back to it.
   const marks = `${building ? 'palette-building' : ''} ${unread ? 'palette-unread' : ''}`;
 
@@ -662,12 +666,33 @@ function lastWord(entries: PaletteEntry[]): string {
   return '';
 }
 
+/** What the folded palette says the agent is waiting on, first what it can't go on without. */
+function WaitingLine() {
+  const asking = useLookAhead((s) => s.asking);
+  const offer = useLive((s) => s.build.offer);
+  const tiles = useLive((s) => s.suggestions.items);
+  if (asking) {
+    return (
+      <>
+        <span className="spoiler-label">! spoiler</span> The agent wants to look ahead of where you are.
+      </>
+    );
+  }
+  if (offer) return <>{offerReason(offer.reason, true)} in build mode?</>;
+  return (
+    <>
+      <span className="palette-tip-label">suggested</span>
+      {tiles.map((t) => t.label).join(' · ')}
+    </>
+  );
+}
+
 /**
  * The hidden palette: folded to its input row, in the same place and as wide, see-through so the video shows
- * behind it. It names the shortcut, and a click unfolds the palette with the cursor in the input. With something
- * unread it's marked, and says the start of the newest reply in place of a tip.
+ * behind it. It names the shortcut, and a click unfolds the palette where it's waited on. With something unread
+ * it's marked. `line`, when there is one, takes the tip's place: what the agent asks, or the start of the newest reply.
  */
-function FoldedPalette({ busy, unread }: { busy: boolean; unread: string | null }) {
+function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean; line: ReactNode }) {
   const keyLabel = usePaletteKeyLabel();
   // Each fold starts on the placeholder, then a tip takes its place every so often.
   const [tip, setTip] = useState<Tip | null>(null);
@@ -690,10 +715,10 @@ function FoldedPalette({ busy, unread }: { busy: boolean; unread: string | null 
   return (
     <button
       type="button"
-      className={`palette palette-folded ${unread != null ? 'palette-unread' : ''}`}
+      className={`palette palette-folded ${unread ? 'palette-unread' : ''}`}
       data-testid="palette-folded"
-      data-unread={unread != null}
-      aria-label={unread ? `Show the palette, with a new reply (${keyLabel})` : `Show the palette (${keyLabel})`}
+      data-unread={unread}
+      aria-label={line ? `Show the palette, with something waiting (${keyLabel})` : `Show the palette (${keyLabel})`}
       onClick={palette.summon}
       onMouseEnter={hold(true)}
       onMouseLeave={hold(false)}
@@ -702,17 +727,17 @@ function FoldedPalette({ busy, unread }: { busy: boolean; unread: string | null 
     >
       <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
       <span className="palette-folded-text">
-        {unread ? (
-          <span className="palette-folded-line palette-folded-unread" data-testid="palette-folded-line" data-unread>
-            {unread}
+        {line ? (
+          <span className="palette-folded-line palette-folded-unread" data-testid="palette-folded-line" data-waiting>
+            {line}
           </span>
         ) : null}
-        {unread ? null : lines.before !== undefined ? (
+        {line ? null : lines.before !== undefined ? (
           <span key={`out:${lines.before?.id ?? ''}`} className="palette-folded-line palette-folded-line-out">
             <FoldedLine tip={lines.before} keyLabel={keyLabel} />
           </span>
         ) : null}
-        {unread ? null : (
+        {line ? null : (
           <span
             key={lines.now?.id ?? ''}
             className={`palette-folded-line ${lines.before !== undefined ? 'palette-folded-line-in' : ''}`}
