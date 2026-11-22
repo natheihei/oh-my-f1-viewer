@@ -58,7 +58,7 @@ Nothing that reaches the agent by default says how a session went:
 The gate runs in the agent's tools, before anything executes, so no row reaches the model and no stream moves unapproved. It's asked for two things:
 
 - **Reading ahead:** `query_session` with `asOf: 'session'`.
-- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known, and `go_live` behind the live edge.
+- **Seeking forward:** `seek_to` landing later than the playhead, `delta` counted, or with a `date` when the playhead isn't known, and `go_live` behind the live edge.
 
 Both are ways of looking ahead. The viewer sees a red `! spoiler`, "The agent wants to look ahead of where you are.", and never the SQL, the target time or how far ahead it is, since any of those could give something away.
 

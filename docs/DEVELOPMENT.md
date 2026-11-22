@@ -154,6 +154,13 @@ node scripts/stream-soak.mjs 10
 node scripts/captions-check.mjs 1000010420
 ```
 
+This one asks the real agent to move by an amount of time, on a live session when there is one and a replay race otherwise,
+and checks it used `seek_to`'s `delta` and where playback landed:
+
+```bash
+node scripts/move-check.mjs
+```
+
 During a live session:
 
 ```bash

@@ -189,8 +189,8 @@ All of these act on every stream at once.
 | `pause` | none | Pauses |
 | `toggle` | none | Plays if paused, pauses if playing |
 | `seek` | `time: number` | Moves to a time on the session clock (`clock.timeSec`) |
-| `seekBy` | `seconds: number` | Moves by that many seconds. A negative number goes back |
-| `seekToDate` | `dateMs: number` | Moves to a moment on the session data clock, in UTC milliseconds like every `date` column, kept within the seekable range. Fails when the video can't be matched to the data yet (no time map, or a live stream with no wall clock). Returns `{ timeSec, clamped }`: where it landed on the session clock, and whether it had to stop short |
+| `seekBy` | `seconds: number` | Moves by that many seconds. A negative number goes back. Returns `{ timeSec, clamped }` like `seekToDate`, or null with no session open |
+| `seekToDate` | `dateMs: number`, `offsetSec?: number` | Moves to a moment on the session data clock, in UTC milliseconds like every `date` column, or to `offsetSec` seconds from it, kept within the seekable range. Fails when the video can't be matched to the data yet (no time map, or a live stream with no wall clock). Returns `{ timeSec, clamped }`: where it landed on the session clock, and whether it had to stop short |
 | `seekToStart` | none | Goes to the very beginning |
 | `goLive` | none | Returns to the live edge |
 
@@ -415,14 +415,14 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `set_volume` | `host.audio.setVolume`, as a percentage |
 | `play`, `pause`, `seek_to_start` | `host.playback.play`, `.pause`, `.seekToStart` |
 | `go_live` | `host.playback.goLive`, on a live session only. Asks the spoiler gate first, as a forward seek, unless playback is at the live edge |
-| `seek_to` | `host.playback.seekToDate`. Asks the spoiler gate first when the moment is later than the playhead |
+| `seek_to` | `host.playback.seekToDate`, with `delta` seconds as its `offsetSec`. With no `date` it's `host.playback.seekBy` from the frame on screen, which needs no session data. Asks the spoiler gate first when where it lands is later than the playhead |
 | `query_session` | `host.data.sql`. Asks the spoiler gate first for `asOf: 'session'`. At most 200 rows go back to the model |
 
-`query_session` and `seek_to` wait while the session's data is loading, and `load_session` returns once it has settled: see "Waiting for the
+`query_session` and `seek_to` with a `date` wait while the session's data is loading, and `load_session` returns once it has settled: see "Waiting for the
 data" in [DESIGN.md](DESIGN.md).
 
 `app_state` also carries the master volume next to the heard video and its tile, so the agent never calls a feed audible at volume 0. It carries the
-playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `seekBy`, `changeVolumeBy` or `toggleMute`, isn't
+playhead in UTC milliseconds and the roster as driver code and number too, so the agent can write a query and pass a `date` straight to `seek_to`. Anything not listed, such as `host.layout.add` and `autoLayout`, `changeVolumeBy` or `toggleMute`, isn't
 offered to the agent at the moment.
 
 With no session open, as on a countdown, messages go to the picking agent, which has only `list_sessions`, `list_live`, `list_upcoming`
