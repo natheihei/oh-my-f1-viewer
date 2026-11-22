@@ -9,7 +9,7 @@ import { loadEvents } from './commands';
 import { agentFix, f1tvFix } from './fixes';
 import { askViewer, lookAhead } from './lookAhead';
 import type { PromptPart } from './mentions';
-import { AUTO_HIDE_MS, palette, usePalette, type AttachedTag } from './palette';
+import { palette, usePalette, type AttachedTag } from './palette';
 
 /**
  * The last message sent to the agent, as it went: what a fix sends again once the agent can answer. Only the
@@ -19,23 +19,17 @@ let lastSent: string | null = null;
 
 export function connectAgent(): () => void {
   let streaming: number | null = null;
-  let finalText = '';
 
   const onEvent = (event: AgentEvent) => {
     switch (event.type) {
       case 'turn_start':
         lookAhead.endTurn();
         streaming = null;
-        finalText = '';
         palette.setBusy(true);
         break;
       case 'text_delta':
-        if (streaming == null) {
-          streaming = palette.push('agent', '');
-          finalText = '';
-        }
+        if (streaming == null) streaming = palette.push('agent', '');
         palette.append(streaming, event.delta);
-        finalText += event.delta;
         break;
       case 'tool_start':
         // A later reply gets its own line under the tool calls.
@@ -45,15 +39,11 @@ export function connectAgent(): () => void {
         // What the build agent did to a file, in the app's words.
         if (event.note) palette.push('system', event.note);
         break;
-      case 'turn_end': {
+      case 'turn_end':
+        // The palette stays for the viewer to read the reply: it goes when they move elsewhere, or press Esc.
         lookAhead.endTurn();
         palette.setBusy(false);
-        // Only hide once the agent did something and isn't waiting on an answer, or on suggestions.
-        const asking = finalText.includes('?');
-        const { session, suggestions, build } = read();
-        if (event.acted && !asking && session != null && suggestions.items.length === 0 && !build.active) palette.hideAfter(AUTO_HIDE_MS);
         break;
-      }
       case 'error': {
         lookAhead.endTurn();
         palette.setBusy(false);

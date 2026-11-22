@@ -132,9 +132,12 @@ check('starts with just the main broadcast', s.tiles.length === 1, JSON.stringif
 check('main broadcast plays', await allReady(), JSON.stringify((await state()).statuses));
 await page.screenshot({ path: path.join(outDir, 'journey-2-main.png') });
 
-// The palette gets out of the way after acting: see AUTO_HIDE_MS in src/shell/agentFeed.ts.
-const hidden = await page.waitForFunction(() => !document.querySelector('[data-testid=palette]')?.checkVisibility(), null, { timeout: 15_000 }).then(() => true, () => false);
-check('palette hides after acting', hidden);
+// The palette stays for the reply to be read, whatever the agent did, and Esc puts it away. See AWAY_HIDE_MS in src/shell/palette.ts.
+await page.waitForTimeout(4000);
+check('palette stays after acting', await paletteVisible());
+await page.locator('[data-testid=palette-input]').press('Escape');
+const hidden = await page.waitForFunction(() => !document.querySelector('[data-testid=palette]')?.checkVisibility(), null, { timeout: 5_000 }).then(() => true, () => false);
+check('esc hides the palette', hidden);
 
 // Multiple requests in a message. The agent suggests; the viewer adds everything it suggested.
 r = await say('Hamilton. Also battle between Noris and Lec.');

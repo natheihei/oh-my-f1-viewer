@@ -159,6 +159,21 @@ changes.
 - After a mouse edit the layout stays as arranged, and new tiles go in the largest free space, or re-tile if there is none. A tile
   that would leave some tile under 3 cells either way is refused instead: see [COMPONENTS.md](COMPONENTS.md).
 
+## When the palette hides, and what's unread
+
+The palette hides itself in one case: 3s after the viewer moves elsewhere in the app (`AWAY_HIDE_MS` in `src/shell/palette.ts`), whatever
+the agent is doing. Moving away is focus leaving the palette, or a press outside it where nothing takes focus, such as on a video. The
+window losing focus isn't, and nor is a press in the palette that leaves focus on nothing, as on the history's text. Otherwise it stays,
+however a turn or a `/` command ends, until the viewer presses Esc or its key. While something holds it open (no session, suggestions, the
+spoiler check, build mode, a panel, attached errors, an offer of build mode), it stays, and the hold ending while the viewer is away starts
+the 3s.
+
+What comes while the viewer is away or the palette is hidden is unread: a reply, an error or fix, or a question for them (suggestions, the
+spoiler check, an offer of build mode). Questions never take focus from elsewhere in the app, only from in the palette. Unread, the frame
+goes white and twice as thick, and folded it shows the start of the newest reply in place of a tip. Focus, a click or typing in the palette
+reads it. The palette's key from elsewhere brings the viewer to it, to the question waiting if there is one, even while it's still showing;
+from in it, the key hides it.
+
 ## Commands and agent tools are separate
 
 - **`/` commands** (`src/shell/commands.ts`) are for the user: account actions.

@@ -20,7 +20,7 @@ import { lookAhead, sessionAllowed, useLookAhead } from './lookAhead';
 import { LookAheadPrompt, type LookAheadPromptHandle } from './LookAheadPrompt';
 import { groupOf, MentionParts, pointAt, renderMention, sayMention } from './mentionKinds';
 import { promptText, type PromptPart } from './mentions';
-import { AUTO_HIDE_MS, palette, usePalette, usePaletteDraft, type EntryRole, type PaletteEntry } from './palette';
+import { palette, usePalette, usePaletteDraft, type EntryRole, type PaletteEntry } from './palette';
 import {
   MAC,
   bindingLabel,
@@ -62,7 +62,7 @@ function trimParts(parts: PromptPart[]): PromptPart[] {
 }
 
 export function CommandPalette() {
-  const { open, busy, entries, panel } = usePalette();
+  const { open, busy, entries, panel, unread, summoned } = usePalette();
   const blank = useLive((s) => s.session == null);
   const onboardingActive = useOnboarding((s) => s.active);
   // The landing page's rows are the examples, and write into the input here.
@@ -110,50 +110,88 @@ export function CommandPalette() {
   const showing = open || held;
   const suggestions = matchCommands(value);
 
-  // A timer that runs out while the palette is held leaves it be: hiding it then would only show once the hold ends.
   const rootRef = useRef<HTMLDivElement | null>(null);
   const heldRef = useRef(held);
   heldRef.current = held;
-  const free = () => !heldRef.current;
-  /** Focus moving into the palette keeps it open; leaving it for elsewhere in the app hides it after a while. */
+  /** Focus in the palette. It stays there when the window loses focus, which isn't the viewer moving away. */
+  const focusInside = () => rootRef.current?.contains(document.activeElement) ?? false;
+  /**
+   * When the time's up, a palette held open stays: the hold ending starts the time again, below. So does one the
+   * viewer's focus is back in, as when the window lost focus rather than the palette.
+   */
+  const stillAway = () => !heldRef.current && !focusInside();
+  /**
+   * Focus or a click in the palette keeps it, and reads what's there. Focus going to something elsewhere in the app
+   * hides it soon after. Focus going to nothing isn't leaving: the window lost focus, a press in the palette landed
+   * on its text, or what had focus went, as a spoiler check does once answered. A press elsewhere is caught below.
+   */
   const focusProps = {
     ref: rootRef,
-    onMouseDown: palette.keepOpen,
-    onFocus: palette.keepOpen,
+    onMouseDown: palette.attend,
+    onFocus: palette.attend,
     onBlur: (e: FocusEvent<HTMLDivElement>) => {
-      if (e.currentTarget.contains(e.relatedTarget)) return;
-      // Still in the palette when the time's up means the window lost focus, not the palette: leave it.
-      palette.hideAfter(AUTO_HIDE_MS, () => free() && !rootRef.current?.contains(document.activeElement));
+      if (e.relatedTarget != null && !e.currentTarget.contains(e.relatedTarget)) palette.leave(stillAway);
     },
   };
+
+  // A press elsewhere in the app is leaving too, though nothing there takes focus, as on a video.
+  useEffect(() => {
+    if (!showing) return;
+    const onPress = (e: Event) => {
+      const root = rootRef.current;
+      if (root && !(e.target instanceof Node && root.contains(e.target))) palette.leave(stillAway);
+    };
+    window.addEventListener('pointerdown', onPress, true);
+    return () => window.removeEventListener('pointerdown', onPress, true);
+  }, [showing]);
+
+  // A hold ending while the viewer is elsewhere starts the time: what held it is answered or gone.
+  const heldBefore = useRef(held);
+  useEffect(() => {
+    if (heldBefore.current && !held && palette.isAway()) palette.leave(stillAway);
+    heldBefore.current = held;
+  }, [held]);
 
   // The picker's selected row outlines its tile, if it's one. The keys and the mouse both select a row.
   const pointed = picker ? picker.options[picker.selected] : null;
   useEffect(() => pointAt(pointed), [pointed?.kind, pointed?.id]);
   useEffect(() => () => pointAt(null), []);
 
-  useEffect(() => {
-    if (showing && !hasTiles) inputRef.current?.focus();
-    // Only on showing: suggestions arriving take focus themselves, below.
-  }, [showing]);
+  /** Puts the viewer where the palette waits on them: the spoiler check, an offer of build mode, the suggestions, else the input. */
+  const focusWaiting = () => {
+    if (useLookAhead.getState().asking) promptRef.current?.focus();
+    else if (read().build.offer && !read().build.active) offerRef.current?.focus();
+    else if (read().suggestions.items.length > 0) stripRef.current?.focus();
+    else inputRef.current?.focus();
+  };
 
-  // New suggestions keep the palette open, and take focus.
+  // Showing for the viewer, the palette takes them in. Showing for something in it while they're elsewhere, it doesn't.
+  useEffect(() => {
+    if (showing && !palette.isAway()) focusWaiting();
+  }, [showing]);
+  useEffect(() => {
+    if (summoned > 0) requestAnimationFrame(focusWaiting);
+  }, [summoned]);
+
+  // New suggestions keep the palette open. They take focus from in the palette, and are unread from elsewhere.
   useEffect(() => {
     if (!hasTiles) {
       disarm();
       return;
     }
     palette.show();
-    if (!useLookAhead.getState().asking) requestAnimationFrame(() => stripRef.current?.focus());
+    if (palette.isAway()) palette.asks();
+    else if (!useLookAhead.getState().asking) requestAnimationFrame(() => stripRef.current?.focus());
   }, [hasTiles]);
 
-  // A spoiler check takes focus, and gives it back once answered.
+  // A spoiler check takes focus from in the palette, and gives it back once answered. From elsewhere, it's unread.
   const askedBefore = useRef(false);
   useEffect(() => {
     if (asking) {
       askedBefore.current = true;
-      requestAnimationFrame(() => promptRef.current?.focus());
-    } else if (askedBefore.current) {
+      if (palette.isAway()) palette.asks();
+      else requestAnimationFrame(() => promptRef.current?.focus());
+    } else if (askedBefore.current && !palette.isAway()) {
       requestAnimationFrame(() => (read().suggestions.items.length > 0 ? stripRef.current?.focus() : inputRef.current?.focus()));
     }
   }, [asking]);
@@ -170,15 +208,16 @@ export function CommandPalette() {
     attachedBefore.current = attached.length;
   }, [attached.length]);
 
-  // An offer of build mode takes focus, as the spoiler check does, and gives it back once answered.
+  // An offer of build mode takes focus, or is unread, as the spoiler check is, and gives focus back once answered.
   const offeredBefore = useRef(false);
   useEffect(() => {
     if (offer) {
       offeredBefore.current = true;
-      if (!useLookAhead.getState().asking) offerRef.current?.focus();
+      if (palette.isAway()) palette.asks();
+      else if (!useLookAhead.getState().asking) offerRef.current?.focus();
     } else if (offeredBefore.current) {
       offeredBefore.current = false;
-      requestAnimationFrame(() => inputRef.current?.focus());
+      if (!palette.isAway()) requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [offer]);
 
@@ -260,8 +299,9 @@ export function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if (isPaletteKey(e)) {
         e.preventDefault();
-        if (usePalette.getState().open && !blank) palette.hide();
-        else palette.show();
+        // From elsewhere it brings the viewer to the palette, even one still showing. From in it, it hides it.
+        if (usePalette.getState().open && !blank && !palette.isAway()) palette.hide();
+        else palette.summon();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -296,7 +336,9 @@ export function CommandPalette() {
   };
 
   // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with a session open: without one it's held.
-  if (!showing) return <FoldedPalette busy={busy} />;
+  if (!showing) return <FoldedPalette busy={busy} unread={unread ? lastWord(entries) : null} />;
+  // Marked until the viewer comes back to it.
+  const marks = `${building ? 'palette-building' : ''} ${unread ? 'palette-unread' : ''}`;
 
   if (panel === 'background') {
     const closePanel = () => {
@@ -306,7 +348,7 @@ export function CommandPalette() {
       requestAnimationFrame(() => inputRef.current?.focus());
     };
     return (
-      <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
+      <div className={`palette ${marks}`} data-testid="palette" data-building={building} data-unread={unread} {...focusProps}>
         <BackgroundPanel onClose={closePanel} />
       </div>
     );
@@ -324,7 +366,7 @@ export function CommandPalette() {
       });
     };
     return (
-      <div className="palette" data-testid="palette" {...focusProps}>
+      <div className={`palette ${marks}`} data-testid="palette" data-unread={unread} {...focusProps}>
         <AgentPanel onClose={closePanel} />
       </div>
     );
@@ -345,10 +387,9 @@ export function CommandPalette() {
         palette.push('user', rest ? `${command.name} ${rest}` : command.name);
         // Typed in full, since the list doesn't offer it without a session.
         if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
-        // Done, the palette goes after a while, as it does once the agent has acted. A panel or build mode holds it.
         else {
           host.telemetry.track('command_used', { command: command.name as (typeof COMMANDS)[number] });
-          void Promise.resolve(command.run(rest)).then(() => palette.hideAfter(AUTO_HIDE_MS, free));
+          void command.run(rest);
         }
       } else {
         palette.push('user', text);
@@ -360,7 +401,7 @@ export function CommandPalette() {
   };
 
   return (
-    <div className={`palette ${building ? 'palette-building' : ''}`} data-testid="palette" data-building={building} {...focusProps}>
+    <div className={`palette ${marks}`} data-testid="palette" data-building={building} data-unread={unread} {...focusProps}>
       {blank && entries.length <= 1 && !onboardingActive ? (
         <div className="palette-intro" data-testid="palette-intro">
           <div>Watch an F1 TV session: feeds and timing as tiles, driven from here.</div>
@@ -520,7 +561,7 @@ export function CommandPalette() {
           onChange={(next) => {
             setParts(next);
             setSelected(0);
-            palette.keepOpen();
+            palette.attend();
           }}
           onPicker={setPicker}
           onKeyDown={(e) => {
@@ -598,7 +639,7 @@ export function CommandPalette() {
             aria-label={recordingKey ? 'Press the new shortcut for the palette' : `Change the palette's shortcut (${keyLabel})`}
             aria-pressed={recordingKey}
             onClick={() => {
-              palette.keepOpen();
+              palette.attend();
               setKeyRefused(null);
               setRecordingKey((r) => !r);
             }}
@@ -612,11 +653,21 @@ export function CommandPalette() {
   );
 }
 
+/** The newest thing the agent or the app said to the viewer, for the folded palette to show while it's unread. */
+function lastWord(entries: PaletteEntry[]): string {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const { role, text } = entries[i];
+    if ((role === 'agent' || role === 'error') && text.trim()) return text.trim();
+  }
+  return '';
+}
+
 /**
  * The hidden palette: folded to its input row, in the same place and as wide, see-through so the video shows
- * behind it. It names the shortcut, and a click unfolds the palette with the cursor in the input.
+ * behind it. It names the shortcut, and a click unfolds the palette with the cursor in the input. With something
+ * unread it's marked, and says the start of the newest reply in place of a tip.
  */
-function FoldedPalette({ busy }: { busy: boolean }) {
+function FoldedPalette({ busy, unread }: { busy: boolean; unread: string | null }) {
   const keyLabel = usePaletteKeyLabel();
   // Each fold starts on the placeholder, then a tip takes its place every so often.
   const [tip, setTip] = useState<Tip | null>(null);
@@ -639,10 +690,11 @@ function FoldedPalette({ busy }: { busy: boolean }) {
   return (
     <button
       type="button"
-      className="palette palette-folded"
+      className={`palette palette-folded ${unread != null ? 'palette-unread' : ''}`}
       data-testid="palette-folded"
-      aria-label={`Show the palette (${keyLabel})`}
-      onClick={palette.show}
+      data-unread={unread != null}
+      aria-label={unread ? `Show the palette, with a new reply (${keyLabel})` : `Show the palette (${keyLabel})`}
+      onClick={palette.summon}
       onMouseEnter={hold(true)}
       onMouseLeave={hold(false)}
       onFocus={hold(true)}
@@ -650,19 +702,26 @@ function FoldedPalette({ busy }: { busy: boolean }) {
     >
       <span className={`palette-prompt ${busy ? 'palette-prompt-busy' : ''}`}>{busy ? '…' : '>'}</span>
       <span className="palette-folded-text">
-        {lines.before !== undefined ? (
+        {unread ? (
+          <span className="palette-folded-line palette-folded-unread" data-testid="palette-folded-line" data-unread>
+            {unread}
+          </span>
+        ) : null}
+        {unread ? null : lines.before !== undefined ? (
           <span key={`out:${lines.before?.id ?? ''}`} className="palette-folded-line palette-folded-line-out">
             <FoldedLine tip={lines.before} keyLabel={keyLabel} />
           </span>
         ) : null}
-        <span
-          key={lines.now?.id ?? ''}
-          className={`palette-folded-line ${lines.before !== undefined ? 'palette-folded-line-in' : ''}`}
-          data-testid="palette-folded-line"
-          data-tip={lines.now?.id}
-        >
-          <FoldedLine tip={lines.now} keyLabel={keyLabel} />
-        </span>
+        {unread ? null : (
+          <span
+            key={lines.now?.id ?? ''}
+            className={`palette-folded-line ${lines.before !== undefined ? 'palette-folded-line-in' : ''}`}
+            data-testid="palette-folded-line"
+            data-tip={lines.now?.id}
+          >
+            <FoldedLine tip={lines.now} keyLabel={keyLabel} />
+          </span>
+        )}
       </span>
       <kbd className="palette-key">{keyLabel}</kbd>
     </button>
