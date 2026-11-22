@@ -101,6 +101,10 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   among the others as if the layout had been built with it. Removing a tile does the same. Once the viewer has moved, resized,
   swapped or dropped a tile, a new one goes into the biggest gap instead, and the grid is re-tiled only when that gap is too small.
   (2026-11-18. Before, an auto layout put a new tile into a gap that fit it, so nothing on screen moved.)
+- **A resize re-tiles once it has settled.** While the grid's size keeps changing, as a window drag does every frame, tiles keep
+  their cells and scale with it. When it has held still for 150 ms the grid is re-tiled, if the new size puts tiles elsewhere.
+  The solver's last few answers are kept, so asking again for the layout the tiles are already in costs nothing. (2026-11-22.
+  Before, every frame of a drag ran the solver twice.)
 - **A hand-arranged layout is left alone,** and dragging a tile below its least size is allowed. The viewer's choice wins.
 - **A dropped suggestion takes what its content uses of the room there,** keeping the top-left corner, as a tile added by
   auto-layout does. A gap chart dropped on half a wide tile stays at 640 by 340 rather than stretching across it, and the rest is
