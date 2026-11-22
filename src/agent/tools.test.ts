@@ -715,10 +715,35 @@ describe('seeking to a moment', () => {
       const run = runTool('query_session', { sql: 'SELECT 1' });
       await vi.advanceTimersByTimeAsync(1_000);
       expect(notes).toEqual(['Lining the timing data up with the live video…']);
-      useSessionData.setState({ ...waiting, brief: false, reason: 'Waiting for the video to reach the live data' } as unknown as SessionDataView, true);
+      useSessionData.setState({ ...waiting, brief: false, ahead: true, reason: 'Waiting for the video to reach the live data' } as unknown as SessionDataView, true);
       const refused = expect(run).rejects.toThrow(/Waiting for the video to reach the live data/);
       await vi.advanceTimersByTimeAsync(500);
       await refused;
+      expect(notes.at(-1)).toBe("Timing data loaded. It's ahead of the live video, and shows once the video catches up.");
+    });
+
+    it('closes the loading line when the data loads but cannot show yet', async () => {
+      const waiting = { state: 'waiting', sessionKey: 9, datasets: {}, tables: [], drivers: [], brief: false, detail: '' };
+      // Joining a live session: loaded, and ahead of the video.
+      useSessionData.setState(loading, true);
+      let run = runTool('query_session', { sql: 'SELECT 1' });
+      let refused = expect(run).rejects.toThrow(/can't be read at the frame on screen yet/);
+      await vi.advanceTimersByTimeAsync(300);
+      useSessionData.setState({ ...waiting, ahead: true, reason: 'Waiting for the video to reach the live data' } as unknown as SessionDataView, true);
+      await vi.advanceTimersByTimeAsync(500);
+      await refused;
+      expect(notes).toEqual(['Loading the timing data…', "Timing data loaded. It's ahead of the live video, and shows once the video catches up."]);
+
+      // A replay with no anchor yet says its own reason.
+      notes.length = 0;
+      useSessionData.setState(loading, true);
+      run = runTool('query_session', { sql: 'SELECT 1' });
+      refused = expect(run).rejects.toThrow(/Not lined up with the video yet/);
+      await vi.advanceTimersByTimeAsync(300);
+      useSessionData.setState({ ...waiting, ahead: false, reason: 'Not lined up with the video yet' } as unknown as SessionDataView, true);
+      await vi.advanceTimersByTimeAsync(500);
+      await refused;
+      expect(notes).toEqual(['Loading the timing data…', 'Timing data loaded. Not lined up with the video yet.']);
     });
   });
 

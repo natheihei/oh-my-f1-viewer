@@ -186,7 +186,8 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     if (waiting) {
       const { reason, detail, kind } = waiting;
       const brief = kind === 'no-wall-clock';
-      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, brief, tables, drivers: roster }), true);
+      const ahead = kind === 'video-behind';
+      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, brief, ahead, tables, drivers: roster }), true);
       return;
     }
     useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);
