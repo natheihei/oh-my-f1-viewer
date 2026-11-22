@@ -164,15 +164,18 @@ changes.
 The palette hides itself in one case: 3s after the viewer moves elsewhere in the app (`AWAY_HIDE_MS` in `src/shell/palette.ts`), whatever
 the agent is doing. Moving away is focus leaving the palette, or a press outside it where nothing takes focus, such as on a video. The
 window losing focus isn't, and nor is a press in the palette that leaves focus on nothing, as on the history's text. Otherwise it stays,
-however a turn or a `/` command ends, until the viewer presses Esc or its key. While something holds it open (no session, suggestions, the
-spoiler check, build mode, a panel, attached errors, an offer of build mode), it stays, and the hold ending while the viewer is away starts
-the 3s.
+however a turn or a `/` command ends, until the viewer presses Esc or its key. While something of the viewer's holds it open (no session,
+build mode, a panel, errors they attached), it stays, and the hold ending while the viewer is away starts the 3s.
 
 What comes while the viewer is away or the palette is hidden is unread: a reply, an error or fix, or a question for them (suggestions, the
-spoiler check, an offer of build mode). Questions never take focus from elsewhere in the app, only from in the palette. Unread, the frame
-goes white and twice as thick, and folded it shows the start of the newest reply in place of a tip. Focus, a click or typing in the palette
-reads it. The palette's key from elsewhere brings the viewer to it, to the question waiting if there is one, even while it's still showing;
-from in it, the key hides it.
+spoiler check, an offer of build mode). Unread, the frame goes white and twice as thick. Focus, a click or typing in the palette reads it.
+
+The agent's questions don't hold the palette open. With the viewer in it, one shows and takes focus there. From elsewhere it never
+unfolds the palette or takes focus: it waits folded, unread, and an open palette with one folds 3s after the viewer moves away like any
+other. Folded, the palette says what waits in place of a tip, first what the agent can't go on without: the spoiler check, then the offer,
+then what was suggested. With none, it says the start of an unread reply. The palette's key from elsewhere brings the viewer to it, on the
+question waiting if there is one, even while it's still showing; from in it, the key hides it. Folded, the suggestions' previews are let go,
+and their streams start again when the palette opens.
 
 ## Commands and agent tools are separate
 

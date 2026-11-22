@@ -45,7 +45,7 @@ export const askViewer: SpoilerAsker = (_request, timedOut) => {
   return new Promise((resolve) => {
     pending = resolve;
     useLookAhead.setState({ asking: true });
-    palette.show();
+    palette.ask();
     timedOut.addEventListener(
       'abort',
       () => {

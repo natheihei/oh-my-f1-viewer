@@ -94,48 +94,57 @@ check('it hides while the agent is still working', (await folded()) && (await pa
 check('what came after the viewer left is unread', await unread());
 await page.evaluate(() => window.palette.setBusy(false));
 
-// Suggestions from elsewhere show, unread, and don't take focus. The palette's key takes the viewer to them.
+const waitingLine = () => page.locator('[data-testid=palette-folded-line]').innerText();
+const foldedMarked = async () => (await page.locator('[data-testid=palette-folded]').getAttribute('data-unread')) === 'true';
+
+// Suggestions from elsewhere wait in the folded palette, unread, and take no focus. Its key takes the viewer to them.
 await page.evaluate(() => {
   window.host.suggestions.newTurn();
   window.host.suggestions.offer({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'video', props: { feed: '1:4' } }] });
 });
 await settle();
-check('suggestions from elsewhere show the palette', await page.locator('[data-testid=suggestion-strip]').isVisible());
+check('suggestions from elsewhere leave the palette folded', (await folded()) && !(await page.locator('[data-testid=suggestion-strip]').isVisible()));
 check('and leave focus where it was', !(await inPalette()), String(await focused()));
-check('and are unread', (await unread()) && (await page.locator('[data-testid=palette]').getAttribute('data-unread')) === 'true');
-await page.screenshot({ path: path.join(outDir, 'palette-away-suggestions-unread.png') });
+check('the folded palette says what was suggested, marked', /suggested\s*HAM · NOR/i.test(await waitingLine()) && (await foldedMarked()), await waitingLine());
+await page.screenshot({ path: path.join(outDir, 'palette-away-suggestions-waiting.png') });
 await page.keyboard.press('Control+K');
 await settle();
-check("the palette's key takes the viewer to the first suggestion", (await focused()) === '1:44' && !(await unread()), String(await focused()));
-await page.keyboard.press('Escape');
-await settle();
-check('esc dismisses them, and the palette stays', (await page.locator('[data-testid=suggestion-strip]').count()) === 0 && (await open()));
+check("the palette's key opens it on the first suggestion", (await focused()) === '1:44' && !(await unread()), String(await focused()));
+await page.screenshot({ path: path.join(outDir, 'palette-away-suggestions-open.png') });
 
-// The hold ending while the viewer is away starts the time.
-await page.evaluate(() => {
-  window.host.suggestions.newTurn();
-  window.host.suggestions.offer({ items: [{ type: 'video', props: { feed: '1:44' } }] });
-});
-await settle();
+// Open with suggestions, moving away folds it all the same, and they wait there, read.
 await pressVideo();
 await page.waitForTimeout(AWAY);
-check('suggestions hold it while the viewer is away', await open());
+check('suggestions no longer hold it open once the viewer moves away', await folded());
+check('folded, it still says they wait, not marked', /suggested/i.test(await waitingLine()) && !(await foldedMarked()), await waitingLine());
 await page.evaluate(() => window.host.suggestions.dismiss());
-await page.waitForTimeout(AWAY);
-check('and it hides 3s after they go', await folded());
+await settle();
+check('dismissed, the folded line goes back to tips', !/suggested/i.test(await waitingLine()), await waitingLine());
 
-// The spoiler check from elsewhere: shown, unread, no focus taken.
+// An offer of build mode, the same way.
+await page.evaluate(() => window.host.build.offer({ reason: 'build a chart of when NOR opens DRS', note: 'test' }));
+await settle();
+check('an offer from elsewhere waits folded, marked', (await folded()) && /in build mode\?/.test(await waitingLine()) && (await foldedMarked()), await waitingLine());
+await page.evaluate(() => window.host.build.dismissOffer());
+// Read, and still folded, so the spoiler check below starts unmarked.
+await page.evaluate(() => {
+  window.palette.attend();
+  window.palette.hide();
+});
+await settle();
+
+// The spoiler check from elsewhere: folded, unread, no focus taken.
 await page.evaluate(() => {
   window.checkAnswer = window.askViewer({}, new AbortController().signal);
 });
 await settle();
-check('a spoiler check from elsewhere shows', await page.locator('[data-testid=palette]').isVisible());
+check('a spoiler check from elsewhere waits folded', (await folded()) && /spoiler\s*The agent wants to look ahead/.test(await waitingLine()), await waitingLine());
 check('and leaves focus where it was', !(await inPalette()), String(await focused()));
-check('and is unread', await unread());
-await page.screenshot({ path: path.join(outDir, 'palette-away-spoiler-unread.png') });
+check('and is unread', (await unread()) && (await foldedMarked()));
+await page.screenshot({ path: path.join(outDir, 'palette-away-spoiler-waiting.png') });
 await page.keyboard.press('Control+K');
 await settle();
-check("the palette's key takes the viewer to the spoiler check", (await focused()) === 'spoiler-once' && !(await unread()), String(await focused()));
+check("the palette's key opens it on the spoiler check", (await focused()) === 'spoiler-once' && !(await unread()), String(await focused()));
 await page.keyboard.press('Escape');
 const decision = await page.evaluate(() => window.checkAnswer);
 check('and Esc there answers it', decision.approved === false);

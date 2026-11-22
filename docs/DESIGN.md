@@ -185,10 +185,10 @@ strip.
   the automatic shape. Resizing never adds or drags the card, and the size doesn't carry to the tile it becomes.
 - Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, with no
   limit on streams (2026-11-15: each preview's videos are real streams, so this costs bandwidth, accepted for now). The user's next message clears it, and tells the agent what they added, dismissed or left.
-- Keys: the first suggestion takes focus, if the viewer is in the palette. From elsewhere it's unread instead: see [ARCHITECTURE.md](ARCHITECTURE.md). ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
+- Keys: the first suggestion takes focus, if the viewer is in the palette. From elsewhere the strip waits in the folded palette instead, and the palette's key opens it on the first suggestion. ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
   dismisses the strip, but while the agent is still working it takes a second Esc, which also stops the turn: otherwise the agent could fill
   the strip again right after.
-- The palette stays open while the strip is showing.
+- The strip doesn't hold the palette open: moved away from, it folds with the strip in it, and says what was suggested. See [ARCHITECTURE.md](ARCHITECTURE.md).
 - A preview holds its videos quietly: they're never heard. Each holder has its own video, but one let go is taken over by a new holder
   of the same feed in the same moment, so adding a previewed suggestion hands the same element to the tile rather than starting the
   stream again. That matters for DRM and the CDN alike. `/` commands stay a separate set for the user, and the two don't share entries.
@@ -252,7 +252,7 @@ anything runs, in two cases:
   seek doesn't ask, and nor does `go_live` already at the edge.
 
 The gate hands the request to an asker the shell registers (`src/shell/lookAhead.ts`), which shows a spoiler check in the palette,
-between the history and any suggested tiles, taking focus only if the viewer is in the palette: a red `! spoiler`, then "The agent wants to look ahead of where you are.". It never shows the SQL, the
+between the history and any suggested tiles, taking focus only if the viewer is in the palette. From elsewhere it waits in the folded palette, which says so: a red `! spoiler`, then "The agent wants to look ahead of where you are.". It never shows the SQL, the
 target time or how far ahead it is, since any of those could give something away. Reading ahead and seeking forward ask the same question.
 The viewer answers:
 
