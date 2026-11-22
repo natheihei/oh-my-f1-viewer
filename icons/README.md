@@ -11,7 +11,7 @@ Mono converted to outlines, so the files need no font.
 | `omfv-logo.svg`, `omfv-logo-light.svg` | The helmet, "omfv", and the full name under them. The site keeps a copy of the dark one, and `src/shell/OmfvMark.tsx` draws its helmet and "omfv" |
 | `omfv-logo-build.svg` | Build mode: the visor lit yellow, and `/build` after the name |
 | `omfv-logo-framed.svg` | The logo drawn like the app's chrome |
-| `omfv-wordmark-dark.svg`, `omfv-wordmark-light.svg` | The helmet, the full name and the BETA badge on one line, on no ground of its own: the README's header |
+| `omfv-wordmark-dark.svg`, `omfv-wordmark-light.svg` | The helmet and the full name on one line, on no ground of its own: the README's header |
 
 `alt-solid/` holds the same set in the other direction that was considered: a solid ink shell with the visor cut out
 of it. Nothing uses it.
