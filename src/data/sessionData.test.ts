@@ -191,6 +191,11 @@ describe('session data', () => {
     handle.update(130, capturedFrom + LIVE_FRAME_LEAD_MS);
     await flush();
     expect(useSessionData.getState()).toMatchObject({ state: 'ready', playheadMs: capturedFrom });
+    // Rewinding to before the capture waits again at once, though the roster it reads hasn't changed.
+    handle.update(100, capturedFrom - 30_000 + LIVE_FRAME_LEAD_MS);
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', reason: 'Waiting for the video to reach the live data' });
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting' });
     handle.destroy();
   });
 

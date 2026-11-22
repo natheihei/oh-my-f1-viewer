@@ -53,6 +53,31 @@ On the 2026 São Paulo Grand Prix, opened through the agent:
   spread 12s later and being corrected.
 - Live timing reaching the app and being held back, through the old `useTiming` path, since replaced: about 680 records held, against about 660 expected for 50s of video lag.
 
+On the 2026 Las Vegas Grand Prix (2026-11-22 UTC, session 11420), joined around lap 20 of 50 under a safety car, with `scripts/live-check.mjs`
+and by hand in isolated instances, on castLabs Electron 45.2.1 with the agent:
+
+- **`scripts/live-check.mjs`, all 25 checks.** The agent opened the session, typed `race`. The world feed, requested with no `channelId`,
+  and three onboards played under DRM, 8.3-8.5s behind the live edge and within 0.04s of each other, 0.32s 12s after a three-minute DVR seek
+  and 0.34s 12s after returning to live. 4,890 rows were held against about 5,285 expected for 58s of video lag.
+- **The capture on a race.** `intervals`, `pit`, `pit_lane`, `laps`, `stints`, `position`, `race_control`, `weather`, `car_data` and
+  `location` filled, and the lap count read 24/50 as the broadcast did. `DriverRaceInfo`, `ChampionshipPrediction` and `LapCount`, which a
+  practice never sends, came in the snapshot and kept coming. `PitStop` and `PitStopSeries` never came: see "Known limits" in
+  [SESSION_DATA.md](SESSION_DATA.md).
+- **The lead on a race.** As the lap count went from 24 to 25, the broadcast's own counter changed 7.5s of stream wall clock after the
+  feed's time for it, so the 7.6s default holds on a race. The app's count changed 2.4s after the picture's: the feed's message took 2.2s
+  to arrive, and data is placed by when it arrived. It was never ahead. MultiViewer's lead stayed unpublished, as expected for a race.
+- **Restarting mid-race.** Closed for 27s and opened again on the same profile: the tables rebuilt from the kept messages, the data was
+  ready 2.5s after opening, and `coverage.gaps` recorded the 27.2s.
+- **Every chart on live race data.** All 15 drew without an error, on the tiles a race offers. The tower's order and retirements
+  matched the broadcast's tower. Joined under the safety car, `tyre_deg` said "Waiting for lap times" and `sector_table` marked those laps
+  as not counted, with nothing for the laps before joining.
+- **The agent.** Asked for the gap between the top two, it read `position` and suggested `gap_evolution` with both onboards. Asked who
+  pitted last and for how long, it gave the pit-lane time and said the stationary time isn't available. "Go back 2 minutes." seeked, and
+  `go_live`, unanswered, left playback where it was and said so.
+- **Rewinding to before the capture.** The first run found the data still `ready`, showing what the live edge had, while SQL at the
+  playhead was refused: the waiting state was only published when its countdown happened to change apart from the playhead's second.
+  It's now published at once, and a rewind of 11 minutes showed "Waiting for the video to reach the live data" at once.
+
 ## Verified on a live practice
 
 On 2026 Las Vegas FP1 (2026-11-20), wet, joined about 30 minutes in, with `scripts/live-check.mjs` and by hand in isolated instances, on castLabs
@@ -155,7 +180,7 @@ The SQLite session data ([SESSION_DATA.md](SESSION_DATA.md)), on the real archiv
 - Retired cars on the 2026 United States race (session 11396), with `scripts/charts-check.mjs` (2026-11-09): at laps 20, 30 and 53 the timing
   tower marked the same cars `OUT` as the broadcast's tower, and the track map, pace and pit window left them out.
 
-Live capture ran on a live practice: see "Verified on a live practice". A race is still to come.
+Live capture ran on a live practice and a live race: see "Verified on a live practice" and "Verified on a live race".
 
 ## Verified for layout
 
@@ -417,14 +442,9 @@ Not verified: an AppImage updating itself from GitHub.
   still playing and ready, with the audio left on the main feed. That was before each holder got its own video (2026-11-15): the handoff
   is now a new holder taking over a video let go in the same render, covered by unit tests, and not yet run in the real strip. The real agent hasn't been asked for a stream since it lost `add_streams`.
 
-- Capturing a live race: lap counts, pit stops and intervals, which a practice doesn't have. And the archive replacing a capture once it's published.
+- The archive replacing a live capture once it's published, and the tables compared with OpenF1 after it (`scripts/openf1-compare.mjs`).
 
-- **The live lead on a race.** The 7.6s the live playhead takes off the stream's wall clock was measured at the start of Las Vegas FP2, and
-  MultiViewer's leads for practice and qualifying agree. A race hasn't been checked, and MultiViewer's own lead is refused for one, since its
-  `session_start` is lights out. See "Linking to the video" in [SESSION_DATA.md](SESSION_DATA.md).
 - **A replay waiting for MultiViewer's anchor.** Unit-tested only: no replay without one was at hand. The live waiting is verified.
-- **The world feed on a live race.** It's now requested with no `channelId`, as F1 TV's play link says, and the license request is built
-  from that. Only replays have run this way, and none of the sampled replays use DRM. Check it on the next live session.
 - **The countdown starting a session by itself.** The display is verified, and a unit test covers firing only for its own session and not
   another in the same event. A real run hasn't reached its start time yet. `scripts/countdown-check.mjs` does this on a session due soon.
 

@@ -174,6 +174,7 @@ says the session started, or 7.6s (`LIVE_FRAME_LEAD_MS`) until MultiViewer publi
 | --- | --- | --- | --- | --- |
 | Las Vegas FP1 2026 | 00:30:00.102 | 00:30:07.654 | 7.55s | MultiViewer's `session_start_pdt`, after the session |
 | Las Vegas FP2 2026 | 03:59:59.977 | 04:00:07.6-08.0 | 7.6-8.0s | The live picture: the Sphere's countdown and F1 TV's graphic reach 0:00 between the frames at +7.55s and +8.5s, and the session clock reads 59:56 at +12s |
+| Las Vegas Grand Prix 2026, lap 25 beginning | 04:48:20.668 | 04:48:28.0-28.2 | 7.4-7.6s | The live picture: the broadcast's lap counter changed between two shots 0.2s apart |
 | 9 practice and qualifying sessions, 2026 | The scheduled start | `session_start_pdt` | 7.45-7.74s | MultiViewer, assuming each started on time as FP1 and FP2 did |
 
 MultiViewer's `live_timing_sync_delay`, 5.5s for every F1 session and set days ahead, isn't this lead, and isn't used. With no wall clock, or
@@ -225,13 +226,18 @@ That race took about 7 seconds to ingest in full, with 1.5 million telemetry row
 
 ## Known limits
 
-- **Live is checked on a practice session only.** At 2026 Las Vegas FP1 (session 11413, wet, joined about 30 minutes in), Subscribe returned no error
-  and the capture reached `ready` from `live`. `SessionInfo`, `DriverList`, `TimingData`, `TimingAppData`, `RaceControlMessages`, `SessionData`,
-  `PitLaneTimeCollection`, `WeatherData`, `TrackStatus` and `ExtrapolatedClock` came in the snapshot. `DriverRaceInfo`, `PitStop`,
-  `PitStopSeries`, `ChampionshipPrediction` and `LapCount` never came, in the snapshot or in 4 minutes of updates, and look race-only. `laps`, `stints`,
-  `pit_lane`, `position`, `race_control`, `weather` and `drivers` filled; `intervals` and `pit` stayed empty, as in any practice. A race is still needed
-  for lap counts, pit stops and intervals. Restarting the app mid-session rebuilt the tables from the kept messages and, since this check, records the
-  time it was closed in `coverage.gaps`.
+- **Live has no `PitStop` or `PitStopSeries`.** Checked on a practice (2026 Las Vegas FP1, session 11413) and a race (2026 Las Vegas
+  Grand Prix, session 11420, joined around lap 20): Subscribe returned no error and the capture reached `ready` from `live`. Every other feed
+  in `TIMING_FEEDS` came in the snapshot. `DriverRaceInfo`, `ChampionshipPrediction` and `LapCount` come on a race only. `PitStop` and
+  `PitStopSeries` never came, in the snapshot or in 14 minutes of a race with stops in it. It's F1's socket, not the capture: a script of its own
+  that subscribed to both during the race got a reply with no error and neither feed in it, and the capture keeps every feed a reply or a
+  message carries. So a live `pit` row is built from
+  `PitLaneTimeCollection`: it has the lap and the time in the pit lane, dated by when the feed reported it, and no `stop_duration`. That feed only holds each car's
+  latest stop for a while, so stops made before joining are mostly missing. The archive has both feeds once it's published.
+- **Live data shows a couple of seconds after the picture.** A row is placed by when it arrived, and the feed runs behind the event: on the
+  race, a lap count stamped by F1 at one moment arrived 2.2s later and showed 2.4s after the broadcast's own counter changed. Never before.
+- **A restart mid-session leaves a gap.** The tables rebuild from the kept messages, and the time the app was closed is in `coverage.gaps`
+  (27.2s recorded for 27s closed, on the race). A renderer that reloads without closing the session leaves the capture running, with no gap.
 - **Live data is placed by a measured lead until MultiViewer publishes the session's own.** The video's wall clock (`getPlayheadTimeAsDate`) runs
   7.6-8.0s ahead of the picture (see "Linking to the video"), and the playhead takes 7.6s off it. MultiViewer's exact lead hadn't been published
   5 minutes into FP2, and FP1's was there an hour after it ended, so live it's usually the default.

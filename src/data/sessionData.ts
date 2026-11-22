@@ -292,8 +292,12 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       // A new second reads the objects again and publishes a revision. In between, only the playhead is
       // published, ten times a second: telemetry shows each sample at its own date, about four a second, and
       // charts that pass the playhead to their query read again as it moves. Others still read once a second.
-      if (ready && Math.floor(playhead / 1000) !== readSecond) void read();
-      else if (moved) publish();
+      // Waiting is published at once: the read behind it only fetches the roster, and publishes only if that changed,
+      // so a rewind to before the capture would otherwise leave what the live edge showed on screen.
+      if (ready && Math.floor(playhead / 1000) !== readSecond) {
+        if (moved && waiting) publish();
+        void read();
+      } else if (moved) publish();
     },
     videoTimeOf(dateMs) {
       return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs, liveLeadMs);
