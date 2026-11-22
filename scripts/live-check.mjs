@@ -34,6 +34,11 @@ await page.evaluate(async () => {
     sessionData: await import('/src/data/sessionData.ts'),
     layout: await import('/src/layout/store.ts'),
   };
+  // Why the data waited, from the moment the session opens: by the time the streams are up it has often lined up already.
+  window.waited = new Set();
+  window.m.sessionData.useSessionData.subscribe((d) => {
+    if (d.state === 'waiting') window.waited.add(`${d.reason}: ${(d.detail ?? '').replace(/\d+/g, 'N')}`);
+  });
 });
 
 const live = await page.evaluate(() => window.omfv.f1tv.liveNow());
@@ -83,14 +88,18 @@ const dataState = () => page.evaluate(() => {
 });
 const untilData = async (limit) => {
   const t0 = Date.now();
-  const seen = new Set();
+  // Every reason since this was last asked, which the first time is since the session opened.
+  const waited = () => page.evaluate(() => {
+    const seen = [...window.waited];
+    window.waited.clear();
+    return seen;
+  });
   while (Date.now() - t0 < limit) {
     const d = await dataState();
-    if (d.state === 'waiting') seen.add(`${d.reason}: ${(d.detail ?? '').replace(/\d+/g, 'N')}`);
-    if (d.state === 'ready') return { after: (Date.now() - t0) / 1000, waited: [...seen] };
+    if (d.state === 'ready') return { after: (Date.now() - t0) / 1000, waited: await waited() };
     await page.waitForTimeout(500);
   }
-  return { after: null, waited: [...seen], last: await dataState() };
+  return { after: null, waited: await waited(), last: await dataState() };
 };
 
 const untilReady = async (limit = 60_000) => {
