@@ -1,7 +1,7 @@
 # Development
 
-How to drive the app while working on it, and the checks that run it. [README.md](../README.md) has how to install it and run
-it from source.
+How to drive the app while working on it, and the checks that run it. [README.md](../README.md) has how to run it from source,
+and [RELEASE.md](RELEASE.md#install-it) how to install a release.
 
 ## Commands in the app
 
