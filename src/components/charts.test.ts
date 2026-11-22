@@ -1252,7 +1252,7 @@ describe('sizes', () => {
     const c = components.find((d) => d.name === name)!;
     return { type: name, key: `${name}:${n}`, label: name, props: {}, ...(c.size ? { size: c.size } : {}), ...(c.fit ? { fit: c.fit } : {}) };
   };
-  const arrange = (names: string[]) => autoLayout(names.map(specOf).reduce(addTile, measure(EMPTY_LAYOUT, cell)));
+  const arrange = (names: string[]) => autoLayout(names.map(specOf).reduce((state, spec) => addTile(state, spec), measure(EMPTY_LAYOUT, cell)));
   const short = (state: LayoutState) =>
     allTiles(state)
       .filter((t) => {

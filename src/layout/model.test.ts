@@ -8,6 +8,7 @@ import {
   autoLayout,
   EMPTY_LAYOUT,
   freeRectAt,
+  groupOf,
   GRID_COLUMNS,
   GRID_ROWS,
   largestFreeRect,
@@ -67,7 +68,7 @@ const chart = (key: string, aspect: number, width: number, height: number): Comp
 /** At most 396 by 500 pixels: 6 columns and 16 rows with the title bar. */
 const tower: ComponentSpec = { ...chart('tower', 0.75, 330, 376), fit: { width: 396, height: 500 } };
 const rects = (s: LayoutState) => Object.fromEntries(allTiles(s).map((t) => [t.component.key, { x: t.x, y: t.y, w: t.w, h: t.h }]));
-const add = (state: LayoutState, ...specs: ComponentSpec[]) => specs.reduce(addTile, state);
+const add = (state: LayoutState, ...specs: ComponentSpec[]) => specs.reduce((s, c) => addTile(s, c), state);
 /** A measured grid with the main feed on it, in the main place. */
 const opened = mainTo(addTile(sized, video('main')), 'main');
 
@@ -349,6 +350,58 @@ describe('tile identity', () => {
   });
 });
 
+describe('groups', () => {
+  it('keeps the tiles of a group together in an auto layout, and a tile its group through new props', () => {
+    // Two onboards and a chart for each, clicked in turn about, round the main feed and a tower.
+    const wide = (key: string) => chart(key, 2.4, 300, 150);
+    const adds: [ComponentSpec, string?][] = [[tower], [video('a1'), 'a'], [video('b1'), 'b'], [wide('a2'), 'a'], [wide('b2'), 'b']];
+    const s = adds.reduce((state, [component, group]) => addTile(state, component, group), opened);
+    assertNoOverlap(allTiles(s));
+    const touch = (a: Rect, b: Rect) => {
+      const across = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const down = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      return (across === 0 && down > 0) || (down === 0 && across > 0);
+    };
+    expect(touch(byKey(s, 'a1'), byKey(s, 'a2')), JSON.stringify(rects(s))).toBe(true);
+    expect(touch(byKey(s, 'b1'), byKey(s, 'b2')), JSON.stringify(rects(s))).toBe(true);
+    const renamed = replaceComponent(s, idOf(s, 'a1'), video('a3'))!;
+    expect(byKey(renamed, 'a3').group).toBe('a');
+    expect(byKey(s, 'tower').group).toBeUndefined();
+  });
+});
+
+describe('what a tile belongs with', () => {
+  const about = (key: string, driver: number): ComponentSpec => ({ ...video(key), title: { name: '', drivers: [driver] } });
+  const pair: ComponentSpec = { ...chart('gap', 2, 300, 150), title: { name: 'Gap', drivers: [4, 1] } };
+
+  it('is the tiles about its driver when there are others, and failing that its batch', () => {
+    // A battle suggested as one batch: two onboards and the gap between them.
+    let s = [about('NOR', 4), about('VER', 1), pair].reduce((state, c) => addTile(state, c, 'batch-1'), opened);
+    expect(groupOf(s.tiles)).toEqual([undefined, 'batch-1', 'batch-1', 'batch-1']);
+    // Then a chart about one of them, however it got on screen: it and that onboard go together.
+    s = addTile(s, { ...chart('telemetry', 1.6, 300, 150), title: { name: 'Telemetry', drivers: [4] } });
+    expect(groupOf(s.tiles)).toEqual([undefined, 'driver-4', 'batch-1', 'batch-1', 'driver-4']);
+  });
+
+  it('puts a tile about a driver beside that driver\'s other tile, in a hand-arranged layout too', () => {
+    let s = addTile(addTile(sized, about('NOR', 4)), video('B'));
+    s = applyMouseEdit(s, idOf(s, 'NOR'), { x: 0, y: 0, w: 6, h: 6 });
+    s = applyMouseEdit(s, idOf(s, 'B'), { x: 6, y: 0, w: 6, h: 24 });
+    expect(byKey(addTile(s, about('VER', 1)), 'VER')).toMatchObject({ x: 12, y: 0 });
+    expect(byKey(addTile(s, about('NOR again', 4)), 'NOR again')).toMatchObject({ x: 0, y: 6 });
+  });
+
+  it('names the group that has gone longest without a new tile when there is no room', () => {
+    let s = addTile(addTile(opened, about('NOR', 4)), about('NOR pedals', 4));
+    s = addTile(addTile(s, about('VER', 1)), about('VER pedals', 1));
+    // A wall of tiles, put there directly: the grid has no room for one more.
+    const wall = Array.from({ length: 70 }, (_, n) => ({ id: `wall-${n}`, component: video(`onboard${n}`), x: 0, y: 0, w: 1, h: 1 }));
+    const full = { ...s, tiles: [...s.tiles, ...wall] };
+    expect(() => addTile(full, video('one more'))).toThrow(/Close a tile to make room\. NOR, NOR pedals have been up longest\.$/);
+    expect(() => addTile(full, video('one more'))).toThrow(NoRoomError);
+  });
+});
+
 describe('editing', () => {
   it('ignores adding the same component twice', () => {
     const s = build('main', 'A');
@@ -388,6 +441,19 @@ describe('mouse edits', () => {
     expect(s.manual).toBe(false);
     expect(s.tiles[0].w).toBeGreaterThan(5);
     expect(area(byKey(s, 'main'))).toBeGreaterThan(area(byKey(s, 'A')));
+  });
+
+  it('put a new tile in the gap beside a tile of its group, when one is big enough', () => {
+    let s = addTile(addTile(sized, video('A'), 'batch'), video('B'));
+    s = applyMouseEdit(s, idOf(s, 'A'), { x: 0, y: 0, w: 6, h: 6 });
+    s = applyMouseEdit(s, idOf(s, 'B'), { x: 6, y: 0, w: 6, h: 24 });
+    // The biggest gap is right of B. The one under A is smaller, and beside A.
+    expect(byKey(addTile(s, video('C')), 'C')).toMatchObject({ x: 12, y: 0 });
+    expect(byKey(addTile(s, video('C'), 'other'), 'C')).toMatchObject({ x: 12, y: 0 });
+    const next = addTile(s, video('C'), 'batch');
+    expect(byKey(next, 'C')).toMatchObject({ x: 0, y: 6, group: 'batch' });
+    expect(next.manual).toBe(true);
+    assertNoOverlap(allTiles(next));
   });
 
   it('do not count as an edit when nothing moved', () => {

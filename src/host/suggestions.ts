@@ -33,6 +33,12 @@ let dismissed: string[] = [];
 let taken = new Set<string>();
 /** The user dismissed the strip: nothing joins it until the next turn. */
 let closed = false;
+/**
+ * The batch each suggestion in the strip came in, by key: one `offer` is one batch. A tile added from
+ * the strip takes it as its group, so the layout keeps a batch's tiles together.
+ */
+let batches = new Map<string, string>();
+let nextBatch = 1;
 
 /**
  * Build mode's drafts: the keys of the previews the app put in the strip itself, one for each mod the
@@ -140,6 +146,7 @@ export const suggestionOps = {
       const result = { suggested: [] as string[], onScreen: [] as string[], repeated: [] as string[] };
       if (closed) throw new Error('The user dismissed the suggestions this turn.');
       const items = [...useSuggestions.getState().items];
+      const batch = `batch-${nextBatch++}`;
       for (const spec of offered.map(specOf)) {
         // A mod of this build suggested with props: its draft previews with them from here on.
         if (isDraft(spec.type)) {
@@ -152,6 +159,7 @@ export const suggestionOps = {
           continue;
         }
         items.push(spec);
+        batches.set(spec.key, batch);
         (onScreen(spec.key) ? result.onScreen : result.suggested).push(spec.label);
       }
       useSuggestions.setState({ items });
@@ -170,7 +178,7 @@ export const suggestionOps = {
       if (!spec) return false;
       // In the same render, so the tile takes over the preview's videos rather than starting its own.
       if (!onScreen(key)) {
-        layout.add(spec);
+        layout.add(spec, batches.get(key));
         carryApproval(key);
         added.push(spec.label);
       }
@@ -199,7 +207,7 @@ export const suggestionOps = {
       const spec = itemOf(key);
       const at = cellAt(x, y);
       if (!spec || !at || onScreen(key)) return false;
-      layout.addAt(spec, at.cell, at.aspect);
+      layout.addAt(spec, at.cell, at.aspect, batches.get(key));
       carryApproval(key);
       added.push(spec.label);
       settleItem(spec);
@@ -244,6 +252,7 @@ export function clearSuggestions(): void {
   dismissed = [];
   taken = new Set();
   closed = false;
+  batches = new Map();
   drafts = new Set();
   useSuggestions.setState({ items: [], highlight: null, drop: null });
   syncDrafts();

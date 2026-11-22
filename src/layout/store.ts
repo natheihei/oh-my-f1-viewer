@@ -43,14 +43,14 @@ function settle(): void {
 
 export const layout = {
   clear: () => set(EMPTY_LAYOUT),
-  /** Returns the id of the tile showing it: a new one, or the one already showing its key. */
-  add(component: ComponentSpec): string {
-    set(addTile(get(), component));
+  /** Returns the id of the tile showing it: a new one, or the one already showing its key. `group` is what it's added with: see `Tile.group`. */
+  add(component: ComponentSpec, group?: string): string {
+    set(addTile(get(), component, group));
     return tileWithKey(get(), component.key)!.id;
   },
   /** Adds a tile where it was dropped on the grid. Returns its id, as `add` does. */
-  addAt(component: ComponentSpec, cell: Cell, cellAspect?: number): string {
-    set(addTileAt(get(), component, cell, cellAspect));
+  addAt(component: ComponentSpec, cell: Cell, cellAspect?: number, group?: string): string {
+    set(addTileAt(get(), component, cell, cellAspect, group));
     return tileWithKey(get(), component.key)!.id;
   },
   /** Removes a tile by its id. Returns whether it was on screen. */

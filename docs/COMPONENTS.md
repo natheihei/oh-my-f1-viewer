@@ -70,6 +70,9 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 
 ### Where auto-layout puts it
 
+The rules, as a component's author needs them. How the solver carries them out, what it tries and how it scores it, is in
+[AUTO_LAYOUT.md](AUTO_LAYOUT.md).
+
 - **The main tile is assigned, never inferred.** `host.layout.setMain` gives one tile the main place, top left and as large as the
   others allow, and `layout.main` holds its id. Nothing about a component makes it the main tile: not being a video, and not being
   added first. (2026-11-12)
@@ -81,6 +84,25 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
 - **The rest go beside it or below it by shape.** Tall components take the rail beside the main tile, wide ones the band below it.
   Within each they keep the order they were added in, unless ordering by shape fits better. (2026-11-12. Before, the order added
   alone decided, so a tall timing tower could land in the wide band.)
+- **Tiles that belong together are placed as one block.** A tile belongs with the other tiles about its driver, when its title
+  names one driver and another tile names the same: an onboard and that car's telemetry, however each got on screen. Failing
+  that, it belongs with the tiles added from the same batch of suggestions, which is one `suggest_tiles` call and is kept as the
+  tile's `group`. So a battle suggested as two onboards and a gap chart is one group, and when a chart about one of the two
+  drivers is added later, that driver's onboard goes with it instead. A group of one is no group, and the main tile is in none.
+  (2026-11-21. Before, an onboard and the chart suggested with it went to the rail and the band by shape alone, with other tiles
+  between.)
+- **A block is a row, a column, or two rows.** Each group is given to the solver as one slot, with the shape and least size its
+  tiles have between them, and its tiles are laid out inside the box it gets. Each way round is tried, and two rows for four
+  tiles and more.
+- **Groups made of the same components are laid out alike.** Two drivers' onboard, telemetry and pedals go the same way round,
+  with their tiles in the same order, so they compare tile for tile. An arrangement costs a little more when such groups aren't
+  at one size and in one row or column, which can cost the main tile some size or leave part of the grid empty.
+- **Groups come first, the newest first.** A group is as new as the last tile added to it, and single tiles follow in the order
+  they were added. When there's no room for another tile, the refusal names the group that has gone longest without one.
+- **Blocks give way to least sizes.** The tiles are also placed on their own, and with all but the oldest group in blocks, and
+  so on down to the newest alone. One of those wins when every group in a block would leave a tile under its least size, or cost
+  more than tiles being apart does: every cell of another tile inside the smallest rectangle round a group's tiles adds to the
+  cost. An experiment: the weights are `COST.apart` and `COST.unalike` in `solve.ts`.
 - **Least sizes come before the main tile's size.** The main tile gets smaller before any other tile goes below its least size, so
   adding charts shrinks the video. When there are too many for that, the shortfall is shared, and the host's "more" mark covers a
   tile that is cut. (2026-11-12)
@@ -99,12 +121,13 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   neighbour that would then be the wrong shape.
 - **Until the viewer arranges tiles by hand, adding a tile re-tiles the grid,** as `/auto-layout` does, so the new tile takes its place
   among the others as if the layout had been built with it. Removing a tile does the same. Once the viewer has moved, resized,
-  swapped or dropped a tile, a new one goes into the biggest gap instead, and the grid is re-tiled only when that gap is too small.
+  swapped or dropped a tile, a new one goes into the biggest gap instead, or the biggest gap beside a tile it belongs with when that
+  one is big enough, and the grid is re-tiled only when the biggest gap is too small.
   (2026-11-18. Before, an auto layout put a new tile into a gap that fit it, so nothing on screen moved.)
 - **A resize re-tiles once it has settled.** While the grid's size keeps changing, as a window drag does every frame, tiles keep
   their cells and scale with it. When it has held still for 150 ms the grid is re-tiled, if the new size puts tiles elsewhere.
   The solver's last few answers are kept, so asking again for the layout the tiles are already in costs nothing. (2026-11-22.
-  Before, every frame of a drag ran the solver twice.)
+  Before, every frame of a drag ran the solver twice, which a layout with several groups made slow enough to stutter.)
 - **A hand-arranged layout is left alone,** and dragging a tile below its least size is allowed. The viewer's choice wins.
 - **A dropped suggestion takes what its content uses of the room there,** keeping the top-left corner, as a tile added by
   auto-layout does. A gap chart dropped on half a wide tile stays at 640 by 340 rather than stretching across it, and the rest is
@@ -633,7 +656,7 @@ Polished 2026-11-13, from the `track_map` proposals 1, 2, 4, 5, 6, 10, 11 and 12
 | What a component says its title bar shows, and the state it keeps with its tile | `src/host/tile.ts` |
 | Who is fighting whom, and the car ahead | `src/kit/fights.ts` |
 | The battle and the chase in the real app, with one feed in two tiles and where the sound goes | `scripts/battle-check.mjs` |
-| Auto-layout: what is tried and how it is scored | `src/layout/solve.ts` |
+| Auto-layout: what is tried and how it is scored. See [AUTO_LAYOUT.md](AUTO_LAYOUT.md) | `src/layout/solve.ts` |
 | The layout tree and what a node asks of the solver | `src/layout/model.ts` |
 | Every built-in chart at its least size in common arrangements | `src/components/charts.test.ts` |
 | A chart drawing past its tile | `src/kit/ChartCanvas.tsx` (`extent`) |
