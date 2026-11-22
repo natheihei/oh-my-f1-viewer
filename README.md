@@ -40,6 +40,7 @@ You need [Node.js](https://nodejs.org). Install the dependencies, then the castL
 build with Widevine, then start it:
 
 ```bash
+# --allow-git=all: Electron comes from castLabs' GitHub (their build with Widevine, for F1 TV's DRM), not the npm registry
 npm install --allow-git=all
 ```
 
