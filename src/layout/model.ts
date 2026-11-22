@@ -149,7 +149,27 @@ function mainIndex(state: LayoutState): number | null {
  * top left, and the rest beside or below it by shape, in the order they were added. See `solve`.
  */
 export function autoLayout(state: LayoutState): LayoutState {
-  return laidOut(state, solve(...problem(state)));
+  return laidOut(state, solved('solve', state, () => solve(...problem(state))));
+}
+
+/** How many of the last problems' answers are kept. A resize asks for the old size's and the new one's. */
+const KEPT_SOLVES = 4;
+const solves = new Map<string, Rect[] | null>();
+
+/**
+ * What the solver gives for a layout, worked out once: the same tiles at the same cell size have the
+ * same answer, and a resize asks again for the one the tiles are already in. `how` is which of the
+ * solver's two entries is asked.
+ */
+function solved<T extends Rect[] | null>(how: string, state: LayoutState, work: () => T): T {
+  const tiles = state.tiles.map((t) => [t.id, t.component.type, t.component.key, t.component.size, t.component.fit]);
+  const key = JSON.stringify([how, state.cell, state.main, tiles]);
+  const kept = solves.get(key);
+  if (kept !== undefined) return kept as T;
+  const boxes = work();
+  solves.set(key, boxes);
+  if (solves.size > KEPT_SOLVES) solves.delete(solves.keys().next().value!);
+  return boxes;
 }
 
 /** What the solver is given for a layout: its tiles' slots, the grid, and which is the main one. */
@@ -172,6 +192,15 @@ export function measure(state: LayoutState, cell: CellPx): LayoutState {
   if (state.manual) return next;
   const retiled = autoLayout(next);
   return rectsOf(retiled.tiles) === rectsOf(autoLayout(state).tiles) ? next : retiled;
+}
+
+/**
+ * The grid's cell size changed and nothing is re-tiled yet, as while the window is being dragged: tiles
+ * keep their cells, so they scale with the grid. `measure` from the size before then decides what moves.
+ */
+export function resized(state: LayoutState, cell: CellPx): LayoutState {
+  if ((cell.w === state.cell.w && cell.h === state.cell.h) || !(cell.w > 0 && cell.h > 0)) return state;
+  return { ...state, cell };
 }
 
 function occupancy(nodes: Rect[], columns: number, rows: number): boolean[][] {
@@ -238,7 +267,7 @@ export class NoRoomError extends Error {
  */
 function place(state: LayoutState, added: Tile): LayoutState {
   const retiled = () => {
-    const boxes = arrange(...problem(state));
+    const boxes = solved('arrange', state, () => arrange(...problem(state)));
     if (!boxes) throw new NoRoomError(added.component);
     return laidOut(state, boxes);
   };
