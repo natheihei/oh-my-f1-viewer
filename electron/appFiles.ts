@@ -18,15 +18,15 @@ export const DECLARATIONS = RESOURCES ? path.join(RESOURCES, 'dist-types') : pat
 export const COMPONENTS = RESOURCES ? path.join(RESOURCES, 'components') : path.join(ROOT, 'src', 'components');
 
 // esbuild spawns its native binary, and nothing can spawn a file inside app.asar. Packaging unpacks it
-// (`asarUnpack`) into app.asar.unpacked, and esbuild reads this variable for where it went.
-if (app.isPackaged && process.platform !== 'win32' && !process.env.ESBUILD_BINARY_PATH) {
+// (`asarUnpack`) into app.asar.unpacked, and esbuild reads this variable for where it went. Its Windows package has
+// `esbuild.exe` at the top, and the others `bin/esbuild`.
+if (app.isPackaged && !process.env.ESBUILD_BINARY_PATH) {
   process.env.ESBUILD_BINARY_PATH = path.join(
     process.resourcesPath,
     'app.asar.unpacked',
     'node_modules',
     '@esbuild',
     `${process.platform}-${process.arch}`,
-    'bin',
-    'esbuild',
+    ...(process.platform === 'win32' ? ['esbuild.exe'] : ['bin', 'esbuild']),
   );
 }

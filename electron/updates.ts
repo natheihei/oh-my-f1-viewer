@@ -1,10 +1,12 @@
 /**
  * Keeps a release of OMFV up to date: checks GitHub for a newer release, downloads it in the background, and
  * installs it when the app quits, so the next start is the new release. Never restarts the app, never asks.
- * Only the AppImage and the Mac app: the pacman package is installed by hand (issue 181). See docs/RELEASE.md.
+ * Only the AppImage, the Mac app and the Windows app: the pacman package is installed by hand (issue 181). See
+ * docs/RELEASE.md.
  *
- * electron-updater does the work, from the feed electron-builder.yml names under `publish`: `latest-linux.yml` or
- * `latest-mac.yml` on the release marked latest.
+ * electron-updater does the work, from the feed electron-builder.yml names under `publish`: `latest-linux.yml`,
+ * `latest-mac.yml` or `latest.yml` (Windows) on the release marked latest. On Windows it runs the next release's NSIS
+ * installer as the app quits.
  */
 import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
@@ -26,10 +28,11 @@ export interface SavedUpdate {
 const NOTHING: UpdateState = { ready: null, updated: null, failed: null };
 let state: UpdateState = NOTHING;
 
-/** Whether this build updates itself: a release, installed as an AppImage or a Mac app. */
+/** Whether this build updates itself: a release, installed as an AppImage, a Mac app or with the Windows installer. */
 export function canUpdate(): boolean {
   if (!app.isPackaged || !releaseName(app.getVersion())) return false;
-  return process.platform === 'darwin' || (process.platform === 'linux' && !!process.env.APPIMAGE);
+  if (process.platform === 'linux') return !!process.env.APPIMAGE;
+  return process.platform === 'darwin' || process.platform === 'win32';
 }
 
 /** Reads what the last run kept, ignoring anything that isn't a release name. */

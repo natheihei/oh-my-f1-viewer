@@ -392,6 +392,10 @@ Not verified: an AppImage updating itself from GitHub.
 
 ## Not verified
 
+- **Windows.** On 2026-11-21, `release/win-unpacked` was built from Linux with castLabs' Windows Electron and VMP-signed
+  through EVS (`verify-pkg` passes), without Wine, so with no icon and no installer. Not verified: that it runs, signs in,
+  decrypts the sign-ins, plays a live session or compiles a mod, nor the installer the action builds on `windows-latest`, nor an
+  update from one release to the next.
 - **The window icon.** Hyprland shows none, so it hasn't been seen.
 - **Fixing a sign-in from onboarding or a fix block.** Neither has completed an F1 TV or ChatGPT sign-in in the real app, F1 TV
   ending a sign-in hasn't been seen, and no turn has failed for a rejected connection or a usage limit, so sending the message again
@@ -443,7 +447,7 @@ Not verified: an AppImage updating itself from GitHub.
   Electron, so every DRM stream fails; unencrypted replays play. Signing it through castLabs' EVS fixes a run from source: after
   `npm run vmp:sign`, the same session's main feed and an onboard got their licences, with 200 through the proxy. Packaging
   VMP-signs the Mac app the same way, but that hasn't run with an EVS account, and no release has been made with it: not verified
-  that a released Mac app plays a live session. See [RELEASE.md](RELEASE.md#vmp-sign-the-mac-build).
+  that a released Mac app plays a live session. See [RELEASE.md](RELEASE.md#vmp-sign-the-app).
 
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
   reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.
@@ -469,6 +473,5 @@ Not verified: an AppImage updating itself from GitHub.
 - Race-state tools for the agent.
 - More charts.
 - Finding moments in the commentary. The captions are researched in [CAPTIONS.md](CAPTIONS.md), and the app doesn't use them yet.
-- Windows. See [RELEASE.md](RELEASE.md#not-done-yet).
 - Saved layouts, pop-out windows and translations.
 - Updates for the pacman package, through the AUR ([issue 181](https://github.com/natheihei/oh-my-f1-viewer/issues/181)).
