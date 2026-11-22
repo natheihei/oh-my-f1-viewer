@@ -28,6 +28,7 @@ Read the one that covers what you're changing. [README.md](README.md) has how to
 | [DESIGN.md](docs/DESIGN.md) | Where the layering is heading and its rules: one read surface and one write path through `src/host`, and a host with no gates. Also the agent's tools, suggested tiles, mentions and the spoiler check in full |
 | [HOST.md](docs/HOST.md) | Every read, query, write and primitive in `src/host`, and the agent tool built on each |
 | [COMPONENTS.md](docs/COMPONENTS.md) | How a tile's component should behave: props, size, auto-layout, overflow, colour, driver codes, and each chart's decisions. Rules a mod must follow are copied into `shared/modGuide.ts` by hand, in the same change |
+| [AUTO_LAYOUT.md](docs/AUTO_LAYOUT.md) | How tiles are placed: when the grid is re-tiled, what the solver tries and how it scores it, how tiles about one driver or from one batch of suggestions are kept together, hand-arranged layouts, and resizing |
 | [MODS.md](docs/MODS.md) | What a mod is, what it may import, and how the app watches, compiles, serves and reloads it |
 | [BUILD_MODE.md](docs/BUILD_MODE.md) | `/build`: the build agent and its file tools, drafts, Save and Undo all, what isn't drawing, and the cases that check it |
 | [SESSION_DATA.md](docs/SESSION_DATA.md) | The session database: tables, `visible_from` and versioned rows, ingest and caching, linking it to the video, and quirks in F1's data |

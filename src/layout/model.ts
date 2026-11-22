@@ -7,7 +7,7 @@
  * moves, resizes and new props, till it's taken off screen. Ids are only unique while the app runs.
  * A component's key only keeps the same thing from being added twice.
  */
-import { arrange, LEAST_ROOM, solve, type Slot } from './solve';
+import { arrange, groupsOf, LEAST_ROOM, solve, type Slot } from './solve';
 
 /** A component's size hint: the shape it reads best in, as width over height, and the least room its content reads in, in pixels. */
 export interface SizeHint {
@@ -67,6 +67,11 @@ export interface Tile extends Rect {
   /** What names this tile while it's on screen, such as "tile-3". A tile added again later gets a new one. */
   id: string;
   component: ComponentSpec;
+  /**
+   * What it was added with, when that was more than itself: one batch of the agent's suggestions. What
+   * the layout keeps together follows from it and from the tiles' drivers: see `groupOf`.
+   */
+  group?: string;
 }
 
 export interface LayoutState {
@@ -128,14 +133,34 @@ export function minCells(size: SizeHint | undefined, cell: CellPx): [number, num
   return [Math.max(1, Math.ceil(size.min.width / w)), Math.max(1, Math.ceil((size.min.height + TITLE_BAR_PX) / h))];
 }
 
-/** What the solver needs to know of a tile. */
-function slotOf(tile: Tile, cell: CellPx): Slot {
+/** The driver a tile is about: the one its title names, when it names just one. */
+const driverOf = (tile: Tile): number | null => (tile.component.title?.drivers.length === 1 ? tile.component.title.drivers[0] : null);
+
+/**
+ * What each tile belongs with, in order, which the layout keeps together. The tiles about one driver,
+ * when there are two or more: an onboard and that car's telemetry, however each got on screen. Failing
+ * that, the batch of suggestions a tile was added from. Undefined for a tile with neither.
+ */
+export function groupOf(tiles: Tile[]): (string | undefined)[] {
+  const about = new Map<number, number>();
+  for (const tile of tiles) {
+    const driver = driverOf(tile);
+    if (driver !== null) about.set(driver, (about.get(driver) ?? 0) + 1);
+  }
+  return tiles.map((tile) => {
+    const driver = driverOf(tile);
+    return driver !== null && about.get(driver)! > 1 ? `driver-${driver}` : tile.group;
+  });
+}
+
+/** What the solver needs to know of a tile. `group` is what it belongs with: see `groupOf`. */
+function slotOf(tile: Tile, cell: CellPx, group: string | undefined): Slot {
   const fitTo = (room: { w: number; h: number }) => contentSize(tile, { x: 0, y: 0, ...room }, cell);
-  const { size, fit: hint } = tile.component;
+  const { size, fit: hint, type: kind } = tile.component;
   const capped = Boolean(hint?.width || hint?.height);
-  if (!size) return { aspect: hint?.aspect ?? 16 / 9, min: { w: 0, h: 0 }, fit: fitTo, capped };
+  if (!size) return { aspect: hint?.aspect ?? 16 / 9, min: { w: 0, h: 0 }, fit: fitTo, capped, group, kind };
   const [w, h] = minCells(size, cell);
-  return { aspect: size.aspect, min: { w, h }, fit: fitTo, capped };
+  return { aspect: size.aspect, min: { w, h }, fit: fitTo, capped, group, kind };
 }
 
 /** Where the main tile is in `tiles`. */
@@ -162,7 +187,7 @@ const solves = new Map<string, Rect[] | null>();
  * solver's two entries is asked.
  */
 function solved<T extends Rect[] | null>(how: string, state: LayoutState, work: () => T): T {
-  const tiles = state.tiles.map((t) => [t.id, t.component.type, t.component.key, t.component.size, t.component.fit]);
+  const tiles = state.tiles.map((t) => [t.id, t.component.type, t.component.key, t.component.size, t.component.fit, t.component.title?.drivers, t.group]);
   const key = JSON.stringify([how, state.cell, state.main, tiles]);
   const kept = solves.get(key);
   if (kept !== undefined) return kept as T;
@@ -174,7 +199,12 @@ function solved<T extends Rect[] | null>(how: string, state: LayoutState, work: 
 
 /** What the solver is given for a layout: its tiles' slots, the grid, and which is the main one. */
 const problem = (state: LayoutState) =>
-  [state.tiles.map((t) => slotOf(t, state.cell)), { columns: GRID_COLUMNS, rows: GRID_ROWS, cell: measured(state.cell), titleBar: TITLE_BAR_PX }, mainIndex(state)] as const;
+  [slotsOf(state), { columns: GRID_COLUMNS, rows: GRID_ROWS, cell: measured(state.cell), titleBar: TITLE_BAR_PX }, mainIndex(state)] as const;
+
+const slotsOf = (state: LayoutState): Slot[] => {
+  const groups = groupOf(state.tiles);
+  return state.tiles.map((t, i) => slotOf(t, state.cell, groups[i]));
+};
 
 /** The layout with each tile in its box, in order: an auto layout again. */
 const laidOut = (state: LayoutState, boxes: Rect[]): LayoutState => ({ ...state, manual: false, tiles: state.tiles.map((t, i) => ({ ...t, ...boxes[i] })) });
@@ -252,30 +282,53 @@ const LEAST: [number, number] = [LEAST_ROOM, LEAST_ROOM];
  * included, at least `LEAST_ROOM` cells either way. Nothing on screen changed.
  */
 export class NoRoomError extends Error {
-  constructor(component: ComponentSpec) {
+  constructor(component: ComponentSpec, oldest: string[] = []) {
     const name = component.label || component.title?.name || 'another tile';
-    super(`No room for ${name}: with it, some tiles would be too small to read. Close a tile to make room.`);
+    const longest = oldest.length ? ` ${oldest.join(', ')} have been up longest.` : '';
+    super(`No room for ${name}: with it, some tiles would be too small to read. Close a tile to make room.${longest}`);
     this.name = 'NoRoomError';
   }
 }
 
+/** Whether two rectangles share part of an edge. */
+const touching = (a: Rect, b: Rect) => {
+  const across = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const down = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return (across === 0 && down > 0) || (down === 0 && across > 0);
+};
+
 /**
  * After a structural change. An auto layout is re-tiled, so a new tile takes its place among the
  * others as if the layout had been built with it. A hand-arranged layout uses its biggest gap for
- * anything, and re-tiles only when that is too small. A gap is never under `LEAST_ROOM` either way.
+ * anything, or the biggest beside a tile the new one belongs with when one is big enough, and re-tiles
+ * only when the biggest is too small. A gap is never under `LEAST_ROOM` either way.
  * Throws `NoRoomError` when re-tiling can't give every tile that.
  */
 function place(state: LayoutState, added: Tile): LayoutState {
   const retiled = () => {
     const boxes = solved('arrange', state, () => arrange(...problem(state)));
-    if (!boxes) throw new NoRoomError(added.component);
+    if (!boxes) throw new NoRoomError(added.component, oldestGroup(state, added));
     return laidOut(state, boxes);
   };
   if (!state.manual) return retiled();
-  const free = largestFreeRect(state.tiles.filter((t) => t !== added), LEAST);
+  const others = state.tiles.filter((t) => t !== added);
+  const groups = groupOf(state.tiles);
+  const own = groups[state.tiles.indexOf(added)];
+  const group = own === undefined ? [] : state.tiles.filter((t, i) => t !== added && groups[i] === own);
+  const largest = (rects: Rect[]) => rects.reduce((best, r) => (area(r) > area(best) ? r : best), ZERO);
+  const gaps = freeRects(others, LEAST, GRID_COLUMNS, GRID_ROWS);
+  const beside = largest(gaps.filter((r) => group.some((t) => touching(r, t))));
+  const free = area(beside) >= MIN_FREE_AREA ? beside : largest(gaps);
   return area(free) < MIN_FREE_AREA
     ? retiled()
     : { ...state, tiles: state.tiles.map((t) => (t === added ? fit({ ...t, ...free }, state.cell) : t)) };
+}
+
+/** The labels of the group that has gone longest without a new tile, leaving out the main tile and the one being added. */
+function oldestGroup(state: LayoutState, added: Tile): string[] {
+  const tiles = state.tiles.filter((t) => t !== added);
+  const groups = groupsOf(slotsOf({ ...state, tiles }), mainIndex({ ...state, tiles }));
+  return (groups.at(-1) ?? []).map((i) => tiles[i].component.label).filter(Boolean);
 }
 
 export function allTiles(state: Pick<LayoutState, 'tiles'>): Tile[] {
@@ -292,17 +345,18 @@ export function tileWithKey(state: Pick<LayoutState, 'tiles'>, key: string): Til
   return state.tiles.find((t) => t.component.key === key) ?? null;
 }
 
-function newTile(component: ComponentSpec): Tile {
-  return { id: newId(), component, ...ZERO };
+function newTile(component: ComponentSpec, group?: string): Tile {
+  return { id: newId(), component, ...ZERO, ...(group === undefined ? {} : { group }) };
 }
 
 /**
  * Adds a tile for the component. One whose key is on screen already adds nothing: `tileWithKey` finds the
- * tile it has. Throws `NoRoomError`, and changes nothing, when there's no room left for it.
+ * tile it has. Throws `NoRoomError`, and changes nothing, when there's no room left for it. `group` is
+ * what it's added with, if anything: see `Tile.group`.
  */
-export function addTile(state: LayoutState, component: ComponentSpec): LayoutState {
+export function addTile(state: LayoutState, component: ComponentSpec, group?: string): LayoutState {
   if (tileWithKey(state, component.key)) return state;
-  const tile = newTile(component);
+  const tile = newTile(component, group);
   return place({ ...state, tiles: [...state.tiles, tile] }, tile);
 }
 
@@ -396,12 +450,12 @@ function dropRoom(state: LayoutState, cell: Cell, cellAspect: number): { room: R
  * Adds a tile where it was dropped, which makes the layout manual. It takes what its content uses of
  * the room there, so a chart that stops growing doesn't stretch across it. Falls back to `addTile`.
  */
-export function addTileAt(state: LayoutState, component: ComponentSpec, cell: Cell, cellAspect = 1): LayoutState {
+export function addTileAt(state: LayoutState, component: ComponentSpec, cell: Cell, cellAspect = 1, group?: string): LayoutState {
   if (tileWithKey(state, component.key)) return state;
   const target = dropTarget(state, cell, cellAspect, component);
-  if (!target) return addTile(state, component);
+  if (!target) return addTile(state, component, group);
   const { rect, room, split } = target;
-  const tile: Tile = { ...newTile(component), ...rect };
+  const tile: Tile = { ...newTile(component, group), ...rect };
   const tiles = state.tiles.map((t) => (t === split ? { ...t, ...rectMinus(t, room) } : t));
   return { ...state, tiles: [...tiles, tile], manual: true };
 }

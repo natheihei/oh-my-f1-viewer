@@ -38,7 +38,7 @@ A selector must return a value or an existing reference. Building a new object o
 | `volume` | `number` | Master volume from 0 to 1. It carries over from one session to the next, and the shell saves it across restarts |
 | `clock` | `ClockState` | `timeSec`, `playing`, `buffering`, `live`, `start`/`end` (the range you can seek in), `atLiveEdge`, `wallClockMs` |
 | `headers` | `Record<tileId, TileHeader>` | What each tile's component says its title bar shows, where it says: `label`, `drivers`, `status` (`load`, `sync` or `error`) and `audio` (`on` or `muted`). See `useTileHeader` below |
-| `layout` | `LayoutState` | `tiles` (each tile's `id`, `component` spec and grid rect, in the order they were added), `manual` (whether the mouse has moved something), `main` (the id of the tile with the main place in auto-layout, or null) |
+| `layout` | `LayoutState` | `tiles` (each tile's `id`, `component` spec and grid rect, in the order they were added, and its `group` when it was added from a batch of suggestions), `manual` (whether the mouse has moved something), `main` (the id of the tile with the main place in auto-layout, or null) |
 | `pointed` | `string \| null` | The tile the viewer is pointing at from the prompt, by id, which the grid puts in the spotlight: a tile row selected in the mention picker, or a tile's tag under the mouse. See `host.layout.point` |
 | `countdown` | `Countdown \| null` | `title`, `startMs` and `session` while waiting for an upcoming session (see `host.session.open`) |
 | `suggestions` | `SuggestionsView` | The tiles the agent suggested this turn, waiting in the strip: `items` (component specs), `highlight` (the key of an on-screen tile that the suggestion under the mouse duplicates) and `drop` (where a dragged suggestion would land, in grid cells) |
@@ -284,7 +284,7 @@ feed id.
 | Function | Arguments | Effect |
 | --- | --- | --- |
 | `offer` | `items: { type, props }[]` | Adds the components to the strip, with no limit on how many: each preview's videos are real streams, so many cost bandwidth. One already suggested or added this turn is skipped. Fails once the user has dismissed the strip this turn. Returns `{ suggested, onScreen, repeated }`, as labels |
-| `add` | `key: string` | Adds the suggestion where auto-layout puts it, and takes it out of the strip. A suggestion that's already on screen only leaves the strip. Returns whether the key matched |
+| `add` | `key: string` | Adds the suggestion where auto-layout puts it, and takes it out of the strip. The tile's `group` is the `offer` the suggestion came in, as it is for `drop`: the layout keeps a batch's tiles together, unless a tile belongs with others about its driver. A suggestion that's already on screen only leaves the strip. Returns whether the key matched |
 | `dragOver` | `key: string`, `x: number`, `y: number` | Shows where a suggestion dragged to that pointer position (client pixels) would land |
 | `drop` | `key: string`, `x: number`, `y: number` | Drops a suggestion there, splitting the tile under the pointer or filling the gap. Returns whether it landed |
 | `cancelDrag` | none | Stops showing where a drag would land |

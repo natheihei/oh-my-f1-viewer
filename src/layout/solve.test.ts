@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrange, shareWithin, solve, type Slot } from './solve';
+import { apart, arrange, groupsOf, shareWithin, solve, type Slot } from './solve';
 
 const sum = (list: number[]) => list.reduce((a, v) => a + v, 0);
 
@@ -85,6 +85,81 @@ describe('solve', () => {
       legible(solve(slots, grid, 0), 3);
       legible(solve(slots, grid), 3);
     }
+  });
+
+  /** How far apart the groups' boxes are: see `apart`. */
+  const spread = (slots: Slot[], main: number | null = null) => {
+    const by = new Map<string, number[]>();
+    slots.forEach((s, i) => s.group !== undefined && by.set(s.group, [...(by.get(s.group) ?? []), i]));
+    return apart(new Map(solve(slots, grid, main).map((box, i) => [i, box])), [...by.values()], grid);
+  };
+
+  it('keeps slots that share a group together, though they were added between others', () => {
+    // Two batches clicked in turn about: a tall chart and a wide one, and two videos. Then a chart alone.
+    const mixed = (grouped: boolean) => {
+      const of = (group: string) => (grouped ? { group } : {});
+      return [slot({ aspect: 0.75, ...of('a') }), slot(of('b')), slot({ aspect: 2, ...of('a') }), slot(of('b')), slot({ aspect: 2.5 })];
+    };
+    expect(spread(mixed(true))).toBe(0);
+    legible(solve(mixed(true), grid), 3);
+    // By shape alone the tall chart goes to the rail, away from the one it came with.
+    const boxes = solve(mixed(false), grid);
+    expect(apart(new Map(boxes.map((box, i) => [i, box])), [[0, 2], [1, 3]], grid)).toBeGreaterThan(0);
+  });
+
+  it('keeps a group together round a main tile too, in the rail, the band, or across their corner', () => {
+    const slots = [slot(), slot({ group: 'a' }), slot({ group: 'b' }), slot({ aspect: 0.8, group: 'a' }), slot({ aspect: 0.8, group: 'b' }), slot({ aspect: 3, group: 'a' }), slot({ aspect: 3, group: 'b' })];
+    legible(solve(slots, grid, 0), 3);
+    expect(spread(slots, 0)).toBeLessThan(0.05);
+  });
+
+  it('arranges slots as before when none share a group', () => {
+    const plain = [slot(), slot({ aspect: 0.75 }), slot({ aspect: 2 }), slot(), slot({ aspect: 2.5 })];
+    const alone = plain.map((s, i) => ({ ...s, group: `only-${i}` }));
+    expect(solve(alone, grid, 0)).toEqual(solve(plain, grid, 0));
+    expect(solve(alone, grid)).toEqual(solve(plain, grid));
+  });
+
+  it('puts a slot at its least size before keeping a group together', () => {
+    const slots = [slot(), slot({ min: { w: 8, h: 8 }, group: 'a' }), slot({ aspect: 0.6, min: { w: 6, h: 12 }, group: 'a' }), slot({ min: { w: 8, h: 6 } })];
+    solve(slots, grid, 0).forEach((box, i) => {
+      expect(box.w, `slot ${i}`).toBeGreaterThanOrEqual(slots[i].min.w);
+      expect(box.h, `slot ${i}`).toBeGreaterThanOrEqual(slots[i].min.h);
+    });
+  });
+
+  it('lays out groups made of the same kinds of tile the same way round, at one size and in line, the newest first', () => {
+    // An onboard, its telemetry and its pedals for each of two drivers, clicked in turn about, round a main tile.
+    const kinds: Partial<Slot>[] = [{ kind: 'video' }, { kind: 'telemetry', aspect: 1.6, min: { w: 5, h: 5 } }, { kind: 'pedals', aspect: 2.4, min: { w: 5, h: 5 } }];
+    const slots = [slot(), ...kinds.flatMap((kind) => [slot({ ...kind, group: 'a' }), slot({ ...kind, group: 'b' })])];
+    const boxes = solve(slots, grid, 0);
+    legible(boxes, 3);
+    const a = [1, 3, 5].map((i) => boxes[i]);
+    const b = [2, 4, 6].map((i) => boxes[i]);
+    // Each of b's tiles is one step from a's of the same kind, the same way for all three: beside it or below it.
+    const steps = a.map((box, k) => `${Math.sign(b[k].x - box.x)},${Math.sign(b[k].y - box.y)}`);
+    expect(new Set(steps).size, JSON.stringify(boxes)).toBe(1);
+    expect(['1,0', '-1,0', '0,1', '0,-1'], JSON.stringify(boxes)).toContain(steps[0]);
+    a.forEach((box, k) => {
+      expect(Math.abs(box.w - b[k].w), JSON.stringify(boxes)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box.h - b[k].h), JSON.stringify(boxes)).toBeLessThanOrEqual(1);
+    });
+    // b had the last tile added, so it is the newer group and comes first: left of a, or above it.
+    expect(['1,0', '0,1']).not.toContain(steps[0]);
+  });
+
+  it('lists groups newest first, by the last slot added to each, and leaves out the main slot and a group of one', () => {
+    const slots = [slot({ group: 'a' }), slot({ group: 'b' }), slot({ group: 'a' }), slot({ group: 'c' }), slot({ group: 'b' }), slot()];
+    expect(groupsOf(slots)).toEqual([[1, 4], [0, 2]]);
+    expect(groupsOf(slots, 4)).toEqual([[0, 2]]);
+  });
+
+  it('places the slots on their own when a block would leave one under its least size', () => {
+    // Five tiles of one group, each needing a third of the grid one way: no row, column or pair of rows holds them.
+    const slots = [slot(), ...Array.from({ length: 5 }, () => slot({ min: { w: 8, h: 6 }, group: 'a' }))];
+    const boxes = solve(slots, grid, 0);
+    legible(boxes, 3);
+    boxes.slice(1).forEach((box) => expect(box.w >= 8 && box.h >= 6, JSON.stringify(boxes)).toBe(true));
   });
 
   it('falls back to a plain grid, with no overlap, when no rail or band gives every slot room', () => {
