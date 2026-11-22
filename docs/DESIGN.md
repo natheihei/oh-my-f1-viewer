@@ -133,7 +133,7 @@ that trying again in the turn won't help:
 returns, so it gets the tables, the playhead and the roster. A message sent while the data loads has no table list, so the bridge sends the
 reference again with the first tool result after the tables are there (`AgentToolResult.reference`).
 
-While a call waits, the palette says what for, and says when it's there: "Loading the timing data…", then "Timing data loaded." A wait ends
+While a call waits, the palette says what for, and says when it's there: "Loading the timing data…", then "Timing data loaded." The line that began a wait is never left hanging: data that loaded but can't show yet says why, as joining a live session does with "Timing data loaded. It's ahead of the live video, and shows once the video catches up.", and a wait that ran out says "Still loading the timing data." A wait ends
 with its turn, so a stopped turn's call never goes on to seek, and when the session changes. The waits are under the 60s a tool call gets
 in `electron/agent/agent.ts`. Waiting is the agent's policy, not the host's: `host.data.sql` and `seekToDate` still fail at once.
 

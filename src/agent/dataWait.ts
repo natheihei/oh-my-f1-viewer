@@ -22,8 +22,8 @@ export type Readiness =
   | { is: 'ready' }
   /** It should clear by itself: `note` is what the viewer is told meanwhile, and `done` once it has. */
   | { is: 'pending'; note: string; done: string }
-  /** It won't clear in this turn: `message` is for the agent. */
-  | { is: 'unavailable'; message: string };
+  /** It won't clear in this turn: `message` is for the agent, and `settled` is what the viewer is told when a wait ends here. */
+  | { is: 'unavailable'; message: string; settled?: string };
 
 const NO_RETRY = "Waiting or trying again in this turn won't change that: tell the user.";
 
@@ -40,7 +40,12 @@ export function readiness(data: SessionDataView, wholeSession = false): Readines
     case 'waiting':
       if (wholeSession) return { is: 'ready' };
       if (data.brief) return { is: 'pending', note: 'Lining the timing data up with the live video…', done: 'Timing data lined up.' };
-      return { is: 'unavailable', message: `The timing data can't be read at the frame on screen yet: ${data.reason}. ${data.detail} ${NO_RETRY}` };
+      return {
+        is: 'unavailable',
+        message: `The timing data can't be read at the frame on screen yet: ${data.reason}. ${data.detail} ${NO_RETRY}`,
+        // The data did load. A wait that began with "Loading…" says so, and why nothing shows yet.
+        settled: data.ahead ? "Timing data loaded. It's ahead of the live video, and shows once the video catches up." : `Timing data loaded. ${data.reason}.`,
+      };
     case 'failed':
     case 'unsupported':
       return { is: 'unavailable', message: `This session's timing data isn't available. ${data.reason} ${NO_RETRY}` };
@@ -49,7 +54,7 @@ export function readiness(data: SessionDataView, wholeSession = false): Readines
 
 export type Settled =
   | { is: 'ready' }
-  | { is: 'unavailable'; message: string }
+  | { is: 'unavailable'; message: string; settled?: string }
   /** Still pending when the time was up. */
   | { is: 'timeout' }
   /** The turn ended or the session changed while waiting. */
@@ -95,9 +100,14 @@ export async function settleData({ wholeSession = false, timeoutMs = DATA_WAIT_M
     if (read().session !== session) return { is: 'ended', message: 'The session was closed or changed while its timing data was loading.' };
     const now = readiness(read().sessionData, wholeSession);
     if (now.is === 'ready') notify?.(done);
+    // Never leave the line that began the wait hanging: say where it ended.
+    if (now.is === 'unavailable' && now.settled) notify?.(now.settled);
     if (now.is !== 'pending') return now;
     done = now.done;
-    if (Date.now() >= deadline) return { is: 'timeout' };
+    if (Date.now() >= deadline) {
+      notify?.('Still loading the timing data.');
+      return { is: 'timeout' };
+    }
   }
 }
 
