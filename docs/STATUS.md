@@ -462,6 +462,17 @@ Not verified: an AppImage updating itself from GitHub.
   partition list should show `teamid:`), or that Widevine loads under the hardened runtime. See
   [RELEASE.md](RELEASE.md#sign-the-mac-build).
 
+- **The agent refuses to go back on a live session to before the capture.** Asked "Go back 2 minutes." a few minutes after
+  joining the 2026 Las Vegas race, in 3 runs of 5 it queried the session and replied that it "can't jump back two minutes: timing
+  data doesn't go back that far", without seeking. The video goes back that far, and the timeline does it. When it did seek, it
+  went 2:47 back in one run, to "the nearest available moment". Its only way to move was `seek_to` with a date from a row, and
+  before the capture there's no row. `seek_to` now takes a `delta` in seconds, alone to move from the frame on screen with no
+  data, or added to a `date`. Fixed, and checked from source on macOS after the race, on the same live session, with
+  `scripts/move-check.mjs`, two runs: "Go back 2 minutes.", "Back another minute." and "Skip ahead 30 seconds." were each one
+  `seek_to` with `delta` alone and no query, with the data `waiting` throughout, and landed to the second; a five-minute jump
+  refused at the spoiler check moved nothing; and back at the edge, "20 seconds before the most recent race control message"
+  was that row's `date` with `delta: -20`.
+
 - **A live session doesn't play on macOS.** Seen on 2026 Las Vegas qualifying (2026-11-20): "F1 TV: Widevine license generation
   failed (DEVELOPMENT_CERTIFICATE_NOT_ALLOWED)". F1 TV's licence server refuses the development VMP signature of castLabs'
   Electron, so every DRM stream fails; unencrypted replays play. Signing it through castLabs' EVS fixes a run from source: after

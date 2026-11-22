@@ -343,9 +343,14 @@ class SessionRuntime {
   }
 
   /** Seeks to a moment on the session database's clock (UTC milliseconds). */
-  seekToDate(dateMs: number): { timeSec: number; clamped: boolean } {
-    const wanted = this.sessionData?.videoTimeOf(dateMs) ?? null;
-    if (wanted === null) throw new Error("The video can't be matched to the session data yet, so that moment can't be found on it.");
+  seekToDate(dateMs: number, offsetSec = 0): { timeSec: number; clamped: boolean } {
+    const at = this.sessionData?.videoTimeOf(dateMs) ?? null;
+    if (at === null) throw new Error("The video can't be matched to the session data yet, so that moment can't be found on it.");
+    return this.seekWithin(at + offsetSec);
+  }
+
+  /** Seeks, and says where it landed and whether the seekable range stopped it short. */
+  seekWithin(wanted: number): { timeSec: number; clamped: boolean } {
     const timeSec = this.seek(wanted);
     return { timeSec, clamped: Math.abs(timeSec - wanted) > SEEK_CLAMP_TOLERANCE_SEC };
   }
@@ -501,13 +506,12 @@ export const sessionControl = {
   seek: (timeSec: number) => {
     runtime?.seek(timeSec);
   },
-  seekToDate: (dateMs: number) => {
+  seekToDate: (dateMs: number, offsetSec = 0) => {
     if (!runtime) throw new Error('No session is open.');
-    return runtime.seekToDate(dateMs);
+    return runtime.seekToDate(dateMs, offsetSec);
   },
-  seekBy: (deltaSec: number) => {
-    if (runtime) runtime.seek(runtime.now() + deltaSec);
-  },
+  /** Returns where it landed, or null with no session open. */
+  seekBy: (deltaSec: number): { timeSec: number; clamped: boolean } | null => (runtime ? runtime.seekWithin(runtime.now() + deltaSec) : null),
   seekToStart: () => runtime?.seekToStart(),
   goLive: () => runtime?.goLive(),
   setAudio: (videoId: string | null) => {
