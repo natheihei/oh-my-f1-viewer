@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="icons/omfv-wordmark-dark.svg">
-    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="439">
+    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer" width="341">
   </picture>
 </p>
 
