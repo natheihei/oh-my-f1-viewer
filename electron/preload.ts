@@ -47,6 +47,7 @@ const api: OmfvApi = {
     update: () => invoke('app:update'),
     onUpdate: (cb) => subscribe<UpdateState>('app:update', cb),
     whatsNew: () => invoke('app:whats-new'),
+    about: () => invoke('app:about'),
   },
   settings: {
     ui: () => invoke('settings:ui'),

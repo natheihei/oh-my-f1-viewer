@@ -249,6 +249,8 @@ export interface OmfvApi {
     onUpdate(cb: (state: import('./release').UpdateState) => void): () => void;
     /** Opens this release's notes in the browser. */
     whatsNew(): Promise<void>;
+    /** Opens the OMFV site in the browser. */
+    about(): Promise<void>;
   };
   /** The renderer's small UI state, such as the volume, kept by main in the app's settings file (electron/settings.ts). */
   settings: {

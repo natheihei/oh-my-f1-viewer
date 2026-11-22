@@ -15,6 +15,7 @@ it from source.
 | `/reset-onboarding` | Show the steps to get started again |
 | `/version` | Show which release this is |
 | `/whats-new` | Open this release's notes in the browser |
+| `/about` | Open the [OMFV site](https://oh-my-f1-viewer.yueyao.run) in the browser |
 | `/build` | Enter build mode, where the agent builds or changes mods. Marked `! spoiler`: the agent looks ahead without asking |
 | Drag a tile's title bar | Move it; drop it on another tile to swap them. With `Alt` held (`Option` on a Mac), drag it by any part |
 | Drag a tile's edge | Resize it |
