@@ -7,7 +7,7 @@ and [RELEASE.md](RELEASE.md#install-it) how to install a release.
 
 | | |
 |---|---|
-| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Folded, it shows a tip every 20 seconds in place of its placeholder, from the list in `src/shell/tips.ts`. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
+| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. From elsewhere in the app it brings you to the palette, even one still showing. It also hides itself 3 seconds after you move elsewhere, and Esc in it hides it. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Folded, it shows a tip every 20 seconds in place of its placeholder, from the list in `src/shell/tips.ts`. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
@@ -48,6 +48,13 @@ node scripts/layout-check.mjs
 
 ```bash
 node scripts/suggestions-check.mjs
+```
+
+`palette-away-check.mjs` checks when the palette hides itself and what's unread: 3 seconds after a press on the video, even mid-reply, a
+reply or a question that comes while you're elsewhere marked and not taking focus, and the palette's key bringing you to it.
+
+```bash
+node scripts/palette-away-check.mjs
 ```
 
 ```bash

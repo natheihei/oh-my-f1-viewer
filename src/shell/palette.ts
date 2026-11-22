@@ -57,22 +57,39 @@ interface PaletteState {
   busy: boolean;
   entries: PaletteEntry[];
   panel: PalettePanel | null;
+  /** Something came while the viewer was away from the palette: a reply, an error, or a question for them. */
+  unread: boolean;
+  /** Counts each time the viewer brings the palette up, for it to put them where they're waited on. */
+  summoned: number;
 }
 
-export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [], panel: null }));
+export const usePalette = create<PaletteState>(() => ({ open: true, busy: false, entries: [], panel: null, unread: false, summoned: 0 }));
 
 /** Text for the input from outside the palette, such as a row picked on the landing page. `seq` counts each one. */
 export const usePaletteDraft = create<{ text: string; seq: number }>(() => ({ text: '', seq: 0 }));
 
-/** How long the palette stays once it's done with, or once focus leaves it: long enough to read the last line. */
-export const AUTO_HIDE_MS = 10_000;
+/**
+ * How long the palette stays once the viewer moves elsewhere in the app, whatever the agent is doing. It's the
+ * only time the palette hides itself: otherwise it goes when they press Esc or its key.
+ */
+export const AWAY_HIDE_MS = 3_000;
 
 let nextEntry = 1;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * The viewer isn't in the palette: they moved elsewhere in the app, or hid it. What comes then is unread. It
+ * starts in it, with the cursor in the input.
+ */
+let away = false;
 
 function cancelHide(): void {
   if (hideTimer != null) clearTimeout(hideTimer);
   hideTimer = null;
+}
+
+/** Something for the viewer came. Unread if they're away, until they come back to the palette. */
+function arrived(): void {
+  if (away && !usePalette.getState().unread) usePalette.setState({ unread: true });
 }
 
 export const palette = {
@@ -80,6 +97,7 @@ export const palette = {
     const id = nextEntry++;
     const extra = { ...(action ? { action } : {}), ...(parts ? { parts } : {}), ...(attached?.length ? { attached } : {}) };
     usePalette.setState((s) => ({ entries: [...s.entries, { id, role, text, ...extra }] }));
+    if (text && (role === 'agent' || role === 'error')) arrived();
     return id;
   },
   /**
@@ -91,6 +109,7 @@ export const palette = {
     usePalette.setState((s) => ({
       entries: [...s.entries.map((e) => (e.fix && !e.fix.running && e.fix.command === fix.command ? { ...e, fix: undefined } : e)), { id, role: 'error', text, fix }],
     }));
+    arrived();
     return id;
   },
   /** Runs an entry's fix. Done, the block becomes the line it resolved to; failed, it stays with why. */
@@ -126,36 +145,53 @@ export const palette = {
     usePalette.setState((s) => ({
       entries: s.entries.map((e) => (e.id === id ? { ...e, text: e.text + delta } : e)),
     }));
+    if (delta) arrived();
   },
+  /** A question for the viewer is waiting in the palette: suggestions, the spoiler check, an offer of build mode. */
+  asks: arrived,
   setBusy(busy: boolean): void {
     usePalette.setState({ busy });
-    if (busy) cancelHide();
   },
   /** Puts text in the input in place of what's there, and the caret after it. Nothing is sent. */
   draft(text: string): void {
     usePaletteDraft.setState((s) => ({ text, seq: s.seq + 1 }));
   },
+  /** Shows the palette, for something in it. Where the viewer is stays as it was. */
   show(): void {
     cancelHide();
     usePalette.setState({ open: true });
   },
+  /** The viewer brought the palette up, with its key or a click: shows it, and they're in it. */
+  summon(): void {
+    palette.attend();
+    usePalette.setState((s) => ({ open: true, summoned: s.summoned + 1 }));
+  },
+  /** Hides it. The viewer put it away, so what comes next is unread. */
   hide(): void {
     cancelHide();
+    away = true;
     usePalette.setState({ open: false });
   },
   /**
-   * Hides the palette in `ms`, unless something keeps it open first: typing, a click or focus in it, the
-   * agent starting a turn. `still` is asked when the time is up, and keeps it open by answering false.
+   * The viewer moved elsewhere in the app: the palette hides in `AWAY_HIDE_MS`, unless they come back first.
+   * `still` is asked when the time is up, and keeps it open by answering false.
    */
-  hideAfter(ms: number, still: () => boolean = () => true): void {
+  leave(still: () => boolean = () => true): void {
     cancelHide();
+    away = true;
     hideTimer = setTimeout(() => {
       hideTimer = null;
-      if (!usePalette.getState().busy && still()) usePalette.setState({ open: false });
-    }, ms);
+      if (still()) usePalette.setState({ open: false });
+    }, AWAY_HIDE_MS);
   },
-  /** Typing or focusing the palette keeps it open. */
-  keepOpen: cancelHide,
+  /** The viewer is in the palette: focus, a click or typing in it. It stays, and they've seen what's there. */
+  attend(): void {
+    cancelHide();
+    away = false;
+    if (usePalette.getState().unread) usePalette.setState({ unread: false });
+  },
+  /** Whether the viewer is elsewhere: moved away from the palette, or hid it. */
+  isAway: (): boolean => away,
   /** Shows a settings panel where the palette is, until it's closed. `onClose` is called when it closes. */
   openPanel(panel: PalettePanel, onClose?: () => void): void {
     cancelHide();
