@@ -1,6 +1,6 @@
 # Status
 
-What has actually been verified, and what hasn't. Last updated 2026-11-19.
+What has actually been verified, and what hasn't. Last updated 2026-11-21.
 
 ## Verified on real sessions
 
@@ -383,6 +383,39 @@ On a MacBook Air (Apple silicon), running from source with Node 26 from Homebrew
   result left out that the tile needed a driver, though the agent still fixed the tile in that turn, having been refused by
   `edit_tile`. Case 25 passed in the first run, so it comes and goes, and why isn't known.
 
+**The released Mac app on a live race** (2026-11-21), release `20261121.1` from `/Applications`, signed with the Developer ID and
+VMP-signed, on the 2026 Las Vegas Grand Prix from lap 34, with `scripts/packaged-live-check.mjs`, five runs, each on a profile of
+its own with the screen locked:
+
+- **The sign-ins.** The copied F1 TV and ChatGPT logins decrypted with no keychain prompt. The keychain entry's partition list
+  reads `teamid:3X53S423SA`.
+- **DRM under the hardened runtime.** The agent opened the live race from "Open the session that is live now.", and F1 LIVE, two
+  onboards it suggested and the world feed all played encrypted, up to 1920x1080, within 0.05s of each other with three streams and
+  0.24s with four, 15s after the fourth was added.
+- **The timeline.** Three minutes back by the arrow keys and back by the timeline's live button, with the streams within 0.05s
+  after each in four runs; in one, an onboard was still `syncing` 12s after the seek, 0.41s off. Pause and resume by Space.
+- **The capture on a race.** `source` was `live` with no gaps, and `intervals`, `laps`, `position`, `stints`, `race_control`,
+  `weather`, `car_data` and `location` filled. `pit` stayed empty: no run was open through a pit stop.
+- **Charts on live race data.** The timing tower, track map and a gap chart, suggested by the agent and added from the strip, drew.
+  The tower's order matched the broadcast's in the one frame compared, with gaps, intervals, last laps and tyres. A car that had
+  retired before the app joined was listed last with no `OUT`, where two others were marked.
+- **The agent.** `go_live` asked the spoiler check and went to the edge after Allow once. "Go back 2 minutes." worked in 2 runs of
+  5: see Known issues.
+
+**After the chequered flag**, with the session still live on F1 TV and the timing feed gone quiet: nothing arrived after the
+snapshot at joining, in runs of several minutes.
+
+- **Build mode on a live session**, in the released app with `scripts/packaged-live-extra.mjs`: `/build` opened over the DRM
+  video, the build agent wrote a mod and called `look_at`, which returned its picture ("looked at look_test").
+- **Restarting mid-session**, same script: closed for 42s and started on the same profile, the capture kept its start, the
+  tables were rebuilt with the first run's rows, and the time closed was a gap. With the feed quiet this only had the two
+  snapshots to rebuild from.
+- **From source**, `scripts/live-check.mjs` passed 22 of 25, once the keychain prompt was answered (see Known issues): F1 LIVE and
+  three onboards under DRM, 8.4s behind the edge and within 0.05s of each other, through a three-minute DVR seek, back to live,
+  and pause and resume; rewinding before the capture made the data wait, and it was ready again at the edge. The three that
+  failed need a feed that's flowing: no rows came in 8s, so none were held back, and the data was already ready when the check
+  looked for it waiting.
+
 ## Verified for packaging
 
 On Omarchy (Arch, x64, Hyprland), 2026-11-20, with `npm run dist` named as release `20261119.1`:
@@ -395,8 +428,8 @@ On Omarchy (Arch, x64, Hyprland), 2026-11-20, with `npm run dist` named as relea
   repositories. It hasn't been installed with `pacman -U`.
 
 The Release app action has since made `20261120.1` and `20261120.2`, and the macOS `.dmg` installs and opens: see
-[Verified for updates](#verified-for-updates). Not verified: playing a session in the installed Mac app, and DRM there (see
-[RELEASE.md](RELEASE.md#not-done-yet) for VMP).
+[Verified for updates](#verified-for-updates). Playing a live session in the installed Mac app, with DRM, is under
+[Verified on macOS](#verified-on-macos).
 
 ## Verified for updates
 
@@ -434,8 +467,8 @@ Not verified: an AppImage updating itself from GitHub.
 
 - **Mods on Windows,** and the app's own agent putting a mod on screen. `scripts/mods-check.mjs` adds it through the host.
 
-- **Build mode on a live session, on Windows, or in the production build.** `look_at` records the window, which hasn't been
-  tried with DRM video on screen.
+- **Build mode on Windows, or in the production build from source.** On a live session with DRM video on screen, `look_at` worked
+  in the released Mac app: see Verified on macOS.
 - **A build that runs long enough to compact.** The build conversation isn't collapsed, so nothing depends on it, but it hasn't run.
 - **Dragging a draft from the strip onto the grid.** Enter and the host's add are checked. The drag is the same code as any suggestion's.
 - **Resizing a draft's preview in the strip.** Resizing a suggestion is checked by `scripts/suggestions-check.mjs`. A draft uses the same
@@ -457,10 +490,17 @@ Not verified: an AppImage updating itself from GitHub.
 - **The Mac app asked for the keychain password after every update.** The sign-ins' keychain entry is partitioned by the hash of
   the build that made it, since OMFV's own certificate has no Team ID, so each new release was a stranger to it. Seen on
   20261120.1 to 20261120.2: the entry's partition list named only `cdhash:` of the first. Releases are now signed with a
-  Developer ID and notarized, which should end it and Gatekeeper's **Open Anyway**, but no Developer ID release has been made yet:
-  not verified that a `.dmg` opens without asking, that one release updates to the next without the keychain asking (the entry's
-  partition list should show `teamid:`), or that Widevine loads under the hardened runtime. See
+  Developer ID and notarized, which should end it and Gatekeeper's **Open Anyway**. On `20261121.1` the entry's partition list
+  shows `teamid:` and Widevine loads under the hardened runtime (see Verified on macOS). Not verified: that a `.dmg` opens
+  without asking, or that one Developer ID release updates to the next without the keychain asking. See
   [RELEASE.md](RELEASE.md#sign-the-mac-build).
+
+- **A run from source on a Mac with a release installed waits for the keychain, with no window.** Both use the keychain entry
+  `oh-my-f1-viewer Safe Storage`. Once a Developer ID release has made it, only that app may read it, so the checkout's Electron
+  gets macOS's keychain prompt, and the app opens no window until it's answered: `restoreSessionOnStartup` is awaited before the
+  window is made. Seen on 2026-11-21 with the screen locked, where every check that copies a sign-in timed out waiting for the
+  window. A profile with no sign-in in it opens at once. Allow on the prompt lets that one launch in: the entry's access list
+  still named only the release afterwards.
 
 - **The agent refuses to go back on a live session to before the capture.** Asked "Go back 2 minutes." a few minutes after
   joining the 2026 Las Vegas race, in 3 runs of 5 it queried the session and replied that it "can't jump back two minutes: timing
@@ -473,12 +513,11 @@ Not verified: an AppImage updating itself from GitHub.
   refused at the spoiler check moved nothing; and back at the edge, "20 seconds before the most recent race control message"
   was that row's `date` with `delta: -20`.
 
-- **A live session doesn't play on macOS.** Seen on 2026 Las Vegas qualifying (2026-11-20): "F1 TV: Widevine license generation
+- **A live session doesn't play on macOS from source without VMP signing.** Seen on 2026 Las Vegas qualifying (2026-11-20): "F1 TV: Widevine license generation
   failed (DEVELOPMENT_CERTIFICATE_NOT_ALLOWED)". F1 TV's licence server refuses the development VMP signature of castLabs'
   Electron, so every DRM stream fails; unencrypted replays play. Signing it through castLabs' EVS fixes a run from source: after
   `npm run vmp:sign`, the same session's main feed and an onboard got their licences, with 200 through the proxy. Packaging
-  VMP-signs the Mac app the same way, but that hasn't run with an EVS account, and no release has been made with it: not verified
-  that a released Mac app plays a live session. See [RELEASE.md](RELEASE.md#vmp-sign-the-app).
+  VMP-signs the Mac app the same way, and release `20261121.1` plays a live race: see Verified on macOS. See [RELEASE.md](RELEASE.md#vmp-sign-the-app).
 
 - **The agent's reply sometimes arrives twice in one line,** as two different wordings run together. Seen in 2 of 3 runs of "2026" at medium
   reasoning: the model seems to send two text messages in one turn, and the palette joins them into one entry. Not looked into yet.
