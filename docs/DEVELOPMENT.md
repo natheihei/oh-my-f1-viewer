@@ -167,5 +167,19 @@ During a live session:
 node scripts/live-check.mjs
 ```
 
+And against a packaged app, which reads only the page since there's no source to import. On macOS it defaults to the
+installed `/Applications/oh-my-f1-viewer.app`, the one the keychain lets read the sign-ins:
+
+```bash
+node scripts/packaged-live-check.mjs /tmp/packaged-live-check
+```
+
+And this one, also on a packaged app during a live session, runs build mode's `look_at` over the DRM video, then quits and
+starts again on the same profile to check the capture is rebuilt with the time closed as a gap:
+
+```bash
+node scripts/packaged-live-extra.mjs /tmp/packaged-live-extra
+```
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it fits together and [STATUS.md](STATUS.md) for what is
 verified and what isn't.
