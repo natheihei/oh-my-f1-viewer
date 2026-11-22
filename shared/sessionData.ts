@@ -209,6 +209,8 @@ export type SessionDataView =
       detail: string;
       /** It should clear by itself within seconds, as a live video that hasn't said what time it shows does. */
       brief: boolean;
+      /** The data is there and ahead of the live video: it shows when the video reaches the moment it arrived. */
+      ahead: boolean;
       tables: SqlTableInfo[];
       drivers: DriverEntry[];
     }
