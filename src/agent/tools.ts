@@ -422,23 +422,61 @@ const querySession = (gated: boolean): AgentTool =>
     },
   });
 
-/** `seek_to`. Gated like `query_session`: only the viewing agent's asks before a forward seek. */
+/** Where `seek_to` goes: a moment on the data clock, some seconds from it, or with no moment, some seconds from the frame on screen. */
+interface SeekTarget {
+  dateMs?: number;
+  deltaSec: number;
+}
+
+/** One write for both: from the frame on screen it's `seekBy`, which needs no session data. */
+const seek: Op<SeekTarget, { timeSec: number; clamped: boolean }> = Object.assign(
+  ({ dateMs, deltaSec }: SeekTarget) => {
+    if (dateMs != null) return host.playback.seekToDate({ dateMs, offsetSec: deltaSec });
+    const landed = host.playback.seekBy({ seconds: deltaSec });
+    if (!landed) throw new Error('No session is open.');
+    return landed;
+  },
+  { info: host.playback.seekToDate.info },
+);
+
+/**
+ * `seek_to`. Gated like `query_session`: only the viewing agent's asks before a forward seek. With no `date` it moves
+ * from the frame on screen, which works where a date can't: while the data loads or waits, and on a live session
+ * before the capture began, where no row has a date and `app_state` has no playhead.
+ */
 const seekTo = (gated: boolean): AgentTool =>
-  expose(host.playback.seekToDate, {
+  expose(seek, {
     name: 'seek_to',
     description:
-      gated
-        ? 'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. A moment later than the frame on screen asks the user first. Playback stays within what can be played.'
-        : 'Move playback to a moment, given as a UTC millisecond time exactly as it comes from a date column of query_session. It moves what the user is watching, so only do it when they ask. Playback stays within what can be played.',
-    args: Type.Object({ date: Type.Number({ description: 'UTC milliseconds, from a query_session date column' }) }, { additionalProperties: false }),
-    adapt: ({ date }) => ({ dateMs: date }),
+      'Move playback. `date` is a moment in UTC milliseconds: a value from a date column of query_session, or the playhead from app_state. `delta` adds seconds to it, negative for earlier, so "30 seconds before the restart" is that row\'s date with delta -30. ' +
+      'Leave `date` out to move from the frame on screen: "go back 2 minutes" is delta -120 alone, with no query, and it works even when the timing data isn\'t there. ' +
+      (gated ? 'A moment later than the frame on screen asks the user first.' : 'It moves what the user is watching, so only do it when they ask.') +
+      ' Playback stays within what can be played.',
+    args: Type.Object(
+      {
+        date: Type.Optional(Type.Number({ description: 'UTC milliseconds. Leave out to move from the frame on screen' })),
+        delta: Type.Optional(Type.Number({ description: 'Seconds to add: negative is earlier' })),
+      },
+      { additionalProperties: false },
+    ),
+    adapt: ({ date, delta }) => ({ dateMs: date, deltaSec: delta ?? 0 }),
     gate: [
+      ({ dateMs, deltaSec }) => {
+        if (dateMs == null && !deltaSec) throw new Error('Give a date, a delta, or both.');
+      },
       sessionOpen,
-      dataReady,
-      async ({ dateMs }) => {
+      // Only a date needs the data: it's placed on the video through it.
+      ({ dateMs }) => (dateMs == null ? undefined : dataReady()),
+      async ({ dateMs, deltaSec }) => {
+        if (!gated) return;
         const playhead = playheadMs();
+        if (dateMs == null) {
+          if (deltaSec > 0) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: (playhead ?? Date.now()) + deltaSec * 1000 });
+          return;
+        }
+        const targetMs = dateMs + deltaSec * 1000;
         // With the frame on screen unknown, a seek may be forward: ask.
-        if (gated && (playhead === null || dateMs > playhead)) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs: dateMs });
+        if (playhead === null || targetMs > playhead) await approve({ kind: 'seek_forward', session: sessionTitle(), playheadMs: playhead, targetMs });
       },
     ],
     result: ({ timeSec, clamped }) =>

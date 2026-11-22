@@ -536,6 +536,45 @@ describe('seeking to a moment', () => {
     expect(sessionSql).not.toHaveBeenCalled();
   });
 
+  it('moves from the frame on screen without the session data, asking first only when going forward', async () => {
+    const seekBy = vi.spyOn(sessionControl, 'seekBy').mockReturnValue({ timeSec: 100, clamped: false });
+    const data = useSessionData.getState();
+    try {
+      // With no data at the frame on screen, as behind a live capture, there's no row to take a date from.
+      useSessionData.setState({ state: 'idle' }, true);
+      await expect(runTool('seek_to', { delta: -120 })).resolves.toBe('Playback is at 0:01:40.');
+      expect(seekBy).toHaveBeenCalledWith(-120);
+      expect(spoilerGate).not.toHaveBeenCalled();
+
+      spoilerGate.mockResolvedValueOnce({ approved: false });
+      await expect(runTool('seek_to', { delta: 30 })).rejects.toThrow(/did not allow that/);
+      expect(seekBy).toHaveBeenCalledTimes(1);
+
+      useSessionData.setState(data, true);
+      await runTool('seek_to', { delta: 30 });
+      expect(spoilerGate).toHaveBeenLastCalledWith({ kind: 'seek_forward', session: 'Race', playheadMs: PLAYHEAD, targetMs: PLAYHEAD + 30_000 });
+      expect(seekBy).toHaveBeenLastCalledWith(30);
+      expect(seekToDate).not.toHaveBeenCalled();
+
+      await expect(runTool('seek_to', {})).rejects.toThrow(/Give a date, a delta, or both/);
+    } finally {
+      seekBy.mockRestore();
+      useSessionData.setState(data, true);
+    }
+  });
+
+  it('adds a delta to a date, and asks by where that lands', async () => {
+    // Later than the playhead, but 30s before it is behind: no check.
+    await runTool('seek_to', { date: PLAYHEAD + 10_000, delta: -30 });
+    expect(seekToDate).toHaveBeenLastCalledWith(PLAYHEAD + 10_000, -30);
+    expect(spoilerGate).not.toHaveBeenCalled();
+
+    // The playhead plus a minute is ahead.
+    await runTool('seek_to', { date: PLAYHEAD, delta: 60 });
+    expect(spoilerGate).toHaveBeenLastCalledWith({ kind: 'seek_forward', session: 'Race', playheadMs: PLAYHEAD, targetMs: PLAYHEAD + 60_000 });
+    expect(seekToDate).toHaveBeenLastCalledWith(PLAYHEAD, 60);
+  });
+
   it('goes live only on a live session, asking first when behind the edge', async () => {
     const goLive = vi.spyOn(sessionControl, 'goLive').mockImplementation(() => {});
     const clock = useSession.getState().clock;

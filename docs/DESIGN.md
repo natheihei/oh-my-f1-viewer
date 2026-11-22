@@ -247,7 +247,7 @@ anything runs, in two cases:
 
 - **Reading ahead:** `query_session` with `asOf: 'session'`, which sees the whole session instead of what the feed had revealed at the
   frame on screen. The request carries the playhead and the SQL. A query as of the playhead doesn't ask.
-- **Seeking forward:** `seek_to` to a moment later than the playhead, or when the playhead isn't known, and `go_live` behind the live
+- **Seeking forward:** `seek_to` landing later than the playhead, `delta` counted, or with a `date` when the playhead isn't known, and `go_live` behind the live
   edge. The request carries the playhead and the target, for `go_live` the playhead plus how far the video is behind the edge. A backward
   seek doesn't ask, and nor does `go_live` already at the edge.
 

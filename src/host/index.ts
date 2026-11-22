@@ -111,17 +111,20 @@ const playback = {
     ({ time }) => sessionControl.seek(time),
   ),
   seekBy: write(
-    { description: 'Move every stream by some seconds: negative goes back.', args: Type.Object({ seconds: Type.Number() }) },
-    ({ seconds }) => sessionControl.seekBy(seconds),
+    {
+      description: 'Move every stream by some seconds: negative goes back. Returns where it landed on the session clock, and whether it had to stop short, or null with no session open.',
+      args: Type.Object({ seconds: Type.Number() }),
+    },
+    ({ seconds }): { timeSec: number; clamped: boolean } | null => sessionControl.seekBy(seconds),
   ),
   seekToDate: write(
     {
       description:
-        'Move every stream to a moment on the session data clock, in UTC milliseconds like every date column, kept within the seekable range. ' +
+        'Move every stream to a moment on the session data clock, in UTC milliseconds like every date column, or to `offsetSec` seconds from it, kept within the seekable range. ' +
         "Fails when the video can't be matched to the data yet. Returns where it landed on the session clock, and whether it had to stop short.",
-      args: Type.Object({ dateMs: Type.Number() }),
+      args: Type.Object({ dateMs: Type.Number(), offsetSec: Type.Optional(Type.Number()) }),
     },
-    ({ dateMs }): { timeSec: number; clamped: boolean } => sessionControl.seekToDate(dateMs),
+    ({ dateMs, offsetSec }): { timeSec: number; clamped: boolean } => sessionControl.seekToDate(dateMs, offsetSec),
   ),
   seekToStart: write({ description: 'Go to the very beginning of the session.' }, () => sessionControl.seekToStart()),
   goLive: write({ description: 'Return to the live edge.' }, () => sessionControl.goLive()),
