@@ -10,6 +10,7 @@ export const LATEST_API = 'https://api.github.com/repos/natheihei/oh-my-f1-viewe
 /** Each file the page offers, by how the release names it (see `artifactName` in electron-builder.yml). */
 export const TARGETS = {
   mac: /-mac-arm64\.dmg$/,
+  windows: /-win-x64\.exe$/,
   appimage: /-linux-x86_64\.AppImage$/,
   pacman: /-linux-x64\.pacman$/,
 } as const;

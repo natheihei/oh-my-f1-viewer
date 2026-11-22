@@ -25,7 +25,7 @@ const filename = (t: Target, fallback: string) => release?.files[t]?.name ?? fal
 
 const cards: {
   target: Target;
-  os: 'mac' | 'linux';
+  os: 'mac' | 'windows' | 'linux';
   label: string;
   title: string;
   button: string;
@@ -40,6 +40,15 @@ const cards: {
     title: 'macOS',
     button: 'Download .dmg',
     body: 'Drag it to Applications. It’s signed, and Apple has checked it for malware, so it opens like any other app. For M1 and later.',
+    updates: 'Updates itself',
+  },
+  {
+    target: 'windows',
+    os: 'windows',
+    label: 'WINDOWS · X64',
+    title: 'Windows',
+    button: 'Download .exe',
+    body: 'Run it. It installs for you alone, with no admin prompt, and adds OMFV to the Start menu. It isn’t signed yet, so Windows warns the first time: More info, then Run anyway.',
     updates: 'Updates itself',
   },
   {
@@ -65,7 +74,7 @@ const cards: {
 ];
 ---
 
-<Base title="Download · oh-my-f1-viewer" description="Download oh-my-f1-viewer for macOS (Apple silicon) and Linux. Free and open source.">
+<Base title="Download · oh-my-f1-viewer" description="Download oh-my-f1-viewer for macOS (Apple silicon), Windows and Linux. Free and open source.">
   <Header />
   <main data-download>
     <div class="wrap flex flex-col gap-12 pt-14 pb-24">
@@ -79,7 +88,7 @@ const cards: {
         </p>
       </div>
 
-      <div class="grid gap-px border border-[#232323] bg-[#232323] lg:grid-cols-3">
+      <div class="grid gap-px border border-[#232323] bg-[#232323] sm:grid-cols-2">
         {
           cards.map((c) => (
             <div class="flex flex-col gap-3 bg-ink p-6" data-os={c.os}>
@@ -113,7 +122,7 @@ const cards: {
       </div>
 
       <p class="mono -mt-6 text-xs leading-relaxed text-dim">
-        No Windows or Intel Mac build yet. You’ll need an F1 TV subscription and an LLM provider: a ChatGPT plan, or an
+        No Intel Mac build yet. You’ll need an F1 TV subscription and an LLM provider: a ChatGPT plan, or an
         API key.
       </p>
     </div>
@@ -145,7 +154,13 @@ const cards: {
 
   // Point out the file for this computer. A browser doesn't say whether a Mac is Apple silicon, so the card says it
   const ua = navigator.userAgent;
-  const os = /Macintosh|Mac OS X/.test(ua) ? 'mac' : /Linux/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
+  const os = /Macintosh|Mac OS X/.test(ua)
+    ? 'mac'
+    : /Windows/.test(ua)
+      ? 'windows'
+      : /Linux/.test(ua) && !/Android/.test(ua)
+        ? 'linux'
+        : null;
   if (os) {
     for (const card of all('[data-os]')) {
       const mine = card.dataset.os === os;
