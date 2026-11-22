@@ -19,7 +19,7 @@ Don't import across them. The site keeps its own copies of the logo from `icons/
 
 ## Docs
 
-Read the one that covers what you're changing. [README.md](README.md) has how to install and run the app.
+Read the one that covers what you're changing. [README.md](README.md) has how to run the app from source.
 
 | Doc | Read it for |
 | --- | --- |
