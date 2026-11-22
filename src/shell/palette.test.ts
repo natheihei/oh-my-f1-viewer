@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTO_HIDE_MS, palette, usePalette, type Fix } from './palette';
+import { AWAY_HIDE_MS, palette, usePalette, type Fix } from './palette';
 
 const fix = (run: Fix['run'], command = '/login-f1tv'): Fix => ({ detail: 'why', label: 'Sign in', command, busy: 'waiting', run });
 const entry = (id: number) => usePalette.getState().entries.find((e) => e.id === id)!;
@@ -71,44 +71,100 @@ describe('panels', () => {
   });
 });
 
-describe('hiding after a while', () => {
+describe('hiding once the viewer moves away', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    usePalette.setState({ open: true, busy: false });
+    usePalette.setState({ open: true, busy: false, entries: [], unread: false });
   });
   afterEach(() => {
-    palette.keepOpen();
+    palette.attend();
+    palette.setBusy(false);
     vi.useRealTimers();
   });
 
   it('hides once the time is up', () => {
-    palette.hideAfter(AUTO_HIDE_MS);
-    vi.advanceTimersByTime(AUTO_HIDE_MS - 1);
+    palette.leave();
+    vi.advanceTimersByTime(AWAY_HIDE_MS - 1);
     expect(usePalette.getState().open).toBe(true);
     vi.advanceTimersByTime(1);
     expect(usePalette.getState().open).toBe(false);
   });
 
-  it('stays when kept open before the time is up', () => {
-    palette.hideAfter(AUTO_HIDE_MS);
-    palette.keepOpen();
-    vi.advanceTimersByTime(AUTO_HIDE_MS);
+  it('stays when the viewer comes back before the time is up', () => {
+    palette.leave();
+    palette.attend();
+    vi.advanceTimersByTime(AWAY_HIDE_MS);
     expect(usePalette.getState().open).toBe(true);
   });
 
   it('stays when what it waited on says no once the time is up', () => {
     let held = false;
-    palette.hideAfter(AUTO_HIDE_MS, () => !held);
+    palette.leave(() => !held);
     held = true;
-    vi.advanceTimersByTime(AUTO_HIDE_MS);
+    vi.advanceTimersByTime(AWAY_HIDE_MS);
     expect(usePalette.getState().open).toBe(true);
   });
 
-  it('stays while the agent is working', () => {
+  it('hides while the agent is working, and the agent starting a turn keeps the time', () => {
+    palette.leave();
     palette.setBusy(true);
-    palette.hideAfter(AUTO_HIDE_MS);
-    vi.advanceTimersByTime(AUTO_HIDE_MS);
-    expect(usePalette.getState().open).toBe(true);
+    vi.advanceTimersByTime(AWAY_HIDE_MS);
+    expect(usePalette.getState().open).toBe(false);
+  });
+
+  it('never hides itself while the viewer is in it, however the agent ends', () => {
+    palette.attend();
+    palette.setBusy(true);
+    palette.append(palette.push('agent', ''), 'Done.');
     palette.setBusy(false);
+    vi.advanceTimersByTime(60_000);
+    expect(usePalette.getState().open).toBe(true);
+  });
+});
+
+describe('unread', () => {
+  beforeEach(() => usePalette.setState({ open: true, busy: false, entries: [], unread: false }));
+  afterEach(() => palette.attend());
+
+  it('is nothing the viewer was in the palette for', () => {
+    palette.attend();
+    palette.push('agent', 'Here.');
+    palette.pushFix('x', fix(async () => 'done'));
+    palette.asks();
+    expect(usePalette.getState().unread).toBe(false);
+  });
+
+  it('is a reply streamed while the viewer is away, even one they were there to start', () => {
+    palette.attend();
+    const id = palette.push('agent', '');
+    expect(usePalette.getState().unread).toBe(false);
+    palette.leave();
+    palette.append(id, 'More.');
+    expect(usePalette.getState().unread).toBe(true);
+  });
+
+  it('is an error, a fix or a question that comes while the palette is hidden', () => {
+    for (const come of [() => palette.push('error', 'Broke.'), () => palette.pushFix('x', fix(async () => 'done')), palette.asks]) {
+      palette.attend();
+      palette.hide();
+      come();
+      expect(usePalette.getState().unread).toBe(true);
+    }
+  });
+
+  it("isn't the viewer's own lines, the app's notes, or an empty line", () => {
+    palette.hide();
+    palette.push('user', 'hi');
+    palette.push('system', 'Loading the timing.');
+    palette.push('agent', '');
+    expect(usePalette.getState().unread).toBe(false);
+  });
+
+  it('is read once the viewer comes back, by focus, a click or its key', () => {
+    palette.hide();
+    palette.push('agent', 'Here.');
+    palette.summon();
+    expect(usePalette.getState()).toMatchObject({ unread: false, open: true });
+    expect(palette.isAway()).toBe(false);
   });
 });

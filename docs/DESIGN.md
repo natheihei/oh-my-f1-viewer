@@ -185,7 +185,7 @@ strip.
   the automatic shape. Resizing never adds or drags the card, and the size doesn't carry to the tile it becomes.
 - Suggestions belong to a turn. Another call in the same turn joins the strip, skipping what's already in it or was added from it, with no
   limit on streams (2026-11-15: each preview's videos are real streams, so this costs bandwidth, accepted for now). The user's next message clears it, and tells the agent what they added, dismissed or left.
-- Keys: the first suggestion takes focus. ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
+- Keys: the first suggestion takes focus, if the viewer is in the palette. From elsewhere it's unread instead: see [ARCHITECTURE.md](ARCHITECTURE.md). ← → move, Enter adds, ↓ or typing returns to the input, ↑ from an empty input comes back. Esc
   dismisses the strip, but while the agent is still working it takes a second Esc, which also stops the turn: otherwise the agent could fill
   the strip again right after.
 - The palette stays open while the strip is showing.
@@ -252,7 +252,7 @@ anything runs, in two cases:
   seek doesn't ask, and nor does `go_live` already at the edge.
 
 The gate hands the request to an asker the shell registers (`src/shell/lookAhead.ts`), which shows a spoiler check in the palette,
-between the history and any suggested tiles: a red `! spoiler`, then "The agent wants to look ahead of where you are.". It never shows the SQL, the
+between the history and any suggested tiles, taking focus only if the viewer is in the palette: a red `! spoiler`, then "The agent wants to look ahead of where you are.". It never shows the SQL, the
 target time or how far ahead it is, since any of those could give something away. Reading ahead and seeking forward ask the same question.
 The viewer answers:
 

@@ -935,6 +935,23 @@
 }
 
 /*
+ * Something came while the viewer was elsewhere: the frame goes white and twice as thick, until they come back to the
+ * palette. The second line is an outline, outside the border, so nothing in or around the palette moves.
+ */
+.palette.palette-unread,
+.palette-folded.palette-unread:hover,
+.palette-folded.palette-unread:focus-visible {
+  border-color: var(--color-ink);
+  outline: 1px solid var(--color-ink);
+  box-shadow: 0 0 0 2px #000;
+}
+
+/* The start of the newest reply, in place of a tip: on one line, cut short. */
+.palette-folded-unread {
+  @apply text-ink;
+}
+
+/*
  * What it says: what it's for, or a tip. Both lines share one cell while one fades into the other, which is all the
  * motion there is, since the row sits over the race.
  */
