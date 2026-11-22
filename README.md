@@ -36,7 +36,7 @@
 
 ## Run from source
 
-You need [Node.js](https://nodejs.org) (`brew install node` on macOS). Install the dependencies, then the castLabs Electron
+You need [Node.js](https://nodejs.org). Install the dependencies, then the castLabs Electron
 build with Widevine, then start it:
 
 ```bash
