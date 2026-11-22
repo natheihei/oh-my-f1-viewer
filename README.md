@@ -1,21 +1,36 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="icons/omfv-wordmark-dark.svg">
-    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="320">
+    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="439">
   </picture>
 </p>
 
-An agent-driven, multi-view F1 TV player, built on Electron and React. **[oh-my-f1-viewer.yueyao.run](https://oh-my-f1-viewer.yueyao.run)**
-has what it does, with screenshots. This README is for running and working on it.
+<p align="center">
+  <b>An agent-driven, multi-view F1 TV player.</b><br>
+  Tell it what you want to watch, and it opens the session and lays out the onboards and live charts on one clock.<br>
+  Ask for a view it doesn't have yet, and the agent builds it.
+</p>
 
-OMFV is in beta, and an unofficial fan project. It needs an F1 TV subscription and an agent provider: a ChatGPT plan, or an
-OpenAI or Anthropic API key. It runs on Linux x64 and macOS on Apple silicon.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platforms: Linux and macOS">
+  <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
+</p>
 
-## Install
+<p align="center">
+  <a href="https://oh-my-f1-viewer.yueyao.run">Website</a> ·
+  <a href="https://oh-my-f1-viewer.yueyao.run/download">Install</a>
+</p>
 
-Download a `.pacman` (Omarchy and Arch), an AppImage (other Linux) or a `.dmg` (macOS) from the
-[download page](https://oh-my-f1-viewer.yueyao.run/download) or [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases).
-[docs/RELEASE.md](docs/RELEASE.md#install-it) says how to install each.
+## Features
+
+- **Ask in plain words.** Name a session, a driver or a battle, and the agent opens it and suggests the tiles to show.
+- **Multi-view, in sync.** The race feed, onboards and charts all follow one session clock.
+- **No spoilers.** Charts and the agent only see data up to the frame on screen.
+- **Race charts.** Battles, gaps, timing, tyres, pit windows and telemetry, built from F1's timing feed.
+- **Builds what's missing.** Ask for a view that isn't there, and the agent writes it as a [mod](docs/MODS.md) you can keep
+  or undo.
+- **Replays and live races.** Any session from 2023 on. Live is in alpha.
 
 ## Run from source
 
@@ -40,32 +55,12 @@ see [VMP-sign the Mac build](docs/RELEASE.md#vmp-sign-the-mac-build).
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the app's commands and the checks that run the real app, and
 [AGENTS.md](AGENTS.md) lists the rest of the docs.
 
-## How it works
-
-OMFV is an Electron app with a React renderer.
-
-- **Playback.** The main process signs in to F1 TV and handles entitlement and the Widevine license. The renderer plays
-  every feed and keeps them in sync on one session clock.
-- **Session data.** F1's timing feed is read into a local SQLite database. Every row records when it became known, so a
-  query only returns what the video has reached.
-- **Components.** Each tile shows a component. Charts draw on Canvas 2D through a small kit. Components read and write only
-  through the host (`src/host`), and mods use the same interface.
-- **Agent.** The agent runs on [pi](https://github.com/earendil-works/pi) with your provider. It gets tools built on the
-  host, and a spoiler check sits between it and anything ahead of the playhead.
-
-## Privacy
-
-OMFV is open source, and knowing people use it is what keeps me going. It sends anonymous usage counts so I can see what to
-improve, never who you are or what you type. `/settings-usage off` turns them off. [docs/TELEMETRY.md](docs/TELEMETRY.md)
-lists every event.
-
 ## Credits
 
 - [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer) (MIT) by npanu420. OMFV builds on its hard-won F1 TV sign-in,
   entitlement, DRM licensing, playback, stream sync and timing work. It is vendored in `electron/vendor/f1ov` and
   `src/data/vendor`, and `src/data/stream.ts`, `syncEngine.ts` and `timeMap.ts` are ported from it.
-- [pi](https://github.com/earendil-works/pi) (MIT) runs the agent. The build agent's output limits and edit matching in
-  `electron/agent/extensions/modFiles.ts` are ported from it.
+- [pi](https://github.com/earendil-works/pi) (MIT) runs the agent (pi-durable).
 
 ## License and disclaimer
 
