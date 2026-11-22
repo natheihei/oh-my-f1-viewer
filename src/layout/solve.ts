@@ -7,6 +7,12 @@
  * as many columns and rows as suit their tiles, so a wall of tiles still gets a grid, and no arrangement
  * that would give a tile under `LEAST_ROOM` cells either way, or put two on the same cells, is tried.
  *
+ * Tiles that belong together share a group: see `Slot.group`. A group is placed as one block, as a
+ * single slot is, and its tiles are laid out inside it: in a row, a column, or two rows. Groups made of
+ * the same kinds of tile are laid out the same way round, and cost more when they don't line up at one
+ * size. Groups come before single tiles, the newest first. Tiles are still tried on their own, and
+ * that wins only when blocks would leave a tile under its least size or cost far more: see `apart`.
+ *
  * Pure, and in grid cells. What a tile needs comes in as `Slot`s, so this file knows nothing of components.
  */
 
@@ -30,6 +36,15 @@ export interface Slot {
   fit(room: Size): Size;
   /** Its content stops growing at some size, so it can't fill the main slot. */
   capped: boolean;
+  /**
+   * What it belongs with: the tiles about one driver, or those added as one batch of suggestions. Slots
+   * that share a group are placed as one block.
+   */
+  group?: string;
+  /** What it is, such as its component's name. Groups made of the same kinds are laid out alike. */
+  kind?: string;
+  /** The least cells it may be given either way, when that is more than `LEAST_ROOM`: a block of several tiles. */
+  least?: Size;
 }
 
 export interface Grid {
@@ -53,7 +68,7 @@ const LEAST_STRIP = 3;
 export const LEAST_ROOM = LEAST_STRIP;
 
 /** How much each fault costs. A tile below its least size outweighs everything else. */
-const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3 };
+const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3, apart: 4, unalike: 0.5 };
 
 /** Splits `total` into `parts` whole numbers that differ by at most one. */
 function split(total: number, parts: number): number[] {
@@ -115,8 +130,11 @@ function runs<T>(list: T[], lines: number): T[][] {
 
 const LOTS = 1e6;
 
-/** Shares that each give at least `LEAST_ROOM` and together fit in `total`. */
-const roomy = (shares: number[], total: number) => shares.every((v) => v >= LEAST_ROOM) && shares.reduce((a, v) => a + v, 0) <= total;
+/** Shares that each give at least `least` and together fit in `total`. */
+const roomy = (shares: number[], least: number[], total: number) => shares.every((v, k) => v >= least[k]) && shares.reduce((a, v) => a + v, 0) <= total;
+
+/** The least cells a slot may be given either way. */
+const leastOf = (slot: Slot): Size => slot.least ?? { w: LEAST_ROOM, h: LEAST_ROOM };
 
 /**
  * Stacks slots down a column, each as tall as its shape asks at that width, within what it can use.
@@ -127,7 +145,8 @@ function stackDown(area: Box, items: number[], slots: Slot[], grid: Grid): Map<n
   const wants = items.map((i) => Math.max(slots[i].min.h, ((area.w * cell.w) / slots[i].aspect + titleBar) / cell.h));
   const most = items.map((i) => slots[i].fit({ w: area.w, h: LOTS }).h);
   const heights = shareWithin(area.h, wants, most);
-  if (area.w < LEAST_ROOM || !roomy(heights, area.h)) return null;
+  const least = items.map((i) => leastOf(slots[i]));
+  if (least.some((l) => area.w < l.w) || !roomy(heights, least.map((l) => l.h), area.h)) return null;
   const out = new Map<number, Box>();
   let y = area.y;
   items.forEach((i, k) => {
@@ -144,7 +163,8 @@ function layAcross(area: Box, items: number[], slots: Slot[], grid: Grid): Map<n
   const wants = items.map((i) => Math.max(slots[i].min.w, (Math.max(1, area.h * cell.h - titleBar) * slots[i].aspect) / cell.w));
   const most = items.map((i) => slots[i].fit({ w: LOTS, h: area.h }).w);
   const widths = shareWithin(area.w, wants, most);
-  if (area.h < LEAST_ROOM || !roomy(widths, area.w)) return null;
+  const least = items.map((i) => leastOf(slots[i]));
+  if (least.some((l) => area.h < l.h) || !roomy(widths, least.map((l) => l.w), area.w)) return null;
   const out = new Map<number, Box>();
   let x = area.x;
   items.forEach((i, k) => {
@@ -250,8 +270,177 @@ export function solve(slots: Slot[], grid: Grid, main: number | null = null): Bo
   return arrange(slots, grid, main) ?? evenGrid(slots, grid);
 }
 
-/** The boxes `solve` gives, or null when no arrangement gives every slot its `LEAST_ROOM`. */
+/** The cells two boxes share. */
+const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/**
+ * How far apart the groups' tiles are: for each group, the cells of other tiles inside the smallest
+ * rectangle that holds all of its own, as a share of the grid. Zero when each group's tiles make a
+ * block of their own, and empty cells among them don't count.
+ */
+export function apart(boxes: Map<number, Box>, groups: number[][], grid: Grid): number {
+  let foreign = 0;
+  for (const members of groups) {
+    const hull = hullOf(members.map((i) => boxes.get(i)!));
+    for (const [i, box] of boxes) if (!members.includes(i)) foreign += overlap(hull, box);
+  }
+  return foreign / (grid.columns * grid.rows);
+}
+
+/**
+ * The slots of each group that has more than one, by index, the main slot left out: it has its own
+ * place. The newest group first, which is the one whose latest slot was added last.
+ */
+export function groupsOf(slots: Slot[], main: number | null = null): number[][] {
+  const by = new Map<string, number[]>();
+  slots.forEach((slot, i) => {
+    if (slot.group !== undefined && i !== main) by.set(slot.group, [...(by.get(slot.group) ?? []), i]);
+  });
+  return [...by.values()].filter((members) => members.length > 1).sort((a, b) => b[b.length - 1] - a[a.length - 1]);
+}
+
+/** A group's tiles in `rows` rows inside `area`: in the rows' shares when each gets its least room, else in equal cells. */
+function inside(area: Box, members: number[], rows: number, slots: Slot[], grid: Grid): Map<number, Box> {
+  const shared = rows === 1 ? layAcross(area, members, slots, grid) : rows === members.length ? stackDown(area, members, slots, grid) : band(area, members, rows, slots, grid);
+  if (shared) return shared;
+  const out = new Map<number, Box>();
+  const heights = split(area.h, rows);
+  let y = area.y;
+  for (const [k, run] of runs(members, rows).entries()) {
+    const widths = split(area.w, run.length);
+    let x = area.x;
+    run.forEach((i, n) => {
+      out.set(i, { x, y, ...slots[i].fit({ w: widths[n], h: heights[k] }) });
+      x += widths[n];
+    });
+    y += heights[k];
+  }
+  return out;
+}
+
+/** A group as one slot: its tiles in `rows` rows, with the shape and least size they have between them. */
+function blockOf(members: number[], rows: number, slots: Slot[], grid: Grid): Slot {
+  const lines = runs(members, rows);
+  const sum = (list: number[]) => list.reduce((a, v) => a + v, 0);
+  const least = (i: number) => leastOf(slots[i]);
+  // A row is as wide as its tiles side by side, and the block as tall as its rows at one width.
+  const across = lines.map((run) => sum(run.map((i) => slots[i].aspect)));
+  return {
+    aspect: 1 / sum(across.map((a) => 1 / a)),
+    min: {
+      w: Math.max(...lines.map((run) => sum(run.map((i) => Math.max(slots[i].min.w, least(i).w))))),
+      h: sum(lines.map((run) => Math.max(...run.map((i) => Math.max(slots[i].min.h, least(i).h))))),
+    },
+    least: { w: Math.max(...lines.map((run) => sum(run.map((i) => least(i).w)))), h: sum(lines.map((run) => Math.max(...run.map((i) => least(i).h)))) },
+    fit: (room) => {
+      const boxes = [...inside({ x: 0, y: 0, ...room }, members, rows, slots, grid).values()];
+      return { w: Math.min(room.w, Math.max(...boxes.map((b) => b.x + b.w))), h: Math.min(room.h, Math.max(...boxes.map((b) => b.y + b.h))) };
+    },
+    capped: members.every((i) => slots[i].capped),
+  };
+}
+
+/** With more kinds of group than this, every group is laid out the same way round: the tries multiply. */
+const MOST_KINDS = 3;
+
+/**
+ * The boxes `solve` gives, or null when no arrangement gives every slot its `LEAST_ROOM`. With groups,
+ * each is placed as one block, every way round, and the slots are also placed on their own: the
+ * cheapest wins, with what `apart` and `unalike` add.
+ */
 export function arrange(slots: Slot[], grid: Grid, main: number | null = null): Box[] | null {
+  const groups = groupsOf(slots, main);
+  const alone = arrangeEach(slots, grid, main);
+  if (groups.length === 0) return alone;
+  // Counted tile by tile, with what the groups' tiles being apart and not alike add, in blocks or not.
+  const kinds = groups.map((members) => kindOfGroup(members, slots));
+  const total = (boxes: Box[]) => {
+    const placed = new Map(boxes.map((box, i) => [i, box]));
+    const hulls = groups.map((members) => hullOf(members.map((i) => boxes[i])));
+    return cost(placed, main, slots, grid) + COST.apart * apart(placed, groups, grid) + COST.unalike * unalike(hulls, kinds);
+  };
+  let best = alone;
+  let bestCost = alone ? total(alone) : Infinity;
+  // Every group in a block, then all but the oldest, and so on: when there are too many to hold them
+  // all, or a block costs the others too much room, the newest keep theirs.
+  for (let kept = groups.length; kept > 0; kept -= 1) {
+    for (const boxes of inBlocks(groups.slice(0, kept), slots, grid, main)) {
+      const c = total(boxes);
+      if (c < bestCost - 1e-9) {
+        best = boxes;
+        bestCost = c;
+      }
+    }
+  }
+  return best;
+}
+
+/** What a group is made of: its slots' kinds. Groups of the same kinds of tile are one kind of group. */
+const kindOfGroup = (members: number[], slots: Slot[]) => members.map((i) => slots[i].kind ?? `#${i}`).sort().join(' ');
+
+/** The smallest rectangle that holds every box. */
+function hullOf(boxes: Box[]): Box {
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
+}
+
+/** The slots arranged with each of `groups` as one block, every way round that fits. */
+function inBlocks(groups: number[][], slots: Slot[], grid: Grid, main: number | null): Box[][] {
+  // Groups of one kind are laid out the same way round, each with its tiles in the order the oldest
+  // of them has its own.
+  const kindOf = (members: number[]) => kindOfGroup(members, slots);
+  const kinds = [...new Set(groups.map(kindOf))];
+  const ordered = groups.map((members) => {
+    const first = groups.filter((g) => kindOf(g) === kindOf(members)).at(-1)!;
+    if (first === members) return members;
+    const left = first.map((i) => slots[i].kind);
+    return [...members].sort((a, b) => left.indexOf(slots[a].kind) - left.indexOf(slots[b].kind) || a - b);
+  });
+  // Every tile in a block, then the rest: groups first, the newest first, then single slots as added.
+  const grouped = new Set(groups.flat());
+  const singles = slots.map((_, i) => i).filter((i) => !grouped.has(i));
+  // In a row, in a column, for four tiles and more in two rows, and for five and more in three.
+  const waysOf = (count: number) => [1, count, ...(count >= 4 ? [2] : []), ...(count >= 5 ? [3] : [])];
+  const ways = kinds.map((kind) => waysOf(groups.find((g) => kindOf(g) === kind)!.length));
+  const tries: number[][] =
+    kinds.length > MOST_KINDS ? [0, 1, 2].map((w) => ways.map((list) => list[Math.min(w, list.length - 1)])) : ways.reduce<number[][]>((all, list) => all.flatMap((t) => list.map((rows) => [...t, rows])), [[]]);
+  const out: Box[][] = [];
+  for (const rowsByKind of tries) {
+    const rowsOf = (g: number) => rowsByKind[kinds.indexOf(kindOf(groups[g]))];
+    const units: Slot[] = [...ordered.map((members, g) => blockOf(members, rowsOf(g), slots, grid)), ...singles.map((i) => slots[i])];
+    const mainUnit = main === null ? null : groups.length + singles.indexOf(main);
+    const placed = arrangeEach(units, grid, mainUnit);
+    if (!placed) continue;
+    const boxes = new Array<Box>(slots.length);
+    singles.forEach((i, k) => (boxes[i] = placed[groups.length + k]));
+    ordered.forEach((members, g) => {
+      for (const [i, box] of inside(placed[g], members, rowsOf(g), slots, grid)) boxes[i] = box;
+    });
+    out.push(boxes);
+  }
+  return out;
+}
+
+/**
+ * How many groups don't line up with the first of their kind: at its size, give or take a cell of
+ * rounding, and in its row or its column. `blocks` are the rectangles round each group's tiles, and
+ * `kinds` what each is made of.
+ */
+function unalike(blocks: Box[], kinds: string[]): number {
+  let count = 0;
+  kinds.forEach((kind, g) => {
+    const first = blocks[kinds.indexOf(kind)];
+    const box = blocks[g];
+    if (box === first) return;
+    const sized = Math.abs(box.w - first.w) <= 1 && Math.abs(box.h - first.h) <= 1;
+    if (!sized || (box.x !== first.x && box.y !== first.y)) count += 1;
+  });
+  return count;
+}
+
+/** `arrange` with every slot placed on its own, whatever its group. */
+function arrangeEach(slots: Slot[], grid: Grid, main: number | null = null): Box[] | null {
   const { columns, rows } = grid;
   if (slots.length === 0) return [];
   const whole = (i: number, w: number, h: number): Box => ({ x: 0, y: 0, ...slots[i].fit({ w, h }) });

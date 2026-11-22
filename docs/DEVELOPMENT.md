@@ -102,6 +102,15 @@ tile is arranged by hand, and after that a new one goes into the biggest gap:
 node scripts/auto-layout-add-check.mjs /tmp/auto-layout-add-check
 ```
 
+This one needs only the F1 TV sign-in. It opens a replay race and adds suggestions clicked in turn about: an onboard, its
+telemetry and its pedals for each of two drivers. Auto-layout keeps each driver's tiles together as a block and lays the two
+blocks out alike, in line. Then it adds a batch of two charts about no one driver, which stay together too, and steps the grid's size as a window drag
+does: no tile moves until the size holds still:
+
+```bash
+node scripts/group-layout-check.mjs /tmp/group-layout-check
+```
+
 This one needs only the F1 TV sign-in, and sends nothing to the agent. It opens a replay race and leaves it by the timeline's ×,
 then by `/close-session`, then stops a countdown with "stop waiting". Each goes back to the landing page with no tiles and no timeline,
 and "Allow for this session" ends with the session:

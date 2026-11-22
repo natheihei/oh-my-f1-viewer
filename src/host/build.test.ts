@@ -180,3 +180,18 @@ describe('offering build mode', () => {
     expect(useBuild.getState().offer).toBeNull();
   });
 });
+
+describe('batches', () => {
+  it('gives the tiles added from one offer the same group, and those from another offer another', () => {
+    suggestionOps.offer({ items: [{ type: 'stepper', props: { drivers: [44] } }, { type: 'form', props: { drivers: [44] } }] });
+    suggestionOps.offer({ items: [{ type: 'stepper', props: { drivers: [1] } }] });
+    for (const key of ['stepper:44', 'stepper:1', 'form:44']) suggestionOps.add({ key });
+    const group = (key: string) => allTiles(useLayout.getState()).find((t) => t.component.key === key)!.group;
+    expect(group('stepper:44')).toBeDefined();
+    expect(group('form:44')).toBe(group('stepper:44'));
+    expect(group('stepper:1')).not.toBe(group('stepper:44'));
+    // A tile put on screen any other way has none.
+    layoutOps.add({ items: [{ type: 'form', props: { drivers: [1] } }] });
+    expect(group('form:1')).toBeUndefined();
+  });
+});
