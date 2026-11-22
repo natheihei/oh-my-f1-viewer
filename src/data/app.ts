@@ -8,4 +8,6 @@ export const appInfo = {
   onUpdate: (cb: (state: UpdateState) => void): (() => void) => window.omfv.app.onUpdate(cb),
   /** Opens this release's notes in the browser. */
   whatsNew: (): Promise<void> => window.omfv.app.whatsNew(),
+  /** Opens the OMFV site in the browser. */
+  about: (): Promise<void> => window.omfv.app.about(),
 };

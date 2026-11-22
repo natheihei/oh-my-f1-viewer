@@ -57,6 +57,7 @@ export const COMMANDS = [
   '/reset-onboarding',
   '/version',
   '/whats-new',
+  '/about',
   '/logout-f1tv',
 ] as const;
 
