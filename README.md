@@ -51,9 +51,6 @@ npm run dev
 On macOS, live sessions and other DRM streams also need that Electron build VMP-signed, with a free castLabs EVS account:
 see [VMP-sign the Mac build](docs/RELEASE.md#vmp-sign-the-mac-build).
 
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the app's commands and the checks that run the real app, and
-[AGENTS.md](AGENTS.md) lists the rest of the docs.
-
 ## Credits
 
 - [F1 OpenViewer](https://github.com/npanu420/F1OpenViewer) (MIT) by npanu420. OMFV builds on its hard-won F1 TV sign-in,
