@@ -29,7 +29,7 @@
 - **Race charts.** Battles, gaps, timing, tyres, pit windows and telemetry, built from F1's timing feed.
 - **Builds what's missing.** Ask for a view that isn't there, and the agent writes it as a [mod](docs/MODS.md) you can keep
   or undo.
-- **Replays and live races.** Any session from 2023 on. Live is in alpha.
+- **Replays and live races.** Any session from 2023 on.
 
 ## Run from source
 
