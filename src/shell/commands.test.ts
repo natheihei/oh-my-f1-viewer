@@ -36,7 +36,7 @@ describe('/ commands', () => {
   it('leaves out the ones that work on a session until one is open', () => {
     useSession.setState({ session: null, channels: [] });
     expect(names('/b')).toEqual([]);
-    expect(names('/a')).toEqual([]);
+    expect(names('/a')).toEqual(['/about']);
     expect(names('/build a controller')).toEqual([]);
     expect(names('/')).toEqual(SLASH_COMMANDS.filter((c) => !c.needsSession && !c.needsOpen).map((c) => c.name));
     expect(SLASH_COMMANDS.filter((c) => c.needsSession).map((c) => c.name)).toEqual(['/build', '/auto-layout']);

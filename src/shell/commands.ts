@@ -165,6 +165,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    name: '/about',
+    description: 'Open the OMFV site in the browser',
+    // Opening the browser says it all, so the palette doesn't add a line.
+    run: () => host.app.about(),
+  },
+  {
     name: '/logout-f1tv',
     description: 'Sign out of F1 TV',
     async run() {

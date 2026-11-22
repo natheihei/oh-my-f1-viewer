@@ -12,7 +12,7 @@ import { TimingDb } from './timingdb';
 import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
-import { releaseName, RELEASES_URL, type AppVersion } from '../shared/release';
+import { releaseName, RELEASES_URL, SITE_URL, type AppVersion } from '../shared/release';
 import { updateState } from './updates';
 import { telemetry, track } from './telemetry';
 
@@ -281,6 +281,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
     const release = releaseName(app.getVersion());
     return shell.openExternal(release ? `${RELEASES_URL}/tag/app-${release}` : RELEASES_URL);
   });
+  handle('app:about', () => shell.openExternal(SITE_URL));
 
   // --- Settings: the renderer's small UI state, in the app's settings file ---
   handle('settings:ui', () => uiState());

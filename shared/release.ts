@@ -19,6 +19,9 @@ export interface AppVersion {
 /** Where releases are published. Each is tagged `app-<name>`. */
 export const RELEASES_URL = 'https://github.com/natheihei/oh-my-f1-viewer/releases';
 
+/** The product site, which `/about` opens. See site/DEPLOY.md. */
+export const SITE_URL = 'https://oh-my-f1-viewer.yueyao.run';
+
 /** Orders release names, oldest first: negative when `a` came before `b`. */
 export function compareReleases(a: string, b: string): number {
   const [aDay, aRun] = a.split('.').map(Number);
