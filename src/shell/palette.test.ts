@@ -130,7 +130,7 @@ describe('unread', () => {
     palette.attend();
     palette.push('agent', 'Here.');
     palette.pushFix('x', fix(async () => 'done'));
-    palette.asks();
+    palette.ask();
     expect(usePalette.getState().unread).toBe(false);
   });
 
@@ -144,12 +144,22 @@ describe('unread', () => {
   });
 
   it('is an error, a fix or a question that comes while the palette is hidden', () => {
-    for (const come of [() => palette.push('error', 'Broke.'), () => palette.pushFix('x', fix(async () => 'done')), palette.asks]) {
+    for (const come of [() => palette.push('error', 'Broke.'), () => palette.pushFix('x', fix(async () => 'done')), palette.ask]) {
       palette.attend();
       palette.hide();
       come();
       expect(usePalette.getState().unread).toBe(true);
     }
+  });
+
+  it('a question shows the palette with the viewer in it, and waits folded from elsewhere', () => {
+    palette.attend();
+    usePalette.setState({ open: false });
+    palette.ask();
+    expect(usePalette.getState()).toMatchObject({ open: true, unread: false });
+    palette.hide();
+    palette.ask();
+    expect(usePalette.getState()).toMatchObject({ open: false, unread: true });
   });
 
   it("isn't the viewer's own lines, the app's notes, or an empty line", () => {

@@ -50,8 +50,9 @@ node scripts/layout-check.mjs
 node scripts/suggestions-check.mjs
 ```
 
-`palette-away-check.mjs` checks when the palette hides itself and what's unread: 3 seconds after a press on the video, even mid-reply, a
-reply or a question that comes while you're elsewhere marked and not taking focus, and the palette's key bringing you to it.
+`palette-away-check.mjs` checks when the palette hides itself and what's unread: 3 seconds after a press on the video, even mid-reply or
+with suggestions showing, a reply or a question that comes while you're elsewhere marked and waiting folded without taking focus, and the
+palette's key bringing you to it.
 
 ```bash
 node scripts/palette-away-check.mjs

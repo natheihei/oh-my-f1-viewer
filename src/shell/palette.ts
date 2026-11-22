@@ -147,8 +147,14 @@ export const palette = {
     }));
     if (delta) arrived();
   },
-  /** A question for the viewer is waiting in the palette: suggestions, the spoiler check, an offer of build mode. */
-  asks: arrived,
+  /**
+   * A question for the viewer: suggestions, the spoiler check, an offer of build mode. With the viewer in the
+   * palette it shows there. From elsewhere it's unread, and waits in the folded palette for them to come to it.
+   */
+  ask(): void {
+    if (away) arrived();
+    else palette.show();
+  },
   setBusy(busy: boolean): void {
     usePalette.setState({ busy });
   },
