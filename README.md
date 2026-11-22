@@ -31,6 +31,9 @@
   or undo.
 - **Replays and live races.** Any session from 2023 on.
 
+> [!NOTE]
+> OMFV is under active development, and new features are added often.
+
 ## Run from source
 
 You need [Node.js](https://nodejs.org) (`brew install node` on macOS). Install the dependencies, then the castLabs Electron
