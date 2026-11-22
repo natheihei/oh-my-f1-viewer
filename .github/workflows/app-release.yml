@@ -1,11 +1,11 @@
-# Builds OMFV's installable files for Linux and macOS and releases them. See docs/RELEASE.md.
+# Builds OMFV's installable files for Linux, macOS and Windows and releases them. See docs/RELEASE.md.
 #
 # - Run by hand with a commit on main (a SHA, or `main`): builds it, tags it `app-YYYYMMDD.N` and publishes a GitHub
 #   release named for the date and run, with the files attached. `dry_run` builds and keeps the files as the run's
 #   artifacts, with no tag and no release.
-# - A pull request that changes the packaging builds both platforms the same way, without releasing.
-# - Each release carries latest-linux.yml and latest-mac.yml, which installed AppImages and Mac apps read to update
-#   themselves (electron/updates.ts), and the Mac zip they install.
+# - A pull request that changes the packaging builds every platform the same way, without releasing.
+# - Each release carries latest-linux.yml, latest-mac.yml and latest.yml, which installed AppImages, Mac apps and
+#   Windows apps read to update themselves (electron/updates.ts), and the Mac zip and Windows installer they install.
 name: Release app
 
 on:
@@ -30,6 +30,7 @@ on:
       - build/**
       - electron/appFiles.ts
       - electron/updates.ts
+      - scripts/packaged-check.mjs
       - package.json
       - package-lock.json
 
@@ -95,10 +96,18 @@ jobs:
             runner: ubuntu-latest
           - platform: mac
             runner: macos-latest # Apple silicon
+          - platform: win
+            runner: windows-latest # x64
     runs-on: ${{ matrix.runner }}
-    # The Developer ID and the notary key are secrets of the mac-signing environment, which only a run from main can
-    # use, and only once the owner approves it: see docs/RELEASE.md. A pull request's build doesn't ask, and signs ad-hoc.
-    environment: ${{ matrix.platform == 'mac' && github.event_name == 'workflow_dispatch' && 'mac-signing' || '' }}
+    # The signing secrets are in an environment for each platform: the Developer ID, the notary key and the EVS account
+    # in mac-signing, and the EVS account in windows-signing. Only a run from main can use either, and only once the
+    # owner approves it: see docs/RELEASE.md. A pull request's build doesn't ask, signs the Mac app ad-hoc, and VMP-signs
+    # neither.
+    environment: ${{ github.event_name == 'workflow_dispatch' && (matrix.platform == 'mac' && 'mac-signing' || matrix.platform == 'win' && 'windows-signing') || '' }}
+    defaults:
+      run:
+        # Git's bash on Windows, so every step is the same script.
+        shell: bash
     steps:
       - uses: actions/checkout@v5
         with:
@@ -155,10 +164,11 @@ jobs:
             echo "SIGNED_BY=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
-      # castLabs' EVS, which build/vmp-sign.js signs with before the Apple signature: F1 TV's licence server refuses the
-      # development VMP signature castLabs' Electron comes with. The account is in the mac-signing environment too.
+      # castLabs' EVS, which build/vmp-sign.js signs with, on a Mac before the Apple signature and on Windows after the
+      # .exe is edited: F1 TV's licence server refuses the development VMP signature castLabs' Electron comes with. The
+      # account is in the mac-signing and windows-signing environments.
       - name: Set up VMP signing
-        if: matrix.platform == 'mac'
+        if: matrix.platform != 'linux'
         env:
           EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
           EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -166,25 +176,32 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$EVS_ACCOUNT_NAME" ] || [ -z "$EVS_PASSWD" ]; then
-            # Without it the Mac app can't play a live session, so a release refuses.
+            # Without it the app can't play a live session, so a release refuses.
             if [ "$RELEASING" = true ]; then
-              echo "::error::The EVS secrets aren't set: see docs/RELEASE.md, \"VMP-sign the Mac build\"."
+              echo "::error::The EVS secrets aren't set: see docs/RELEASE.md, \"VMP-sign the app\"."
               exit 1
             fi
-            echo "::warning::No EVS account: not VMP-signed. This Mac app won't play live sessions or other DRM streams."
+            echo "::warning::No EVS account: not VMP-signed. This app won't play live sessions or other DRM streams."
             exit 0
           fi
-          python3 -m venv "$RUNNER_TEMP/evs"
-          "$RUNNER_TEMP/evs/bin/pip" install --quiet castlabs-evs
+          # Node runs EVS_PYTHON without a shell, so on Windows it names the .exe.
+          if [ "$RUNNER_OS" = Windows ]; then
+            python -m venv "$RUNNER_TEMP/evs"
+            evs_python="$RUNNER_TEMP/evs/Scripts/python.exe"
+          else
+            python3 -m venv "$RUNNER_TEMP/evs"
+            evs_python="$RUNNER_TEMP/evs/bin/python"
+          fi
+          "$evs_python" -m pip install --quiet castlabs-evs
           {
-            echo "EVS_PYTHON=$RUNNER_TEMP/evs/bin/python"
+            echo "EVS_PYTHON=$evs_python"
             echo "VMP_REQUIRED=true"
           } >> "$GITHUB_ENV"
 
       - name: Package
         env:
-          EVS_ACCOUNT_NAME: ${{ matrix.platform == 'mac' && secrets.EVS_ACCOUNT_NAME || '' }}
-          EVS_PASSWD: ${{ matrix.platform == 'mac' && secrets.EVS_PASSWD || '' }}
+          EVS_ACCOUNT_NAME: ${{ matrix.platform != 'linux' && secrets.EVS_ACCOUNT_NAME || '' }}
+          EVS_PASSWD: ${{ matrix.platform != 'linux' && secrets.EVS_PASSWD || '' }}
           # Sign as electron-builder.yml says, or as the Developer ID above, without looking in the runner's keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           CSC_KEY_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_PASSWORD }}
@@ -230,6 +247,7 @@ jobs:
             release/*.AppImage
             release/*.dmg
             release/*.zip
+            release/*.exe
             release/latest*.yml
           if-no-files-found: error
 

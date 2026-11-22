@@ -23,6 +23,7 @@ mkdirSync(outDir, { recursive: true });
 const DEFAULT_APP = {
   linux: path.join(root, 'release', 'linux-unpacked', 'oh-my-f1-viewer'),
   darwin: path.join(root, 'release', 'mac-arm64', 'oh-my-f1-viewer.app', 'Contents', 'MacOS', 'oh-my-f1-viewer'),
+  win32: path.join(root, 'release', 'win-unpacked', 'oh-my-f1-viewer.exe'),
 }[process.platform];
 const bin = path.resolve(process.argv[3] ?? DEFAULT_APP ?? '');
 if (!existsSync(bin)) throw new Error(`No packaged app at ${bin}: run npm run dist first, or name one.`);
