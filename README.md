@@ -1,77 +1,23 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="icons/omfv-wordmark-dark.svg">
-    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="439">
+    <img src="icons/omfv-wordmark-light.svg" alt="oh-my-f1-viewer, beta" width="320">
   </picture>
 </p>
 
-<p align="center">
-  <b>An agent-driven, multi-view F1 TV player.</b><br>
-  Tell it what you want to watch, and it opens the session and lays out the onboards and live charts on one clock.
-</p>
+An agent-driven, multi-view F1 TV player, built on Electron and React. **[oh-my-f1-viewer.yueyao.run](https://oh-my-f1-viewer.yueyao.run)**
+has what it does, with screenshots. This README is for running and working on it.
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platforms: Linux and macOS">
-  <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
-</p>
-
-<p align="center">
-  <a href="https://oh-my-f1-viewer.yueyao.run">Website</a> ·
-  <a href="#install">Install</a> ·
-  <a href="docs/ARCHITECTURE.md">Architecture</a>
-</p>
-
-![The 2026 Mexico City Grand Prix in OMFV: the race feed and the Hamilton and Leclerc onboards, with their pit windows, gap, telemetry, pedals, sectors, tyres and track positions, all on one session clock.](site/src/assets/shots/page/hero-charts.webp)
-
-> [!NOTE]
-> OMFV is in beta. It's an unofficial fan project, not affiliated with Formula 1, and it needs your own F1 TV subscription
-> and an LLM provider. Everything runs on your machine: there is no OMFV server.
-
-## Features
-
-- **Ask in plain words.** Name a session, a driver or a battle, and the agent opens it and suggests the tiles to show.
-- **Multi-view, in sync.** The race feed, onboards and charts all follow one session clock. Drag, swap and resize tiles, or
-  let `/auto-layout` arrange them.
-- **No spoilers.** Charts and the agent only see data up to the frame on screen. The agent asks before it looks ahead.
-- **Race charts.** Battles, gaps, timing, tyre degradation, pit windows, telemetry and more, built from F1's timing feed.
-- **Build mode.** Describe a view that isn't there, and the agent writes it as a [mod](docs/MODS.md) you can keep or undo.
-- **Replays and live races.** Any session from 2023 on. Live is in alpha.
-
-## Build mode
-
-`/build` turns the agent into a builder. Describe a view that isn't there, with no code needed:
-
-```
-show whoever's pitting
-always show the leader's onboard
-buttons to skip a lap
-the gap to the car behind, on every onboard
-```
-
-It writes a [mod](docs/MODS.md) and runs it on the race you're watching as a draft. **Save** keeps it, and **Undo all**
-puts everything back. Mods are plain folders, so you can also write or change one yourself. See
-[docs/BUILD_MODE.md](docs/BUILD_MODE.md).
-
-## Requirements
-
-- **Video and data:** an F1 TV subscription. You sign in with your own account, and F1 TV's access and regional rules
-  apply.
-- **Agent:** a ChatGPT plan (sign in with ChatGPT), or an OpenAI or Anthropic API key.
-- **Platform:** Linux x64, or macOS on Apple silicon. Windows isn't supported yet.
+OMFV is in beta, and an unofficial fan project. It needs an F1 TV subscription and an agent provider: a ChatGPT plan, or an
+OpenAI or Anthropic API key. It runs on Linux x64 and macOS on Apple silicon.
 
 ## Install
 
-Releases have a `.pacman` package for Omarchy and Arch, an AppImage for other Linux, and a `.dmg` for macOS. Download them
-from [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases), and see
-[docs/RELEASE.md](docs/RELEASE.md#install-it) for how to install each. Until the first app release is out, run it from
-source. The AppImage and the Mac app update themselves: a new release downloads in the background and installs automatically next time you start oh-my-f1-viewer.
+Download a `.pacman` (Omarchy and Arch), an AppImage (other Linux) or a `.dmg` (macOS) from the
+[download page](https://oh-my-f1-viewer.yueyao.run/download) or [Releases](https://github.com/natheihei/oh-my-f1-viewer/releases).
+[docs/RELEASE.md](docs/RELEASE.md#install-it) says how to install each.
 
-On first launch the app walks you through signing in to F1 TV and connecting the agent's model. Then open a session.
-`Ctrl+K` (`Cmd+K` on macOS) shows or hides the palette. To change it, click the key written at the end of the
-palette's input row and press another.
-
-### Run from source
+## Run from source
 
 You need [Node.js](https://nodejs.org) (`brew install node` on macOS). Install the dependencies, then the castLabs Electron
 build with Widevine, then start it:
@@ -91,7 +37,8 @@ npm run dev
 On macOS, live sessions and other DRM streams also need that Electron build VMP-signed, with a free castLabs EVS account:
 see [VMP-sign the Mac build](docs/RELEASE.md#vmp-sign-the-mac-build).
 
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the app's commands and the checks that run the real app.
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the app's commands and the checks that run the real app, and
+[AGENTS.md](AGENTS.md) lists the rest of the docs.
 
 ## How it works
 

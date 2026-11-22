@@ -5,7 +5,7 @@
 The app's agent normally drives viewing: it finds sessions, suggests tiles and seeks. In build mode it writes mods instead. The viewer
 asks to follow something, such as how often NOR opens DRS, the viewing agent finds that no tile shows it and offers to build one, and
 on a yes the build agent builds it (2026-11-21). `/build` goes straight there, for a viewer who already knows they want something
-built or changed. Onboarding, the README and the site still show `/build` as the way in.
+built or changed. Onboarding and the site still show `/build` as the way in.
 
 Agreed and built on 2026-11-11. [STATUS.md](STATUS.md) says what's verified. [MODS.md](MODS.md) describes mods themselves, and
 [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md) the rules build mode changes.
