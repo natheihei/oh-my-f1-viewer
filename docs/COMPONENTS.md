@@ -516,18 +516,22 @@ Added 2026-11-13, replacing `sector_delta`, from direction D of its proposals.
 
 Polished 2026-11-13.
 
-- **Each lap's gap in ink, the live trace faint behind it.** The gap as both cars crossed the line gets a dot, read off the trace at
-  that moment rather than from `lap_summary`, whose gap to the leader is taken at a different moment for each car and can be a second
-  out. The trend reads through the jitter within a lap.
-- **A pass is marked.** Where the order flips on track, away from a stop and within 5 s, a hairline and "VER AHEAD". The line is
-  the gap's size, so before this a pass was only a dip to zero and back.
+- **The live trace in ink, each lap's gap faint behind it.** The instantaneous sample-by-sample gap is the primary line in ink; each
+  lap's crossing of the line sits faint behind it with dots, read off the trace at that moment rather than from `lap_summary`, whose gap
+  to the leader is taken at a different moment for each car and can be a second out.
+- **0-based for a chase, signed around 0 for back-and-forth fighting.** While one car stays ahead in the visible scale, the plot
+  starts at 0 and the DRS/Overtake band runs from 0 to 1.0 s. When both cars spend time ahead within the scale (a pass or undercut),
+  the y-axis spans 0 with each side fitted to its own extent (so a lopsided lead doesn't waste space), the 0 line is drawn thicker and
+  brighter, the sections above and below 0 are labelled `… AHEAD` at ±0.5 s, and the DRS/Overtake band spans ±1.0 s. Passes read directly
+  from the trace crossing 0 instead of stacked vertical pass labels.
+- **Same-loop updates are paired.** When both cars cross a timing loop within 2 s of each other, the half-updated difference from the
+  first car is replaced by the synchronised pair once the second arrives, preventing sawtooth spikes and false zero crossings.
 - **A stop is marked and breaks the line,** with "PIT NOR" on a dashed rule at the start of the new stint. The scale fits the laps
-  since the last stop, so the stop runs off the top, and its height is named there ("▲ 22.7"). Before, a stop set the scale to 30 s
+  since the last stop, so the stop runs off the edge, and its height is named there ("▲ 22.7" or "▼ 22.7"). Before, a stop set the scale to 30 s
   and flattened the battle.
-- **Marks don't draw over each other.** Each label stays at its own line, so it reads as that stop or pass. One that would cover
-  another drops a row, under it. Combining them ("PIT NOR · PIA") was tried and dropped: it tied both names to one line. The
-  passes' rows start under the stops'. (2026-11-13, #93.)
-- **The DRS or Overtake zone is a filled band,** so inside it reads as a place. Its label on the axis is the aid's name alone,
+- **Stop marks don't draw over each other.** Each label stays at its own line, so it reads as that stop. One that would cover
+  another drops a row, under it. Combining them ("PIT NOR · PIA") was tried and dropped: it tied both names to one line. (2026-11-13, #93.)
+- **The DRS or Overtake zone is a filled band,** so inside it reads as a place (0 to 1.0 s normally, ±1.0 s in symmetric view). Its label on the axis is the aid's name alone,
   "OT" or "DRS", which keeps the left margin to the axis's width.
 - **The car ahead is on top in the panel, and nothing in it is dropped.** It used to leave out the second driver at its least size.
   Below what the panel needs the chart stops shrinking and runs past the tile, for the host to mark.
