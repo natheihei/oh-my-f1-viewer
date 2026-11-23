@@ -353,6 +353,14 @@ describe('suggesting charts', () => {
     expect(describeAppState()).toContain(`\non screen: ${ham} HAM (stream); ${gap} Gap 44 v 1 (test_gap, props {"driver_a":44,"driver_b":1}); ${weather} Weather (test_weather)\n`);
   });
 
+  it('marks the tile with the main place in the app state', () => {
+    const [ham, gap] = host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }, { type: 'test_gap', props: { driver_a: 44, driver_b: 1 } }] });
+    host.layout.setMain({ tile: ham });
+    expect(describeAppState()).toContain(`\non screen: ${ham} HAM (stream, main); ${gap} Gap 44 v 1 (test_gap, props {"driver_a":44,"driver_b":1})\n`);
+    host.layout.setMain({ tile: gap });
+    expect(describeAppState()).toContain(`${ham} HAM (stream); ${gap} Gap 44 v 1 (test_gap, props {"driver_a":44,"driver_b":1}, main)\n`);
+  });
+
   it('can have the same chart twice, for different drivers', async () => {
     host.layout.add({ items: [{ type: 'test_pit', props: { driver: 44 } }, { type: 'test_pit', props: { driver: 1 } }, { type: 'test_pit', props: { driver: 44 } }] });
     expect(layout.tiles().map((t) => t.component.label)).toEqual(['Pit 44', 'Pit 1']);

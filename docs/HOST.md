@@ -399,8 +399,8 @@ by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `d
 without one. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
 a tile on screen in place: a component's props, only those it names, null taking one away, or with `stream` the feed a stream tile shows,
 so "focus on RUS now" turns the HAM onboard into RUS's where it stands, and its sound follows the tile. A feed another tile already shows is refused. `remove_tiles` and `edit_tile` name tiles by the
-ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream); tile-4 Pit 44 (pit_window, props {"driver":44}); tile-5 Battle NOR · VER (battle, shows Lando Norris, Max Verstappen)`, and refuse
-anything else, labels included. A tile's title is what its component says, from `live.headers`. The agent never sees what a component shows, and a
+ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream, main); tile-4 Pit 44 (pit_window, props {"driver":44}); tile-5 Battle NOR · VER (battle, shows Lando Norris, Max Verstappen)`, and refuse
+anything else, labels included. The tile with the main place is marked `main`, so "close all" leaves it unless the user names it. A tile's title is what its component says, from `live.headers`. The agent never sees what a component shows, and a
 refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:
 
 | Tool | Host function |
