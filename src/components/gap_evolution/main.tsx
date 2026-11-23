@@ -19,6 +19,7 @@ import {
   hline,
   linear,
   niceCeil,
+  niceStep,
   num,
   partsWidth,
   polyline,
@@ -41,6 +42,11 @@ const WINDOW = 15;
 const TREND_LAPS = 3;
 /** A sample this far, in seconds, from its neighbours' median is a glitch. */
 const SPIKE = 1;
+/**
+ * Updates from the two drivers arriving within this many milliseconds are the same timing loop:
+ * replace the half-updated stale difference with the synchronised pair instead of drawing a sawtooth spike.
+ */
+const PAIR_WINDOW_MS = 2_000;
 
 // The pair's lap starts over the window, both drivers' gaps to the leader since its first lap, and
 // each one's laps of the window: the gap as it crossed the line, for the trend, and its time and tyre.
@@ -137,20 +143,30 @@ export function gapModel(rows: ReadonlyArray<Record<string, unknown>>, [a, b]: r
   // The leader has no gap to itself: null means 0 there. Text such as "+1 LAP" is not a time.
   const last = new Map<number, number | null>();
   const points: GapModel['points'] = [];
+  let pending: { driver: number; date: number; idx: number } | null = null;
   for (const r of rows) {
     const date = num(r.date);
     if (r.kind !== 'gap' || date === null || date < laps[0].date) continue;
     const driver = num(r.n);
     if (driver !== a && driver !== b) continue;
+    const hadBoth = last.has(a) && last.has(b);
     last.set(driver, r.gap == null ? 0 : gapSeconds(r.gap));
     if (!last.has(a) || !last.has(b)) continue;
     const ga = last.get(a);
     const gb = last.get(b);
     if (ga == null || gb == null) {
       if (points.at(-1) !== null) points.push(null);
+      pending = null;
       continue;
     }
-    points.push({ x: lapAt(laps, date), gap: gb - ga });
+    const pt = { x: lapAt(laps, date), gap: gb - ga };
+    if (pending && pending.driver !== driver && date - pending.date <= PAIR_WINDOW_MS) {
+      points[pending.idx] = pt;
+      pending = null;
+    } else {
+      pending = hadBoth ? { driver, date, idx: points.length } : null;
+      points.push(pt);
+    }
   }
   while (points.at(-1) === null) points.pop();
   smooth(points);
@@ -252,10 +268,51 @@ function smooth(points: GapModel['points']): void {
 }
 
 /** Most of what's shown, so a lone glitch doesn't flatten the battle. */
-function yTop(gaps: number[], line: number): number {
+function yTop(gaps: readonly number[], line: number): number {
   const sorted = gaps.map(Math.abs).sort((x, y) => x - y);
   const high = sorted[Math.floor((sorted.length - 1) * 0.9)] ?? 0;
   return niceCeil(Math.max(line * 2, high * 1.15), 4);
+}
+
+/**
+ * Whether the plotted gap trades the lead between both drivers within the visible scale:
+ * both sides spend time ahead beyond the level deadband, so the plot switches to a signed view around 0.
+ */
+export function isSigned(points: ReadonlyArray<{ gap: number }>, cap: number): boolean {
+  let pos = false;
+  let neg = false;
+  for (const p of points) {
+    if (p.gap >= LEVEL && p.gap <= cap) pos = true;
+    else if (p.gap <= -LEVEL && p.gap >= -cap) neg = true;
+    if (pos && neg) return true;
+  }
+  return false;
+}
+
+/**
+ * The y-axis domain: `[0, yMax]` while one car stays ahead, or an asymmetric `[yMin, yMax]` spanning 0
+ * when both spend time ahead within the scale so neither side wastes space. Both sides keep room past ±`within`.
+ */
+export function gapDomain(
+  drawn: ReadonlyArray<{ gap: number }>,
+  scaleGaps: readonly number[],
+  within: number,
+): { min: number; max: number; signed: boolean } {
+  const cap = yTop(scaleGaps, within);
+  if (!isSigned(drawn, cap)) return { min: 0, max: cap, signed: false };
+  const pct90 = (values: number[]) => {
+    const s = values.sort((a, b) => a - b);
+    return s[Math.floor((s.length - 1) * 0.9)] ?? 0;
+  };
+  const posScale = scaleGaps.filter((g) => g > 0 && g <= cap);
+  const negScale = scaleGaps.filter((g) => g < 0 && g >= -cap).map((g) => -g);
+  const posAll = drawn.map((p) => p.gap).filter((g) => g > 0 && g <= cap);
+  const negAll = drawn.map((p) => p.gap).filter((g) => g < 0 && g >= -cap).map((g) => -g);
+  const rawUp = Math.max(within * 1.2, pct90(posScale.length ? posScale : posAll) * 1.15);
+  const rawDown = Math.max(within * 1.2, pct90(negScale.length ? negScale : negAll) * 1.15);
+  const step = niceStep(rawUp + rawDown, 5);
+  const ceilTo = (v: number) => Number((Math.ceil(v / step - 1e-9) * step).toPrecision(12));
+  return { min: -ceilTo(rawDown), max: ceilTo(rawUp), signed: true };
 }
 
 /** Between a mark's line and its label, in pixels. */
@@ -330,7 +387,7 @@ export function gapExtent(m: Drawn, box: Box): { width: number; height: number }
   return { width: box.width, height: Math.max(box.height, panel(m).height) };
 }
 
-function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
+export function drawGap(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const c = colors();
   const big = compact ? 15 : BIG;
   const left = compact ? 6 : LEFT;
@@ -340,78 +397,125 @@ function draw(ctx: Ctx, m: Drawn, { width, height, compact }: Box): void {
   const drawn = m.points.filter((p) => p !== null);
   const within = m.aid.within;
   const styles = new Map([m.first, m.second].map((s) => [s.number, s]));
-  // The scale fits the laps since the last stop, so the stop itself runs off the top.
+  // The scale fits the laps since the last stop, so the stop itself runs off the edge.
   const lastPit = m.pits.length ? Math.max(...m.pits.map((p) => p.lap)) : null;
   const since = lastPit === null ? [] : drawn.filter((p) => p.x > lastPit + 0.3);
-  const yMax = yTop((since.length ? since : drawn).map((p) => p.gap), within);
+  const { min: yMin, max: yMax, signed } = gapDomain(drawn, (since.length ? since : drawn).map((p) => p.gap), within);
+  const val = (g: number) => (signed ? g : Math.abs(g));
   const x = linear([m.from, m.to], [left, right]);
-  const y = linear([0, yMax], [bottom, top]);
+  const y = linear([yMin, yMax], [bottom, top]);
 
-  // The DRS or Overtake zone, filled, so inside it reads as a place.
+  // The DRS or Overtake zone, filled, so inside it reads as a place: [0, within] normally, [-within, +within] when signed.
+  const bandTop = Math.min(within, yMax);
+  const bandBottom = signed ? Math.max(-within, yMin) : 0;
   ctx.fillStyle = c.quiet;
-  ctx.fillRect(left, y(Math.min(within, yMax)), right - left, bottom - y(Math.min(within, yMax)));
+  ctx.fillRect(left, y(bandTop), right - left, y(bandBottom) - y(bandTop));
+
+  const fmt = (v: number) => {
+    const a = Math.abs(v);
+    const s = a.toFixed(a >= 10 || Number.isInteger(a) ? 0 : 1);
+    if (!signed || v === 0) return s;
+    return `${v < 0 ? '−' : '+'}${s}`;
+  };
+
   if (!compact) {
     const room = Math.max(1, Math.floor((right - left) / 44));
     const step = [1, 2, 5, 10].find((s) => (m.to - m.from) / s <= room) ?? 10;
     for (const l of ticks(Math.ceil(m.from), Math.floor(m.to), 0, step)) text(ctx, `L${l}`, x(l), height - 9, { align: 'center', size: TYPE });
-    const values = ticks(0, yMax, Math.max(2, Math.floor((bottom - top) / 34))).filter((v) => Math.abs(y(v) - y(within)) >= 12);
-    for (const v of values) {
-      hline(ctx, left, right, y(v));
-      text(ctx, v.toFixed(v >= 10 || Number.isInteger(v) ? 0 : 1), left - 5, y(v), { align: 'right', size: TYPE });
+    if (signed) {
+      const aidSplit = Math.abs(y(0) - y(within)) >= 12;
+      const values = ticks(yMin, yMax, Math.max(2, Math.floor((bottom - top) / 34))).filter((v) =>
+        aidSplit ? Math.abs(y(v) - y(within)) >= 12 && Math.abs(y(v) - y(-within)) >= 12 : Math.abs(y(v) - y(0)) >= 12,
+      );
+      for (const v of values) {
+        if (v !== 0) hline(ctx, left, right, y(v));
+        text(ctx, fmt(v), left - 5, y(v), { align: 'right', color: v === 0 ? c.ink : undefined, size: TYPE });
+      }
+      if (aidSplit) {
+        text(ctx, m.aid.label, left - 5, y(within), { align: 'right', color: c.ink, size: TYPE });
+        text(ctx, m.aid.label, left - 5, y(-within), { align: 'right', color: c.ink, size: TYPE });
+      } else {
+        text(ctx, m.aid.label, left - 5, y(0), { align: 'right', color: c.ink, size: TYPE });
+      }
+    } else {
+      const values = ticks(0, yMax, Math.max(2, Math.floor((bottom - top) / 34))).filter((v) => Math.abs(y(v) - y(within)) >= 12);
+      for (const v of values) {
+        hline(ctx, left, right, y(v));
+        text(ctx, fmt(v), left - 5, y(v), { align: 'right', size: TYPE });
+      }
+      text(ctx, m.aid.label, left - 5, y(within), { align: 'right', color: c.ink, size: TYPE });
     }
-    text(ctx, m.aid.label, left - 5, y(within), { align: 'right', color: c.ink, size: TYPE });
-  } else text(ctx, m.aid.label, left + 2, y(within) - 7, { size: TYPE });
+  } else {
+    text(ctx, m.aid.label, left + 2, y(within) - 7, { size: TYPE });
+  }
+  if (signed) {
+    // Emphasise the 0 lead-change line: brighter and thicker than the regular grid and dashed aid lines.
+    ctx.fillStyle = c.dim;
+    ctx.fillRect(left, Math.round(y(0)) - 1, right - left, compact ? 1.5 : 2);
+  }
   hline(ctx, left, right, y(within), c.dim, [3, 3]);
+  if (signed) hline(ctx, left, right, y(-within), c.dim, [3, 3]);
 
   if (!compact) {
-    // Each label sits at its own line, right of it or left of it by the panel, stacked a row down where it
-    // would cover another. The passes' rows start under the stops'.
-    const row = (marks: Array<{ at: number; driver: number }>, parts: (driver: number) => Part[], y: number, style: { color?: string; weight?: number }) => {
-      const s = { ...style, size: TYPE };
-      const labels = layoutMarks(marks, (d) => partsWidth(ctx, parts(d), styles, s), right);
-      for (const l of labels) {
-        drawParts(ctx, parts(l.driver), styles, l.align === 'left' ? l.at + MARK_PAD : l.at - MARK_PAD, y + l.row * MARK_ROW, { ...s, align: l.align });
-      }
-      return labels.length ? Math.max(...labels.map((l) => l.row)) + 1 : 0;
-    };
+    // Each stop label sits at its own dashed line, right of it or left of it by the panel, stacked a row down where it
+    // would cover another. Passes are shown directly by the trace crossing the 0 line between the two AHEAD sections.
     const pits = m.pits.filter((p) => p.lap >= m.from);
     for (const p of pits) vline(ctx, x(p.lap), top, bottom, c.faint, [2, 3]);
-    for (const p of m.passes) vline(ctx, x(p.x), top, bottom, c.dim);
-    const pitRows = row(pits.map((p) => ({ at: x(p.lap), driver: p.driver })), (driver) => ['PIT ', { driver }], top + 6, {});
-    row(m.passes.map((p) => ({ at: x(p.x), driver: p.ahead })), (driver) => [{ driver }, ' AHEAD'], top + 6 + pitRows * MARK_ROW, { color: c.ink, weight: 600 });
+    const pitStyle = { size: TYPE };
+    const pitParts = (driver: number): Part[] => ['PIT ', { driver }];
+    const pitLabels = layoutMarks(
+      pits.map((p) => ({ at: x(p.lap), driver: p.driver })),
+      (d) => partsWidth(ctx, pitParts(d), styles, pitStyle),
+      right,
+    );
+    for (const l of pitLabels) {
+      drawParts(ctx, pitParts(l.driver), styles, l.align === 'left' ? l.at + MARK_PAD : l.at - MARK_PAD, top + 6 + l.row * MARK_ROW, { ...pitStyle, align: l.align });
+    }
+    // In signed view, name which driver is ahead in each half, centred at ±0.5 s inside the chase-aid band.
+    if (signed) {
+      const sideLook = { size: TYPE, color: c.dim, align: 'left' as const, look: { strong: false } };
+      drawParts(ctx, [{ driver: m.first.number }, ' AHEAD'], styles, left + 4, Math.max(top + 6, Math.min(y(0) - 9, y(within / 2))), sideLook);
+      drawParts(ctx, [{ driver: m.second.number }, ' AHEAD'], styles, left + 4, Math.min(bottom - 7, Math.max(y(0) + 9, y(-within / 2))), sideLook);
+    }
   }
 
-  // The live trace, faint, broken across a stop.
+  // The live instantaneous trace, highlighted in ink, broken across a stop.
   const trace: Array<readonly [number, number] | null> = [];
   let prev: number | null = null;
   for (const p of m.points) {
     if (p && prev !== null && m.pits.some((q) => q.lap > prev! && q.lap <= p.x + 0.15)) trace.push(null);
-    trace.push(p ? [x(p.x), y(Math.abs(p.gap))] : null);
+    trace.push(p ? [x(p.x), y(val(p.gap))] : null);
     prev = p ? p.x : prev;
   }
-  // Over it, the gap at each crossing of the line, broken where either driver's stint changed.
+  // Behind it, the per-lap gap at each crossing of the line, faint, broken where either driver's stint changed.
   const shown = m.lapGaps.filter((g) => g.gap !== null && g.x >= m.from);
   const laps: Array<readonly [number, number] | null> = [];
   shown.forEach((g, i) => {
     const before = shown[i - 1];
     if (before && (g.stints[0] !== before.stints[0] || g.stints[1] !== before.stints[1])) laps.push(null);
-    laps.push([x(g.x), y(Math.abs(g.gap!))]);
+    laps.push([x(g.x), y(val(g.gap!))]);
   });
   const end = drawn[drawn.length - 1];
-  if (end && (!shown.length || end.x > shown[shown.length - 1].x)) laps.push([x(end.x), y(Math.abs(end.gap))]);
   ctx.save();
   ctx.beginPath();
   ctx.rect(left - 4, top - 2, right - left + 8, bottom - top + 6);
   ctx.clip();
-  polyline(ctx, trace, { color: c.faint, width: 1 });
-  polyline(ctx, laps, { color: c.ink, width: compact ? 1.4 : 1.6 });
-  if (!compact) for (const g of shown) dot(ctx, x(g.x), y(Math.abs(g.gap!)), 2, c.ink);
-  if (end) dot(ctx, x(end.x), y(Math.abs(end.gap)), compact ? 2.5 : 3, c.ink);
+  polyline(ctx, laps, { color: c.faint, width: 1 });
+  if (!compact) for (const g of shown) dot(ctx, x(g.x), y(val(g.gap!)), 2, c.faint);
+  polyline(ctx, trace, { color: c.ink, width: compact ? 1.4 : 1.6 });
+  if (end) dot(ctx, x(end.x), y(val(end.gap)), compact ? 2.5 : 3, c.ink);
   ctx.restore();
-  // A stop off the top of the scale is named there.
-  if (!compact && drawn.some((p) => Math.abs(p.gap) > yMax)) {
-    const peak = Math.max(...drawn.map((p) => Math.abs(p.gap)));
-    text(ctx, `▲ ${peak.toFixed(1)}`, left + 2, top - 3, { size: TYPE });
+  // A stop off the scale is named at the edge it leaves.
+  if (!compact) {
+    if (signed) {
+      const above = drawn.filter((p) => p.gap > yMax);
+      if (above.length) text(ctx, `▲ ${Math.max(...above.map((p) => p.gap)).toFixed(1)}`, left + 2, top - 3, { size: TYPE });
+      const below = drawn.filter((p) => p.gap < yMin);
+      if (below.length) text(ctx, `▼ ${Math.max(...below.map((p) => -p.gap)).toFixed(1)}`, left + 2, bottom - 6, { size: TYPE });
+    } else if (drawn.some((p) => Math.abs(p.gap) > yMax)) {
+      const peak = Math.max(...drawn.map((p) => Math.abs(p.gap)));
+      text(ctx, `▲ ${peak.toFixed(1)}`, left + 2, top - 3, { size: TYPE });
+    }
   }
 
   const value = m.current === null ? '—' : Math.abs(m.current).toFixed(2);
@@ -471,7 +575,7 @@ function GapEvolution({ props }: { props: { driver_a: number; driver_b: number }
   );
   return (
     <ChartFrame needs={NEEDS} views={[view]}>
-      {() => model && <ChartCanvas model={model} draw={draw} extent={gapExtent} />}
+      {() => model && <ChartCanvas model={model} draw={drawGap} extent={gapExtent} />}
     </ChartFrame>
   );
 }

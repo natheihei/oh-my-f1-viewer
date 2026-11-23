@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { gapModel, layoutMarks } = await import('./gap_evolution/main');
+const { gapDomain, gapModel, isSigned, layoutMarks } = await import('./gap_evolution/main');
 const { tyreModel, tyreExtent } = await import('./tyre_strategy/main');
 const { towerModel, towerExtent } = await import('./timing_tower/main');
 const { degModel, degExtent, shadeOf } = await import('./tyre_deg/main');
@@ -136,8 +136,56 @@ describe('gap_evolution', () => {
     expect(gapModel([...rows, lap(22, 2200), ...ends(21)], [44, 1]).trend).toBeNull();
   });
 
+  it('pairs same-loop updates from the two drivers so staggered timing loops do not create fake sawtooth spikes', () => {
+    // Car 16 crosses each loop ~250ms ahead of car 44 as both drop back from the leader.
+    const rows = [
+      lap(1, 0),
+      lap(2, 90_000),
+      gap(16, 1_000, 1.32),
+      gap(44, 1_030, 1.33),
+      gap(16, 6_000, 2.39),
+      gap(44, 6_060, 2.53),
+      gap(16, 11_000, 3.12),
+      gap(44, 11_240, 3.35),
+      gap(16, 16_000, 3.13),
+      gap(44, 16_340, 3.48),
+    ];
+    const m = gapModel(rows, [44, 16]);
+    // Four synchronised points, all negative (16 ahead the whole time), and zero false passes.
+    expect(m.points.map((p) => p && Number(p.gap.toFixed(2)))).toEqual([-0.01, -0.14, -0.23, -0.35]);
+    expect(m.passes).toEqual([]);
+  });
+
   it('is empty before the first lap', () => {
     expect(gapModel([gap(44, 1000, 1), gap(1, 1000, 2)], [44, 1]).points).toEqual([]);
+  });
+
+  describe('signed scale', () => {
+    it('stays 0-based when only one driver is ahead in the window', () => {
+      expect(isSigned([{ gap: 2.0 }, { gap: 1.2 }, { gap: 0.4 }], 3)).toBe(false);
+      expect(isSigned([{ gap: -2.0 }, { gap: -1.2 }, { gap: -0.4 }], 3)).toBe(false);
+      // Tiny level jitter across 0 doesn't flip to signed.
+      expect(isSigned([{ gap: 1.0 }, { gap: 0.02 }, { gap: -0.05 }, { gap: 0.4 }], 2)).toBe(false);
+      expect(gapDomain([{ gap: -2.0 }, { gap: -1.2 }], [-2.0, -1.2], 1)).toEqual({ min: 0, max: 2, signed: false });
+    });
+
+    it('fits positive and negative halves independently without forcing symmetry', () => {
+      const pts = [{ gap: 5.0 }, { gap: 4.5 }, { gap: 3.0 }, { gap: 1.2 }, { gap: 0.2 }, { gap: -0.6 }];
+      const d = gapDomain(pts, pts.map((p) => p.gap), 1);
+      expect(d.signed).toBe(true);
+      expect(d.max).toBeGreaterThanOrEqual(5);
+      // Negative side stays tight around the -1.0 band instead of mirroring +6/+8.
+      expect(d.min).toBeLessThanOrEqual(-1.2);
+      expect(Math.abs(d.min)).toBeLessThan(d.max);
+    });
+
+    it('handles an undercut across a stop while ignoring off-scale pit spikes', () => {
+      expect(isSigned([{ gap: 1.5 }, { gap: -19.0 }, { gap: 1.8 }], 2.5)).toBe(false);
+      const undercut = gapDomain([{ gap: 1.5 }, { gap: -19.0 }, { gap: -1.2 }], [-1.2], 1);
+      expect(undercut.signed).toBe(true);
+      expect(undercut.max).toBeGreaterThanOrEqual(1.5);
+      expect(undercut.min).toBeLessThanOrEqual(-1.2);
+    });
   });
 
   describe('marks', () => {
