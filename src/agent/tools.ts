@@ -561,7 +561,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   suggestTiles(suggestArgs),
   expose(host.layout.remove, {
     name: 'remove_tiles',
-    description: 'Take tiles off screen, streams or components, by their tile ids.',
+    description:
+      'Take tiles off screen, streams or components, by their tile ids. For "close all" and the like, leave out the tile app_state marks main: it goes only when the user names it, as in "close all and the main" or "close the main stream".',
     args: Type.Object({ tiles: Type.Array(TileId) }, { additionalProperties: false }),
     gate: [
       sessionOpen,
@@ -714,7 +715,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.session.close, {
     name: 'close_session',
     description:
-      'Close the open session and go back to the screen with nothing open, where the user picks a session. Only when they ask to leave it, such as "close this" or "take me home". To watch another session, load_session replaces this one instead.',
+      'Close the open session and go back to the screen with nothing open, where the user picks a session. Only when they ask to leave it, such as "close this session" or "take me home". "Close all" is about the tiles: that is remove_tiles. To watch another session, load_session replaces this one instead.',
     gate: [sessionOpen],
     result: () => 'Closed. No session is open now, and the user sees the list of sessions.',
   }),
