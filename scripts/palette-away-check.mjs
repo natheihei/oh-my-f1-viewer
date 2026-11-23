@@ -73,6 +73,16 @@ check('a press on the video leaves it a moment', await open());
 await page.waitForTimeout(AWAY - 2_000);
 check('and hides it 3s after', await folded());
 
+// Once it has lost focus, a second click outside closes it immediately instead of waiting 3s.
+await page.locator('[data-testid=palette-folded]').click();
+await settle();
+await pressVideo();
+await settle();
+check('first click outside leaves it open', await open());
+await pressVideo();
+await settle();
+check('second click outside closes it immediately', await folded());
+
 await page.evaluate(() => window.reply('Hamilton pits this lap, by the gap.').then(() => window.palette.setBusy(false)));
 await settle();
 check('a reply while it is hidden is unread', await unread());
