@@ -159,11 +159,12 @@ export function CommandPalette() {
   };
 
   // A press elsewhere in the app is leaving too, though nothing there takes focus, as on a video.
+  // Once the palette has already lost focus, another press outside closes it at once.
   useEffect(() => {
     if (!showing) return;
     const onPress = (e: Event) => {
       const root = rootRef.current;
-      if (root && !(e.target instanceof Node && root.contains(e.target))) palette.leave(stillAway);
+      if (root && !(e.target instanceof Node && root.contains(e.target))) palette.pressOutside(stillAway);
     };
     window.addEventListener('pointerdown', onPress, true);
     return () => window.removeEventListener('pointerdown', onPress, true);

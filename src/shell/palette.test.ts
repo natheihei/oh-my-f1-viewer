@@ -120,6 +120,39 @@ describe('hiding once the viewer moves away', () => {
     vi.advanceTimersByTime(60_000);
     expect(usePalette.getState().open).toBe(true);
   });
+
+  it('hides at once on a second press outside once already away', () => {
+    palette.attend();
+    palette.pressOutside();
+    expect(usePalette.getState().open).toBe(true);
+    expect(palette.isAway()).toBe(true);
+    palette.pressOutside();
+    expect(usePalette.getState().open).toBe(false);
+  });
+
+  it('hides at once on a press outside after focus left via leave()', () => {
+    palette.attend();
+    palette.leave();
+    expect(usePalette.getState().open).toBe(true);
+    palette.pressOutside();
+    expect(usePalette.getState().open).toBe(false);
+  });
+
+  it('keeps open on a second press outside while held', () => {
+    palette.attend();
+    const still = () => false;
+    palette.pressOutside(still);
+    palette.pressOutside(still);
+    expect(usePalette.getState().open).toBe(true);
+  });
+
+  it('resets the away count when the viewer comes back before pressing outside again', () => {
+    palette.attend();
+    palette.pressOutside();
+    palette.attend();
+    palette.pressOutside();
+    expect(usePalette.getState().open).toBe(true);
+  });
 });
 
 describe('unread', () => {
