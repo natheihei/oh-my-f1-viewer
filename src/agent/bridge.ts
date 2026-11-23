@@ -8,17 +8,19 @@ import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, 
 
 /**
  * A tile by its id, then what its title bar says, which its component may set itself, then its
- * component and props, and the feeds it shows, so the agent can name and change it.
+ * component and props, and the feeds it shows, so the agent can name and change it. The tile with
+ * the main place says so, so "close all" can leave it.
  */
 function describeTile({ id, component: c }: Tile, live: Live): string {
   const header = live.headers[id];
   const label = header?.drivers ? labelText(header.label ?? '', header.drivers) : (header?.label ?? c.label);
-  if (c.type === 'video') return `${id} ${label} (stream)`;
+  const main = live.layout.main === id ? ', main' : '';
+  if (c.type === 'video') return `${id} ${label} (stream${main})`;
   const shows = Object.values(live.streams)
     .filter((v) => v.tile === id && !v.quiet)
     .map((v) => live.feeds.find((f) => f.id === v.feed)?.label ?? v.feed);
   const props = Object.keys(c.props).length ? `, props ${JSON.stringify(c.props)}` : '';
-  return `${id} ${label} (${c.type}${props}${shows.length ? `, shows ${shows.join(', ')}` : ''})`;
+  return `${id} ${label} (${c.type}${props}${shows.length ? `, shows ${shows.join(', ')}` : ''}${main})`;
 }
 
 const describeLayout = (live: Live): string => (live.layout.tiles.length === 0 ? 'nothing' : live.layout.tiles.map((t) => describeTile(t, live)).join('; '));
