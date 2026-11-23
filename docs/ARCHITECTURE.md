@@ -162,7 +162,7 @@ changes.
 ## When the palette hides, and what's unread
 
 The palette hides itself in one case: 3s after the viewer moves elsewhere in the app (`AWAY_HIDE_MS` in `src/shell/palette.ts`), whatever
-the agent is doing. Moving away is focus leaving the palette, or a press outside it where nothing takes focus, such as on a video. The
+the agent is doing — or at once on another click outside once it has already lost focus. Moving away is focus leaving the palette, or a press outside it where nothing takes focus, such as on a video. The
 window losing focus isn't, and nor is a press in the palette that leaves focus on nothing, as on the history's text. Otherwise it stays,
 however a turn or a `/` command ends, until the viewer presses Esc or its key. While something of the viewer's holds it open (no session,
 build mode, a panel, errors they attached), it stays, and the hold ending while the viewer is away starts the 3s.

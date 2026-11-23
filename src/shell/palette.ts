@@ -190,6 +190,17 @@ export const palette = {
       if (still()) usePalette.setState({ open: false });
     }, AWAY_HIDE_MS);
   },
+  /**
+   * A press outside the palette. Once the viewer is already away (focus left the palette), another press outside
+   * hides it at once unless `still` keeps it open; otherwise it moves them away and starts the hide timer.
+   */
+  pressOutside(still: () => boolean = () => true): void {
+    if (away) {
+      if (still()) palette.hide();
+    } else {
+      palette.leave(still);
+    }
+  },
   /** The viewer is in the palette: focus, a click or typing in it. It stays, and they've seen what's there. */
   attend(): void {
     cancelHide();
