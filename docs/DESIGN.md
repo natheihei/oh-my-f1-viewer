@@ -107,7 +107,8 @@ Suggesting a component shows the agent no race data, so it needs no approval gat
 described below:
 
 - A chart declares the props it needs, and the agent fills them in: only the drivers the user named, as car numbers. A chart never
-  picks a driver itself, so one about a driver needs one (#77). The agent changes them on screen with `edit_tile`.
+  picks a driver itself, so one about a driver needs one (#77). The agent changes them on screen with `edit_tile`, which also
+  swaps the feed a stream tile shows, so moving the focus to another driver changes the onboard in place with the charts.
 - A refusal never depends on how the session is going. It may say no session is open, the chart is for another session type, the session
   has no data, the name is unknown, or the props are missing or don't fit.
 - The agent has not seen what a component shows, so it never describes it.

@@ -134,10 +134,8 @@ const AsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
 
 // Name matching
 
-const StreamRefs = Type.Array(Type.String(), {
-  description:
-    'Stream references: a driver code (HAM), surname (Hamilton), car number (44), or channel name (world feed, F1 Live, data, tracker).',
-});
+const STREAM_REF = 'a driver code (HAM), surname (Hamilton), car number (44), or channel name (world feed, F1 Live, data, tracker)';
+const StreamRefs = Type.Array(Type.String(), { description: `Stream references: ${STREAM_REF}.` });
 
 function matchAll(refs: string[]): { feeds: Channel[]; missing: string[] } {
   const available = read().feeds;
@@ -577,20 +575,38 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.layout.setProps, {
     name: 'edit_tile',
     description:
-      'Change the props of one component on screen, in place: who it is about, who it highlights or who it draws. It keeps its id and place. Only the props named change; null takes one away. To show the same component for someone else as well, suggest another with suggest_tiles instead.',
-    args: Type.Object({ tile: TileId, props: ComponentProps }, { additionalProperties: false }),
-    adapt: ({ tile, props }) => {
+      "Change one tile on screen, in place: a component's props (who it is about, who it highlights or who it draws), or the stream a stream tile shows, as another driver's onboard in place of this one. It keeps its id and place, and a stream tile that is heard stays heard. Only the props named change; null takes one away. To show the same component or stream for someone else as well, suggest another with suggest_tiles instead.",
+    args: Type.Object(
+      {
+        tile: TileId,
+        props: Type.Optional(ComponentProps),
+        stream: Type.Optional(Type.String({ description: `For a stream tile only, the stream to show in it instead: ${STREAM_REF}.` })),
+      },
+      { additionalProperties: false },
+    ),
+    adapt: ({ tile, props = {}, stream }) => {
       const hit = tileOnScreen(tile);
+      if (hit?.component.type === VIDEO) return { tile, props: { feed: (stream != null && resolveChannel(read().feeds, stream)?.id) || String(hit.component.props.feed) } };
       const info = hit && componentsOf().find((c) => c.name === hit.component.type);
       return { tile, props: info ? resolveProps(info, props, hit.component.props).props : {} };
     },
     gate: [
       sessionOpen,
-      (_, { tile, props }) => {
+      (_, { tile, props = {}, stream }) => {
         const hit = tileOnScreen(tile);
         if (!hit) throw new Error(`No tile ${tile} is on screen. ${ID_HINT}`);
+        if (hit.component.type === VIDEO) {
+          if (stream == null) throw new Error(`${tile} is a stream: give stream, the one to show in it instead, and no props.`);
+          if (Object.keys(props).length) throw new Error(`${tile} is a stream, which has no props: give only stream. Nothing was changed.`);
+          const channel = resolveChannel(read().feeds, stream);
+          if (!channel) throw new Error(`No stream matches "${stream}". Use list_streams to see the options. Nothing was changed.`);
+          const other = tilesOf(read().layout).find((t) => t.component.type === VIDEO && t.component.key === channel.id);
+          if (other && other.id !== tile) throw new Error(`${channel.label} is already on screen in ${other.id}: leave ${tile} as it is, or remove it.`);
+          return;
+        }
         const info = componentsOf().find((c) => c.name === hit.component.type);
-        if (!info) throw new Error(`${tile} is a stream: only a component's props can be changed. To show another stream, suggest it.`);
+        if (!info) throw new Error(`No component ${hit.component.type} is registered for ${tile}.`);
+        if (stream != null) throw new Error(`${tile} is a component, not a stream: change who it is about with props. Nothing was changed.`);
         const { problems } = resolveProps(info, props, hit.component.props);
         if (problems.length) throw new Error(`${problems.join(' ')} Nothing was changed.`);
       },

@@ -397,7 +397,8 @@ Before that the list is left out, and the tool waits for the data: the bridge se
 by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
 `drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
 without one. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
-the props of one component on screen in place, only those it names, null taking one away. `remove_tiles` and `edit_tile` name tiles by the
+a tile on screen in place: a component's props, only those it names, null taking one away, or with `stream` the feed a stream tile shows,
+so "focus on RUS now" turns the HAM onboard into RUS's where it stands, and its sound follows the tile. A feed another tile already shows is refused. `remove_tiles` and `edit_tile` name tiles by the
 ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream); tile-4 Pit 44 (pit_window, props {"driver":44}); tile-5 Battle NOR · VER (battle, shows Lando Norris, Max Verstappen)`, and refuse
 anything else, labels included. A tile's title is what its component says, from `live.headers`. The agent never sees what a component shows, and a
 refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:
@@ -409,7 +410,7 @@ refusal only ever depends on the session type, missing data, an unknown name or 
 | `close_session` | `host.session.close`, when the user asks to leave the session. `load_session` already replaces it with another |
 | `suggest_tiles` | `host.suggestions.offer`, for streams and components |
 | `remove_tiles` | `host.layout.remove`, for any tile |
-| `edit_tile` | `host.layout.setProps`, for one component that isn't video |
+| `edit_tile` | `host.layout.setProps`: `props` for a component, `stream` for a video tile, as its `feed` |
 | `offer_build` | `host.build.offer`, with `error_tiles` for `tiles`. The viewing agent's only: for a tile whose fix is in its component's code, or something the viewer wants to follow, or a tile to keep doing, that no component does |
 | `set_audio` | `host.audio.set`. It takes a stream name, and picks the video: the one already heard if it shows that feed, else the one in the main tile, else the oldest. It refuses a feed no tile shows |
 | `set_volume` | `host.audio.setVolume`, as a percentage |
