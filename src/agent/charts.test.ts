@@ -423,11 +423,30 @@ describe('suggesting charts', () => {
       expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 10']);
     });
 
-    it('refuses a tile that is not on screen, by label too, or a stream, and changes nothing', async () => {
+    it('refuses a tile that is not on screen, by label too, and changes nothing', async () => {
       await expect(runTool('edit_tile', { tile: 'nothing', props: {} })).rejects.toThrow('No tile nothing is on screen. Name tiles by the ids app_state lists, such as tile-3.');
       await expect(runTool('edit_tile', { tile: 'Pit 44', props: { driver: 'GAS' } })).rejects.toThrow(/No tile Pit 44 is on screen/);
-      await expect(runTool('edit_tile', { tile: ids[0], props: {} })).rejects.toThrow(`${ids[0]} is a stream: only a component's props can be changed`);
       expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1']);
+    });
+
+    it("swaps a stream tile's onboard for another driver's in place, and it keeps its id, place and the main place", async () => {
+      host.layout.setMain({ tile: ids[0] });
+      const rect = () => layout.tiles().find((t) => t.id === ids[0])!;
+      const { x, y, w, h } = rect();
+      expect(await runTool('edit_tile', { tile: ids[0], stream: 'Norris' })).toBe('Changed: NOR.');
+      expect(tiles()[0]).toEqual({ id: ids[0], label: 'NOR', props: { feed: '1:4' } });
+      expect(rect()).toMatchObject({ x, y, w, h });
+      expect(read().layout.main).toBe(ids[0]);
+    });
+
+    it('refuses a stream tile given props, no stream, one that matches none or one already on screen, and changes nothing', async () => {
+      const [ver] = host.layout.add({ items: [{ type: 'video', props: { feed: '1:1' } }] });
+      await expect(runTool('edit_tile', { tile: ids[0], props: { driver: 'VER' } })).rejects.toThrow(`${ids[0]} is a stream: give stream`);
+      await expect(runTool('edit_tile', { tile: ids[0], stream: 'VER', props: { feed: 'x' } })).rejects.toThrow(/is a stream, which has no props/);
+      await expect(runTool('edit_tile', { tile: ids[0], stream: 'Senna' })).rejects.toThrow(/No stream matches "Senna"/);
+      await expect(runTool('edit_tile', { tile: ids[0], stream: 'VER' })).rejects.toThrow(`VER is already on screen in ${ver}`);
+      await expect(runTool('edit_tile', { tile: ids[3], stream: 'VER' })).rejects.toThrow(/is a component, not a stream/);
+      expect(tiles().map((t) => t.label)).toEqual(['HAM', 'Field all/44', 'Pit 44', 'Pit 1', 'VER']);
     });
 
     it('refuses props that do not fit, or a chart that is already on screen', async () => {
