@@ -391,7 +391,9 @@ export function CommandPalette() {
       if (command && (!rest || command.takesText)) {
         palette.push('user', rest ? `${command.name} ${rest}` : command.name);
         // Typed in full, since the list doesn't offer it without a session.
-        if (!availableCommands().includes(command)) palette.push('system', `${command.name} works on a session: open one first, like "last race".`);
+        if (!availableCommands().includes(command)) {
+          palette.push('system', command.needsOpen ? 'No session is open.' : `${command.name} works on a session: open one first, like "last race".`);
+        }
         else {
           host.telemetry.track('command_used', { command: command.name as (typeof COMMANDS)[number] });
           void command.run(rest);
