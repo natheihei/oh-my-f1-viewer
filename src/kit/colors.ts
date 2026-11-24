@@ -31,6 +31,8 @@ const TOKENS = {
    */
   gain: '#5fb57c',
   loss: '#d9b84a',
+  /** The fastest of anyone in the session, as F1's timing marks it, toned down as the others are. */
+  purple: '#a77bd6',
 };
 
 export type Theme = typeof TOKENS;
