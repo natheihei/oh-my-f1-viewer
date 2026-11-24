@@ -23,8 +23,9 @@ It runs on Cloudflare Workers: `main` builds staging (only the owner can open it
 | `src/pages/` | One file per route: `index.astro`, `download.astro`, `404.astro` |
 | `src/layouts/Base.astro` | `<head>`, meta and Open Graph tags, global CSS |
 | `src/components/` | Page sections, top to bottom: `Header`, `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
-| `src/components/HeroReel.astro`, `Palette.astro` | The hero's reel, and the app's palette a reel types prompts into |
-| `src/scripts/reel.ts` | What the hero and `Moment` share to tell a story in frames: the clock with its pause button, typing into the palette, and switching frames |
+| `src/components/HeroReel.astro` | The hero's reel: three screen recordings on Vimeo, played in turn, each after its caption is typed on a card, with a tab for each under them |
+| `src/components/Palette.astro` | The app's palette, which `Moment`'s reel types prompts into |
+| `src/scripts/reel.ts` | What the hero and `Moment` share: the clock with its pause button, which holds off screen. `Moment` also types into the palette and switches frames with it |
 | `src/site.ts` | Where Download and "Star on GitHub" go, the platforms a release builds for, and team colours |
 | `src/release.ts` | The latest app release for `/download`: read from GitHub as the site builds, and again in the browser, since the app is released apart from the site |
 | `src/assets/` | Images Astro optimises (import them) |
