@@ -23,7 +23,7 @@ It runs on Cloudflare Workers: `main` builds staging (only the owner can open it
 | `src/pages/` | One file per route: `index.astro`, `download.astro`, `404.astro` |
 | `src/layouts/Base.astro` | `<head>`, meta and Open Graph tags, global CSS |
 | `src/components/` | Page sections, top to bottom: `Header`, `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
-| `src/components/HeroReel.astro` | The hero's reel: three screen recordings on Vimeo, played in turn, each after its caption is typed on a card. Toned down in a narrower frame, with a thin progress bar and caption for each under them |
+| `src/components/HeroReel.astro` | The hero's reel: three screen recordings on Vimeo, played in turn, each after its caption is typed on a card. In a narrower frame, with a thin progress bar and caption for each under them |
 | `src/components/Palette.astro` | The app's palette, which `Moment`'s reel types prompts into |
 | `src/scripts/reel.ts` | What the hero and `Moment` share: the clock with its pause button, which holds off screen. `Moment` also types into the palette and switches frames with it |
 | `src/site.ts` | Where Download, "Star on GitHub", X and Discord go (Discord shows only once its invite is set), the platforms a release builds for, and team colours |
