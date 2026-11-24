@@ -8,14 +8,21 @@ export const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 /**
  * A reel's clock. It plays on its own, with a button to pause it, and holds while it's off screen or the tab is hidden.
  * Under reduced motion it starts paused. `what` names the reel for the button's label, as in "Pause the screenshots".
+ * `onChange` hears each time it starts or stops playing, for a reel that plays video rather than waiting.
  */
-export function clock(reel: HTMLElement, toggle: HTMLButtonElement, what: string) {
+export function clock(reel: HTMLElement, toggle: HTMLButtonElement, what: string, onChange?: (running: boolean) => void) {
   let paused = reduce;
   let visible = true;
   let wake: (() => void) | null = null;
+  let was: boolean | null = null;
   const running = () => !paused && visible && !document.hidden;
   const resume = () => {
-    if (running() && wake) {
+    const now = running();
+    if (now !== was) {
+      was = now;
+      onChange?.(now);
+    }
+    if (now && wake) {
       wake();
       wake = null;
     }
@@ -44,7 +51,7 @@ export function clock(reel: HTMLElement, toggle: HTMLButtonElement, what: string
     await new Promise((r) => setTimeout(r, ms));
     await ready();
   };
-  return { ready, wait };
+  return { ready, wait, setPaused };
 }
 
 /** Types a prompt into a reel's palette the way the app shows it, and sends it. */

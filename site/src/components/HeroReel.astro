@@ -1,94 +1,242 @@
 ---
 /**
- * The hero: real screenshots of the app, each after its prompt is typed into the palette, the way the app draws it.
- * The prompt types on an empty screen of its own, Enter sends it, the app's "…" pulses while the agent works, and the
- * screenshot it got fades in. Then the next.
- * Without JavaScript it's the first screenshot. Under reduced motion it starts paused, and prompts appear whole.
+ * The hero: three screen recordings of the app on Vimeo, played one after the other, muted. Before each, its caption
+ * types on a card of its own, as a prompt after the red ">" with the block cursor, then the video fades in under it. Under them, a tab for each with its caption and how
+ * far it's played; pressing one plays that video, after its card. Each is an ordinary Vimeo player, so its own
+ * controls can unmute it, seek or go full screen.
+ * Without JavaScript it's the first video's player, to play by hand. Under reduced motion it starts paused on the
+ * first video, with no card, and cards come and go without fading, their captions whole.
  */
-import { Image } from 'astro:assets';
-import Palette from './Palette.astro';
-import battle from '../assets/shots/page/hero-battle.webp';
-import onboards from '../assets/shots/page/hero-onboards.webp';
-import lead from '../assets/shots/page/hero-lead.webp';
-import charts from '../assets/shots/page/hero-charts.webp';
-import build from '../assets/shots/page/hero-build.webp';
 
-// Each prompt is the one that was typed into the app for that screenshot (see shots/hero/SHOTS.md).
-const slides = [
-  {
-    img: battle,
-    prompt: 'The battle between HAM and VER, with their telemetry',
-    alt: "Asked for the battle between Hamilton and Verstappen, on the 2026 Canadian Grand Prix: the world feed, both onboards, the gap between them and each car's speed, gear and pedals.",
-  },
-  {
-    img: onboards,
-    prompt: 'Onboards of the top 10, and jump to 10 seconds before lights out',
-    alt: 'Asked for the onboards of the top 10, ten seconds before lights out at the 2026 Mexico City Grand Prix: the grid formed up under five red lights, and ten onboards.',
-  },
-  {
-    img: build,
-    prompt: '/build onboard of whoever\'s pitting. An overlay of "[DRIVER] pitting" in the center.',
-    alt: "In build mode, asked for the onboard of whoever's pitting with their name over it: the agent wrote the tile, and its draft, framed in yellow, shows Russell's onboard in the pit lane under \"RUS pitting\".",
-  },
-  {
-    img: lead,
-    prompt: 'the battle for the race lead',
-    alt: 'Asked for the battle for the race lead, on lap 49 in Mexico City: the world feed, and the battle tile with Verstappen and Hamilton 0.6 s apart for P1, over a list of every fight on track.',
-  },
-  {
-    img: charts,
-    prompt: 'All charts focusing on HAM vs. LEC',
-    alt: 'Asked for all charts on Hamilton against Leclerc: both onboards and fifteen charts, from pit windows and the gap to speed ribbons, pedals, sectors, tyres and the track map.',
-  },
+// The account is on Vimeo's free plan, so the player can't hide its controls or branding (that's background mode, Plus and up).
+// `h` is each unlisted video's privacy hash. The last one is about /build, so its tab is in build mode's yellow.
+const videos = [
+  { id: '1249500655', h: '1552152cc9', caption: 'Lights out, with onboards and charts ready' },
+  { id: '1249504015', h: '7a8c001b9d', caption: 'Every insight, asked and answered' },
+  { id: '1249501273', h: 'abe4156f96', caption: 'Your F1 viewer, made to order', build: true },
 ];
+
+const src = (v: (typeof videos)[number]) =>
+  `https://player.vimeo.com/video/${v.id}?${new URLSearchParams({
+    h: v.h,
+    muted: '1',
+    autoplay: '0',
+    loop: '0',
+    autopause: '0',
+    playsinline: '1',
+    title: '0',
+    byline: '0',
+    portrait: '0',
+    dnt: '1',
+  })}`;
 ---
 
 <div class="flex flex-col gap-2.5">
-  <div class="reel shot" data-hero-reel>
+  <!-- The recordings are 1600×1026 (the app's window), not 16:9, so the frame matches them and has no black bars -->
+  <div class="reel shot" style="aspect-ratio: 1600 / 1026" data-hero-reel>
     {
-      slides.map((s, i) => (
-        <Image
-          src={s.img}
-          alt={s.alt}
-          widths={[800, 1240, 1600, 2400]}
-          sizes="(min-width: 1240px) 1208px, calc(100vw - 32px)"
+      videos.map((v, i) => (
+        <iframe
+          src={src(v)}
+          title={`OMFV: ${v.caption}`}
+          allow="autoplay; fullscreen; picture-in-picture"
+          referrerpolicy="strict-origin-when-cross-origin"
           loading={i ? 'lazy' : 'eager'}
-          fetchpriority={i ? undefined : 'high'}
-          class:list={['reel-img', { on: i === 0 }]}
-          data-prompt={s.prompt}
+          class:list={['reel-video', { on: i === 0 }]}
         />
       ))
     }
-    <Palette />
+    <div class="reel-card" aria-hidden="true" data-hero-card>
+      <p class="reel-card-prompt mono">
+        <span class="text-signal">&gt;</span> <span data-card-caption></span><span class="cursor"></span>
+      </p>
+    </div>
   </div>
-  <div class="mono flex justify-end text-xs">
-    <button type="button" class="reel-toggle" data-hero-toggle aria-pressed="false">pause</button>
+  <div class="flex items-start gap-4">
+    <div class="reel-tabs mono" role="group" aria-label="Videos">
+      {
+        videos.map((v, i) => (
+          <button
+            type="button"
+            class:list={['reel-tab', { on: i === 0, 'reel-tab-build': v.build }]}
+            aria-pressed={i === 0 ? 'true' : 'false'}
+            data-hero-tab
+            data-caption={v.caption}
+          >
+            <span class="reel-tab-bar" aria-hidden="true" />
+            {v.caption}
+          </button>
+        ))
+      }
+    </div>
+    <button type="button" class="reel-toggle mono shrink-0 text-xs" data-hero-toggle aria-pressed="false">pause</button>
   </div>
 </div>
 
+<style>
+  /* The caption card over the reel. It's sized off the reel's width (the reel is a size container), so it reads the
+     same from a phone to a wide screen */
+  .reel-card {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 8cqw;
+    background: #0d0d0d;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .reel-card.on {
+    opacity: 1;
+  }
+  /* Typed like the prompt under the headline, but small, so it doesn't compete with it */
+  .reel-card-prompt {
+    margin: 0;
+    /* A wrapped line starts under the caption, not the ">" */
+    padding-left: 2ch;
+    text-indent: -2ch;
+    font-size: max(14px, 2.4cqw);
+    font-weight: 700;
+    line-height: 1.35;
+    color: #e7e7e7;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reel-card {
+      transition: none;
+    }
+  }
+
+  /* The three tabs sit in a row, each with a bar over it that fills as its video plays */
+  .reel-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .reel-tab {
+    --p: 0;
+    --accent: var(--color-signal);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 0 4px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #8f8f8f;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .reel-tab-build {
+    --accent: var(--color-build);
+  }
+  .reel-tab:hover,
+  .reel-tab.on {
+    color: #e7e7e7;
+  }
+  .reel-tab-bar {
+    display: block;
+    height: 2px;
+    background: linear-gradient(var(--accent), var(--accent)) left / calc(var(--p) * 100%) 100% no-repeat, #2c2c2c;
+  }
+</style>
+
 <script>
-  import { clock, palette, showFrame } from '../scripts/reel';
+  import Player from '@vimeo/player';
+  import { clock, reduce } from '../scripts/reel';
 
   const reel = document.querySelector<HTMLElement>('[data-hero-reel]');
   const toggle = document.querySelector<HTMLButtonElement>('[data-hero-toggle]');
   if (reel && toggle) {
-    const imgs = [...reel.querySelectorAll<HTMLImageElement>('.reel-img')];
-    const { ready, wait } = clock(reel, toggle, 'the screenshots');
-    const pal = palette(reel.querySelector<HTMLElement>('[data-palette]')!, wait);
+    const frames = [...reel.querySelectorAll<HTMLIFrameElement>('.reel-video')];
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-hero-tab]')];
+    const card = reel.querySelector<HTMLElement>('[data-hero-card]')!;
+    const cardCaption = card.querySelector<HTMLElement>('[data-card-caption]')!;
+    const players = frames.map((f) => new Player(f));
+    let at = 0;
+    // Whether the reel is playing: not paused, on screen, and the tab showing
+    let want = false;
+    // While a caption card is up, the video under it waits at its start
+    let carding = false;
+    // Each change of video takes a number, so a card still holding for one that's been left lets it go
+    let turn = 0;
 
-    const play = async (i: number) => {
-      // Paused on the screenshot it's showing, with nothing over it
-      await ready();
-      // An empty screen, the prompt typed and sent, then what it got
-      showFrame(imgs, -1);
-      await pal.ask(imgs[i].dataset.prompt ?? '');
-      showFrame(imgs, i);
-      pal.hide();
-      await wait(5200);
+    const sync = () => {
+      const p = players[at];
+      (want && !carding ? p.play() : p.pause()).catch(() => {
+        // The browser wouldn't autoplay it (Low Power Mode, say): leave it paused for the viewer to press play
+        if (want) setPaused(true);
+      });
     };
 
-    (async () => {
-      for (let i = 0; ; i = (i + 1) % imgs.length) await play(i);
-    })();
+    const { setPaused, wait } = clock(reel, toggle, 'the videos', (running) => {
+      want = running;
+      sync();
+    });
+
+    /** Puts video i up, cued to its start, and stops the one that was playing */
+    const show = (i: number) => {
+      const old = players[at];
+      at = i;
+      if (old !== players[i]) old.pause().catch(() => {});
+      frames.forEach((f, j) => f.classList.toggle('on', j === i));
+      tabs.forEach((t, j) => {
+        t.classList.toggle('on', j === i);
+        t.setAttribute('aria-pressed', String(j === i));
+        t.style.setProperty('--p', '0');
+      });
+      players[i].setCurrentTime(0).catch(() => {});
+    };
+
+    /** Video i: its caption typed on a card while the video cues under it, a beat to read it, then the video */
+    const go = async (i: number) => {
+      const mine = ++turn;
+      carding = true;
+      show(i);
+      sync();
+      const caption = tabs[i].dataset.caption ?? '';
+      cardCaption.textContent = reduce ? caption : '';
+      card.classList.add('on');
+      if (!reduce) {
+        await wait(400);
+        for (let n = 1; n <= caption.length; n++) {
+          if (mine !== turn) return;
+          cardCaption.textContent = caption.slice(0, n);
+          await wait(28 + Math.random() * 30);
+        }
+      }
+      await wait(1300);
+      if (mine !== turn) return;
+      card.classList.remove('on');
+      carding = false;
+      sync();
+    };
+
+    players.forEach((p, i) => {
+      // Only the current one: a player just stopped can report its time once more, after its bar was cleared
+      p.on('timeupdate', ({ percent }) => i === at && tabs[i].style.setProperty('--p', String(percent)));
+      p.on('ended', () => i === at && go((i + 1) % players.length));
+      // Played or paused with the player's own controls: the pause button follows
+      p.on('play', () => i === at && !carding && !want && setPaused(false));
+      p.on('pause', async () => {
+        if (i !== at || carding || !want) return;
+        if (!(await p.getEnded().catch(() => false))) setPaused(true);
+      });
+    });
+
+    tabs.forEach((t, i) =>
+      t.addEventListener('click', () => {
+        // The card first, so playing again doesn't start the old video for a moment
+        go(i);
+        setPaused(false);
+      }),
+    );
+
+    // The first video opens on its card, unless it starts paused: then it's the video, ready to play
+    if (want) go(0);
+    else sync();
   }
 </script>
