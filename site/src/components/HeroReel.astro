@@ -1,7 +1,7 @@
 ---
 /**
  * The hero: three screen recordings of the app on Vimeo, played one after the other, muted, in a frame a little
- * narrower than the page. They're toned down so they sit behind the headline, and come up to full when pointed at.
+ * narrower than the page, at full colour so they stand out.
  * Before each, its caption types on a card of its own, as a prompt after the red ">" with the block cursor, then the
  * video fades in under it. Under them, a thin bar for each with its caption, filling as it plays; pressing one plays
  * that video, after its card. Each is an ordinary Vimeo player, so its own controls can unmute it, seek or go full
@@ -128,23 +128,6 @@ const src = (v: (typeof videos)[number]) =>
     box-shadow:
       0 0 0 1px rgb(255 255 255 / 0.02),
       0 40px 90px -30px rgb(0 0 0 / 0.9);
-  }
-
-  /* Toned down, so it sits behind the headline. Pointing at it, or tabbing into it, brings it back to full */
-  .reel-video {
-    filter: saturate(0.85) brightness(0.92);
-    transition:
-      opacity 0.7s ease,
-      filter 0.4s ease;
-  }
-  .hero-frame:hover .reel-video,
-  .hero-frame:focus-within .reel-video {
-    filter: none;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .reel-video {
-      transition: none;
-    }
   }
 
   /* The three bars sit in a row, each with its caption under it, small and dim until it's the one playing */
