@@ -4,10 +4,11 @@ import Ticker from './Ticker.astro';
 import draft from '../assets/shots/page/b1-draft.webp';
 import badge from '../assets/ferrari-badge.png';
 
+// Things to follow that no tile shows, so the agent offers to build one (see docs/BUILD_MODE.md, "Offered from view mode")
 const prompts = [
   "show whoever's pitting",
+  'track how often NOR opens DRS',
   "always show the leader's onboard",
-  'buttons to skip a lap',
   'the gap to the car behind, on every onboard',
 ];
 const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
@@ -17,11 +18,13 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
   <div class="wrap flex flex-wrap items-center gap-x-16 gap-y-12">
     <div class="flex min-w-0 flex-[1_1_420px] flex-col gap-[22px]">
       <p class="eyebrow" style="color: #3d3400">
-        <b style="color: #0d0d0d">›</b> <span class="font-bold text-ink">/build</span>
+        <b style="color: #0d0d0d">›</b>
         <Ticker prompts={prompts} offset={9} />
       </p>
-      <h2 class="disp h2 text-ink">Want a view that isn't here? Ask the agent to build it.</h2>
-      <p class="lead" style="color: #2b2500">Describe what you want. It runs on the race you're watching, and you can keep it or undo it.</p>
+      <h2 class="disp h2 text-ink">No chart for it? The agent builds one.</h2>
+      <p class="lead" style="color: #2b2500">
+        Ask to follow something no chart shows, and the agent builds one for you.
+      </p>
       <div class="hand text-ink" style="font-size: 30px">
         <p class="m-0">no code needed</p>
         <p class="m-0 mt-2 flex items-center gap-3 font-bold" style="color: #e8002d">
@@ -32,22 +35,29 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
     </div>
 
     <div class="build-shot min-w-0 flex-[1_1_560px]" style="filter: drop-shadow(0 18px 40px rgba(60, 45, 0, 0.35))">
+      <!-- Points down at the draft tile, top right in the crop -->
+      <p class="hand build-note text-ink" aria-hidden="true">the agent built this ↓</p>
       <Image
         src={draft}
         alt="Build mode on the 2026 Mexico City Grand Prix, under the safety car: a new tile, framed in yellow and marked DRAFT, shows Russell's onboard in the pit lane with 'RUS pitting' over it."
-        widths={[680, 1360, 1780]}
+        widths={[680, 1360]}
         sizes={sizes}
         class="shot"
         style="border-color: #0d0d0d"
       />
-      <!-- The build palette as it was for this shot (3b in shots/hero/SHOTS.md), drawn here so its text is sharp -->
+      <!-- The palette for this shot (3b in shots/hero/SHOTS.md), drawn here so its text is sharp. It's the way in the app
+           takes when the viewer just asks: the agent finds no tile for it and offers build mode, the viewer says yes (the offer
+           goes once answered), and the build agent starts on what was asked -->
       <div class="bp mono">
-        <div class="bp-row bp-said"><span class="bp-mark">&gt;</span><span>/build</span></div>
+        <div class="bp-row bp-said">
+          <span class="bp-mark">&gt;</span><span>show whoever's pitting, with their name over the onboard</span>
+        </div>
+        <div class="bp-row"><span></span><span>No tile follows the pit lane. Offered to build one.</span></div>
         <div class="bp-row bp-note">
           <span>#</span><span>Build mode. Save keeps what gets built, Undo all puts everything back.</span>
         </div>
-        <div class="bp-row bp-said">
-          <span class="bp-mark">&gt;</span><span>onboard of whoever's pitting. An overlay of <span class="whitespace-nowrap">"[DRIVER] pitting"</span> in the center.</span>
+        <div class="bp-row bp-note">
+          <span>#</span><span>Asked the build agent to build an onboard of whoever's pitting.</span>
         </div>
         <div class="bp-row bp-note"><span>#</span><span>wrote pitting_onboard/main.tsx · loaded</span></div>
         <div class="bp-row">
@@ -63,8 +73,9 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
 </section>
 
 <style>
-  /* The screenshot, with the build palette over its left side where the app drew it. A size container, so the
-     palette's type scales with the picture; when that's too small to read, the palette goes under it */
+  /* The screenshot, cropped so the built tile is large at its top right, with the palette over the main feed to its left.
+     The palette stops short of the tile's left edge (57% across), so however tall it wraps it never covers it. A size container, so the palette's type scales with the picture; when that's too small to read, the palette
+     goes under it */
   .build-shot {
     position: relative;
     container-type: inline-size;
@@ -73,7 +84,7 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
     position: absolute;
     left: 1.5%;
     bottom: 2.5%;
-    width: 66%;
+    width: 54%;
     padding-top: 0.25em;
     background: #1a1a1a;
     border: 1px solid #ffd12e;
@@ -81,6 +92,14 @@ const sizes = '(min-width: 1240px) 680px, calc(100vw - 32px)';
     font-size: clamp(9px, 1.8cqw, 13px);
     line-height: 1.5;
     color: #e7e7e7;
+  }
+  /* Over the right side, so its arrow lands on the tile */
+  .build-note {
+    margin: 0 0 6px;
+    padding-right: 14%;
+    text-align: right;
+    font-size: 26px;
+    line-height: 1;
   }
   /* Every row has a column for its mark (> said, # from the app), so text and its wrapped lines line up */
   .bp-row {
