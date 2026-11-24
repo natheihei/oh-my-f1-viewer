@@ -2,7 +2,7 @@
 
 /* The app's own look: one dark page, with the prompt (red arrow, block cursor) as the one bold device.
    ground #0d0d0d · panel #161616 · tile #000 · line #2c2c2c · ink #e7e7e7 · dim #8f8f8f
-   red #ff3b30 is for asking and spoilers, yellow #ffd12e for /build only, Ferrari red #e8002d for the radio line in #build. */
+   red #ff3b30 is for asking and spoilers, yellow #ffd12e for /build only. */
 @theme {
   --color-ink: #0d0d0d;
   --color-paper: #e7e7e7;
@@ -74,21 +74,6 @@
     }
   }
 
-  /* A driver or team as the app draws one: a bar in its colour and the code */
-  .code {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-family: var(--font-mono);
-    font-weight: 700;
-    color: #e7e7e7;
-  }
-  .code i {
-    display: inline-block;
-    width: 3px;
-    height: 11px;
-  }
-
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 13px;
@@ -108,15 +93,6 @@
     color: #b9b9b9;
     max-width: 60ch;
     margin: 0;
-  }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: #cfcfcf;
-    background: #161616;
-    border: 1px solid #2c2c2c;
-    padding: 5px 9px;
-    white-space: nowrap;
   }
   .btn {
     display: inline-flex;
@@ -168,22 +144,6 @@
     background: rgb(255 209 46 / 0.07);
     border-color: var(--color-build);
   }
-  .card {
-    background: #111;
-    border: 1px solid #232323;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  /* A screenshot of the app, framed like a window */
-  .shot {
-    display: block;
-    width: 100%;
-    height: auto;
-    border: 1px solid #2c2c2c;
-    background: #000;
-  }
-
   .cursor {
     display: inline-block;
     width: 0.5em;
@@ -195,106 +155,6 @@
   @keyframes blink {
     50% {
       opacity: 0;
-    }
-  }
-
-  /* Section prompts roll through four examples, then the first again so the loop has no jump */
-  .tick {
-    display: inline-block;
-    height: 1.6em;
-    overflow: hidden;
-    vertical-align: bottom;
-  }
-  .tick-track {
-    display: flex;
-    flex-direction: column;
-    animation: tick 12s infinite;
-  }
-  .tick-track span {
-    display: block;
-    height: 1.6em;
-    line-height: 1.6em;
-    white-space: nowrap;
-  }
-  @keyframes tick {
-    0%,
-    21% {
-      transform: translateY(0);
-    }
-    25%,
-    46% {
-      transform: translateY(-1.6em);
-    }
-    50%,
-    71% {
-      transform: translateY(-3.2em);
-    }
-    75%,
-    96% {
-      transform: translateY(-4.8em);
-    }
-    100% {
-      transform: translateY(-6.4em);
-    }
-  }
-
-  /* Two frames of one moment, the second fading in over the first: the ask, then what it did */
-  .pair {
-    display: grid;
-  }
-  .pair > * {
-    grid-area: 1 / 1;
-  }
-  .pair > :last-child {
-    animation: pair 9s infinite;
-  }
-  @keyframes pair {
-    0%,
-    40% {
-      opacity: 0;
-    }
-    48%,
-    92% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-    }
-  }
-
-  /* Chart gallery: two rows that drift in opposite directions and loop. Each track holds its cards four times, and moves by one copy */
-  .marquee {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-top: 40px;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-  }
-  .marquee-row {
-    overflow: hidden;
-  }
-  .marquee-track {
-    display: flex;
-    gap: 16px;
-    padding-right: 16px;
-    width: max-content;
-    animation: marq 70s linear infinite;
-  }
-  .marquee-track.rev {
-    animation-direction: reverse;
-  }
-  .marquee-row:hover .marquee-track,
-  .marquee-row:focus-within .marquee-track {
-    animation-play-state: paused;
-  }
-  @keyframes marq {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-25%);
     }
   }
 
@@ -345,88 +205,8 @@
     display: block;
   }
 
-  /* A prompt as you'd type it in the app */
-  .say {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: #e7e7e7;
-    background: #000;
-    border: 1px solid #2c2c2c;
-    padding: 2px 8px;
-    white-space: nowrap;
-    display: inline-flex;
-    gap: 8px;
-  }
-  .say b {
-    color: #ff3b30;
-  }
-
-  /* A story told in frames of the app (scripts/reel.ts). The frames stack, and the one that's on fades in. It's a size
-     container, so the palette typed into between frames scales with it */
-  .reel {
-    position: relative;
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-    container-type: inline-size;
-  }
-  .reel-img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 0.7s ease;
-  }
-  .reel-img.on {
-    opacity: 1;
-  }
-  /* A reel of videos (HeroReel.astro): the players stack the same way, and only the one that's on takes clicks */
-  .reel-video {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: 0;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.7s ease;
-  }
-  .reel-video.on {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .reel-toggle {
-    color: #8f8f8f;
-    background: none;
-    border: 0;
-    padding: 4px 2px;
-    min-height: 32px;
-    cursor: pointer;
-  }
-  .reel-toggle:hover {
-    color: #e7e7e7;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .reel-img,
-    .reel-video {
-      transition: none;
-    }
-    .cursor,
-    .tick-track,
-    .marquee-track {
-      animation: none;
-    }
-    .marquee-row {
-      overflow-x: auto;
-    }
-    /* Both frames, one under the other */
-    .pair {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .pair > :last-child {
+    .cursor {
       animation: none;
     }
   }

@@ -22,14 +22,12 @@ It runs on Cloudflare Workers: `main` builds staging (only the owner can open it
 | --- | --- |
 | `src/pages/` | One file per route: `index.astro`, `download.astro`, `404.astro` |
 | `src/layouts/Base.astro` | `<head>`, meta and Open Graph tags, global CSS |
-| `src/components/` | Page sections, top to bottom: `Header`, `Hero`, `Ask`, `Moment`, `Charts`, `Build`, `More`, `Need`, `Footer` |
-| `src/components/HeroReel.astro` | The hero's reel: three screen recordings on Vimeo, played in turn, each after its caption is typed on a card. In a narrower frame, with a thin progress bar and caption for each under them |
-| `src/components/Palette.astro` | The app's palette, which `Moment`'s reel types prompts into |
-| `src/scripts/reel.ts` | What the hero and `Moment` share: the clock with its pause button, which holds off screen. `Moment` also types into the palette and switches frames with it |
-| `src/site.ts` | Where Download, "Star on GitHub", X and Discord go (Discord shows only once its invite is set), the platforms a release builds for, and team colours |
+| `src/components/` | Page sections, top to bottom: `Header`, `Hero`, `Story`, `Need`, `Footer` |
+| `src/components/Story.astro` | What the app does, in four steps: each a headline over a screen recording on Vimeo that plays by itself and loops |
+| `src/site.ts` | Where Download, "Star on GitHub", X and Discord go (Discord shows only once its invite is set) and the platforms a release builds for |
 | `src/release.ts` | The latest app release for `/download`: read from GitHub as the site builds, and again in the browser, since the app is released apart from the site |
 | `src/assets/` | Images Astro optimises (import them) |
-| `src/assets/shots/page/` | The crops the page uses, from the raw shots on the `assets/landing-shots` branch (see `shots/hero/SHOTS.md`) |
+| `src/assets/shots/` | Notes from collecting screenshots for the page: race moments worth showing, and the raw shots on the `assets/landing-shots` branch. The page no longer uses the shots |
 | `src/styles/global.css` | Tailwind import and `@theme` tokens |
 | `public/` | Copied as-is: favicon, OG image |
 | `wrangler.jsonc` | The production and staging Workers and their domains. See [DEPLOY.md](DEPLOY.md) |
