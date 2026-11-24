@@ -147,6 +147,26 @@
     color: #fff;
     border-color: #e7e7e7;
   }
+  /* A social link in the header, as its mark alone */
+  .social {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+    color: #8f8f8f;
+  }
+  .social:hover {
+    color: #e7e7e7;
+  }
+  /* The ask for a star: the one touch of yellow beside Download, still second to it */
+  .btn-star {
+    border-color: rgb(255 209 46 / 0.45);
+  }
+  .btn-star:hover {
+    background: rgb(255 209 46 / 0.07);
+    border-color: var(--color-build);
+  }
   .card {
     background: #111;
     border: 1px solid #232323;
@@ -278,6 +298,12 @@
   }
 
   /* The maker's handwriting in the margins */
+  /* The star drawn in a handwritten note, in place of the word (Star.astro) */
+  .star {
+    display: inline-block;
+    color: var(--color-build);
+    vertical-align: -0.02em;
+  }
   .hand {
     font-family: var(--font-hand);
     font-weight: 500;
