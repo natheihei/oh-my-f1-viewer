@@ -11,7 +11,7 @@ Page slots:
 
 - [x] **H1 · hero.** Now three screen recordings on Vimeo, set in `HeroReel.astro`, not screenshots. It used to rotate shots 8b, 1, 3b, 5b and 2, each after its prompt was typed.
 - [x] **M1 · spoiler check, then the jump.** Shots 6d and 6e, cropped to 16:9 with the seek bar. The section plays them as screens: the race on lap 22 (6d), dimmed while the prompt types and the spoiler check is answered, then Verstappen on Hamilton on lap 37 (6e), then a beat of black before it starts over. The palette between them is drawn by the page, so shots 6a, 6b and 6c aren't used.
-- [x] **B1 · build draft.** Shot 3b, cropped to the draft tile, with the build palette drawn by the page over its left side so the text is sharp. The Save frame (shot 4) isn't used.
+- [x] **B1 · build draft.** Shot 3b, cropped to its right 1400×960 so the draft tile is large at the top right, with the palette drawn by the page under the tile so the text is sharp. The palette shows the way in from view mode: the viewer asks, and the agent offers build mode. The Save frame (shot 4) isn't used.
 - [x] **S1 · suggestion strip with live previews.** Shot 7.
 - [x] **X1 · point at anything.** [x1-mention.png](https://github.com/natheihei/oh-my-f1-viewer/blob/assets/landing-shots/x1-mention.png?raw=true). Asked as `how is @Ferrari doing against @Mercedes on the @gap` instead of `how is HAM vs @Ferrari`, since HAM drives for Ferrari in 2026, and only a tile tag lights a tile.
 - [ ] **X3 · live races.** Waits for a live weekend.

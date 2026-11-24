@@ -26,7 +26,6 @@ const base = home ? '' : '/';
   </a>
   <nav class="mono flex flex-wrap items-center gap-6 text-[13px]">
     <a href={`${base}#ask`} class="text-[#b9b9b9] no-underline">Features</a>
-    <a href={`${base}#build`} class="text-build no-underline">/build</a>
     <a href={REPO_HREF} class="flex items-center gap-2 text-[#b9b9b9] no-underline hover:text-paper"><GitHubMark size={15} />GitHub</a>
     <!-- On a phone the hero's own Download is just below, so the bar keeps to one row. The download page has no need of it -->
     <span class:list={['max-sm:hidden', { hidden: Astro.url.pathname.startsWith(DOWNLOAD_HREF) }]}
