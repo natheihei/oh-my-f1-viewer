@@ -20,6 +20,38 @@
   <a href="https://oh-my-f1-viewer.yueyao.run/download">Install</a>
 </p>
 
+## See it in action
+
+What you type, then what you get. From the 2026 Las Vegas Grand Prix.
+
+### Say what you want to watch. It sets up the screen.
+
+<p>
+  <img src="docs/readme/1-ask-prompt.jpg" width="49%" alt="The palette over the race, with the prompt typed: HAM and LEC battle and trackmap highlight them">
+  <img src="docs/readme/1-ask-result.jpg" width="49%" alt="The race feed with Hamilton's and Leclerc's onboards, their gap chart and a track map with both cars lit, down the right">
+</p>
+
+### A growing gallery of charts.
+
+<p>
+  <img src="docs/readme/2-charts-prompt.jpg" width="49%" alt="The palette with the prompt typed: Bring up all charts for VER">
+  <img src="docs/readme/2-charts-result.jpg" width="49%" alt="The screen filled with charts for Verstappen: timing, tyres, pit window, telemetry, pedals, speed ribbon and track map, beside his onboard">
+</p>
+
+### No chart for it? The agent builds one.
+
+<p>
+  <img src="docs/readme/3-build-prompt.jpg" width="49%" alt="The palette with the prompt typed: Track the onboards of the top 5, and the gap in between them. In a vertical tile.">
+  <img src="docs/readme/3-build-result.jpg" width="49%" alt="Build mode: a new tile down the right shows the top five onboards in running order, each with the gap to the car ahead">
+</p>
+
+### Tweak it in your own words.
+
+<p>
+  <img src="docs/readme/4-tweak-prompt.jpg" width="49%" alt="The build-mode palette with the prompt typed: When a change of position happens, overlay the onboard with an arrow, use F1 colors (green/yellow)">
+  <img src="docs/readme/4-tweak-result.jpg" width="49%" alt="The top-five tile with a green up arrow on Russell's onboard for a place gained and a yellow down arrow on Hadjar's for one lost">
+</p>
+
 ## Features
 
 - **Ask in plain words.** Name a session, a driver or a battle, and the agent opens it and suggests the tiles to show.
