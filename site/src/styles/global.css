@@ -353,6 +353,21 @@
   .reel-img.on {
     opacity: 1;
   }
+  /* A reel of videos (HeroReel.astro): the players stack the same way, and only the one that's on takes clicks */
+  .reel-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.7s ease;
+  }
+  .reel-video.on {
+    opacity: 1;
+    pointer-events: auto;
+  }
   .reel-toggle {
     color: #8f8f8f;
     background: none;
@@ -366,7 +381,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .reel-img {
+    .reel-img,
+    .reel-video {
       transition: none;
     }
     .cursor,

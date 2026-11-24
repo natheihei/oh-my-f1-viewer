@@ -9,7 +9,7 @@ design canvas's `Main.dc.html`.
 
 Page slots:
 
-- [x] **H1 · hero.** The page rotates five, each after its prompt is typed: shots 8b, 1, 3b, 5b and 2. They're the ones with the palette closed, since the page types the prompt itself.
+- [x] **H1 · hero.** Now three screen recordings on Vimeo, set in `HeroReel.astro`, not screenshots. It used to rotate shots 8b, 1, 3b, 5b and 2, each after its prompt was typed.
 - [x] **M1 · spoiler check, then the jump.** Shots 6d and 6e, cropped to 16:9 with the seek bar. The section plays them as screens: the race on lap 22 (6d), dimmed while the prompt types and the spoiler check is answered, then Verstappen on Hamilton on lap 37 (6e), then a beat of black before it starts over. The palette between them is drawn by the page, so shots 6a, 6b and 6c aren't used.
 - [x] **B1 · build draft.** Shot 3b, cropped to the draft tile, with the build palette drawn by the page over its left side so the text is sharp. The Save frame (shot 4) isn't used.
 - [x] **S1 · suggestion strip with live previews.** Shot 7.
