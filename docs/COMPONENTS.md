@@ -159,7 +159,9 @@ The rules, as a component's author needs them. How the solver carries them out, 
 ### Colour
 
 - **Dark and square.** Black behind a chart, ink `#e7e7e7` for what's read, dim `#8a8a8a` for what's secondary, `#2c2c2c` for lines,
-  the app's monospace font. No rounded corners, shadows or gradients. `colors()` in the kit reads the tokens from `src/styles.css`.
+  the app's monospace font: Menlo on macOS, JetBrains Mono elsewhere. No rounded corners, shadows or gradients. `colors()` in the kit
+  reads the tokens from `src/styles.css`. In a canvas, the kit's text helpers draw in `MONO_FAMILY`, and `MONO_ADVANCE` is a
+  character's width as a share of the size, for widths worked out before there's a canvas.
 - **Red and yellow are taken.** Red means an error, a spoiler warning or a live session. Yellow marks build mode. Neither is used for
   emphasis, which is shown with ink and weight.
 - **Tyre colours are for tyres, team colours for drivers.** A driver's team colour is drawn as its code's bar, or as its line or dot

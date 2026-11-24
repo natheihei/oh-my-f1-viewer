@@ -285,8 +285,8 @@ describe('tyre_strategy', () => {
     });
 
     it('declares the size it reads at least and the most it draws', () => {
-      expect(tyres.size!.min).toEqual({ width: 364, height: 374 });
-      expect(tyres.fit).toEqual({ width: 652, height: 506 });
+      expect(tyres.size!.min).toEqual({ width: 365, height: 374 });
+      expect(tyres.fit).toEqual({ width: 653, height: 506 });
     });
   });
 });
@@ -362,8 +362,8 @@ describe('timing_tower', () => {
     });
 
     it('declares the size it reads at least and the most it draws', () => {
-      expect(tower.size!.min).toEqual({ width: 315, height: 376 });
-      expect(tower.fit).toEqual({ width: 396, height: 508 });
+      expect(tower.size!.min).toEqual({ width: 316, height: 376 });
+      expect(tower.fit).toEqual({ width: 397, height: 508 });
     });
   });
 

@@ -16,6 +16,7 @@ import {
   drawCode,
   type DriverStyle,
   hline,
+  MONO_ADVANCE,
   type Neutral,
   neutralOf,
   num,
@@ -123,13 +124,12 @@ const MIN_PITCH = 16;
 const MAX_PITCH = 22;
 const MAX_CARS = 22;
 const THUMBNAIL_BELOW = 150;
-const ADVANCE = 0.6;
 /** A margin under this is close enough that a good or bad stop decides it: set in ink. */
 const CLOSE = 1;
 
 function widthAt(columns: typeof COLUMNS, size: number, spacing: number): number {
-  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? ADVANCE : spacing), 0);
-  return chars * size * ADVANCE + PAD * 2;
+  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? MONO_ADVANCE : spacing), 0);
+  return chars * size * MONO_ADVANCE + PAD * 2;
 }
 const heightAt = (rows: number, pitch: number): number => HEAD + rows * pitch + PAD;
 
@@ -181,11 +181,11 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 
   const room = width - pad * 2;
   const chars = columns.reduce((s, col) => s + col.chars, 0);
-  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - ADVANCE * ch) / Math.max(1, columns.length - 2)));
+  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - MONO_ADVANCE * ch) / Math.max(1, columns.length - 2)));
   const edges = new Map<Key, { x0: number; x1: number }>();
   let at = pad;
   for (const col of columns) {
-    const gap = col.key === 'driver' ? ch * ADVANCE : spacing;
+    const gap = col.key === 'driver' ? ch * MONO_ADVANCE : spacing;
     if (at > pad) at += gap;
     edges.set(col.key, { x0: at, x1: at + col.chars * ch });
     at += col.chars * ch;
