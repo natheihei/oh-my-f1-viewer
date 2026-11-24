@@ -1,6 +1,8 @@
 ---
+import DiscordMark from './DiscordMark.astro';
 import GitHubMark from './GitHubMark.astro';
-import { DOWNLOAD_HREF, REPO_HREF } from '../site';
+import XMark from './XMark.astro';
+import { DISCORD_HREF, DOWNLOAD_HREF, REPO_HREF, X_HREF } from '../site';
 
 /** On the home page the links jump within it; anywhere else they go back to it first. */
 const home = Astro.url.pathname === '/';
@@ -24,8 +26,20 @@ const base = home ? '' : '/';
     </svg>
     <span class="mono text-[15px] font-bold">oh-my-f1-viewer</span>
   </a>
-  <nav class="mono flex flex-wrap items-center gap-6 text-[13px]">
+  <nav class="mono flex flex-wrap items-center gap-6 text-[13px] max-sm:gap-4">
     <a href={`${base}#ask`} class="text-[#b9b9b9] no-underline">Features</a>
+    <!-- X and Discord as their marks alone, dimmer than the rest, so GitHub stays the link that reads. On a phone
+         they'd push the bar to two rows, so they're left to the footer -->
+    <span class="flex items-center gap-4 max-sm:hidden">
+      <a href={X_HREF} class="social" aria-label="OMFV's maker on X"><XMark size={14} /></a>
+      {
+        DISCORD_HREF && (
+          <a href={DISCORD_HREF} class="social" aria-label="OMFV on Discord">
+            <DiscordMark size={16} />
+          </a>
+        )
+      }
+    </span>
     <a href={REPO_HREF} class="flex items-center gap-2 text-[#b9b9b9] no-underline hover:text-paper"><GitHubMark size={15} />GitHub</a>
     <!-- On a phone the hero's own Download is just below, so the bar keeps to one row. The download page has no need of it -->
     <span class:list={['max-sm:hidden', { hidden: Astro.url.pathname.startsWith(DOWNLOAD_HREF) }]}

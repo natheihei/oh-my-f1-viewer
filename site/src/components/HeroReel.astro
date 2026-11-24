@@ -1,9 +1,11 @@
 ---
 /**
- * The hero: three screen recordings of the app on Vimeo, played one after the other, muted. Before each, its caption
- * types on a card of its own, as a prompt after the red ">" with the block cursor, then the video fades in under it. Under them, a tab for each with its caption and how
- * far it's played; pressing one plays that video, after its card. Each is an ordinary Vimeo player, so its own
- * controls can unmute it, seek or go full screen.
+ * The hero: three screen recordings of the app on Vimeo, played one after the other, muted, in a frame a little
+ * narrower than the page. They're toned down so they sit behind the headline, and come up to full when pointed at.
+ * Before each, its caption types on a card of its own, as a prompt after the red ">" with the block cursor, then the
+ * video fades in under it. Under them, a thin bar for each with its caption, filling as it plays; pressing one plays
+ * that video, after its card. Each is an ordinary Vimeo player, so its own controls can unmute it, seek or go full
+ * screen.
  * Without JavaScript it's the first video's player, to play by hand. Under reduced motion it starts paused on the
  * first video, with no card, and cards come and go without fading, their captions whole.
  */
@@ -31,28 +33,32 @@ const src = (v: (typeof videos)[number]) =>
   })}`;
 ---
 
-<div class="flex flex-col gap-2.5">
-  <!-- The recordings are 1600×1026 (the app's window), not 16:9, so the frame matches them and has no black bars -->
-  <div class="reel shot" style="aspect-ratio: 1600 / 1026" data-hero-reel>
-    {
-      videos.map((v, i) => (
-        <iframe
-          src={src(v)}
-          title={`OMFV: ${v.caption}`}
-          allow="autoplay; fullscreen; picture-in-picture"
-          referrerpolicy="strict-origin-when-cross-origin"
-          loading={i ? 'lazy' : 'eager'}
-          class:list={['reel-video', { on: i === 0 }]}
-        />
-      ))
-    }
-    <div class="reel-card" aria-hidden="true" data-hero-card>
-      <p class="reel-card-prompt mono">
-        <span class="text-signal">&gt;</span> <span data-card-caption></span><span class="cursor"></span>
-      </p>
+<!-- The app, a little narrower than the page, so it reads as a look at the app rather than a wall of it -->
+<div class="hero-window flex flex-col gap-3">
+  <div class="hero-frame">
+    <!-- The recordings are 1600×1026 (the app's window), not 16:9, so the frame matches them and has no black bars -->
+    <div class="reel" style="aspect-ratio: 1600 / 1026" data-hero-reel>
+      {
+        videos.map((v, i) => (
+          <iframe
+            src={src(v)}
+            title={`OMFV: ${v.caption}`}
+            allow="autoplay; fullscreen; picture-in-picture"
+            referrerpolicy="strict-origin-when-cross-origin"
+            loading={i ? 'lazy' : 'eager'}
+            class:list={['reel-video', { on: i === 0 }]}
+          />
+        ))
+      }
+      <div class="reel-card" aria-hidden="true" data-hero-card>
+        <p class="reel-card-prompt mono">
+          <span class="text-signal">&gt;</span> <span data-card-caption></span><span class="cursor"></span>
+        </p>
+      </div>
     </div>
   </div>
-  <div class="flex items-start gap-4">
+  <!-- A thin bar for each video, filling as it plays, with its caption under it -->
+  <div class="flex items-start gap-3">
     <div class="reel-tabs mono" role="group" aria-label="Videos">
       {
         videos.map((v, i) => (
@@ -69,7 +75,8 @@ const src = (v: (typeof videos)[number]) =>
         ))
       }
     </div>
-    <button type="button" class="reel-toggle mono shrink-0 text-xs" data-hero-toggle aria-pressed="false">pause</button>
+    <!-- The clock writes "play" or "pause" in it and labels it; here it's drawn as the icon instead -->
+    <button type="button" class="hero-toggle shrink-0" data-hero-toggle aria-pressed="false">pause</button>
   </div>
 </div>
 
@@ -107,11 +114,44 @@ const src = (v: (typeof videos)[number]) =>
     }
   }
 
-  /* The three tabs sit in a row, each with a bar over it that fills as its video plays */
+  /* The window: rounded, with a soft shadow, and room either side */
+  .hero-window {
+    width: 100%;
+    max-width: 1040px;
+    margin: 16px auto 0;
+  }
+  .hero-frame {
+    overflow: hidden;
+    border: 1px solid #2c2c2c;
+    border-radius: 10px;
+    background: #000;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.02),
+      0 40px 90px -30px rgb(0 0 0 / 0.9);
+  }
+
+  /* Toned down, so it sits behind the headline. Pointing at it, or tabbing into it, brings it back to full */
+  .reel-video {
+    filter: saturate(0.85) brightness(0.92);
+    transition:
+      opacity 0.7s ease,
+      filter 0.4s ease;
+  }
+  .hero-frame:hover .reel-video,
+  .hero-frame:focus-within .reel-video {
+    filter: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reel-video {
+      transition: none;
+    }
+  }
+
+  /* The three bars sit in a row, each with its caption under it, small and dim until it's the one playing */
   .reel-tabs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px;
     flex: 1;
     min-width: 0;
   }
@@ -120,12 +160,12 @@ const src = (v: (typeof videos)[number]) =>
     --accent: var(--color-signal);
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 0 0 4px;
+    gap: 7px;
+    padding: 10px 0 4px;
     text-align: left;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.4;
-    color: #8f8f8f;
+    color: #6f6f6f;
     background: none;
     border: 0;
     cursor: pointer;
@@ -133,14 +173,42 @@ const src = (v: (typeof videos)[number]) =>
   .reel-tab-build {
     --accent: var(--color-build);
   }
-  .reel-tab:hover,
-  .reel-tab.on {
-    color: #e7e7e7;
-  }
   .reel-tab-bar {
     display: block;
+    width: 100%;
     height: 2px;
-    background: linear-gradient(var(--accent), var(--accent)) left / calc(var(--p) * 100%) 100% no-repeat, #2c2c2c;
+    background: linear-gradient(var(--accent), var(--accent)) left / calc(var(--p) * 100%) 100% no-repeat, #262626;
+    transition: background-color 0.2s ease;
+  }
+  .reel-tab:hover,
+  .reel-tab.on {
+    color: #cfcfcf;
+  }
+  .reel-tab:hover .reel-tab-bar,
+  .reel-tab.on .reel-tab-bar {
+    background-color: #3a3a3a;
+  }
+
+  /* The pause button as an icon: two bars to pause, a triangle once paused */
+  .hero-toggle {
+    width: 24px;
+    height: 24px;
+    margin-top: 2px;
+    padding: 0;
+    font-size: 0;
+    color: transparent;
+    border: 0;
+    cursor: pointer;
+    background: center / 10px 10px no-repeat
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%238f8f8f'%3E%3Crect x='1.5' width='2.5' height='10'/%3E%3Crect x='6' width='2.5' height='10'/%3E%3C/svg%3E");
+    opacity: 0.8;
+  }
+  .hero-toggle[aria-pressed='true'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%238f8f8f'%3E%3Cpath d='M1.5 0v10L9.5 5z'/%3E%3C/svg%3E");
+  }
+  .hero-toggle:hover {
+    opacity: 1;
+    filter: brightness(1.6);
   }
 </style>
 
