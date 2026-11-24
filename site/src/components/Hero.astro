@@ -1,6 +1,5 @@
 ---
 import Arrow from './Arrow.astro';
-import HeroReel from './HeroReel.astro';
 import GitHubMark from './GitHubMark.astro';
 import Star from './Star.astro';
 import Header from './Header.astro';
@@ -9,7 +8,7 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
 
 <Header />
 
-<div id="top" class="wrap flex flex-col gap-12 pt-14 pb-[72px]">
+<div id="top" class="wrap flex flex-col gap-12 pt-14 pb-16">
   <div class="flex max-w-[980px] flex-col gap-6">
     <a
       href={REPO_HREF}
@@ -19,7 +18,7 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
       Free and open source<span class="text-dim">·</span>MIT licensed
     </a>
     <h1 class="disp" style="font-size: clamp(34px, 5.4vw, 70px); line-height: 1.04">
-      Your F1 viewer,<br />with an AI <span class="sr-only">TV director and race engineer.</span><span class="role" aria-hidden="true"
+      F1 multi-viewer,<br />with an AI <span class="sr-only">TV director and race engineer.</span><span class="role" aria-hidden="true"
         ><span class="text-signal">TV director</span><span class="text-build">race engineer</span></span
       >
     </h1>
@@ -47,8 +46,6 @@ import { DOWNLOAD_HREF, PLATFORMS, REPO_HREF } from '../site';
       >
     </p>
   </div>
-
-  <HeroReel />
 </div>
 
 <style>
