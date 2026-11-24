@@ -162,8 +162,12 @@ The rules, as a component's author needs them. How the solver carries them out, 
   the app's monospace font: Menlo on macOS, JetBrains Mono elsewhere. No rounded corners, shadows or gradients. `colors()` in the kit
   reads the tokens from `src/styles.css`. In a canvas, the kit's text helpers draw in `MONO_FAMILY`, and `MONO_ADVANCE` is a
   character's width as a share of the size, for widths worked out before there's a canvas.
-- **Red and yellow are taken.** Red means an error, a spoiler warning or a live session. Yellow marks build mode. Neither is used for
-  emphasis, which is shown with ink and weight.
+- **Colour means what it means in F1.** A fan reads purple, green and yellow on a time, a flag's colour and the pedals without a
+  key, so a chart uses them that way and for nothing else. On timing, `purple` is the fastest of anyone in the session, green
+  (`gain`) a driver's own best and yellow (`loss`) no better than it. Red, yellow and green aren't used for emphasis, which is
+  shown with ink and weight. In the app's chrome, outside a chart, red still means an error, a spoiler warning or a live
+  session, and yellow build mode. (2026-11-24. Before, red and yellow were kept from charts and mods for the chrome's meanings,
+  and the build agent avoided them where F1 uses them.)
 - **Tyre colours are for tyres, team colours for drivers.** A driver's team colour is drawn as its code's bar, or as its line or dot
   on a plot, never as the colour of text: see "Driver codes".
 - **Pedals have their own colours, and brake is the one red that isn't an alert.** Throttle green and brake red, as every
@@ -171,7 +175,7 @@ The rules, as a component's author needs them. How the solver carries them out, 
   warns or as a soft tyre. (2026-11-13. Violet was tried first, to keep red for alerts, and read as foreign.)
 - **Flag colours are for flags, toned down the same way.** A flag is drawn as a small flag, never as the colour of text or a bar:
   green and red take the pedals' `throttle` and `brake`, and yellow and blue their own toned `flag-yellow` and `flag-blue`, so
-  none reads as an alert, build mode or a tyre. (2026-11-13, with race control.)
+  none reads as the chrome's red or yellow or as a tyre. (2026-11-13, with race control.)
 - **Faster is green and slower yellow, wherever one time is compared with another.** `gain` and `loss` are the pedals' green and
   the flags' toned yellow, named for what they mean there. They always sit beside a − or
   + sign, so neither is read by colour alone. (2026-11-13, with the sector table. Before, each comparison chart picked its own,

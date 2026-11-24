@@ -60,6 +60,11 @@
   --color-loss: #d9b84a;
 }
 
+/* The fastest of anyone in the session, as F1's timing marks it: purple, toned down like the others. */
+@theme static {
+  --color-purple: #a77bd6;
+}
+
 :root {
   --row: 22px;
   --text-s: 11px;
