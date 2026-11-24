@@ -15,6 +15,7 @@ import {
   drawParts,
   isCleanLap,
   median,
+  MONO_ADVANCE,
   num,
   styleOf,
   text,
@@ -128,7 +129,7 @@ const MAX_CARS = 22;
 /** Below this high it's the suggestion strip's thumbnail: the cells alone. */
 const THUMBNAIL_BELOW = 150;
 /** The width of a character at `SIZE`, for sizes worked out before there's a canvas. */
-const CH = 6.62;
+const CH = SIZE * MONO_ADVANCE;
 /** Position, the team's mark, code, compound and age, in characters. */
 const LABEL_CHARS = 13;
 

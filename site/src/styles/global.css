@@ -10,7 +10,8 @@
   --color-signal: #ff3b30;
   --color-build: #ffd12e;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Menlo ships with macOS, so a Mac shows it in any browser; elsewhere JetBrains Mono, from Google Fonts. The app does the same. */
+  --font-mono: Menlo, "JetBrains Mono", ui-monospace, monospace;
   --font-display: "Archivo", "Arial Narrow", sans-serif;
   --font-hand: "Caveat", cursive;
 }

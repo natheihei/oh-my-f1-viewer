@@ -8,6 +8,7 @@ import {
   colors,
   drawCode,
   linear,
+  MONO_ADVANCE,
   num,
   stintAge,
   styleOf,
@@ -114,8 +115,7 @@ interface Drawn extends TyreModel {
 
 /** Type for codes, positions and stint lengths: the app's smallest. Axis labels are the kit's. */
 const SIZE = 11;
-/** JetBrains Mono's advance is 0.6 of its size. */
-const CH = SIZE * 0.6;
+const CH = SIZE * MONO_ADVANCE;
 /** The lap axis, on top so it stays in view when the rows run past the bottom. */
 const HEAD = 18;
 const PAD = 4;

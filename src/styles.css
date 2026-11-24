@@ -10,7 +10,8 @@
  * slightly lifted ground, so they stand off it by value where no hairline separates them.
  */
 @theme {
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Menlo ships with macOS, so a Mac uses it; elsewhere JetBrains Mono, bundled. MONO_FAMILY in src/kit/draw.ts is the same for canvases. */
+  --font-mono: Menlo, 'JetBrains Mono', ui-monospace, monospace;
   --radius-*: initial;
   --color-ink: #e7e7e7;
   --color-dim: #8a8a8a;

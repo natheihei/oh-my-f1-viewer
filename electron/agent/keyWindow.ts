@@ -16,7 +16,7 @@ function page(title: string, message: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>${escapeHtml(title)}</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0a0a0a; color: #e7e7e7; font: 13px/1.45 'JetBrains Mono', ui-monospace, monospace; }
+  html, body { margin: 0; height: 100%; background: #0a0a0a; color: #e7e7e7; font: 13px/1.45 Menlo, 'JetBrains Mono', ui-monospace, monospace; }
   form { display: grid; gap: 10px; padding: 12px; }
   label { color: #8a8a8a; }
   input { background: transparent; border: 1px solid #4a4a4a; color: #e7e7e7; font: inherit; padding: 3px 8px; outline: none; }

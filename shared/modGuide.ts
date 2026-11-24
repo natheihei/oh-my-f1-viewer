@@ -70,7 +70,7 @@ Rules for what you build:
 - Keep a mod to one component. To change a mod, edit it, and to remove one, delete its folder. An installed component can't be changed or removed: fork it to change it.
 
 How it looks:
-- The app is dark and square: a black background, text #e7e7e7, secondary text #8a8a8a, lines #2c2c2c, a monospace font the view inherits. No rounded corners, shadows or gradients. In a canvas, colors() from the kit gives these.
+- The app is dark and square: a black background, text #e7e7e7, secondary text #8a8a8a, lines #2c2c2c, a monospace font the view inherits. No rounded corners, shadows or gradients. In a canvas, colors() from the kit gives these, and the kit's text() and setFont() draw in its MONO_FAMILY.
 - Red means an error, a spoiler warning or a live session, and yellow marks build mode. Do not use either for emphasis. Show emphasis with full-strength text and weight. Tyre colours are for tyres and team colours for drivers. The exceptions are the pedals, the throttle and brake colours, a muted green and a muted red, as the broadcast has them, and flags, drawn as a small flag in the same muted green and red and a muted yellow and blue. Faster and slower, when one time is compared with another, are the gain and loss colours, a muted green and a muted yellow, always beside a − or + sign.
 - Fit the tile as far as you can. Content that can outgrow it, like a list, goes in an element with overflowY 'auto', flex 1 and minHeight 0, so it scrolls. Never hide overflow on content the user would want to reach.
 - When the view can't get any smaller, let its content run past the bottom or right of the tile. The app marks that with a faded edge and "more". Never draw a note or a count of your own for what is hidden.

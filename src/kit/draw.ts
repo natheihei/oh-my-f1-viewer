@@ -5,13 +5,23 @@ import type { Scale } from './scale';
 
 export type Ctx = CanvasRenderingContext2D;
 
-const FAMILY = '"JetBrains Mono", ui-monospace, monospace';
+/**
+ * The app's monospace font, for canvas text: Menlo on macOS, where it ships with the system, and JetBrains Mono,
+ * bundled, elsewhere. The same as --font-mono in src/styles.css.
+ */
+export const MONO_FAMILY = 'Menlo, "JetBrains Mono", ui-monospace, monospace';
+
+/**
+ * A character's advance in MONO_FAMILY as a share of its size, for widths worked out before there's a canvas:
+ * Menlo's, 0.602, the wider of the two (JetBrains Mono's is 0.6), so a width from it fits either.
+ */
+export const MONO_ADVANCE = 0.602;
 
 /** Axis text size. Values are ink, everything around them dim. */
 export const AXIS_SIZE = 10;
 
 export function setFont(ctx: Ctx, size = AXIS_SIZE, weight = 400): void {
-  ctx.font = `${weight} ${size}px ${FAMILY}`;
+  ctx.font = `${weight} ${size}px ${MONO_FAMILY}`;
 }
 
 export interface TextStyle {

@@ -11,6 +11,7 @@ import {
   formatGap,
   formatLapTime,
   hline,
+  MONO_ADVANCE,
   num,
   parseGap,
   stintAge,
@@ -127,13 +128,11 @@ const MAX_PITCH = 22;
 const MAX_CARS = 22;
 /** Below this height the tower is a thumbnail, as in the suggestion strip: it fits the box, with no heads or rules. */
 const THUMBNAIL_BELOW = 150;
-/** JetBrains Mono's advance is 0.6 of its size. */
-const ADVANCE = 0.6;
 
 /** The width the columns take at a text size and spacing, with the padding either side. */
 function widthAt(columns: typeof COLUMNS, size: number, spacing: number): number {
-  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? ADVANCE : spacing), 0);
-  return chars * size * ADVANCE + PAD * 2;
+  const chars = columns.reduce((sum, col, i) => sum + col.chars + (i === 0 ? 0 : col.key === 'driver' ? MONO_ADVANCE : spacing), 0);
+  return chars * size * MONO_ADVANCE + PAD * 2;
 }
 
 /** The height the rows take at a pitch, with the column heads above and the padding below. */
@@ -188,12 +187,12 @@ function draw(ctx: Ctx, m: Drawn, { width, height }: Box): void {
 
   const room = width - pad * 2;
   const chars = columns.reduce((s, col) => s + col.chars, 0);
-  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - ADVANCE * ch) / Math.max(1, columns.length - 2)));
+  const spacing = Math.min(MAX_SPACING * ch, Math.max(MIN_SPACING * ch, (room - chars * ch - MONO_ADVANCE * ch) / Math.max(1, columns.length - 2)));
   const edges = new Map<Key, { x0: number; x1: number }>();
   let at = pad;
   for (const col of columns) {
     // The driver sits tight against the position.
-    const gap = col.key === 'driver' ? ch * ADVANCE : spacing;
+    const gap = col.key === 'driver' ? ch * MONO_ADVANCE : spacing;
     if (at > pad) at += gap;
     edges.set(col.key, { x0: at, x1: at + col.chars * ch });
     at += col.chars * ch;
