@@ -1,6 +1,7 @@
 /** A dim field of made-up lap times. One cell at a time changes, flashes purple and fades back. */
 import Type from 'typebox';
 import { defineBackground } from '../host';
+import { MONO_FAMILY } from '../kit/draw';
 import { seeded } from './random';
 
 interface Params {
@@ -59,7 +60,7 @@ export default defineBackground<Params, Field>({
       cell.changedAt = t;
       field.next = t + 1 / p.rate;
     }
-    ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
+    ctx.font = `10px ${MONO_FAMILY}`;
     ctx.textBaseline = 'middle';
     for (const c of field.cells) {
       const age = t - c.changedAt;
