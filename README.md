@@ -26,7 +26,7 @@ What you type, then what you get. From the 2026 Las Vegas Grand Prix.
 
 ### Say what you want to watch. It sets up the screen.
 
-`HAM and LEC battle and trackmap highlight them`
+`> HAM and LEC battle and trackmap highlight them`
 
 <p>
   <img src="docs/readme/1-ask-prompt.jpg" width="49%" alt="The palette over the race, with the prompt typed: HAM and LEC battle and trackmap highlight them">
@@ -35,7 +35,7 @@ What you type, then what you get. From the 2026 Las Vegas Grand Prix.
 
 ### A growing gallery of charts.
 
-`Bring up all charts for VER`
+`> Bring up all charts for VER`
 
 <p>
   <img src="docs/readme/2-charts-prompt.jpg" width="49%" alt="The palette with the prompt typed: Bring up all charts for VER">
@@ -44,7 +44,7 @@ What you type, then what you get. From the 2026 Las Vegas Grand Prix.
 
 ### No chart for it? The agent builds one.
 
-`Track the onboards of the top 5, and the gap in between them. In a vertical tile.`
+`> Track the onboards of the top 5, and the gap in between them. In a vertical tile.`
 
 <p>
   <img src="docs/readme/3-build-prompt.jpg" width="49%" alt="The palette with the prompt typed: Track the onboards of the top 5, and the gap in between them. In a vertical tile.">
@@ -53,7 +53,7 @@ What you type, then what you get. From the 2026 Las Vegas Grand Prix.
 
 ### Tweak it in your own words.
 
-`When a change of position happens, overlay the onboard with an arrow, use F1 colors (green/yellow)`
+`> When a change of position happens, overlay the onboard with an arrow, use F1 colors (green/yellow)`
 
 <p>
   <img src="docs/readme/4-tweak-prompt.jpg" width="49%" alt="The build-mode palette with the prompt typed: When a change of position happens, overlay the onboard with an arrow, use F1 colors (green/yellow)">
