@@ -35,8 +35,8 @@ const opened = await openRace(page, { sessionKey: flag('session', null) == null 
 log(`opened ${opened.title}`);
 await seekToLap(page, opened.start ?? 600, Number(flag('lap', 30)));
 const codeOf = (n) => page.evaluate(async (n) => (await import('/src/host/index.ts')).read().sessionData.drivers.find((d) => d.driver_number === n)?.name_acronym ?? String(n), n);
-const [first, second] = await frontRunners(page);
-const [a, b] = [await codeOf(first), await codeOf(second)];
+const [first, second, third] = await frontRunners(page);
+const [a, b, c3] = [await codeOf(first), await codeOf(second), await codeOf(third)];
 log(`about ${a} and ${b}`);
 
 await page.evaluate(() => {
@@ -77,6 +77,12 @@ const offered = (t) => t.calls.some((c) => c.name === 'offer_build') && t.offer 
 const noOffer = (t) => !t.calls.some((c) => c.name === 'offer_build') && t.offer == null;
 const suggested = (t) => t.calls.some((c) => c.name === 'suggest_tiles');
 const queried = (t) => t.calls.some((c) => c.name === 'query_session');
+/** Every stream and component the turn suggested, upper-cased streams. */
+const streamsOf = (t) => t.calls.filter((c) => c.name === 'suggest_tiles').flatMap((c) => (c.args.streams ?? []).map((s) => String(s).toUpperCase()));
+const componentsOf = (t) => t.calls.filter((c) => c.name === 'suggest_tiles').flatMap((c) => c.args.components ?? []);
+/** Whether a stream or prop names a place: P2, or leader for P1. */
+const isPlace = (s, n) => String(s).toUpperCase() === `P${n}` || (n === 1 && /^(the )?leader$/i.test(String(s)));
+const followsPlace = (t, n) => streamsOf(t).some((s) => isPlace(s, n));
 /** Says nothing is being built: the offer is a question. */
 const noClaim = (t) => !/\b(building|built|i'll build|i will build)\b/i.test(t.reply);
 
@@ -118,8 +124,50 @@ const RACE_CASES = [
     ],
     expect: [{ offers: offered }, null, { 'no offer again': noOffer }, { 'offers when asked again': offered }],
   },
-  // Something to keep doing is a tile.
-  { name: 'keep doing: leader onboard', turns: ["always show the leader's onboard"], expect: [{ offers: offered, 'the note asks for a tile': (t) => /tile|component/i.test(t.offer?.note ?? '') }] },
+  // A place in the running order is followed, not looked up: a tile that follows it, never the car there now.
+  { name: 'place: leader onboard', turns: ["show me the leader's onboard"], expect: [{ 'follows P1': (t) => followsPlace(t, 1), [`not ${a}'s own onboard`]: (t) => !streamsOf(t).includes(a), 'no offer': noOffer }] },
+  {
+    name: 'place: telemetry for second',
+    turns: ['show telemetry for whoever is in second'],
+    expect: [{ 'car_telemetry follows P2': (t) => componentsOf(t).some((c) => c.component === 'car_telemetry' && isPlace(c.props?.driver, 2)), 'no offer': noOffer }],
+  },
+  {
+    name: 'place: a named driver stays that driver',
+    turns: [`show me ${a}'s onboard`],
+    expect: [{ [`suggests ${a}'s onboard`]: (t) => streamsOf(t).some((s) => s === a || s.includes(a)), 'no place': (t) => ![1, 2, 3].some((n) => followsPlace(t, n)) }],
+  },
+  {
+    name: 'place: a stream on screen follows a place',
+    turns: [
+      async () => {
+        await page.evaluate(async (code) => {
+          const { host, read } = await import('/src/host/index.ts');
+          const feed = read().feeds.find((f) => f.kind === 'onboard' && f.label === code)?.id;
+          // Once per run: a later run finds it on screen, or following a place from the run before.
+          for (const t of read().layout.tiles.filter((t) => t.component.type === 'video' && t.id !== read().layout.main)) host.layout.remove({ tiles: [t.id] });
+          host.layout.add({ items: [{ type: 'video', props: { feed } }] });
+        }, c3);
+        await page.waitForTimeout(1000);
+      },
+      `make the ${c3} onboard follow whoever is in second instead`,
+    ],
+    expect: [null, { 'edits it to follow P2': (t) => t.calls.some((c) => c.name === 'edit_tile' && isPlace(c.args.stream, 2)), 'suggests nothing': (t) => !suggested(t) }],
+  },
+  { name: 'place: who leads is a fact', turns: ["who's leading right now?"], expect: [{ 'answers from the data': queried, 'no tile': (t) => !suggested(t), 'no offer': noOffer }] },
+  // Following a place needs no build: an onboard that follows P1.
+  {
+    name: 'place: keep doing, leader onboard',
+    turns: ["always show the leader's onboard"],
+    expect: [
+      {
+        'suggests the onboard of P1': (t) => t.calls.some((c) => c.name === 'suggest_tiles' && (c.args.streams ?? []).some((s) => /^(p1|leader)$/i.test(s))),
+        'no offer': noOffer,
+      },
+    ],
+  },
+  { name: 'place: top three onboards', turns: ['show me the onboards of the top three'], expect: [{ 'suggests P1 to P3': (t) => t.calls.some((c) => c.name === 'suggest_tiles' && ['P1', 'P2', 'P3'].every((p) => (c.args.streams ?? []).some((s) => s.toUpperCase() === p || (p === 'P1' && /^leader$/i.test(s))))), 'no offer': noOffer }] },
+  // Something to keep doing that no component does is a tile.
+  { name: 'keep doing: fastest lap onboard', turns: ['always show the onboard of whoever set the last fastest lap'], expect: [{ offers: offered, 'the note asks for a tile': (t) => /tile|component/i.test(t.offer?.note ?? '') }] },
   // Nothing built changes the app with no tile on screen.
   { name: 'no tile: fullscreen on start', turns: ['make the app open in fullscreen every time I start it'], expect: [{ 'no offer': noOffer }] },
   { name: 'no tile: shortcut', turns: ['change the shortcut that opens this palette to F2'], expect: [{ 'no offer': noOffer }] },

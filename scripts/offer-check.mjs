@@ -140,7 +140,7 @@ if (!agent) {
   await shot('absent');
 
   // Something to keep doing: only a tile can, so it's an offer to build one, and no claim that the app will do it by itself.
-  const standing = await say("always show the leader's onboard");
+  const standing = await say('always show the onboard of whoever set the last fastest lap');
   const tile = standing.calls.find((c) => c.name === 'offer_build');
   check('something to keep doing gets an offer to build a tile', tile != null, `${JSON.stringify(tile?.args)} ${standing.reply}`);
   await shot('standing');

@@ -363,6 +363,12 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   highlight) and `drivers_to_display` (those to draw), or any name starting `driver_` or `drivers_`. `Driver(description)`,
   `DriverList(description, max?)`, `Highlighted(max?)` and `Displayed()` are their schemas, `isDriverProp(name)` and
   `isDriverList(name)` tell them by name, and `keyPart(value)` writes one for a key. See [COMPONENTS.md](COMPONENTS.md).
+- A driver prop can hold a place, `"P1"`, to follow whoever holds it: from [src/host/places.ts](../src/host/places.ts). `specOf`
+  checks and keys the props with a stand-in car number for each place (`standIns`), and `ComponentView` swaps in the car in it at
+  the playhead before the component draws (`resolvePlaces`), so `View` only ever gets car numbers. `usePlaces` holds the running
+  order while something follows a place (`watchPlaces`, `useRunningOrder(active)`), `carIn(place)` is who holds one now, and
+  `placeOf(value)` tells a place from a car. A title's `drivers` may hold places, which `fillTitle`, `<TitleDriver />` and
+  `labelText(name, drivers, code, { now: true })` draw as the place and its holder.
 
 ### Driver codes
 
@@ -396,9 +402,10 @@ tables `query_session` can read follow, from `sessionData.tables`: one line each
 Before that the list is left out, and the tool waits for the data: the bridge sends the list with the first tool result after it's there. `suggest_tiles` takes components
 by name, each with its props. A driver prop (`driver`, `driver_a`, `drivers`, `drivers_to_display` and any name starting `driver_` or
 `drivers_`) takes codes, names or numbers, which the agent matches to car numbers through the session's roster, or the onboard feeds
-without one. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
+without one, or a place, `P1` or `leader`, kept as `"P1"` so the tile follows whoever holds it. A place past the roster's last car is
+refused. A stream named as a place is a `video` following it. A required prop left out is refused, with a note to ask the user whose; a component never picks its own. `edit_tile` changes
 a tile on screen in place: a component's props, only those it names, null taking one away, or with `stream` the feed a stream tile shows,
-so "focus on RUS now" turns the HAM onboard into RUS's where it stands, and its sound follows the tile. A feed another tile already shows is refused. `remove_tiles` and `edit_tile` name tiles by the
+so "focus on RUS now" turns the HAM onboard into RUS's where it stands, and its sound follows the tile; `stream: "P2"` makes it follow P2. A feed another tile already shows is refused. `remove_tiles` and `edit_tile` name tiles by the
 ids `app_state` lists, as in `on screen: tile-1 F1 LIVE (stream, main); tile-4 Pit 44 (pit_window, props {"driver":44}); tile-5 Battle NOR · VER (battle, shows Lando Norris, Max Verstappen)`, and refuse
 anything else, labels included. The tile with the main place is marked `main`, so "close all" leaves it unless the user names it. A tile's title is what its component says, from `live.headers`. The agent never sees what a component shows, and a
 refusal only ever depends on the session type, missing data, an unknown name or the props, never on how the session is going. The tools today:

@@ -18,6 +18,16 @@ On Linux with an RTX 4080, against real F1 TV streams and the real agent:
   time, as a second stream. Clicking a picture made it the one heard without raising the volume from 0, and the battle's title bar and
   the picture said so. Picking another fight kept the sound with the driver who stayed in it, and closing the battle moved the sound to the other video of the same feed. The chase showed the car ahead and the gap,
   marked OT within a second. Many streams at once haven't been soaked: each picture is its own stream, so this costs bandwidth.
+- Tiles following a place, on the 2026 Las Vegas race at lap 5 with `scripts/places-check.mjs` (2026-11-24, macOS). P1's and P2's
+  onboards and P1's telemetry showed VER and HAD, titled "P1 VER", "P2 HAD" and "Telemetry P1 VER", keyed by place, with P1's two
+  tiles one group. Swapping P1 and P2 by hand, the two onboards traded videos in one render and stayed ready, with no new stream.
+  Played through the change of lead on lap 8, P1's onboard and telemetry moved to HAD as the broadcast's tower did. The real agent,
+  with the `place:` cases in `scripts/decide-check.mjs` at lap 30, two runs each, all passed: "the leader's onboard" and "always
+  show the leader's onboard" suggested the stream P1 and offered no build, "the top three" P1 to P3, "telemetry for whoever is in
+  second" `car_telemetry` with driver P2 (and P2's onboard beside it), "VER's onboard" with VER leading stayed VER's, "make the GAS
+  onboard follow whoever is in second" called `edit_tile` with stream P2, and "who's leading" was answered from the data with no
+  tile. "The onboard of whoever set the last fastest lap" still offered a build. Not verified: an onboard whose new car isn't on
+  screen starting its stream mid-race, or a place nobody holds.
 - Pause, timeline seek, keyboard controls, and closing the main feed while the clock keeps running.
 - The timeline's volume control setting each stream's level by mouse and keyboard, including in the production build. This was read
   back from the video elements, not checked by ear.

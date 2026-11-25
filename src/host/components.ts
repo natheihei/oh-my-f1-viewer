@@ -12,6 +12,7 @@ import type { Dataset } from '../../shared/sessionData';
 import { allTiles, type ComponentSpec, type ContentFit, type SizeHint } from '../layout/model';
 import { layout, useLayout } from '../layout/store';
 import { labelText } from './drivers';
+import { standIns } from './places';
 import { write } from './op';
 
 /** A spec's key and label, and the drivers it names. */
@@ -219,16 +220,22 @@ export const Item = Type.Object({
   props: Type.Record(Type.String(), Type.Unknown(), { description: "Props that match the component's args" }),
 });
 
-/** Builds the spec for a component and its props. Throws on an unknown type or props that don't fit. */
+/**
+ * Builds the spec for a component and its props. Throws on an unknown type or props that don't fit. A
+ * driver prop may hold a place, such as "P1": the component's args and spec see a stand-in car number
+ * for it, and the key and title name the place. See `places.ts`.
+ */
 export function specOf({ type, props }: Static<typeof Item>): ComponentSpec {
   const definition = definitions.get(type);
   if (!definition) throw new Error(`Unknown component: ${type}`);
-  if (!Value.Check(definition.args, props)) {
-    const error = Value.Errors(definition.args, props)[0];
+  const standIn = standIns(props);
+  if (!Value.Check(definition.args, standIn.props)) {
+    const error = Value.Errors(definition.args, standIn.props)[0];
     throw new Error(`Invalid props for ${type}: ${error ? `${error.instancePath || '/'} ${error.message}` : 'they do not match its args'}`);
   }
   const size = sizeOf(definition);
-  const { key, label, drivers } = definition.spec(props);
+  const made = definition.spec(standIn.props);
+  const [key, label, drivers] = [standIn.text(made.key), standIn.text(made.label), standIn.drivers(made.drivers)];
   const named = drivers?.length ? { label: labelText(label, drivers), title: { name: label, drivers } } : { label };
   return { type, key, ...named, props, ...(size ? { size } : {}), ...(definition.fit ? { fit: definition.fit } : {}) };
 }

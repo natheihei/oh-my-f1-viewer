@@ -14,6 +14,7 @@ const { defineComponent, Displayed, Driver, Highlighted, host, keyPart, read } =
 const { useSession } = await import('../data/session');
 const { useSessionData } = await import('../data/sessionData');
 const { useBuild } = await import('../host/build');
+const { usePlaces } = await import('../host/places');
 const { layout } = await import('../layout/store');
 const { components } = await import('../components/registry');
 const Type = (await import('typebox')).default;
@@ -489,5 +490,85 @@ describe('suggesting charts', () => {
       await expect(runTool('remove_tiles', { tiles: [ids[1], 'tile-999', 'Pit 1'] })).rejects.toThrow('Not on screen: tile-999, Pit 1. Nothing was removed.');
       expect(labels()).toEqual(['HAM', 'VER', 'Gap 44 v 1', 'Pit 44', 'Pit 1']);
     });
+  });
+});
+
+describe('following a place in the running order', () => {
+  const race = { contentId: 1, title: 'Race', status: 'replay', type: 'race' } as SessionInfo;
+  const ready = { state: 'ready', drivers: roster, tables: [] } as unknown as SessionDataView;
+  const props = () => read().suggestions.items.map((i) => ({ type: i.type, props: i.props }));
+
+  beforeEach(() => {
+    host.components.register({ components, origin: 'installed' });
+    host.components.register({ components: [gap, pit, field] });
+    useSession.setState({ session: race, channels });
+    useSessionData.setState(ready, true);
+    layout.clear();
+  });
+  afterEach(() => {
+    host.suggestions.newTurn();
+    layout.clear();
+    usePlaces.setState({ order: [] });
+    useSession.setState({ session: null, channels: [] });
+    useSessionData.setState({ state: 'idle' }, true);
+  });
+
+  it('keeps a place in a driver prop, and names it in the key and label', async () => {
+    const out = await runTool('suggest_tiles', {
+      components: [
+        { component: 'test_pit', props: { driver: 'P2' } },
+        { component: 'car_telemetry', props: { driver: 'leader' } },
+        { component: 'test_field', props: { drivers: ['P1', 'p3', 'HAM'] } },
+      ],
+    });
+    expect(out).toContain('Suggested: Pit P2, Telemetry P1, Field all/P1-P3-44.');
+    expect(props()).toEqual([
+      { type: 'test_pit', props: { driver: 'P2' } },
+      { type: 'car_telemetry', props: { driver: 'P1' } },
+      { type: 'test_field', props: { drivers: ['P1', 'P3', 44] } },
+    ]);
+    const telemetry = read().suggestions.items[1];
+    expect(telemetry).toMatchObject({ key: 'car_telemetry:P1', title: { name: 'Telemetry', drivers: ['P1'] } });
+  });
+
+  it('refuses a place past the last car, and the same place twice in a chart of two', async () => {
+    await expect(runTool('suggest_tiles', { components: [{ component: 'test_pit', props: { driver: 'P4' } }] })).rejects.toThrow(
+      '"P4" is no place in this session: there are P1 to P3. Nothing was suggested.',
+    );
+    await expect(runTool('suggest_tiles', { components: [{ component: 'gap_evolution', props: { driver_a: 'P1', driver_b: 'leader' } }] })).rejects.toThrow(
+      /needs two different drivers/,
+    );
+    // A place and a car are two drivers, even when that car holds the place.
+    await expect(runTool('suggest_tiles', { components: [{ component: 'gap_evolution', props: { driver_a: 'P1', driver_b: 'VER' } }] })).resolves.toContain('Suggested: Gap P1 · VER');
+  });
+
+  it("suggests a place's onboard as a stream that follows it", async () => {
+    const out = await runTool('suggest_tiles', { streams: ['P1', 'leader', 'P2', 'HAM'] });
+    expect(out).toContain('Suggested: P1, P2, HAM.');
+    expect(props()).toEqual([
+      { type: 'video', props: { driver: 'P1' } },
+      { type: 'video', props: { driver: 'P2' } },
+      { type: 'video', props: { feed: '1:44' } },
+    ]);
+    expect(read().suggestions.items[0]).toMatchObject({ key: 'onboard:P1', title: { name: '', drivers: ['P1'] } });
+  });
+
+  it('swaps a stream tile to follow a place, and back to a car', async () => {
+    const [tile] = host.layout.add({ items: [{ type: 'video', props: { feed: '1:44' } }] });
+    expect(await runTool('edit_tile', { tile, stream: 'P2' })).toBe('Changed: P2.');
+    expect(layout.tiles()[0].component).toMatchObject({ key: 'onboard:P2', props: { driver: 'P2' } });
+    const [other] = host.layout.add({ items: [{ type: 'video', props: { driver: 'P1' } }] });
+    await expect(runTool('edit_tile', { tile, stream: 'leader' })).rejects.toThrow(`The onboard of P1 is already on screen in ${other}`);
+    expect(await runTool('edit_tile', { tile, stream: 'Norris' })).toBe('Changed: NOR.');
+    expect(layout.tiles()[0].component.props).toEqual({ feed: '1:4' });
+  });
+
+  it('tells the agent who holds each place a tile follows, as of the playhead', () => {
+    host.layout.add({ items: [{ type: 'car_telemetry', props: { driver: 'P1' } }, { type: 'video', props: { driver: 'P2' } }] });
+    const [a, b] = layout.tiles().map((t) => t.id);
+    expect(describeAppState()).toContain(`${a} Telemetry P1 (car_telemetry, props {"driver":"P1"})`);
+    usePlaces.setState({ order: [1, 44, 10] });
+    expect(describeAppState()).toContain(`${a} Telemetry P1 VER (car_telemetry, props {"driver":"P1"})`);
+    expect(describeAppState()).toContain(`${b} P2 HAM (stream, following P2)`);
   });
 });

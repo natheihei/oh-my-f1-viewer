@@ -119,6 +119,15 @@ does: no tile moves until the size holds still:
 node scripts/group-layout-check.mjs /tmp/group-layout-check
 ```
 
+This one needs only the F1 TV sign-in. It opens a replay race, muted, and adds P1's and P2's onboards and P1's telemetry, which
+follow those places: each shows the car in it and says so in its title, and the P1 tiles are one group. It swaps P1 and P2 by hand,
+and the two onboards trade videos in one render with no new stream. Then it plays through the next change of lead, and the P1
+tiles follow the new leader:
+
+```bash
+node scripts/places-check.mjs /tmp/places-check [lap] [session key]
+```
+
 This one needs only the F1 TV sign-in, and sends nothing to the agent. It opens a replay race and leaves it by the timeline's ×,
 then by `/close-session`, then stops a countdown with "stop waiting". Each goes back to the landing page with no tiles and no timeline,
 and "Allow for this session" ends with the session:

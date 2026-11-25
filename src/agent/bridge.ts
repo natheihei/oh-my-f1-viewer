@@ -13,9 +13,11 @@ import { formatClock, offeredComponents, propsText, readsPastPlayhead, runTool, 
  */
 function describeTile({ id, component: c }: Tile, live: Live): string {
   const header = live.headers[id];
-  const label = header?.drivers ? labelText(header.label ?? '', header.drivers) : (header?.label ?? c.label);
+  // A place is said with whoever holds it at the playhead, as the title bar draws it: "Telemetry P1 VER".
+  const own = c.title ? labelText(c.title.name, c.title.drivers, undefined, { now: true }) : c.label;
+  const label = header?.drivers ? labelText(header.label ?? '', header.drivers) : (header?.label ?? own);
   const main = live.layout.main === id ? ', main' : '';
-  if (c.type === 'video') return `${id} ${label} (stream${main})`;
+  if (c.type === 'video') return `${id} ${label} (stream${typeof c.props.driver === 'string' ? `, following ${c.props.driver}` : ''}${main})`;
   const shows = Object.values(live.streams)
     .filter((v) => v.tile === id && !v.quiet)
     .map((v) => live.feeds.find((f) => f.id === v.feed)?.label ?? v.feed);

@@ -19,14 +19,15 @@ export interface PlaceHealth {
   label: string;
   /**
    * `drawn` means it didn't throw, not that it's right. `needs_props` and `error` aren't drawing.
-   * `waiting` looks ahead, and isn't drawn until the viewer allows it.
+   * `waiting` looks ahead, and isn't drawn until the viewer allows it; or, with a `message`, follows a
+   * place in the running order that nobody holds yet, and draws once somebody does.
    */
   state: 'drawn' | 'needs_props' | 'error' | 'waiting';
   /** Required props it has no value for. */
   missing: string[];
   /** Props it was given that its args don't accept any more. It draws without them, if nothing is missing. */
   dropped: string[];
-  /** Why, for `error`, and for props that don't fit in a way the two lists can't say. */
+  /** Why, for `error`, for props that don't fit in a way the two lists can't say, and for a place nobody holds. */
   message: string | null;
   /** When it first stood this way, for a place that isn't drawing. Null otherwise, or with no session open. */
   since: Moment | null;
@@ -48,7 +49,7 @@ const named = (p: PlaceHealth) => (p.where === 'strip' ? `Draft ${p.type} in the
 /** One place, as a line for the build agent: what it is, how it stands, and what would fix it. */
 export function describePlace(p: PlaceHealth): string {
   if (p.state === 'drawn') return `${named(p)}: drawn${p.dropped.length ? `, without ${list(p.dropped)}, which it no longer accepts` : ''}.`;
-  if (p.state === 'waiting') return `${named(p)}: waiting for the user to allow it to look ahead.`;
+  if (p.state === 'waiting') return p.message ? `${named(p)}: waiting: ${p.message}.` : `${named(p)}: waiting for the user to allow it to look ahead.`;
   if (p.state === 'error') return `${named(p)}: render error: ${p.message ?? 'unknown'}. Fix the code.`;
   const dropped = p.dropped.length ? ` It no longer accepts ${list(p.dropped)}.` : '';
   const why = p.missing.length ? `needs ${list(p.missing)}` : (p.message ?? "its props don't fit");

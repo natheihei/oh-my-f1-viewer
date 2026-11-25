@@ -13,6 +13,7 @@ import { layoutOps, usePointed } from './layoutOps';
 import { previewScope, tileLookAhead, useTileLookAhead } from './lookAhead';
 import { reportTileError } from './mods';
 import { useHiddenPast } from './overflow';
+import { followsPlaces, resolvePlaces, usePlaces, useRunningOrder, type Place as RunningPlace } from './places';
 import { setGridFrame, useSuggestions } from './suggestions';
 import { forgetTile, TilePlaceContext, useTileHeaders, type TilePlace, type TileHeader } from './tile';
 
@@ -126,17 +127,41 @@ function ViewFrame({ children }: { children: ReactNode }) {
   );
 }
 
+/** Why a tile following a place has nothing to draw yet. */
+function waitingText(waiting: readonly RunningPlace[], order: readonly number[]): string {
+  return order.length ? `Nobody is in ${waiting.join(' or ')}` : `Waiting for the running order, to find ${waiting.join(' and ')}`;
+}
+
+/**
+ * Whether a component can't be drawn with these props, such as two places held by one car in a chart
+ * of two drivers: its spec's reason, or null. Only asked of props that follow a place, whose cars change.
+ */
+function specProblem(definition: NonNullable<ReturnType<typeof componentOf>>, props: Record<string, unknown>): string | null {
+  try {
+    definition.spec(props);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
 /**
  * Draws a spec with its registered component, or `fallback` if none is registered under its type.
  * `scope` names the tile or preview it draws in, which is what a look-ahead approval belongs to. A
- * component that declares `looksAhead` isn't drawn there until the viewer allows it.
+ * component that declares `looksAhead` isn't drawn there until the viewer allows it. A driver prop that
+ * holds a place, such as "P1", reaches the component as the car in that place at the playhead: see `places.ts`.
  */
 export function ComponentView({ spec, scope = null, fallback = null }: { spec: ComponentSpec; scope?: string | null; fallback?: ReactNode }) {
   // Re-renders when a mod's component is replaced, wherever this is drawn.
   useComponents((s) => s.list);
   const definition = componentOf(spec.type);
+  const follows = useMemo(() => followsPlaces(spec.props), [spec.props]);
+  const order = useRunningOrder(follows);
+  const placed = useMemo(() => resolvePlaces(spec.props, order), [spec.props, order]);
+  const waiting = placed.waiting.length ? waitingText(placed.waiting, order) : null;
   // Props from before an edit may not fit the component's new args: it keeps those that do.
-  const fit = useMemo(() => (definition ? fitProps(definition.args, spec.props) : null), [definition, spec.props]);
+  const fit = useMemo(() => (definition ? fitProps(definition.args, placed.props) : null), [definition, placed.props]);
+  const unfit = useMemo(() => (follows && definition && !waiting && !fit?.message ? specProblem(definition, fit!.props) : null), [follows, definition, waiting, fit]);
   useEffect(() => {
     if (scope == null) return;
     return () => {
@@ -152,19 +177,23 @@ export function ComponentView({ spec, scope = null, fallback = null }: { spec: C
     [scope, spec.key, spec.type, spec.label],
   );
   const tilePlace = useMemo<TilePlace | null>(() => (place ? { scope: place.scope, where: place.where } : null), [place]);
-  const waiting = !!View && !fit?.message && definition?.looksAhead === true && !allowed;
+  const lookingAhead = !!View && !fit?.message && definition?.looksAhead === true && !allowed;
+  // Nobody in its place yet is no fault: the tile says so, and draws once somebody is.
+  const empty = waiting ?? unfit;
   // What isn't drawn reports here. What is, reports from its boundary, once it has drawn or thrown.
   useEffect(() => {
     if (!place || !View || !fit) return;
-    if (fit.message) health.report({ ...place, state: 'needs_props', missing: fit.missing, dropped: fit.dropped, message: fit.message }, View);
-    else if (waiting) health.report({ ...place, state: 'waiting', missing: [], dropped: fit.dropped, message: null }, View);
-  }, [place, View, fit, waiting]);
+    if (empty) health.report({ ...place, state: 'waiting', missing: [], dropped: fit.dropped, message: empty }, View);
+    else if (fit.message) health.report({ ...place, state: 'needs_props', missing: fit.missing, dropped: fit.dropped, message: fit.message }, View);
+    else if (lookingAhead) health.report({ ...place, state: 'waiting', missing: [], dropped: fit.dropped, message: null }, View);
+  }, [place, View, fit, lookingAhead, empty]);
   useEffect(() => {
     if (place && !View) health.forget(place.scope);
   }, [place, View]);
   if (!View || !fit) return <>{fallback}</>;
+  if (empty) return <div className="chart-message">{empty}</div>;
   if (fit.message) return <TileProblem place={place} state="needs_props" text={fit.message} />;
-  if (waiting) return scope != null ? <LookAheadWarning scope={scope} /> : null;
+  if (lookingAhead) return scope != null ? <LookAheadWarning scope={scope} /> : null;
   return (
     <ViewFrame>
       <TileBoundary type={spec.type} version={View} place={place} dropped={fit.dropped}>
@@ -266,12 +295,14 @@ export function Grid() {
     }
     return out;
   }, [approved, components, tiles, headers, marks, spotlit]);
-  // Titles draw their drivers' codes from the roster, so they're drawn again when it changes.
+  // Titles draw their drivers' codes from the roster, so they're drawn again when it changes, and a
+  // place's holder from the running order, which each tile following one keeps current.
   const styles = useDriverStyles();
+  const order = usePlaces((s) => s.order);
   const titles = useMemo(() => Object.fromEntries(Object.entries(headers).map(([id, h]) => [id, titleOf(h)])), [headers]);
   const drawTitle = useCallback(
-    (el: HTMLElement, component: ComponentSpec, tileId: string) => fillTitle(el, { ...component, ...titles[tileId] }, styles),
-    [styles, titles],
+    (el: HTMLElement, component: ComponentSpec, tileId: string) => fillTitle(el, { ...component, ...titles[tileId] }, styles, order),
+    [styles, titles, order],
   );
   return (
     <>

@@ -383,6 +383,16 @@ describe('what a tile belongs with', () => {
     expect(groupOf(s.tiles)).toEqual([undefined, 'driver-4', 'batch-1', 'batch-1', 'driver-4']);
   });
 
+  it('is the tiles following its place, apart from the car that holds it now', () => {
+    const following = (key: string, place: `P${number}`): ComponentSpec => ({ ...video(key), title: { name: '', drivers: [place] } });
+    // P1's onboard and P1's telemetry go together; VER's onboard isn't with them, even while VER leads.
+    const s = [following('P1', 'P1'), about('VER', 1), { ...chart('telemetry', 1.6, 300, 150), title: { name: 'Telemetry', drivers: ['P1' as const] } }].reduce(
+      (state, c) => addTile(state, c),
+      opened,
+    );
+    expect(groupOf(s.tiles)).toEqual([undefined, 'driver-P1', undefined, 'driver-P1']);
+  });
+
   it('puts a tile about a driver beside that driver\'s other tile, in a hand-arranged layout too', () => {
     let s = addTile(addTile(sized, about('NOR', 4)), video('B'));
     s = applyMouseEdit(s, idOf(s, 'NOR'), { x: 0, y: 0, w: 6, h: 6 });

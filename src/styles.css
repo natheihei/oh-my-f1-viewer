@@ -265,6 +265,12 @@
   vertical-align: -0.12em;
   content: '';
 }
+/* A place a tile follows, "P1", before the code of whoever holds it: in the title's own ink, not bold. */
+.driver-place {
+  white-space: nowrap;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 
 .tile-slots {
   @apply flex shrink-0 items-center gap-1 pr-1;

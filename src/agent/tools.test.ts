@@ -303,7 +303,7 @@ describe('components', () => {
     expect(() => host.suggestions.offer({ items: [{ type: 'nope', props: {} }] })).toThrow(/Unknown component: nope/);
     expect(() => host.layout.add({ items: [{ type: 'nope', props: {} }] })).toThrow(/Unknown component: nope/);
     expect(() => host.suggestions.offer({ items: [{ type: 'test-chart', props: { driver: 44 } }] })).toThrow(/Invalid props for test-chart/);
-    expect(() => host.layout.add({ items: [{ type: 'video', props: {} }] })).toThrow(/Invalid props for video/);
+    expect(() => host.layout.add({ items: [{ type: 'video', props: {} }] })).toThrow(/video needs a feed/);
     expect(labels()).toEqual([]);
     expect(layout.tiles()).toEqual([]);
   });

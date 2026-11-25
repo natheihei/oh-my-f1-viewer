@@ -15,6 +15,9 @@ export interface SizeHint {
   min: { width: number; height: number };
 }
 
+/** A driver a title names: a car number, or a place in the running order such as "P1", whoever holds it. */
+export type TitleDriver = number | `P${number}`;
+
 export interface ComponentSpec {
   type: string;
   /**
@@ -26,9 +29,10 @@ export interface ComponentSpec {
   label: string;
   /**
    * The label's parts, when it names drivers: the title bar draws each as a driver code, from the roster.
-   * Without it, the title bar shows `label`.
+   * A place such as "P1" is whoever holds it, drawn as the place and that car's code. Without it, the
+   * title bar shows `label`.
    */
-  title?: { name: string; drivers: number[] };
+  title?: { name: string; drivers: TitleDriver[] };
   props: Record<string, unknown>;
   /**
    * The component's size hint, when it has one. Auto-layout puts it where its shape suits and keeps it
@@ -133,8 +137,12 @@ export function minCells(size: SizeHint | undefined, cell: CellPx): [number, num
   return [Math.max(1, Math.ceil(size.min.width / w)), Math.max(1, Math.ceil((size.min.height + TITLE_BAR_PX) / h))];
 }
 
-/** The driver a tile is about: the one its title names, when it names just one. */
-const driverOf = (tile: Tile): number | null => (tile.component.title?.drivers.length === 1 ? tile.component.title.drivers[0] : null);
+/**
+ * The driver a tile is about: the one its title names, when it names just one. A place is its own
+ * driver, so a tile following P1 goes with the others following P1, and stays with them through an
+ * overtake, rather than with whoever holds it now.
+ */
+const driverOf = (tile: Tile): TitleDriver | null => (tile.component.title?.drivers.length === 1 ? tile.component.title.drivers[0] : null);
 
 /**
  * What each tile belongs with, in order, which the layout keeps together. The tiles about one driver,
@@ -142,7 +150,7 @@ const driverOf = (tile: Tile): number | null => (tile.component.title?.drivers.l
  * that, the batch of suggestions a tile was added from. Undefined for a tile with neither.
  */
 export function groupOf(tiles: Tile[]): (string | undefined)[] {
-  const about = new Map<number, number>();
+  const about = new Map<TitleDriver, number>();
   for (const tile of tiles) {
     const driver = driverOf(tile);
     if (driver !== null) about.set(driver, (about.get(driver) ?? 0) + 1);
