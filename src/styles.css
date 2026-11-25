@@ -1730,6 +1730,77 @@
   outline-offset: 1px;
 }
 
+/* Advanced: below the providers, apart from them. */
+.agent-advanced {
+  @apply mt-1 border-t border-line pt-1;
+}
+
+.agent-server {
+  @apply truncate text-ink;
+}
+
+/* Where models.json is: one line, cut in the middle, and a click copies it. */
+.agent-file {
+  @apply col-span-2 flex min-w-0 cursor-pointer items-center bg-transparent p-0 text-left text-ink;
+  height: var(--row);
+}
+
+.agent-file-head {
+  @apply min-w-0 truncate;
+}
+
+.agent-file-tail {
+  @apply flex-none whitespace-nowrap;
+}
+
+.agent-file-icon {
+  @apply ml-2 flex-none text-dim;
+  width: 12px;
+  height: 12px;
+}
+
+.agent-file:hover .agent-file-icon {
+  @apply text-ink;
+}
+
+.agent-file-copied {
+  @apply ml-2 flex-none text-dim;
+  font-size: var(--text-s);
+}
+
+/* The sentence a note opens with, when it says what to do: as bright as the rest of the panel, with the detail after it dim. */
+.agent-lead {
+  @apply text-ink;
+}
+
+/* Advanced's parts, set apart from each other: what it's for, the file, and the prompt for a coding agent. */
+.agent-apart {
+  margin-top: calc(var(--row) / 2);
+}
+
+/* A button that copies: the clip icon, then what it copies. Brighter than its neighbours, which only open things. */
+.bg-toggle.agent-copy {
+  @apply inline-flex items-center gap-1.5 border-rule text-ink;
+}
+
+.agent-copy .agent-file-icon {
+  @apply ml-0 text-ink;
+}
+
+/* A provider from models.json: under Advanced, and set in from it. */
+.bg-styles .agent-from-file button {
+  padding-left: calc(var(--pad) - 2px + 2ch);
+}
+
+.agent-link {
+  @apply underline;
+}
+
+.agent-setup-errors {
+  @apply grid gap-1 pl-4;
+  list-style: disc;
+}
+
 /* Build mode. See docs/BUILD_MODE.md. */
 
 /* A draft in the strip: wider, since its preview is there to be tried. Only its name adds or drags it. */

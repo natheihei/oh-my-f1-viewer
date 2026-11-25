@@ -11,7 +11,7 @@ and [RELEASE.md](RELEASE.md#install-it) how to install a release.
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
-| `/settings-agent` | Connect the agent's provider, and choose its model and thinking level |
+| `/settings-agent` | Connect the agent's provider, and choose its model and thinking level. Advanced sets up others by hand, such as a local model |
 | `/reset-onboarding` | Show the steps to get started again |
 | `/version` | Show which release this is |
 | `/whats-new` | Open this release's notes in the browser |

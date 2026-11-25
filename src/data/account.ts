@@ -10,6 +10,7 @@ import type {
   AgentToolResult,
   AiStatus,
   ConnectWay,
+  CustomModelsFile,
   F1TvStatus,
   ThinkingLevel,
 } from '../../shared/api';
@@ -41,7 +42,13 @@ export const agentLink = {
   cancelConnect: (): Promise<void> => window.omfv.ai.cancelConnect(),
   onConnect: (cb: (event: AgentConnectEvent) => void): (() => void) => window.omfv.ai.onConnect(cb),
   disconnect: (): Promise<void> => window.omfv.ai.disconnect(),
-  choose: (model: string, thinking: ThinkingLevel): Promise<AiStatus> => window.omfv.ai.choose(model, thinking),
+  choose: (model: string, thinking: ThinkingLevel, provider?: string): Promise<AiStatus> => window.omfv.ai.choose(model, thinking, provider),
+  /** `/settings-agent` → Advanced: the custom providers' text, and saving it. */
+  customModels: (): Promise<CustomModelsFile> => window.omfv.ai.customModels(),
+  customModelsDocs: (): Promise<void> => window.omfv.ai.customModelsDocs(),
+  openCustomModels: (): Promise<void> => window.omfv.ai.openCustomModels(),
+  revealCustomModels: (): Promise<void> => window.omfv.ai.revealCustomModels(),
+  onCustomModels: (cb: () => void): (() => void) => window.omfv.ai.onCustomModels(cb),
   send: (text: string, context: string, tools: AgentToolDefinition[], reference: string, mode: AgentMode = 'view', scope: AgentScope = mode): Promise<void> =>
     window.omfv.ai.send(text, context, tools, reference, mode, scope),
   /** Ends build mode's conversation. */

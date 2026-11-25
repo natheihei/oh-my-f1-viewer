@@ -19,10 +19,19 @@ export interface SupportedProvider {
   ways: Partial<Record<ConnectWay, string>>;
   /** Offered in this order. */
   models: string[];
-  recommended: { model: string; thinking: ThinkingLevel };
+  /** Absent for a provider from Advanced: the app only recommends among models it has tried. */
+  recommended?: { model: string; thinking: ThinkingLevel };
+  /**
+   * Set for a provider from `/settings-agent` → Advanced (custom.ts), never for one of SUPPORTED. It needs no
+   * connecting: its key, if it has one, is in its setup.
+   */
+  custom?: { baseUrl: string; api: string; hasKey: boolean };
 }
 
-export const SUPPORTED: SupportedProvider[] = [
+/** One the app ships with, which always has a recommended model. */
+export type BuiltInProvider = SupportedProvider & Required<Pick<SupportedProvider, 'recommended'>>;
+
+export const SUPPORTED: BuiltInProvider[] = [
   {
     provider: 'openai',
     label: 'OpenAI',

@@ -46,8 +46,8 @@ Each event also carries `build` (`release` or `dev`), `release` (the release nam
 | `session_closed` | `minutes`, rounded to 5 and capped at 600 | It closes, another opens, or the app quits |
 | `tile_added` | `tile`: a built-in component's name, or `mod` | A tile appears on the grid, from the agent, a suggestion or the viewer |
 | `command_used` | `command`: a built-in `/` command's name, without what follows it | A `/` command runs |
-| `agent_connected` | `provider`, `way` (`oauth` or `api_key`) | A provider is connected |
-| `agent_turn` | `mode` (`pick`, `view`, `build`), `provider`, `model`, `thinking`, `tool_calls`, `acted`, `outcome` (`done`, `error`, `cancelled`), `fix` | A message is answered |
+| `agent_connected` | `provider`, `way` (`oauth` or `api_key`) | A supported provider is connected. One set up in `models.json` is never connected: its key is in the file |
+| `agent_turn` | `mode` (`pick`, `view`, `build`), `provider`, `model`, `thinking`, `tool_calls`, `acted`, `outcome` (`done`, `error`, `cancelled`), `fix` | A message is answered. A provider set up in `/settings-agent` → Advanced is sent as `custom`, with no `model`: its ids are the viewer's own |
 | `agent_tool` | `mode`, `tool` (the tool's name), `ok` | The agent calls a tool |
 | `build_started` | none | Build mode begins |
 | `build_ended` | `how` (`save` or `undo`), `mods` (how many changed) | Build mode is saved or undone |

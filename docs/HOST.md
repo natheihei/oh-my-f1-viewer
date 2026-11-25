@@ -303,7 +303,7 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
   didn't. `whatsNew()` opens this release's notes, and `about()` the OMFV site. Only the shell uses it: `/version`, `/whats-new`,
   `/about` and `src/shell/updates.ts`. See [RELEASE.md](RELEASE.md#updates).
 - `host.agent`: the link to the agent loop in the main process (`status`, `send`, `cancel`, `onEvent`, `onToolCall`, `toolResult`), and its
-  setup (`providers`, `connect`, `cancelConnect`, `onConnect`, `disconnect`, `choose`). The shell's agent feed, `/settings-agent` and
+  setup (`providers`, `connect`, `cancelConnect`, `onConnect`, `disconnect`, `choose`, and Advanced's `customModels`, `openCustomModels`, `revealCustomModels`, `customModelsDocs` and `onCustomModels`). The shell's agent feed, `/settings-agent` and
   `src/agent/bridge.ts` use it. `send` keeps `live.agentBusy` as messages go through it (`src/host/agentTurn.ts`).
 - `host.savedState`: small UI state kept across restarts in the profile's settings file (`load()`, `get(key)`, `set(key, value)`).
   `src/main.tsx` loads it once before the first render, and only the shell restores and saves through it (`src/shell/uiState.ts`).
