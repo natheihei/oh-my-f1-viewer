@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apart, arrange, groupsOf, shareWithin, solve, type Slot } from './solve';
+import { apart, arrange, groupsOf, mixed, shareWithin, solve, type Slot } from './solve';
 
 const sum = (list: number[]) => list.reduce((a, v) => a + v, 0);
 
@@ -146,6 +146,43 @@ describe('solve', () => {
     });
     // b had the last tile added, so it is the newer group and comes first: left of a, or above it.
     expect(['1,0', '0,1']).not.toContain(steps[0]);
+  });
+
+  it('keeps tiles of one kind at one size where that costs little, but not by making them all small', () => {
+    const wide = { ...grid, cell: { w: 66, h: 36 } };
+    // An onboard keeps its picture's shape inside whatever room it is given.
+    const picture = (cell: number) => (room: { w: number; h: number }) => {
+      const w = Math.min(room.w * cell, ((room.h * 36 - 22) * 16) / 9);
+      return { w: Math.min(room.w, Math.ceil(w / cell)), h: Math.min(room.h, Math.ceil(((w * 9) / 16 + 22) / 36)) };
+    };
+    const onboard = (cell = 66) => slot({ kind: 'onboard', fit: picture(cell) });
+    const feed = slot({ kind: 'feed', fit: picture(66) });
+    const tel = slot({ kind: 'telemetry', aspect: 2.5, min: { w: 6, h: 5 } });
+    const tower = slot({ kind: 'tower', aspect: 0.5, min: { w: 4, h: 10 }, capped: true, fit: (room) => ({ w: Math.min(room.w, 6), h: room.h }) });
+    const sizes = (boxes: { w: number; h: number }[], of: number[]) => new Set(of.map((i) => `${boxes[i].w}x${boxes[i].h}`)).size;
+    // No main tile: three onboards and two telemetry charts. Each kind takes one size.
+    const shared = solve([onboard(), onboard(), onboard(), tel, tel], wide);
+    legible(shared, 3);
+    expect(sizes(shared, [0, 1, 2]), JSON.stringify(shared)).toBe(1);
+    expect(sizes(shared, [3, 4]), JSON.stringify(shared)).toBe(1);
+    // Round a main tile, two onboards either side of a tower take one size, and the main tile gives up a little for it.
+    const round = solve([feed, onboard(), tower, onboard()], wide, 0);
+    legible(round, 3);
+    expect(sizes(round, [1, 3]), JSON.stringify(round)).toBe(1);
+    // Five onboards and a tower: one size for all would be the least size for all, so they stay larger.
+    const narrow = slot({ kind: 'feed', fit: picture(60) });
+    const five = solve([narrow, onboard(60), onboard(60), onboard(60), tower, onboard(60), onboard(60)], { ...grid, cell: { w: 60, h: 36 } }, 0);
+    legible(five, 3);
+    [1, 2, 3, 5, 6].forEach((i) => expect(five[i].w, JSON.stringify(five)).toBeGreaterThanOrEqual(4));
+  });
+
+  it('counts how far tiles of one kind are from one size, leaving out the main tile and tiles of no kind', () => {
+    const slots = [slot({ kind: 'video' }), slot({ kind: 'video' }), slot({ kind: 'video' }), slot(), slot()];
+    const at = (...sizes: [number, number][]) => new Map(sizes.map(([w, h], i) => [i, { x: 0, y: 0, w, h }]));
+    expect(mixed(at([12, 12], [6, 6], [6, 6], [3, 3], [9, 9]), 0, slots)).toBe(0);
+    expect(mixed(at([6, 6], [6, 6], [6, 6], [3, 3], [9, 9]), null, slots)).toBe(0);
+    expect(mixed(at([12, 12], [6, 6], [6, 3], [3, 3], [9, 9]), 0, slots)).toBeCloseTo(0.25);
+    expect(mixed(at([12, 12], [6, 6], [6, 6]), null, slots)).toBeCloseTo(0.5);
   });
 
   it('lists groups newest first, by the last slot added to each, and leaves out the main slot and a group of one', () => {

@@ -13,6 +13,8 @@
  * size. Groups come before single tiles, the newest first. Tiles are still tried on their own, and
  * that wins only when blocks would leave a tile under its least size or cost far more: see `apart`.
  *
+ * Tiles of one kind, such as several onboards, are kept at one size where that costs little: see `mixed`.
+ *
  * Pure, and in grid cells. What a tile needs comes in as `Slot`s, so this file knows nothing of components.
  */
 
@@ -41,7 +43,7 @@ export interface Slot {
    * that share a group are placed as one block.
    */
   group?: string;
-  /** What it is, such as its component's name. Groups made of the same kinds are laid out alike. */
+  /** What it is, such as its component's name. Tiles of one kind are kept at one size, and groups of the same kinds laid out alike. */
   kind?: string;
   /** The least cells it may be given either way, when that is more than `LEAST_ROOM`: a block of several tiles. */
   least?: Size;
@@ -68,7 +70,7 @@ const LEAST_STRIP = 3;
 export const LEAST_ROOM = LEAST_STRIP;
 
 /** How much each fault costs. A tile below its least size outweighs everything else. */
-const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3, apart: 4, unalike: 0.5 };
+const COST = { deficit: 40, shape: 1, main: 5, empty: 3, uneven: 3, apart: 4, unalike: 0.5, mixed: 1 };
 
 /** Splits `total` into `parts` whole numbers that differ by at most one. */
 function split(total: number, parts: number): number[] {
@@ -255,7 +257,28 @@ function cost(boxes: Map<number, Box>, main: number | null, slots: Slot[], grid:
     const areas = [...boxes].filter(([i]) => !slots[i].capped).map(([, box]) => box.w * box.h);
     if (areas.length > 1) uneven = (Math.max(...areas) - Math.min(...areas)) / all;
   }
-  return tiles - (COST.main * mainArea) / all + COST.empty + COST.uneven * uneven;
+  return tiles - (COST.main * mainArea) / all + COST.empty + COST.uneven * uneven + COST.mixed * mixed(boxes, main, slots);
+}
+
+/**
+ * How far tiles of one kind, such as one component's onboards, are from one size: for each kind with
+ * two or more tiles, the smallest one's width and height short of the largest's, as a share of each,
+ * averaged. The main tile is left out: it is meant to be larger. A preference, so its weight is small.
+ */
+export function mixed(boxes: Map<number, Box>, main: number | null, slots: Slot[]): number {
+  const by = new Map<string, Box[]>();
+  for (const [i, box] of boxes) {
+    const { kind } = slots[i];
+    if (i !== main && kind !== undefined) by.set(kind, [...(by.get(kind) ?? []), box]);
+  }
+  let out = 0;
+  for (const list of by.values()) {
+    if (list.length < 2) continue;
+    const ws = list.map((b) => b.w);
+    const hs = list.map((b) => b.h);
+    out += (2 - Math.min(...ws) / Math.max(...ws) - Math.min(...hs) / Math.max(...hs)) / 2;
+  }
+  return out;
 }
 
 /** The widths tried for a rail of tall tiles when there is no main tile. */
@@ -452,8 +475,8 @@ function arrangeEach(slots: Slot[], grid: Grid, main: number | null = null): Box
 
   let best: Map<number, Box> | null = null;
   let bestCost = Infinity;
-  // With a main tile, a tile's cost depends only on its own box, so each strip is split into however
-  // many lines suits it best on its own: more of them as tiles are added, so none is squeezed to a
+  // With a main tile, a tile's cost depends almost only on its own box, so each strip is split into
+  // however many lines suits it best on its own: more of them as tiles are added, so none is squeezed to a
   // sliver. The same strip comes up again and again across main sizes and orders, so each is worked out once.
   const others = Math.max(1, rest.length);
   const strips = new Map<string, Map<number, Box> | null>();
@@ -467,6 +490,8 @@ function arrangeEach(slots: Slot[], grid: Grid, main: number | null = null): Box
       if (!boxes) continue;
       let c = 0;
       for (const [i, box] of boxes) c += tileCost(i, box, main, others, slots, grid);
+      // Tiles of one kind within the strip: those across strips are counted in `cost`.
+      c += COST.mixed * mixed(boxes, main, slots);
       if (c < least - 1e-9) {
         found = boxes;
         least = c;
