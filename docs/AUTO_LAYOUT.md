@@ -42,7 +42,7 @@ One `Slot` for each tile, in the order the tiles were added, the grid, and which
 | `fit(room)` | `fit` | The cells it uses of a rectangle: all of it, unless its content stops growing (`width`, `height`) or keeps a shape (`aspect`) |
 | `capped` | `fit.width` or `fit.height` is set | Its content stops growing, so it isn't counted when sizes are evened out |
 | `group` | `groupOf` in the model | What it belongs with: see "Tiles that belong together" |
-| `kind` | The component's name | What it is. Groups made of the same kinds are laid out alike |
+| `kind` | The component's name | What it is. Tiles of one kind are kept at one size, and groups made of the same kinds are laid out alike |
 | `least` | Only blocks set it | The least cells it may be given, when that is more than 3 either way |
 
 Shapes are judged as they look on screen, so the grid carries a cell's size in pixels and the title bar's height (22px). Before
@@ -98,10 +98,27 @@ Lower is better. Each term is a share of something, times a weight (`COST` in `s
 | Uneven | 3 | With no main tile only: the gap between the largest and smallest tile that can grow, as a share of the grid |
 | Apart | 4 | How far apart the groups' tiles are: see below |
 | Unalike | 0.5 | How many groups don't line up with the first of their kind: see below |
+| Mixed | 1 | For each component with two or more tiles, the main one aside, how far its smallest tile's width and height are short of its largest's, as a share of each |
 
 So a tile under its least size outweighs everything, and the main tile shrinks before that happens. After that the main tile
-is as large as it can be, tiles apart from their group cost about as much as the main tile's size, and shape, empty cells and
-groups lining up decide between what's left.
+is as large as it can be, tiles apart from their group cost about as much as the main tile's size, and shape, empty cells,
+groups lining up and tiles of one component at one size decide between what's left.
+
+### Tiles of one component at one size
+
+Three onboards read as a set when they are one size, so the *mixed* term prefers that. It is a preference, not a rule
+(2026-11-24). Its weight was chosen on made-up tiles in the unit tests. There, at 1, two onboards either side of a tower take
+one size where the main tile gives up a row or two, and three onboards beside two telemetry charts with no main tile take one
+column of equal tiles. At 2 or more, five onboards and a tower round a main tile all shrank to 3 by 3 cells to be equal, since
+a share costs the same at any size. A cell of rounding between two tiles in one line still counts, but rarely decides anything.
+
+On a real replay race it changed one of seven sets of tiles: four onboards round a main feed and a tower, which were 6 by 6
+beside the tower and 7 by 6 below, are all 6 by 6. Real charts and the tower stop growing, so most sets were one size per
+component already. With no main tile, three onboards beside two telemetry charts stay 12, 12 and 10 columns wide at 1 or 2:
+one size would mean about 8 columns each and much of the grid empty.
+
+Each strip's best number of lines counts it among the strip's own tiles. Between the rail and the band it is counted in the
+arrangement's cost.
 
 ## Tiles that belong together
 
