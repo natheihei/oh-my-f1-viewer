@@ -164,8 +164,10 @@ changes.
 The palette hides itself in one case: 3s after the viewer moves elsewhere in the app (`AWAY_HIDE_MS` in `src/shell/palette.ts`), whatever
 the agent is doing — or at once on another click outside once it has already lost focus. Moving away is focus leaving the palette, or a press outside it where nothing takes focus, such as on a video. The
 window losing focus isn't, and nor is a press in the palette that leaves focus on nothing, as on the history's text. Otherwise it stays,
-however a turn or a `/` command ends, until the viewer presses Esc or its key. While something of the viewer's holds it open (no session,
-build mode, a panel, errors they attached), it stays, and the hold ending while the viewer is away starts the 3s.
+however a turn or a `/` command ends, until the viewer presses Esc or its key. While something of the viewer's holds it open (nothing else
+on screen, build mode, a panel, errors they attached), it stays, and the hold ending while the viewer is away starts the 3s. Nothing else on
+screen is no session and no landing page, as during onboarding or the countdown: the landing page doesn't hold it, and picking a row there
+unfolds it with the session in the input.
 
 What comes while the viewer is away or the palette is hidden is unread: a reply, an error or fix, or a question for them (suggestions, the
 spoiler check, an offer of build mode). Unread, the frame goes white and twice as thick. Focus, a click or typing in the palette reads it.

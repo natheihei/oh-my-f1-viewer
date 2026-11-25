@@ -158,8 +158,12 @@ export const palette = {
   setBusy(busy: boolean): void {
     usePalette.setState({ busy });
   },
-  /** Puts text in the input in place of what's there, and the caret after it. Nothing is sent. */
+  /**
+   * Puts text in the input in place of what's there, and the caret after it. Nothing is sent. It brings the
+   * viewer to the palette, unfolding it if it was hidden, since the input is only there while it shows.
+   */
   draft(text: string): void {
+    palette.summon();
     usePaletteDraft.setState((s) => ({ text, seq: s.seq + 1 }));
   },
   /** Shows the palette, for something in it. Where the viewer is stays as it was. */
