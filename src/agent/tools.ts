@@ -15,8 +15,8 @@
  */
 import Type, { type Static, type TObject } from 'typebox';
 import type { AgentMode, AgentToolDefinition, Channel } from '../../shared/api';
-import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, misfit, read, specOf, tilesOf, type ComponentInfo, type Op } from '../host';
-import { driversOf, normalize, resolveChannel, resolveDriver } from './matching';
+import { FIRST_SEASON, fitting, host, isDriverList, isDriverProp, MAX_PLACE, misfit, read, specOf, tilesOf, type ComponentInfo, type Op, type Place } from '../host';
+import { driversOf, normalize, resolveChannel, resolveDriver, resolvePlace } from './matching';
 import { OPEN_WAIT_MS, requireData, settleData } from './dataWait';
 import { spoilerGate, type SpoilerRequest } from './spoilerGate';
 import { formatClock } from '../../shared/clock';
@@ -134,22 +134,35 @@ const AsOf = Type.Union([Type.Literal('playhead'), Type.Literal('session')], {
 
 // Name matching
 
-const STREAM_REF = 'a driver code (HAM), surname (Hamilton), car number (44), or channel name (world feed, F1 Live, data, tracker)';
+const STREAM_REF =
+  'a driver code (HAM), surname (Hamilton), car number (44), channel name (world feed, F1 Live, data, tracker), or a place in the running order (P1, P2, or leader), for the onboard of whoever holds it as the order changes';
 const StreamRefs = Type.Array(Type.String(), { description: `Stream references: ${STREAM_REF}.` });
 
-function matchAll(refs: string[]): { feeds: Channel[]; missing: string[] } {
-  const available = read().feeds;
-  const feeds: Channel[] = [];
-  const missing: string[] = [];
-  for (const ref of refs) {
-    const hit = resolveChannel(available, ref);
-    if (!hit) missing.push(ref);
-    else if (!feeds.includes(hit)) feeds.push(hit);
-  }
-  return { feeds, missing };
+/** How many places there are: one per car in the roster, else the most there could be. */
+const placesNow = (): number => rosterNow().length || MAX_PLACE;
+
+/** The place a stream reference names, to follow with an onboard, or null for a feed or a miss. */
+function placeRef(ref: string): Place | null {
+  const hit = resolvePlace(ref, placesNow());
+  return hit && 'place' in hit ? hit.place : null;
 }
 
-const videosOf = (feeds: Channel[]) => feeds.map((f) => ({ type: 'video', props: { feed: f.id } }));
+/** The feeds and places named, in the order named, each once, and what matched neither. */
+function matchAll(refs: string[]): { matched: (Channel | Place)[]; missing: string[] } {
+  const available = read().feeds;
+  const matched: (Channel | Place)[] = [];
+  const missing: string[] = [];
+  for (const ref of refs) {
+    const hit = placeRef(ref) ?? resolveChannel(available, ref);
+    if (!hit) missing.push(ref);
+    else if (!matched.includes(hit)) matched.push(hit);
+  }
+  return { matched, missing };
+}
+
+/** A video for each feed, and one following each place. */
+const videosOf = ({ matched }: { matched: (Channel | Place)[] }) =>
+  matched.map((m) => ({ type: 'video', props: typeof m === 'string' ? { driver: m } : { feed: m.id } }));
 /**
  * What the model meant by a stream that isn't one, when it names a component this session doesn't offer: its list leaves
  * those out, so asked for a race's timing tower in practice, it reaches for a stream of that name.
@@ -223,7 +236,7 @@ export function propsText(c: ComponentInfo): string {
 
 const ComponentProps = Type.Record(Type.String(), Type.Unknown(), {
   description:
-    "The component's props, from its line in the component list. Give every required one. A driver prop takes a driver code (HAM), surname (Hamilton) or car number (44): one for a prop named driver…, a list for drivers….",
+    "The component's props, from its line in the component list. Give every required one. A driver prop takes a driver code (HAM), surname (Hamilton) or car number (44): one for a prop named driver…, a list for drivers…. It also takes a place in the running order, P1, P2 and so on, or leader for P1, to follow whoever holds it as the order changes: P1 to P3 for the top three.",
 });
 
 const ComponentRef = Type.Object(
@@ -284,14 +297,20 @@ export function resolveProps(component: ComponentInfo, given: Record<string, unk
       continue;
     }
     const refs = (Array.isArray(value) ? value : [value]).map(String);
-    const numbers: number[] = [];
+    const drivers: (number | Place)[] = [];
     for (const ref of refs) {
-      const hit = resolveDriver(roster, ref);
-      if (!hit) unknown.push(ref);
-      else if (!numbers.includes(hit.number)) numbers.push(hit.number);
+      const place = resolvePlace(ref, roster.length || MAX_PLACE);
+      if (place && 'problem' in place) {
+        problems.push(place.problem);
+        continue;
+      }
+      const hit = place ? null : resolveDriver(roster, ref);
+      const driver = place ? place.place : hit?.number;
+      if (driver == null) unknown.push(ref);
+      else if (!drivers.includes(driver)) drivers.push(driver);
     }
-    if (isDriverList(name)) props[name] = numbers;
-    else if (numbers.length === 1) props[name] = numbers[0];
+    if (isDriverList(name)) props[name] = drivers;
+    else if (drivers.length === 1) props[name] = drivers[0];
     else if (refs.length > 1) problems.push(`${component.name}'s ${name} is one driver, and ${refs.length} were given.`);
   }
   if (unknown.length) problems.push(`No driver matches ${unknown.map((u) => `"${u}"`).join(', ')} in this session: ask the user who they mean.`);
@@ -339,6 +358,15 @@ function planComponents(components: Static<typeof ComponentRef>[]): { items: Ite
   return { items, problems };
 }
 
+/** A stream tile's props for the stream the model named: a feed, or a place to follow. Its own, when the name matches neither. */
+function streamProps(stream: string | undefined, own: Record<string, unknown>): Record<string, unknown> {
+  if (stream == null) return own;
+  const place = placeRef(stream);
+  if (place) return { driver: place };
+  const feed = resolveChannel(read().feeds, stream)?.id;
+  return feed ? { feed } : own;
+}
+
 /** Tiles are named by their id, as app_state lists them. */
 const TileId = Type.String({ description: 'A tile id as app_state lists it, such as "tile-3"' });
 const ID_HINT = 'Name tiles by the ids app_state lists, such as tile-3.';
@@ -354,7 +382,7 @@ const suggestTiles = (args: typeof SuggestArgs | (() => typeof SuggestArgs)): Ag
     description:
       'Suggest streams and components as tiles, in a strip under the conversation: the user adds the ones they want, or dismisses them. This is the only way to put anything on screen. It returns at once, before the user answers. Calling it again in the same turn adds to the strip. Components come from the component list, each with its props filled in.',
     args,
-    adapt: ({ streams = [], components = [] }) => ({ items: [...videosOf(matchAll(streams).feeds), ...planComponents(components).items] }),
+    adapt: ({ streams = [], components = [] }) => ({ items: [...videosOf(matchAll(streams)), ...planComponents(components).items] }),
     gate: [
       sessionOpen,
       (_, { streams = [], components = [] }) => {
@@ -576,7 +604,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   expose(host.layout.setProps, {
     name: 'edit_tile',
     description:
-      "Change one tile on screen, in place: a component's props (who it is about, who it highlights or who it draws), or the stream a stream tile shows, as another driver's onboard in place of this one. It keeps its id and place, and a stream tile that is heard stays heard. Only the props named change; null takes one away. To show the same component or stream for someone else as well, suggest another with suggest_tiles instead.",
+      "Change one tile on screen, in place: a component's props (who it is about, who it highlights or who it draws), or the stream a stream tile shows, as another driver's onboard in place of this one, or the onboard of a place to follow, such as P2. It keeps its id and place, and a stream tile that is heard stays heard. Only the props named change; null takes one away. To show the same component or stream for someone else as well, suggest another with suggest_tiles instead.",
     args: Type.Object(
       {
         tile: TileId,
@@ -587,7 +615,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     ),
     adapt: ({ tile, props = {}, stream }) => {
       const hit = tileOnScreen(tile);
-      if (hit?.component.type === VIDEO) return { tile, props: { feed: (stream != null && resolveChannel(read().feeds, stream)?.id) || String(hit.component.props.feed) } };
+      if (hit?.component.type === VIDEO) return { tile, props: streamProps(stream, hit.component.props) };
       const info = hit && componentsOf().find((c) => c.name === hit.component.type);
       return { tile, props: info ? resolveProps(info, props, hit.component.props).props : {} };
     },
@@ -599,10 +627,14 @@ export const AGENT_TOOLS: AgentTool[] = [
         if (hit.component.type === VIDEO) {
           if (stream == null) throw new Error(`${tile} is a stream: give stream, the one to show in it instead, and no props.`);
           if (Object.keys(props).length) throw new Error(`${tile} is a stream, which has no props: give only stream. Nothing was changed.`);
-          const channel = resolveChannel(read().feeds, stream);
-          if (!channel) throw new Error(`No stream matches "${stream}". Use list_streams to see the options. Nothing was changed.`);
-          const other = tilesOf(read().layout).find((t) => t.component.type === VIDEO && t.component.key === channel.id);
-          if (other && other.id !== tile) throw new Error(`${channel.label} is already on screen in ${other.id}: leave ${tile} as it is, or remove it.`);
+          const place = resolvePlace(stream, placesNow());
+          if (place && 'problem' in place) throw new Error(`${place.problem} Nothing was changed.`);
+          const channel = place ? null : resolveChannel(read().feeds, stream);
+          if (!place && !channel) throw new Error(`No stream matches "${stream}". Use list_streams to see the options. Nothing was changed.`);
+          const key = place ? specOf({ type: VIDEO, props: { driver: place.place } }).key : channel!.id;
+          const other = tilesOf(read().layout).find((t) => t.component.type === VIDEO && t.component.key === key);
+          const name = place ? `The onboard of ${place.place}` : channel!.label;
+          if (other && other.id !== tile) throw new Error(`${name} is already on screen in ${other.id}: leave ${tile} as it is, or remove it.`);
           return;
         }
         const info = componentsOf().find((c) => c.name === hit.component.type);

@@ -15,6 +15,7 @@ import { driverStyles, labelText as plainLabel, partsText as plainParts, styleOf
 // The data stores themselves, not `live`: the host's own modules import this, and `live` imports them.
 import { useSession } from '../data/session';
 import { useSessionData } from '../data/sessionData';
+import { carIn, usePlaces, useRunningOrder, type DriverRef, type Place } from './places';
 
 export { CODE_BAR, CODE_WEIGHT, driverStyles, styleOf, type CodeLook, type CodeTone, type CodeVariant, type DriverStyle, type Part } from './codes';
 
@@ -35,8 +36,20 @@ export function codeOf(number: number): string {
 /** The parts as plain text, each driver as its code. */
 export const partsText = (parts: readonly Part[], code: (number: number) => string = codeOf): string => plainParts(parts, code);
 
-/** A tile's label as text: its name, then its drivers' codes. "Gap NOR · PIA". */
-export const labelText = (name: string, drivers: readonly number[], code: (number: number) => string = codeOf): string => plainLabel(name, drivers, code);
+/** A place as text: the place, then the code of whoever holds it now. "P1 VER", or "P1" while nobody does. */
+export function placeText(place: Place, code: (number: number) => string = codeOf, order: readonly number[] = usePlaces.getState().order): string {
+  const car = carIn(place, order);
+  return car === null ? place : `${place} ${code(car)}`;
+}
+
+/**
+ * A tile's label as text: its name, then its drivers' codes. "Gap NOR · PIA". A place is the place
+ * alone, "Telemetry P1", unless `now`: then it's who holds it as well, "Telemetry P1 VER".
+ */
+export function labelText(name: string, drivers: readonly DriverRef[], code: (number: number) => string = codeOf, { now = false } = {}): string {
+  if (drivers.every((d) => typeof d === 'number')) return plainLabel(name, drivers as number[], code);
+  return [name, drivers.map((d) => (typeof d === 'number' ? code(d) : now ? placeText(d, code) : d)).join(' · ')].filter(Boolean).join(' ');
+}
 
 /** The roster's styles now, for code that draws outside React. */
 let last: { drivers: readonly DriverEntry[]; styles: Map<number, DriverStyle> } | null = null;
@@ -88,14 +101,25 @@ export function Parts({ parts, look }: { parts: readonly Part[]; look?: CodeLook
   return parts.map((p, i) => (typeof p === 'string' ? p : <DriverCode key={i} number={p.driver} {...look} />));
 }
 
+/** A place as a DOM element, "P1", for a title bar: see `.driver-place` in styles.css. */
+function placeElement(place: Place): HTMLSpanElement {
+  const el = document.createElement('span');
+  el.className = 'driver-place';
+  el.dataset.place = place;
+  el.textContent = place;
+  return el;
+}
+
 /**
  * Fills a tile's title: its name, then each driver as a strong `bar` code, so whose tile it is reads
- * at a glance. A title that names no drivers is its label as text.
+ * at a glance. A place is drawn as the place, then the code of whoever holds it in `order`. A title
+ * that names no drivers is its label as text.
  */
 export function fillTitle(
   el: HTMLElement,
-  spec: { label: string; title?: { name: string; drivers: number[] } },
+  spec: { label: string; title?: { name: string; drivers: DriverRef[] } },
   styles: Map<number, DriverStyle> = currentStyles(),
+  order: readonly number[] = usePlaces.getState().order,
 ): void {
   if (!spec.title) {
     el.textContent = spec.label;
@@ -105,6 +129,32 @@ export function fillTitle(
   if (spec.title.name) el.append(`${spec.title.name} `);
   spec.title.drivers.forEach((d, i) => {
     if (i) el.append(' · ');
-    el.append(driverCodeElement(d, { strong: true }, styles));
+    if (typeof d === 'number') {
+      el.append(driverCodeElement(d, { strong: true }, styles));
+      return;
+    }
+    el.append(placeElement(d));
+    const car = carIn(d, order);
+    if (car !== null) el.append(' ', driverCodeElement(car, { strong: true }, styles));
   });
+}
+
+/** A driver a title names, in React: a code, or a place and the code of whoever holds it. */
+export function TitleDriver({ driver }: { driver: DriverRef }) {
+  const order = useRunningOrder(typeof driver !== 'number');
+  if (typeof driver === 'number') return <DriverCode number={driver} strong />;
+  const car = carIn(driver, order);
+  return (
+    <>
+      <span className="driver-place" data-place={driver}>
+        {driver}
+      </span>
+      {car !== null ? (
+        <>
+          {' '}
+          <DriverCode number={car} strong />
+        </>
+      ) : null}
+    </>
+  );
 }

@@ -47,6 +47,7 @@ export {
   Parts,
   partsText,
   styleOf,
+  TitleDriver,
   useDriverStyles,
   type CodeLook,
   type CodeTone,
@@ -58,6 +59,7 @@ export { startPictures } from './picture';
 export { startHealth, type Attachment, type ErrorReport, type PlaceHealth } from './health';
 export { startMods } from './mods';
 export { Displayed, Driver, DriverList, Highlighted, isDriverList, isDriverProp, keyPart } from './props';
+export { carIn, isPlace, MAX_PLACE, placeName, placeOf, usePlaces, useRunningOrder, type DriverRef, type Place } from './places';
 export { startBuild, type BuildOffer, type BuildView } from './build';
 export { previewScope } from './lookAhead';
 export type { BuildChange, ModLogLine, ModStatus } from '../../shared/mods';

@@ -32,9 +32,10 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   the tile, like the battle's fight, is the component's, kept with `useTileState` so it survives the mod being saved. (2026-11-15.)
 - **It declares the props it needs, and whoever puts it on screen fills them in.** The agent does, from what the user said, when it
   suggests the tile, so a preview in the suggestion strip is already about its drivers and the tile stays about them. A component
-  never picks a driver from the data itself, or from which onboards are on screen, unless following one is its job (a "leader"
-  chart that tracks whoever leads), and then its label says so. (2026-11-13, #77. Before, a chart given no drivers picked its own
-  at every render: the top three reshuffled under the viewer, and a key such as `speed_ribbon:leader` never said who.)
+  never picks a driver from the data itself, or from which onboards are on screen, unless following one is its job, and then its
+  label says so. Following a place, like whoever leads, isn't a component's job: the agent gives it the place as a prop, below.
+  (2026-11-13, #77. Before, a chart given no drivers picked its own at every render: the top three reshuffled under the viewer,
+  and a key such as `speed_ribbon:leader` never said who.)
 - **Driver props are named for what they hold,** so the agent fills them in by name. `src/host/props.ts` has the schemas.
   - `driver`: the one driver a chart is about. Required: `car_telemetry`, `pit_window`, `speed_ribbon`, `pedal_barcode`.
   - `driver_a`, `driver_b`: the two a comparison is about. Required: `gap_evolution`, where which is which only sets the colours,
@@ -47,6 +48,26 @@ Each rule has the date it was decided. One marked **not built yet** is agreed bu
   "how is VER doing" gets every car's tyres with VER highlighted. (2026-11-18. Before, it often drew the one driver alone, which
   gave a chart of the field with nothing to compare against.)
   A name starting `driver_` or `drivers_` is a driver prop too, one driver or a list, so a component can add its own.
+- **A driver prop can hold a place instead of a car:** `"P1"` is whoever leads at the playhead, and the tile follows the place as
+  the order changes. "The onboards of the top three" is three onboards following P1 to P3, and "telemetry for the leader" is
+  `car_telemetry` with `driver: "P1"`. A list can mix them, `["P1", 44]`. (2026-11-24.)
+  - **The host resolves it, and the component never sees one.** Just before a tile draws, `src/host/places.ts` swaps each place for
+    the car in it, from the latest `position` row of each car still running (a car that has retired holds no place), read as of the
+    playhead like any chart's data. So every chart and mod follows a place with no code of its own, and when the order changes it
+    is drawn again with the new car's number, as if the agent had edited it.
+  - **The props, key and title keep the place.** `car_telemetry:P1` and `car_telemetry:1` are two tiles, so P1's telemetry and VER's
+    can both be on screen. To check the props against the args and build the spec, the host stands in a number no car has for each
+    place, in the places' order, and turns it back into the place in the key, label and drivers. A spec that sorts its drivers or
+    tells two apart does so for places too: `driver_a: "P1", driver_b: "P1"` is refused like two of the same car.
+  - **The title bar draws the place, then the code of whoever holds it:** "Telemetry P1 ▍VER", the place in the title's ink and
+    not bold, so it reads as which tile this is and the code as who it is now. The agent reads it the same way in `app_state`,
+    "Telemetry P1 VER".
+  - **Nobody in the place is no fault.** Before the order is known, or past the last car still running, the tile says
+    "Nobody is in P18" and draws once somebody is. A list draws with the places it can fill. When two places in a chart of two
+    hold the same car, as `driver_a: "P1"` and `driver_b: 1` while VER leads, the tile says why the spec refuses it.
+  - **No hold on a change.** The tile switches the moment the order does. An onboard whose new car's video is already playing in
+    another tile takes it over at once: when P1 and P2 swap, the two tiles trade videos in one render with no reload. One whose
+    new car isn't on screen starts its stream.
 - **Every prop is in the key,** so the same chart can be on screen twice when its props differ, one telemetry for HAM and one for VER,
   and the same props twice is one tile. Where the order of two drivers doesn't change what's drawn, the key sorts them.
 - **The key is not the tile's name.** It follows the props, so a tile is named by its id instead, which it keeps through new props.
@@ -220,6 +241,9 @@ Any component can show feeds: `video` is just the one that shows one feed and no
   what's on screen: an empty picture holds none.
 - **A driver's onboard comes from `live.feeds`:** the feed with `kind` `onboard` and their car number. Some sessions lack one, so say
   "No onboard" where it would go.
+- **`video` takes a feed, or a place to follow.** `{ feed }` is one feed, keyed by it. `{ driver: "P1" }` is the onboard of whoever
+  holds the place, keyed `onboard:P1`, and the agent asks for it by naming the place as a stream. When the car in it changes, the
+  tile lets go of the old onboard and takes the new one in the same render, and a heard tile stays heard.
 - **The stream slots are the component's to say.** It spreads `streamSlots(...)` of its videos into `useTileHeader`, so the title bar
   says when they load or catch up, and which tile is heard.
 - **The sound belongs to a picture.** A click on a picture makes it the one heard. A component with more than one names each with a

@@ -112,3 +112,17 @@ export function resolveDriver(drivers: Driver[], ref: string): Driver | null {
   const hit = resolveChannel(asChannels, ref);
   return hit ? (drivers.find((d) => d.number === hit.number) ?? null) : null;
 }
+
+/**
+ * The place in the running order a reference names, to follow whoever holds it: "P1", "p2", or "leader"
+ * for P1. Null for anything else, such as a driver. The number is checked against `most`, the cars there are.
+ */
+export function resolvePlace(ref: string, most: number): { place: `P${number}` } | { problem: string } | null {
+  const key = normalize(ref).replace(/\s+/g, ' ');
+  if (key === 'leader' || key === 'the leader') return { place: 'P1' };
+  const m = /^p ?(\d{1,2})$/.exec(key);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1 || n > most) return { problem: `"${ref}" is no place in this session: there are P1 to P${most}.` };
+  return { place: `P${n}` };
+}

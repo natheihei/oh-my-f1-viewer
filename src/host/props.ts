@@ -6,7 +6,9 @@
  *
  * A prop holds drivers when its name says so: `driver`, `drivers`, or a name starting `driver_` or
  * `drivers_`. Its value is car numbers: one for `driver…`, a list for `drivers…`. The agent passes codes,
- * surnames or numbers, and the host turns them into car numbers. The usual ones:
+ * surnames or numbers, and the host turns them into car numbers. It can also pass a place, such as "P1",
+ * to follow whoever holds it: the props keep the place, and the component is drawn with the car in it at
+ * the playhead, so it only ever sees car numbers. See `places.ts`. The usual ones:
  *
  * - `driver`: the one driver a chart is about.
  * - `driver_a`, `driver_b`: the two a comparison is about, when which is which matters.

@@ -5,7 +5,7 @@
  */
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { rosterOf, type DriverEntry } from '../../shared/sessionData';
-import { codeOf, driverCodeElement, DriverCode, fillTitle, host, read, tileTitle, useLive, type CodeLook } from '../host';
+import { codeOf, driverCodeElement, DriverCode, fillTitle, host, read, tileTitle, TitleDriver, useLive, type CodeLook } from '../host';
 import {
   sayDriver,
   sayTeam,
@@ -154,7 +154,7 @@ function TileTag({ id }: { id: string }) {
           {title.title.drivers.map((d, i) => (
             <Fragment key={d}>
               {i ? ' · ' : null}
-              <DriverCode number={d} strong />
+              <TitleDriver driver={d} />
             </Fragment>
           ))}
         </>

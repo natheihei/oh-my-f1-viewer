@@ -108,7 +108,8 @@ groups lining up decide between what's left.
 `groupOf` in the model gives each tile what it belongs with.
 
 1. **Its driver.** A tile is about a driver when its title names exactly one, as an onboard, a telemetry chart or a pit window
-   does. When two or more tiles on screen are about the same driver, they are a group, however each got there.
+   does. When two or more tiles on screen are about the same driver, they are a group, however each got there. A place is its
+   own driver: P1's onboard and P1's telemetry are a group, and stay one through an overtake, apart from whoever holds P1 now.
 2. **Failing that, its batch.** One `suggest_tiles` call is one `host.suggestions.offer`, and every tile added from it, by click
    or by drop, keeps that batch as `Tile.group`.
 3. **Otherwise nothing.** A tile put on screen any other way, about no one driver, is on its own.

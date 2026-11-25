@@ -121,9 +121,10 @@ Whether a request needs a build is decided in the order `VIEW_PROMPT` gives, tak
    - a component covers it but isn't offered in this session: it says why
    - none covers it and the session's tables hold the data: it offers the build
    - the tables don't hold it, such as tyre temperature: it says so, and offers nothing
-4. **Something to keep doing, or a control to press:** "always show the leader's onboard", "buttons to skip a lap". The viewing
+4. **Something to keep doing, or a control to press:** "always show the onboard of whoever set the fastest lap", "buttons to skip a lap". The viewing
    agent acts once per message, so it can't keep it up, but a tile can. A mod defines one component, so this is a tile too, decided
    as in 3. The prompt says nothing can be built that changes the app with no tile on screen, so the agent doesn't offer that.
+   Following a place isn't a build: "always show the leader's onboard" is the stream P1, which follows whoever leads.
 
 A request that could be a fact or something to follow, such as "how is HAM's pace", gets a component if one covers it and the fact if
 none does, with no offer. The offer comes if the viewer then says that wasn't what they wanted. Asked outright to build or change
@@ -161,7 +162,8 @@ the word build in it, and switching starts the build agent on the note.
 conversation for each case and each case several times: facts, something to follow that a component covers or none does in several
 wordings, a request that could be either and then says which, an offer turned down, something to keep doing, something no tile can
 do, data the session lacks, and a race chart asked for in qualifying. It never switches to build mode. All 16 cases passed 3 of 3
-on 2026-11-21.
+on 2026-11-21. The `place:` cases, added 2026-11-24, check that a place in the running order is followed with a tile and never
+built or looked up: `--only place` runs just those.
 
 ### Trying it
 
