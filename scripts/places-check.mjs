@@ -3,24 +3,70 @@
 // title, that the P1 tiles are kept together, and that when P1 and P2 swap the two onboards trade videos in
 // one render with no new stream, first by setting the order and then over a real change of lead. Prints what
 // it finds and saves a screenshot of each step. Runs its own isolated OMFV: see scripts/isolated.mjs.
-// Usage: node scripts/places-check.mjs <screenshot-dir> [lap] [session key]
+// With --agent the tiles come from the real agent: it's asked in the palette, and each suggestion is clicked
+// in the strip. That needs the agent's login too, which it copies in.
+// Usage: node scripts/places-check.mjs <screenshot-dir> [lap] [session key] [--agent]
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { typeInPalette } from './harness.mjs';
 import { openRace, seekToLap, startIsolatedApp } from './isolated.mjs';
 
-const outDir = process.argv[2];
-if (!outDir) throw new Error('Usage: node scripts/places-check.mjs <screenshot-dir> [lap] [session key]');
-const LAP = Number(process.argv[3] ?? 5);
-const SESSION = process.argv[4] ? Number(process.argv[4]) : null;
+const AGENT = process.argv.includes('--agent');
+const [outDir, lapArg, sessionArg] = process.argv.slice(2).filter((a) => a !== '--agent');
+if (!outDir) throw new Error('Usage: node scripts/places-check.mjs <screenshot-dir> [lap] [session key] [--agent]');
+const LAP = Number(lapArg ?? 5);
+const SESSION = sessionArg ? Number(sessionArg) : null;
+const ASK = 'show me the onboards of the top two, and telemetry for the leader';
 mkdirSync(outDir, { recursive: true });
 
-const { page, log, stop } = await startIsolatedApp(outDir, { name: 'places' });
+const { page, log, stop } = await startIsolatedApp(outDir, { name: 'places', agent: AGENT });
 let failed = 0;
 const check = (what, ok, detail = '') => {
   if (!ok) failed += 1;
   log(`${ok ? 'ok  ' : 'FAIL'} ${what}${detail ? `: ${detail}` : ''}`);
 };
-const shoot = (name) => page.screenshot({ path: path.join(outDir, `${name}.png`) });
+/** A screenshot of the grid, with the palette folded out of the tiles' way unless `palette`. */
+const shoot = async (name, { palette = false } = {}) => {
+  if (!palette) await page.evaluate(async () => (await import('/src/shell/palette.ts')).usePalette.setState({ open: false, unread: false }));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(outDir, `${name}.png`) });
+};
+
+/** Asks the agent in the palette, waits for its turn to end, and clicks each suggestion in the strip. Returns the new tiles' ids, in the order wanted. */
+async function askAgent() {
+  if (!(await page.evaluate(async () => (await window.omfv.ai.status()).ready))) throw new Error('The agent is not set up in the main profile: connect it in /settings-agent.');
+  await page.evaluate(() => {
+    window.events = [];
+    window.omfv.ai.onEvent((e) => window.events.push(e));
+  });
+  await typeInPalette(page, ASK);
+  const deadline = Date.now() + 180_000;
+  while (!(await page.evaluate(() => window.events.some((e) => e.type === 'turn_end' || e.type === 'error')))) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for the agent');
+    await page.waitForTimeout(500);
+  }
+  const turn = await page.evaluate(() => ({
+    calls: window.events.filter((e) => e.type === 'tool_start').map((e) => `${e.name}(${JSON.stringify(e.args)})`),
+    reply: window.events.filter((e) => e.type === 'text_delta').map((e) => e.delta).join(''),
+  }));
+  log(`> ${ASK}`);
+  for (const c of turn.calls) log(`  tool: ${c}`);
+  log(`  reply: ${turn.reply}`);
+  const keys = await page.locator('[data-testid=suggestion]').evaluateAll((els) => els.map((el) => el.dataset.key));
+  const wanted = ['onboard:P1', 'onboard:P2', 'car_telemetry:P1'];
+  check('the agent suggests the P1 and P2 onboards and P1 telemetry', wanted.every((k) => keys.includes(k)), keys.join(', '));
+  // The previews play before anything is added.
+  await page.waitForTimeout(6000);
+  await shoot('0-asked', { palette: true });
+  for (const key of wanted.filter((k) => keys.includes(k))) {
+    await page.locator(`[data-testid=suggestion][data-key="${key}"]`).click();
+    await page.waitForTimeout(800);
+  }
+  return page.evaluate(async (wanted) => {
+    const { read } = await import('/src/host/index.ts');
+    return wanted.map((k) => read().layout.tiles.find((t) => t.component.key === k)?.id);
+  }, wanted);
+}
 const host = (fn, arg) => page.evaluate(fn, arg);
 
 /** The order, each tile's title, the videos and which tile holds each, and the groups. */
@@ -63,7 +109,7 @@ try {
   log(`opened ${race.title}`);
   await seekToLap(page, race.start ?? 0, LAP);
 
-  const ids = await host(async () => {
+  const ids = AGENT ? await askAgent() : await host(async () => {
     const { host } = await import('/src/host/index.ts');
     return host.layout.add({
       items: [
