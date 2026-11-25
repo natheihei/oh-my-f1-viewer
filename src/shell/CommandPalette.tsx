@@ -102,11 +102,13 @@ export function CommandPalette() {
   /** Why the last key pressed while recording wasn't kept. */
   const [keyRefused, setKeyRefused] = useState<string | null>(null);
 
-  // With nothing on screen the palette is the whole interface, so it can't be dismissed.
   const hasTiles = tiles.length > 0;
+  // With nothing on screen the palette is the whole interface, so it can't be dismissed. The landing page is
+  // something on screen, so there it hides as it does over a session.
+  const alone = blank && !landingShown;
   // While building, the tag beside the input is the only way out, so the palette stays.
   // A panel, and errors the viewer attached, are theirs to finish, so the palette stays for them too.
-  const held = blank || building || panel != null || attached.length > 0;
+  const held = alone || building || panel != null || attached.length > 0;
   /**
    * What the agent asks the viewer: suggestions, the spoiler check, an offer of build mode. Open, the palette
    * shows them. Folded, they wait there, and it says what's waiting until the viewer comes to them.
@@ -305,13 +307,13 @@ export function CommandPalette() {
       if (isPaletteKey(e)) {
         e.preventDefault();
         // From elsewhere it brings the viewer to the palette, even one still showing. From in it, it hides it.
-        if (usePalette.getState().open && !blank && !palette.isAway()) palette.hide();
+        if (usePalette.getState().open && !alone && !palette.isAway()) palette.hide();
         else palette.summon();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [blank]);
+  }, [alone]);
 
   /** Dragging the top edge up raises the history's cap, from wherever it is now, within its bounds. */
   const onResizeStart = (e: PointerEvent<HTMLDivElement>) => {
@@ -340,8 +342,8 @@ export function CommandPalette() {
     grip.addEventListener('pointercancel', end);
   };
 
-  // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with a session open: without one it's held.
-  if (!showing) return <FoldedPalette busy={busy} unread={unread} line={waiting ? <WaitingLine /> : unread ? lastWord(entries) : null} />;
+  // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with something on screen: without it, it's held.
+  if (!showing) return <FoldedPalette busy={busy} unread={unread} blank={blank} line={waiting ? <WaitingLine /> : unread ? lastWord(entries) : null} />;
   // Marked until the viewer comes back to it.
   const marks = `${building ? 'palette-building' : ''} ${unread ? 'palette-unread' : ''}`;
 
@@ -575,7 +577,7 @@ export function CommandPalette() {
             e.stopPropagation();
             if (isPaletteKey(e)) {
               e.preventDefault();
-              if (!blank) palette.hide();
+              if (!alone) palette.hide();
               return;
             }
             if (e.key === 'Enter') {
@@ -585,7 +587,7 @@ export function CommandPalette() {
               e.preventDefault();
               if (value) inputRef.current?.setText('');
               else if (hasTiles) escapeTiles();
-              else if (!blank && !building) palette.hide();
+              else if (!alone && !building) palette.hide();
             } else if (e.key === 'Tab' && suggestions.length > 0) {
               e.preventDefault();
               inputRef.current?.setText(suggestions[selected].name);
@@ -695,7 +697,7 @@ function WaitingLine() {
  * behind it. It names the shortcut, and a click unfolds the palette where it's waited on. With something unread
  * it's marked. `line`, when there is one, takes the tip's place: what the agent asks, or the start of the newest reply.
  */
-function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean; line: ReactNode }) {
+function FoldedPalette({ busy, unread, blank, line }: { busy: boolean; unread: boolean; blank: boolean; line: ReactNode }) {
   const keyLabel = usePaletteKeyLabel();
   // Each fold starts on the placeholder, then a tip takes its place every so often.
   const [tip, setTip] = useState<Tip | null>(null);
@@ -707,8 +709,9 @@ function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean;
     }, TIP_MS);
     return () => clearInterval(timer);
   }, []);
-  // While the agent works the row says only what it's for.
-  const shown = busy ? null : tip;
+  // While the agent works the row says only what it's for. So it does with no session open, as on the landing
+  // page: the tips are about tiles and the video.
+  const shown = busy || blank ? null : tip;
   // The line before this one, drawn under it while one fades into the other.
   const [lines, setLines] = useState<{ now: Tip | null; before?: Tip | null }>({ now: null });
   if (lines.now !== shown) setLines({ now: shown, before: lines.now });
@@ -737,7 +740,7 @@ function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean;
         ) : null}
         {line ? null : lines.before !== undefined ? (
           <span key={`out:${lines.before?.id ?? ''}`} className="palette-folded-line palette-folded-line-out">
-            <FoldedLine tip={lines.before} keyLabel={keyLabel} />
+            <FoldedLine tip={lines.before} keyLabel={keyLabel} blank={blank} />
           </span>
         ) : null}
         {line ? null : (
@@ -747,7 +750,7 @@ function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean;
             data-testid="palette-folded-line"
             data-tip={lines.now?.id}
           >
-            <FoldedLine tip={lines.now} keyLabel={keyLabel} />
+            <FoldedLine tip={lines.now} keyLabel={keyLabel} blank={blank} />
           </span>
         )}
       </span>
@@ -756,9 +759,9 @@ function FoldedPalette({ busy, unread, line }: { busy: boolean; unread: boolean;
   );
 }
 
-/** What the folded palette says: a tip, or what it's for. */
-function FoldedLine({ tip, keyLabel }: { tip: Tip | null; keyLabel: string }) {
-  if (!tip) return <>ask for anything on screen</>;
+/** What the folded palette says: a tip, or what it's for, as the open palette's placeholder does. */
+function FoldedLine({ tip, keyLabel, blank }: { tip: Tip | null; keyLabel: string; blank: boolean }) {
+  if (!tip) return <>{blank ? 'name a session, or / for commands' : 'ask for anything on screen'}</>;
   return (
     <>
       <span className="palette-tip-label">tip</span>

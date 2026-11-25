@@ -7,7 +7,7 @@ and [RELEASE.md](RELEASE.md#install-it) how to install a release.
 
 | | |
 |---|---|
-| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. From elsewhere in the app it brings you to the palette, even one still showing. It also hides itself 3 seconds after you move elsewhere (or at once on a second click outside once it has lost focus), and Esc in it hides it. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Folded, it shows a tip every 20 seconds in place of its placeholder, from the list in `src/shell/tips.ts`. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
+| `Ctrl+K` | Show or hide the palette, with its history. `Cmd+K` works too. From elsewhere in the app it brings you to the palette, even one still showing. It also hides itself 3 seconds after you move elsewhere (or at once on a second click outside once it has lost focus), and Esc in it hides it. The chevron on its top edge folds it to its input row, see-through, and a click on that unfolds it. Folded over a session, it shows a tip every 20 seconds in place of its placeholder, from the list in `src/shell/tips.ts`; on the landing page it keeps the placeholder. Click the key written at the end of the input row and press another to change it; Backspace there goes back to `Ctrl+K` |
 | `Space` | Play or pause, when the palette isn't focused |
 | `←` `→` | Back or forward 10s |
 | `/login-f1tv` | Sign in to F1 TV (`/logout-f1tv` to sign out) |
@@ -139,7 +139,7 @@ npm run build:electron && node scripts/close-session-check.mjs /tmp/close-sessio
 
 This one opens no session and sends nothing to the agent. It checks the landing page: onboarding's two steps give way to it,
 it opens on now with no row open unless a session is live, a row clicked writes its session in the input and opens to its
-suffixes, and the arrow keys walk the sessions:
+suffixes, the arrow keys walk the sessions, and the palette folds on Esc or a press outside and unfolds when a row is clicked:
 
 ```bash
 node scripts/landing-check.mjs /tmp/landing-check

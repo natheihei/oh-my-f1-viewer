@@ -1,7 +1,7 @@
 // The landing page in the real app: onboarding has two steps and gives way to it, the tape opens on now with
 // no row open unless a session is live, a row clicked writes its session into the input and opens to its
-// suffixes, a suffix adds to the prompt, and the arrow keys walk the sessions. Nothing is sent, so no session
-// opens. Runs in an OMFV of its own (see isolated.mjs). It prints session names from the calendar, never a result.
+// suffixes, a suffix adds to the prompt, and the arrow keys walk the sessions. The palette isn't held open there:
+// Esc and presses outside fold it, and a row clicked unfolds it. Nothing is sent, so no session opens. Runs in an OMFV of its own (see isolated.mjs). It prints session names from the calendar, never a result.
 // Usage: node scripts/landing-check.mjs <screenshot-dir>
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -66,6 +66,51 @@ try {
   await page.locator('[data-testid=palette-input]').fill('something of my own');
   await page.keyboard.press('ArrowUp');
   check("the arrows leave the viewer's own text alone", (await input()).trim() === 'something of my own', await input());
+
+  // The landing page is something on screen, so the palette isn't held: Esc and presses outside hide it.
+  const folded = page.locator('[data-testid=palette-folded]');
+  await page.keyboard.press('Escape');
+  check('Esc clears the input first', (await input()).trim() === '', await input());
+  await page.keyboard.press('Escape');
+  check('then Esc folds the palette', (await folded.count()) === 1);
+  // Unfolded, the palette puts the keyboard in its input, again a frame later, which a viewer's next press comes
+  // after. On a hidden workspace frames come slowly, so this waits for that one.
+  const inInput = async () => {
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'palette-input', null, { timeout: 5_000 });
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  };
+  await folded.click();
+  await inInput();
+  check('a click on the folded palette unfolds it', (await folded.count()) === 0 && (await page.locator('[data-testid=palette-input]').count()) === 1);
+  // A press on the landing page where nothing takes focus, away from the palette and its rows.
+  const spot = await page.evaluate(() => {
+    const box = document.querySelector('[data-testid=landing]').getBoundingClientRect();
+    for (let y = box.top + 4; y < box.bottom; y += 8) {
+      for (const x of [box.left + 4, box.right - 4]) {
+        const at = document.elementFromPoint(x, y);
+        if (at && !at.closest('button, a, input, [contenteditable], [data-testid=palette]')) return { x, y };
+      }
+    }
+    return null;
+  });
+  check('there is a spot on the landing page with nothing to press', spot != null);
+  if (spot) {
+    await page.mouse.click(spot.x, spot.y);
+    await page.waitForTimeout(3_500);
+    check('a press outside folds it 3 seconds later', (await folded.count()) === 1);
+    const says = await folded.innerText();
+    check('folded, it says what it is for there', says.includes('name a session'), says);
+    await shoot('4-folded');
+    await folded.click();
+    await inInput();
+    await page.mouse.click(spot.x, spot.y);
+    await page.locator('[data-testid=landing-jump-now]').click();
+    check('a second press outside folds it at once', (await folded.count()) === 1);
+  }
+  await page.waitForTimeout(500);
+  await race.click();
+  check('a row clicked while it is folded unfolds it with the session in the input', (await folded.count()) === 0 && (await input()).trim().startsWith(named), await input());
+  check('with the keyboard in the input', await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'palette-input'));
 } finally {
   await stop();
 }
