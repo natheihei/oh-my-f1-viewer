@@ -120,7 +120,27 @@ export interface AgentProviderOption {
   /** How it's connected, or null. At most one provider is connected at a time. */
   connected: { way: ConnectWay; label: string } | null;
   models: { id: string; name: string; thinking: ThinkingLevel[] }[];
-  recommended: { model: string; thinking: ThinkingLevel };
+  /** Absent for a provider from Advanced, whose models the app knows nothing about. */
+  recommended?: { model: string; thinking: ThinkingLevel };
+  /**
+   * Set for a provider from Advanced (shared/customModels.ts). It needs no connecting: it's used once one of its
+   * models is chosen, and `active` says whether it is. `hasKey` says whether its setup has an API key, never the key.
+   */
+  custom?: { baseUrl: string; api: string; hasKey: boolean; active: boolean };
+}
+
+/** What Advanced shows of models.json (shared/customModels.ts). Its text is never sent: it can hold a key. */
+export interface CustomModelsFile {
+  /** Where the file is, to show and copy. */
+  path: string;
+  exists: boolean;
+  /** Where its JSON Schema and an example of it are, which the app writes beside it: the copied prompt names them. */
+  schema: string;
+  example: string;
+  /** The providers read from it, by the names the panel lists them under. None when anything is wrong. */
+  providers: string[];
+  /** What's wrong with it, each naming where. */
+  errors: string[];
 }
 
 /** What the browser side of a sign-in asks of the user, shown in the panel while it runs. */
@@ -283,8 +303,21 @@ export interface OmfvApi {
     onConnect(cb: (event: AgentConnectEvent) => void): () => void;
     /** Removes the connected provider's credential. The agent then needs setting up again. */
     disconnect(): Promise<void>;
-    /** Saves the model and thinking level. They apply from the next message, in the same conversation. */
-    choose(model: string, thinking: ThinkingLevel): Promise<AiStatus>;
+    /**
+     * Saves the model and thinking level. They apply from the next message, in the same conversation. `provider`
+     * switches to another provider that's ready: a connected one, or one from Advanced.
+     */
+    choose(model: string, thinking: ThinkingLevel, provider?: string): Promise<AiStatus>;
+    /** What Advanced shows of models.json, the file of models set up by hand. */
+    customModels(): Promise<CustomModelsFile>;
+    /** Opens models.json in the viewer's editor, making it with an example the first time. */
+    openCustomModels(): Promise<void>;
+    /** Shows models.json in its folder. */
+    revealCustomModels(): Promise<void>;
+    /** Opens pi-ai's documentation of custom providers, which models.json follows, in the browser. */
+    customModelsDocs(): Promise<void>;
+    /** Called when models.json has changed and been read again. */
+    onCustomModels(cb: () => void): () => void;
     /** `reference` is appended to the system prompt: what the agent should know up front, like the event list. */
     send(text: string, context: string, tools: AgentToolDefinition[], reference: string, mode?: AgentMode, scope?: AgentScope): Promise<void>;
     /** Ends build mode's conversation. The viewing one is untouched. */

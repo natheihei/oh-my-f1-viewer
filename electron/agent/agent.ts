@@ -1,12 +1,12 @@
 /**
  * The agent: a pi-durable conversation on the provider, model and thinking level chosen in `/settings-agent`,
- * from the providers in supported.ts. It holds the credentials, so it lives here, but its tools run in the
+ * from the providers in supported.ts, or one set up by hand in its Advanced view (custom.ts). It holds the credentials, so it lives here, but its tools run in the
  * renderer, which owns layout and playback. The renderer sends their definitions with each message, each call
  * goes over IPC, and its result comes back here.
  */
 import { app, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { promises as fsp } from 'node:fs';
+import { existsSync, promises as fsp, readFileSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import type { Context } from '@earendil-works/chord/context' with { 'resolution-mode': 'import' };
 import type { Api, AuthInteraction, CredentialStore, Message, Model, Models, Provider } from '@earendil-works/pi-ai' with { 'resolution-mode': 'import' };
@@ -24,9 +24,11 @@ import type {
   AgentToolResult,
   AiStatus,
   ConnectWay,
+  CustomModelsFile,
   ThinkingLevel,
 } from '../../shared/api';
 import { parseAgentSettings, THINKING_LEVELS, type AgentSettings } from '../../shared/agentSettings';
+import { CUSTOM_MODELS_DOCS, CUSTOM_MODELS_EXAMPLE_FILE, CUSTOM_MODELS_FILE, CUSTOM_MODELS_SCHEMA_FILE, EXAMPLE_CUSTOM_MODELS, parseCustomModelsText } from '../../shared/customModels';
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
 import { appSettings, type Settings } from '../settings';
@@ -36,6 +38,8 @@ import { track } from '../telemetry';
 import { forgetForSummary, forgetTurn, readAheadIn, SUMMARY_SYSTEM_PROMPT, summaryRequest } from './extensions/forgetReadAhead';
 import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
+import { customEntry, customProvider, type CustomParts } from './custom';
+import { customModelsSchema } from './modelsSchema';
 import { askForKey } from './keyWindow';
 import { SUPPORTED, supported, type SupportedProvider } from './supported';
 
@@ -52,7 +56,14 @@ const CONNECT_TIMEOUT_MS = 5 * 60_000;
 /** How often the text of a reply in progress is published. */
 const PARTIAL_INTERVAL_MS = 40;
 const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
+
+/** The agent can't answer until something is chosen in /settings-agent. Its message is in the viewer's words. */
+class SetupError extends Error {}
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
+/** Ids a provider from Advanced can't take: the supported ones', and the panel's own for Advanced. */
+/** The level a model from Advanced starts at, clamped to what it has. */
+const DEFAULT_THINKING: ThinkingLevel = 'medium';
+const RESERVED = [...SUPPORTED.map((s) => s.provider), 'advanced'];
 
 /** Stored conversations of each kind kept for review. Older ones are deleted when a new one starts. */
 export const KEPT_CONVERSATIONS = 100;
@@ -86,6 +97,7 @@ export interface AgentModels {
   credentials: CredentialStore;
   /** Adds a provider, or replaces the one with its id. */
   setProvider(provider: Provider): void;
+  deleteProvider(id: string): void;
   login: Models['login'];
   logout: Models['logout'];
 }
@@ -101,12 +113,17 @@ interface Runtime {
   conversationsDir: string;
   levels: (model: Model<Api>) => ThinkingLevel[];
   clamp: (model: Model<Api>, level: ThinkingLevel) => ThinkingLevel;
+  /** What Advanced's providers are made of. */
+  custom: CustomParts;
 }
 
-/** What the agent runs on: a supported provider with a stored credential, and the model and level chosen for it. */
+/**
+ * What the agent runs on: a supported provider with a stored credential, or one from Advanced, and the model and
+ * level chosen for it. `way` is null for one from Advanced, which needs no connecting.
+ */
 interface Choice {
   entry: SupportedProvider;
-  way: ConnectWay;
+  way: ConnectWay | null;
   model: Model<Api>;
   thinking: ThinkingLevel;
   stored: AgentSettings;
@@ -196,6 +213,10 @@ export class Agent {
   private connectAbort: AbortController | null = null;
   /** The run policy every conversation reads, from the settings as they stood at the last message. */
   private policy: HarnessSettings = {};
+  /** Advanced's providers as registered with pi-ai, and the stored setup they were made from. */
+  /** Advanced's providers as registered with pi-ai, the text of models.json they were made from, and what's wrong with it. */
+  private custom: { from: string | null; entries: SupportedProvider[]; errors: string[] } = { from: null, entries: [], errors: [] };
+  private customWatcher: FSWatcher | null = null;
 
   /** `onRuntime` lets tests register a fake model and credentials, and `store` is for their settings. */
   constructor(
@@ -224,6 +245,10 @@ export class Agent {
     const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
     const { anthropicProvider } = await import('@earendil-works/pi-ai/providers/anthropic');
     const { openNodeSqliteStorage } = await import('@earendil-works/pi-durable/storage/sqlite/node');
+    const { createProvider } = await import('@earendil-works/pi-ai');
+    const { openAICompletionsApi } = await import('@earendil-works/pi-ai/api/openai-completions.lazy');
+    const { openAIResponsesApi } = await import('@earendil-works/pi-ai/api/openai-responses.lazy');
+    const { anthropicMessagesApi } = await import('@earendil-works/pi-ai/api/anthropic-messages.lazy');
     // A test's fakes go in first: its credentials are what the collection is made over, and its providers
     // replace the real ones of the same id.
     const added: Provider[] = [];
@@ -231,15 +256,18 @@ export class Agent {
       models: null as unknown as Models,
       credentials: credentialStore(path.join(app.getPath('userData'), 'omfv-credentials.json')),
       setProvider: (provider) => void added.push(provider),
+      deleteProvider: () => {},
       login: (...args) => providers.models.login(...args),
       logout: (...args) => providers.models.logout(...args),
     };
     this.onRuntime?.(providers);
     const models = createModels({ credentials: providers.credentials });
-    // Only the providers supported.ts offers: nothing else in pi's catalog can be reached.
+    // Only the providers supported.ts offers: nothing else in pi's catalog can be reached. Advanced's are added
+    // later, from the settings (customEntries).
     for (const provider of [openaiProvider(), anthropicProvider(), ...added]) models.setProvider(provider);
     providers.models = models;
     providers.setProvider = (provider) => models.setProvider(provider);
+    providers.deleteProvider = (id) => models.deleteProvider(id);
     return {
       durable,
       context: BACKGROUND_CONTEXT,
@@ -248,7 +276,61 @@ export class Agent {
       conversationsDir: path.join(app.getPath('userData'), 'conversations'),
       levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
       clamp: (model, level) => clampThinkingLevel(model, level) as ThinkingLevel,
+      custom: {
+        createProvider,
+        apis: { 'openai-completions': openAICompletionsApi, 'openai-responses': openAIResponsesApi, 'anthropic-messages': anthropicMessagesApi },
+      },
     };
+  }
+
+  /** The setup's file, models.json, and its schema and an example beside it. */
+  private get customFiles(): { setup: string; schema: string; example: string } {
+    const dir = app.getPath('userData');
+    return { setup: path.join(dir, CUSTOM_MODELS_FILE), schema: path.join(dir, CUSTOM_MODELS_SCHEMA_FILE), example: path.join(dir, CUSTOM_MODELS_EXAMPLE_FILE) };
+  }
+
+  /**
+   * Advanced's providers, registered with pi-ai to match models.json (shared/customModels.ts). The file is read at
+   * each use, and the providers are made again whenever its text has changed, so an edit applies at the next thing
+   * the agent does. A file with anything wrong in it is used not at all, and Advanced says why.
+   */
+  private async customEntries(): Promise<SupportedProvider[]> {
+    const { providers, custom } = await this.runtime();
+    let from = '';
+    try {
+      from = readFileSync(this.customFiles.setup, 'utf8');
+    } catch {
+      // No file: nothing is set up.
+    }
+    if (from === this.custom.from) return this.custom.entries;
+    for (const old of this.custom.entries) providers.deleteProvider(old.provider);
+    const { config, errors } = parseCustomModelsText(from, RESERVED);
+    if (errors.length) console.warn(`[ai] ${CUSTOM_MODELS_FILE} is not used:`, errors.join(' '));
+    const entries = Object.entries(config?.providers ?? {}).flatMap(([id, provider]) => {
+      try {
+        providers.setProvider(customProvider(custom, id, provider));
+        return [customEntry(id, provider)];
+      } catch (e) {
+        console.warn(`[ai] the provider ${id} of ${CUSTOM_MODELS_FILE} can't be used:`, (e as Error).message);
+        return [];
+      }
+    });
+    this.custom = { from, entries, errors };
+    return entries;
+  }
+
+  /** Why the agent isn't set up, when what it was set up with is gone from models.json. */
+  private async setupProblem(): Promise<Error> {
+    const { provider, model } = this.settings;
+    if (!provider || supported(provider)) return new Error(SETUP_NEEDED);
+    const entry = await this.entryFor(provider);
+    if (!entry) return new SetupError(`The agent was using "${provider}", which is no longer in models.json. Choose a model in /settings-agent.`);
+    return new SetupError(`${entry.label} no longer has the model ${model ?? 'the agent was using'}. Choose one in /settings-agent.`);
+  }
+
+  /** A supported provider, or one from Advanced. */
+  private async entryFor(id: string | undefined): Promise<SupportedProvider | undefined> {
+    return supported(id) ?? (await this.customEntries()).find((e) => e.provider === id);
   }
 
   /** The way a provider is connected: its stored credential. Environment variables never count. */
@@ -261,20 +343,21 @@ export class Agent {
 
   /**
    * What the agent runs on, or null if it isn't set up. The provider is the one in the settings, and a
-   * model missing from its supported list falls back to the recommended one.
+   * model missing from its supported list falls back to the recommended one. A provider from Advanced has no
+   * recommended model, so when its saved one is gone the agent isn't set up until another is chosen.
    */
   private async current(): Promise<Choice | null> {
     const { providers, clamp } = await this.runtime();
     const stored = this.settings;
-    const entry = supported(stored.provider);
+    const entry = await this.entryFor(stored.provider);
     if (!entry) return null;
-    const way = await this.connectedWay(entry);
-    if (!way) return null;
+    const way = entry.custom ? null : await this.connectedWay(entry);
+    if (!entry.custom && !way) return null;
     const saved = stored.model;
-    const id = saved && entry.models.includes(saved) && providers.models.getModel(entry.provider, saved) ? saved : entry.recommended.model;
-    const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
+    const id = saved && entry.models.includes(saved) && providers.models.getModel(entry.provider, saved) ? saved : entry.recommended?.model;
+    const model = id ? (providers.models.getModel(entry.provider, id) as Model<Api> | undefined) : undefined;
     if (!model) return null;
-    const thinking = clamp(model, stored.thinking ?? entry.recommended.thinking);
+    const thinking = clamp(model, stored.thinking ?? entry.recommended?.thinking ?? DEFAULT_THINKING);
     return { entry, way, model, thinking, stored };
   }
 
@@ -465,7 +548,7 @@ export class Agent {
   async providers(): Promise<AgentProviderOption[]> {
     const { providers, levels } = await this.runtime();
     const choice = await this.current();
-    return SUPPORTED.flatMap((entry): AgentProviderOption[] => {
+    const builtIn = SUPPORTED.flatMap((entry): AgentProviderOption[] => {
       const provider = providers.models.getProvider(entry.provider);
       if (!provider) return [];
       const { oauth, apiKey } = provider.auth;
@@ -486,6 +569,109 @@ export class Agent {
         },
       ];
     });
+    const custom = (await this.customEntries()).map((entry): AgentProviderOption => {
+      const config = entry.custom!;
+      return {
+        id: entry.provider,
+        label: entry.label,
+        ways: [],
+        connected: null,
+        models: entry.models.flatMap((id) => {
+          const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
+          return model ? [{ id, name: model.name, thinking: levels(model) }] : [];
+        }),
+        recommended: entry.recommended,
+        custom: { baseUrl: config.baseUrl, api: config.api, hasKey: config.hasKey, active: choice?.entry.provider === entry.provider },
+      };
+    });
+    return [...builtIn, ...custom];
+  }
+
+  /** Opens pi-ai's documentation of custom providers in the browser. The address is the app's own, never the renderer's. */
+  openCustomModelsDocs(): void {
+    openExternal(CUSTOM_MODELS_DOCS);
+  }
+
+  /**
+   * What Advanced shows of models.json: where it is, and what the app read from it. Never its text, which can hold a
+   * key. The schema and the example are written first, so the prompt Advanced copies names files that are there.
+   */
+  async customModels(): Promise<CustomModelsFile> {
+    const entries = await this.customEntries();
+    const { setup, schema, example } = this.customFiles;
+    await this.writeCustomReference().catch((e) => console.warn('[ai] the models.json schema and example were not written:', (e as Error).message));
+    return { path: setup, exists: existsSync(setup), schema, example, providers: entries.map((e) => e.label), errors: this.custom.errors };
+  }
+
+  /**
+   * Writes what describes models.json beside it, unless that's what is there: its schema, as the installed pi-ai
+   * has it, and the example a new file starts from, for an editor and for the viewer's coding agent to read.
+   */
+  private async writeCustomReference(): Promise<void> {
+    const { schema, example } = this.customFiles;
+    const files: [string, unknown][] = [
+      [schema, await customModelsSchema()],
+      [example, EXAMPLE_CUSTOM_MODELS],
+    ];
+    for (const [file, value] of files) {
+      const text = `${JSON.stringify(value, null, 2)}\n`;
+      if (!existsSync(file) || readFileSync(file, 'utf8') !== text) writeFileSync(file, text);
+    }
+  }
+
+  /**
+   * Opens models.json in the viewer's editor for `.json` files, with its schema and an example beside it. A first time, the file
+   * is made with an example to change, named as one. Its key, when it has one, is the viewer's alone to read: mode 600. If
+   * nothing opens `.json` files, the folder is shown with the file selected.
+   */
+  async openCustomModels(): Promise<void> {
+    const { setup } = this.customFiles;
+    await this.writeCustomReference();
+    if (!existsSync(setup)) writeFileSync(setup, `${JSON.stringify(EXAMPLE_CUSTOM_MODELS, null, 2)}\n`, { mode: 0o600 });
+    if (await shell.openPath(setup)) shell.showItemInFolder(setup);
+  }
+
+  /** Shows models.json in its folder, or the folder when there's no file yet. */
+  revealCustomModels(): void {
+    const { setup } = this.customFiles;
+    if (existsSync(setup)) shell.showItemInFolder(setup);
+    else void shell.openPath(path.dirname(setup));
+  }
+
+  /**
+   * Takes up a change to models.json at once. A conversation on one of its providers starts over, since its
+   * server or model may have changed. If the provider or model in use is gone, nothing is chosen in its place: the
+   * agent isn't set up until the viewer chooses, and the next message says what went (setupProblem). The panel is
+   * told, so Advanced shows what was read.
+   */
+  async customModelsChanged(): Promise<void> {
+    const before = this.custom;
+    const using = before.entries.some((e) => e.provider === this.settings.provider);
+    await this.customEntries();
+    if (this.custom === before) return;
+    if (using) await this.reset();
+    sendToRenderer('ai:customModels', null);
+  }
+
+  /**
+   * Watches for models.json being saved, from the app's start. Editors save by writing another file and renaming
+   * it, so the folder is watched, not the file, and a burst of changes is taken as one. The schema is brought up
+   * to date for a file that's already there, and the example with it.
+   */
+  watchCustomModels(): void {
+    if (this.customWatcher) return;
+    const { setup } = this.customFiles;
+    if (existsSync(setup)) void this.writeCustomReference().catch((e) => console.warn('[ai] the models.json schema and example were not written:', (e as Error).message));
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      this.customWatcher = watch(path.dirname(setup), (_event, file) => {
+        if (file !== CUSTOM_MODELS_FILE) return;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void this.customModelsChanged().catch((e) => console.warn('[ai] models.json was not read:', (e as Error).message)), 200);
+      });
+    } catch (e) {
+      console.warn('[ai] models.json is not watched:', (e as Error).message);
+    }
   }
 
   /**
@@ -494,7 +680,7 @@ export class Agent {
    * conversation with its recommended model and thinking level.
    */
   async connect(providerId: string, way: ConnectWay): Promise<AiStatus> {
-    const entry = supported(providerId);
+    const entry = await this.entryFor(providerId);
     if (!entry || !entry.ways[way]) throw new Error(`${providerId} can't be connected that way.`);
     const { providers } = await this.runtime();
     this.connectAbort?.abort();
@@ -507,15 +693,15 @@ export class Agent {
       clearTimeout(timeout);
       if (this.connectAbort === abort) this.connectAbort = null;
     }
-
     const stored = this.settings;
     const switched = stored.provider !== entry.provider;
     if (switched) await this.reset();
     for (const credential of await providers.credentials.list()) {
       if (credential.providerId !== entry.provider) await providers.logout(credential.providerId);
     }
-    if (switched || !entry.models.includes(stored.model ?? '')) {
-      this.changeSettings({ provider: entry.provider, model: entry.recommended.model, thinking: entry.recommended.thinking });
+    const { recommended } = entry;
+    if (recommended && (switched || !entry.models.includes(stored.model ?? ''))) {
+      this.changeSettings({ provider: entry.provider, model: recommended.model, thinking: recommended.thinking });
     }
     track('agent_connected', { provider: entry.provider, way });
     return this.status();
@@ -568,16 +754,26 @@ export class Agent {
     if (provider) await providers.logout(provider);
   }
 
-  /** Saves the model and thinking level. A conversation picks them up at its next message. */
-  async choose(modelId: string, thinking: ThinkingLevel): Promise<AiStatus> {
+  /**
+   * Saves the model and thinking level. A conversation picks them up at its next message. `providerId` switches
+   * to another provider: one from Advanced, or a supported one that's connected. A new provider means a new
+   * conversation, from its next message.
+   */
+  async choose(modelId: string, thinking: ThinkingLevel, providerId?: string): Promise<AiStatus> {
     const choice = await this.current();
-    if (!choice) throw new Error(SETUP_NEEDED);
+    let entry = choice?.entry;
+    if (providerId !== undefined && providerId !== entry?.provider) {
+      entry = await this.entryFor(providerId);
+      if (!entry) throw new Error(`${providerId} isn't a provider the app offers.`);
+      if (!entry.custom && !(await this.connectedWay(entry))) throw new Error(`${entry.label} isn't connected.`);
+    }
+    if (!entry) throw new Error(SETUP_NEEDED);
     const { providers } = await this.runtime();
     if (!THINKING_LEVELS.includes(thinking)) throw new Error(`Unknown thinking level: ${thinking}`);
-    if (!choice.entry.models.includes(modelId) || !providers.models.getModel(choice.entry.provider, modelId)) {
-      throw new Error(`${modelId} isn't offered for ${choice.entry.label}.`);
+    if (!entry.models.includes(modelId) || !providers.models.getModel(entry.provider, modelId)) {
+      throw new Error(`${modelId} isn't offered for ${entry.label}.`);
     }
-    this.changeSettings({ provider: choice.entry.provider, model: modelId, thinking });
+    this.changeSettings({ provider: entry.provider, model: modelId, thinking });
     return this.status();
   }
 
@@ -762,6 +958,7 @@ export class Agent {
   private async runTurn(turn: Turn, text: string, appState: string, definitions: AgentToolDefinition[], reference: string): Promise<void> {
     emit({ type: 'turn_start', turnId: turn.id });
     let label: string | undefined;
+    let server: string | undefined;
     let choice: Choice | null = null;
     let outcome: 'done' | 'error' | 'cancelled' = 'cancelled';
     let fix: AgentErrorFix | 'none' = 'none';
@@ -769,8 +966,9 @@ export class Agent {
       // Only a credential stored through /settings-agent counts: a key in the environment, like
       // ANTHROPIC_API_KEY, would otherwise be used without anyone choosing it.
       choice = await this.current();
-      if (!choice) throw new Error(SETUP_NEEDED);
+      if (!choice) throw await this.setupProblem();
       label = choice.entry.label;
+      server = choice.entry.custom?.baseUrl;
       this.policy = this.policyOf(choice.stored);
       let message = { appState, definitions, reference };
       for (let handoffs = 0; ; handoffs += 1) {
@@ -798,15 +996,17 @@ export class Agent {
       outcome = 'done';
     } catch (e) {
       if (turn.cancelled) return;
-      const error = friendlyError(e, label);
+      const error = friendlyError(e, label, server);
       emit({ type: 'error', turnId: turn.id, ...error });
       outcome = 'error';
       fix = error.fix ?? 'none';
     } finally {
+      // A provider from Advanced is named only as `custom`: its ids are the viewer's own words. See docs/TELEMETRY.md.
+      const custom = !!choice?.entry.custom;
       track('agent_turn', {
         mode: turn.mode,
-        provider: choice?.entry.provider,
-        model: choice?.model.id,
+        provider: custom ? 'custom' : choice?.entry.provider,
+        model: custom ? undefined : choice?.model.id,
         thinking: choice?.thinking,
         tool_calls: turn.toolCalls,
         acted: turn.acted,
@@ -876,10 +1076,17 @@ export class Agent {
   }
 }
 
-/** A failed turn's error in the viewer's words, and what fixes it, so the palette can offer that. */
-function friendlyError(e: unknown, label = 'The provider'): { message: string; fix?: AgentErrorFix } {
+/**
+ * A failed turn's error in the viewer's words, and what fixes it, so the palette can offer that. `server` is set
+ * for a provider from Advanced: one that can't be reached is most often a local server that isn't running.
+ */
+function friendlyError(e: unknown, label = 'The provider', server?: string): { message: string; fix?: AgentErrorFix } {
   const message = e instanceof Error ? e.message : String(e);
   if (message === SETUP_NEEDED) return { message: "The agent isn't set up yet.", fix: 'setup' };
+  if (e instanceof SetupError) return { message, fix: 'setup' };
+  if (server && /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|fetch failed|connection error|connect timeout/i.test(message)) {
+    return { message: `Couldn't reach ${label} at ${server}. Is its server running?`, fix: 'setup' };
+  }
   if (/usage_limit|usage limit|rate_limit|rate limit/i.test(message)) return { message: `${label} usage limit reached.`, fix: 'limit' };
   if (/not_eligible/i.test(message)) return { message: `This ${label} account can't use its plan in other apps.`, fix: 'connect' };
   if (/No API key|not configured|unauthor|invalid_grant|invalid x-api-key|authentication_error|incorrect api key|token/i.test(message)) {

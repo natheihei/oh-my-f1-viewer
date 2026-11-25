@@ -260,10 +260,35 @@ that refuse a call.
   API key, and Anthropic through an API key, each with its models and a recommended model and thinking level. Anything else in pi's
   catalog is left out. Its comment says how to see everything pi offers. GPT-6 Luna and GPT-6.1 Terra have run the app's tools on a
   ChatGPT plan. Nothing has run on an API key yet.
+- **Models set up by hand.** For power users, a file: `models.json` in the app's user data folder, for a local model on Ollama,
+  LM Studio, llama.cpp or vLLM, or any OpenAI- or Anthropic-compatible server. It's edited in the viewer's own editor, never in the
+  app: `/settings-agent` → Advanced shows where it is, opens it (making it the first time from an example, named "Ollama (example)") and says what's wrong
+  with it, if anything. It also copies a prompt for the viewer's own coding agent to write the file (`customModelsPrompt`), which
+  names the file, its schema and an example, `models.example.json`, and has the agent settle which model to connect before it writes;
+  and it copies the list of what's wrong, to paste back to that agent. The app writes a JSON Schema beside it, `models.schema.json`
+  (`electron/agent/modelsSchema.ts`), and the file names it in `$schema`, so an editor completes the fields, describes them and
+  marks mistakes. A model's own objects in that schema, such as `compat` and `cost`, are the installed pi-ai's schemas for them.
+  The file is what pi-ai's `createProvider()` takes, as far as JSON can say it (`shared/customModels.ts`): each entry of `providers`
+  is one call, with its key as the `id` and `name`, `baseUrl`, `headers` and `models` as that call's options, and each model a
+  pi-ai `Model` with its fields passed on as written. So pi-ai's own
+  [documentation of custom providers](https://github.com/earendil-works/pi/blob/v1.5.2/packages/ai/README.md#custom-providers) is the
+  documentation of a model's fields, and Advanced links to it as of the pi release the app is built on (`PI_VERSION`). The app fills in what a `Model` needs and nobody should have to type:
+  `provider`, `api` and `baseUrl` from the provider's unless the model has its own, and a default for the rest but `id`. Two of
+  `createProvider()`'s options are code, so the file names them instead: `api` is `openai-completions`, `openai-responses` or
+  `anthropic-messages`, the pi-ai APIs wired in (`electron/agent/custom.ts`), and the auth is the provider's `apiKey`, for a server
+  that needs one. It isn't the `models.json` of pi's coding agent, which has fields of its own, such as a key read from the
+  environment or from a command. The file is read by the main process only, at each use, and the folder is watched so a save is
+  taken up at once: a conversation on one of its providers starts over, and the panel is told. The renderer, where mods run, is
+  never given the file's text and can't write it, so a mod can neither read the key, which is in plain text in the file, nor point
+  the agent at another server. A file with anything wrong in it is used not at all. Unknown fields are errors, so a typo isn't
+  silently ignored. Each provider is listed in the panel after the supported ones, with its models and pi's thinking levels for
+  each. None of its models is recommended: the app only recommends among the ones it ships with. When the provider or model in use
+  is gone from the file, nothing is chosen in its place: the agent isn't set up, and the next message says what went. It needs no
+  connecting: choosing one of its models uses it, and the supported provider's sign-in stays.
 - **One provider at a time.** Connecting another provider removes the first only once the new one succeeds, so a cancelled or failed
   connection changes nothing. Switching provider starts a new conversation. A new model or thinking level applies from the next
   message, in the same conversation.
-- **Only credentials stored through the panel count.** Keys in the environment, like `ANTHROPIC_API_KEY`, are never used.
+- **Only credentials stored through the panel count.** Keys in the environment, like `ANTHROPIC_API_KEY`, are never used. A provider from `models.json` uses its own `apiKey` and nothing else.
 - **History.** Compaction summarizes old turns when the context nears the model's limit. A turn that read past the playhead is cut
   down to the viewer's message and the agent's words as soon as it ends: one more entry says how each of the turn's entries reads
   from then on, so later requests and summaries see the cut-down turn, and the stored entries stay as they were. A summary made

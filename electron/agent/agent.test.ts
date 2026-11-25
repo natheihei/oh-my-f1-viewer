@@ -1,3 +1,5 @@
+import { createServer, type IncomingHttpHeaders } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,6 +10,7 @@ import type { AgentEvent, AgentToolCall, AgentToolDefinition } from '../../share
 import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import type { PlaceHealth } from '../../shared/health';
 import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
+import { EXAMPLE_CUSTOM_MODELS } from '../../shared/customModels';
 
 const host = vi.hoisted(() => ({
   userData: '',
@@ -17,11 +20,21 @@ const host = vi.hoisted(() => ({
   onToolCall: (_call: unknown): void => {},
   askForKey: (_title: string, _message: string, _signal: AbortSignal): Promise<string> => Promise.resolve('sk-test-key'),
   keyTitles: [] as string[],
+  /** What the shell was asked to open or show, and what opening answers: '' when something opened it. */
+  shell: [] as string[],
+  openPath: '',
 }));
 
 vi.mock('electron', () => ({
   app: { getPath: () => host.userData },
-  shell: { openExternal: vi.fn() },
+  shell: {
+    openExternal: async (url: string) => void host.shell.push(`external ${url}`),
+    openPath: async (file: string) => {
+      host.shell.push(`open ${file}`);
+      return host.openPath;
+    },
+    showItemInFolder: (file: string) => void host.shell.push(`show ${file}`),
+  },
   safeStorage: { isAsyncEncryptionAvailable: async () => false },
 }));
 vi.mock('../windows', () => ({
@@ -105,6 +118,10 @@ let store = memoryStore();
 /** The settings the agent last wrote, if it changed any. */
 const savedSettings = () => store.written.at(-1);
 
+const modelsFile = () => path.join(host.userData, 'models.json');
+/** Saves models.json as an editor would: `value` as it is when it's text, else as JSON. */
+const writeModels = (value: unknown) => writeFileSync(modelsFile(), typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+
 /**
  * An agent on a faux `openai`, connected the way `credentials` says. Credentials live in memory, and
  * login and logout change them, so connecting and switching run without a network.
@@ -115,10 +132,12 @@ function setup(
     model?: string;
     thinking?: string;
     credentials?: [string, Way][];
-    /** More of the settings, such as compaction. */
+    /** More of the settings, such as compaction. `custom` is not one: it's written to models.json, as text or as JSON. */
     settings?: Record<string, unknown>;
   } = {},
 ) {
+  const { custom: models, ...settings } = options.settings ?? {};
+  if (models !== undefined) writeModels(models);
   const faux = fauxProvider({
     provider: 'openai',
     models: [
@@ -129,7 +148,7 @@ function setup(
   const credentials = new Map<string, Way>(options.credentials ?? [['openai', 'oauth']]);
   const ops: string[] = [];
   const requests: Request[] = [];
-  store = memoryStore({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...options.settings });
+  store = memoryStore({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...settings });
   const agent = new Agent((providers) => {
     providers.setProvider(faux.provider);
     providers.credentials = {
@@ -200,6 +219,8 @@ beforeEach(() => {
   host.events.length = 0;
   host.sent.length = 0;
   host.keyTitles.length = 0;
+  host.shell.length = 0;
+  host.openPath = '';
   host.onToolCall = () => {};
   host.askForKey = () => Promise.resolve('sk-test-key');
 });
@@ -944,6 +965,232 @@ describe('setup', () => {
     await agent.disconnect();
     expect([...credentials]).toEqual([]);
     expect(await agent.status()).toMatchObject({ ready: false });
+  });
+});
+
+describe('models from Advanced', () => {
+  /** A local OpenAI-compatible server, like Ollama's: it streams one reply and records each request. */
+  async function localServer(reply = 'Hello from a local model.') {
+    const requests: { url: string; headers: IncomingHttpHeaders; body: { model: string; messages: { role: string }[]; tools?: unknown[] } }[] = [];
+    const server = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => (raw += chunk));
+      req.on('end', () => {
+        requests.push({ url: req.url ?? '', headers: req.headers, body: JSON.parse(raw || '{}') });
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        const chunk = (delta: object, finish: string | null) =>
+          `data: ${JSON.stringify({ id: 'c1', object: 'chat.completion.chunk', created: 0, model: 'm', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+        res.end(chunk({ role: 'assistant', content: reply }, null) + chunk({}, 'stop') + 'data: [DONE]\n\n');
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+    return { baseUrl, requests, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  }
+
+  const custom = (baseUrl: string, extra: Record<string, unknown> = {}) => ({
+    providers: {
+      ollama: {
+        name: 'Ollama',
+        baseUrl,
+        api: 'openai-completions',
+        models: [
+          { id: 'qwen3:14b', name: 'Qwen3 14B', reasoning: true },
+          { id: 'llama3.2', name: 'Llama 3.2' },
+        ],
+        ...extra,
+      },
+    },
+  });
+
+  it('lists each provider it sets up after the supported ones, with its models and thinking levels', async () => {
+    const { agent } = setup({ settings: { custom: custom('http://localhost:11434/v1') } });
+    const list = await agent.providers();
+    expect(list.map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
+    const ollama = list[2];
+    expect(ollama).toMatchObject({
+      label: 'Ollama',
+      connected: null,
+      custom: { baseUrl: 'http://localhost:11434/v1', api: 'openai-completions', hasKey: false, active: false },
+      ways: [],
+    });
+    // The app recommends only among the models it ships with.
+    expect(ollama.recommended).toBeUndefined();
+    expect(ollama.models.map((m) => [m.id, m.name])).toEqual([
+      ['qwen3:14b', 'Qwen3 14B'],
+      ['llama3.2', 'Llama 3.2'],
+    ]);
+    expect(ollama.models[0].thinking).toContain('high');
+    expect(ollama.models[1].thinking).toEqual(['off']);
+    // Setting one up changes nothing until one of its models is chosen.
+    expect(await agent.status()).toMatchObject({ ready: true, provider: 'openai' });
+  });
+
+  it('answers through a local server once one of its models is chosen, and the supported provider stays connected', async () => {
+    const local = await localServer();
+    try {
+      const { agent, credentials } = setup({ settings: { custom: custom(local.baseUrl) } });
+      expect(await agent.choose('qwen3:14b', 'medium', 'ollama')).toMatchObject({ ready: true, provider: 'ollama', model: 'qwen3:14b', modelName: 'Qwen3 14B' });
+      expect(savedSettings()).toMatchObject({ provider: 'ollama', model: 'qwen3:14b', thinking: 'medium' });
+      await agent.send('who leads?', 'state', [TOOL]);
+      expect(types()).toEqual(['turn_start', 'text_delta', 'turn_end']);
+      expect(said()).toBe('Hello from a local model.');
+      expect(local.requests).toHaveLength(1);
+      const [request] = local.requests;
+      expect(request.url).toBe('/v1/chat/completions');
+      expect(request.body.model).toBe('qwen3:14b');
+      expect(request.body.tools).toHaveLength(1);
+      // No key is set up, and none from the environment is sent.
+      expect(request.headers.authorization).toBe('Bearer omfv-no-key');
+      expect([...credentials]).toEqual([['openai', 'oauth']]);
+      expect((await agent.providers()).find((p) => p.id === 'ollama')?.custom?.active).toBe(true);
+    } finally {
+      await local.close();
+    }
+  });
+
+  it("sends the setup's key, the provider's headers and each model's own, and never a key stored or in the environment", async () => {
+    const local = await localServer();
+    process.env.OLLAMA_API_KEY = 'sk-from-env';
+    try {
+      const withKey = { providers: { ollama: { baseUrl: local.baseUrl, apiKey: 'sk-from-setup', headers: { 'x-team': 'f1', 'x-from': 'provider' }, models: [{ id: 'llama3.2', headers: { 'x-from': 'model' } }] } } };
+      // A credential left under its id, by an earlier version's key window, is not used.
+      const { agent } = setup({ provider: 'ollama', model: 'llama3.2', credentials: [['openai', 'oauth'], ['ollama', 'api_key']], settings: { custom: withKey } });
+      const ollama = (await agent.providers()).find((p) => p.id === 'ollama');
+      // The panel is told there's a key, never the key.
+      expect(ollama?.custom).toEqual({ baseUrl: local.baseUrl, api: 'openai-completions', hasKey: true, active: true });
+      await agent.send('hi', 'state', [TOOL]);
+      expect(local.requests[0].headers).toMatchObject({ authorization: 'Bearer sk-from-setup', 'x-team': 'f1', 'x-from': 'model' });
+      await expect(agent.connect('ollama', 'api_key')).rejects.toThrow("ollama can't be connected that way.");
+    } finally {
+      delete process.env.OLLAMA_API_KEY;
+      await local.close();
+    }
+  });
+
+  it('reaches each model at the server it names, over the one its provider does', async () => {
+    const [shared, own] = [await localServer('From the shared server.'), await localServer('From its own server.')];
+    try {
+      const mixed = { providers: { ollama: { baseUrl: shared.baseUrl, models: [{ id: 'a' }, { id: 'b', baseUrl: own.baseUrl, api: 'openai-completions' }] } } };
+      const { agent } = setup({ provider: 'ollama', model: 'b', settings: { custom: mixed } });
+      await agent.send('hi', 'state', [TOOL]);
+      expect(said()).toBe('From its own server.');
+      expect([shared.requests.length, own.requests.length]).toEqual([0, 1]);
+    } finally {
+      await Promise.all([shared.close(), own.close()]);
+    }
+  });
+
+  it('stays set up when a supported provider connects, and that one takes over', async () => {
+    const { agent, credentials, ops } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('http://localhost:11434/v1') } });
+    expect(await agent.connect('anthropic', 'api_key')).toMatchObject({ ready: true, provider: 'anthropic' });
+    expect(ops).toEqual(['login anthropic', 'logout openai']);
+    expect([...credentials].map(([id]) => id)).toEqual(['anthropic']);
+    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
+  });
+
+  it('reads models.json where the app keeps its data, and says what it read without its text', async () => {
+    const { agent } = setup();
+    const beside = { schema: path.join(host.userData, 'models.schema.json'), example: path.join(host.userData, 'models.example.json') };
+    expect(await agent.customModels()).toEqual({ path: modelsFile(), exists: false, ...beside, providers: [], errors: [] });
+    // Both are there once Advanced has asked, before any models.json: the copied prompt names them.
+    expect(JSON.parse(readFileSync(beside.example, 'utf8'))).toEqual(EXAMPLE_CUSTOM_MODELS);
+    expect(JSON.parse(readFileSync(beside.schema, 'utf8')).title).toBe('oh-my-f1-viewer models.json');
+    writeModels(custom('http://localhost:11434/v1', { apiKey: 'sk-secret' }));
+    expect(await agent.customModels()).toEqual({ path: modelsFile(), exists: true, ...beside, providers: ['Ollama'], errors: [] });
+    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
+    // Nothing the renderer is given holds the key.
+    expect(JSON.stringify([await agent.customModels(), await agent.providers(), await agent.status()])).not.toContain('sk-secret');
+    // The file is no part of the settings.
+    expect(savedSettings()).toBeUndefined();
+  });
+
+  it('uses none of a file with anything wrong in it, and says what', async () => {
+    const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('not a url') } });
+    expect(await agent.status()).toMatchObject({ ready: false });
+    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic']);
+    expect(await agent.customModels()).toMatchObject({ exists: true, providers: [], errors: ['providers.ollama.baseUrl must be an http or https URL, like http://localhost:11434/v1.'] });
+    writeModels('{ "providers": { "openai": { "baseUrl": "http://x", "models": [] } } }');
+    expect((await agent.customModels()).errors).toEqual(['providers.openai: "openai" is already one of the app\'s providers. Give it another key.', 'providers.openai.models must list at least one model.']);
+    writeModels('{ "providers": ');
+    expect((await agent.customModels()).errors[0]).toMatch(/^It isn't valid JSON: /);
+    // Fixed, it's used at the next thing the agent does.
+    writeModels(custom('http://localhost:11434/v1'));
+    expect(await agent.status()).toMatchObject({ ready: true, provider: 'ollama', model: 'qwen3:14b' });
+  });
+
+  it('makes the file from an example named as one and opens it in the editor, with its schema beside it', async () => {
+    const { agent } = setup();
+    await agent.openCustomModels();
+    expect(host.shell).toEqual([`open ${modelsFile()}`]);
+    const made = JSON.parse(readFileSync(modelsFile(), 'utf8'));
+    expect(made).toMatchObject({ $schema: './models.schema.json', providers: { 'example-ollama': { name: 'Ollama (example)', baseUrl: 'http://localhost:11434/v1' } } });
+    expect(await agent.customModels()).toMatchObject({ exists: true, providers: ['Ollama (example)'], errors: [] });
+    const schema = JSON.parse(readFileSync(path.join(host.userData, 'models.schema.json'), 'utf8'));
+    expect(schema.properties.providers.additionalProperties.properties.models.items.required).toEqual(['id']);
+    // A file that's there is opened as it is, and shown in its folder when nothing opens .json files.
+    writeModels(custom('http://localhost:1/v1'));
+    host.openPath = 'No application is associated with this file';
+    await agent.openCustomModels();
+    expect(JSON.parse(readFileSync(modelsFile(), 'utf8'))).toEqual(custom('http://localhost:1/v1'));
+    expect(host.shell.slice(1)).toEqual([`open ${modelsFile()}`, `show ${modelsFile()}`]);
+    agent.revealCustomModels();
+    expect(host.shell.at(-1)).toBe(`show ${modelsFile()}`);
+  });
+
+  it('takes up a saved file at once, tells the panel, and starts the conversation over when its provider is in use', async () => {
+    const local = await localServer();
+    try {
+      const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom(local.baseUrl) } });
+      await agent.send('one', 'state', [TOOL]);
+      const told = () => host.sent.filter((s) => (s as [string])[0] === 'ai:customModels').length;
+      // A change the watcher reports with the file as it was is nothing.
+      await agent.customModelsChanged();
+      expect(told()).toBe(0);
+      writeModels(custom(local.baseUrl, { name: 'Ollama, renamed' }));
+      await agent.customModelsChanged();
+      expect(told()).toBe(1);
+      expect((await agent.customModels()).providers).toEqual(['Ollama, renamed']);
+      await agent.send('two', 'state', [TOOL]);
+      // The second message starts a conversation of its own: the first isn't sent again.
+      expect(local.requests.at(-1)?.body.messages.filter((m) => m.role === 'user')).toHaveLength(1);
+    } finally {
+      await local.close();
+    }
+  });
+
+  it('chooses nothing in its place when the provider in use is taken out of the file, and says what went', async () => {
+    const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('http://localhost:11434/v1') } });
+    expect(await agent.status()).toMatchObject({ provider: 'ollama' });
+    rmSync(modelsFile());
+    await agent.customModelsChanged();
+    expect(await agent.status()).toMatchObject({ ready: false });
+    expect(savedSettings()).toBeUndefined();
+    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic']);
+    await agent.send('hi', 'state', [TOOL]);
+    const error = events().find((e) => e.type === 'error') as { message: string; fix?: string } | undefined;
+    expect(error).toMatchObject({ message: 'The agent was using "ollama", which is no longer in models.json. Choose a model in /settings-agent.', fix: 'setup' });
+  });
+
+  it('chooses no other model when the one in use is taken out of the file, and says which went', async () => {
+    const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('http://localhost:11434/v1') } });
+    writeModels({ providers: { ollama: { name: 'Ollama', baseUrl: 'http://localhost:11434/v1', models: [{ id: 'llama3.2' }] } } });
+    await agent.customModelsChanged();
+    expect(await agent.status()).toMatchObject({ ready: false });
+    await agent.send('hi', 'state', [TOOL]);
+    const error = events().find((e) => e.type === 'error') as { message: string; fix?: string } | undefined;
+    expect(error).toMatchObject({ message: 'Ollama no longer has the model qwen3:14b. Choose one in /settings-agent.', fix: 'setup' });
+    // Choosing one sets the agent up again.
+    expect(await agent.choose('llama3.2', 'off', 'ollama')).toMatchObject({ ready: true, provider: 'ollama', model: 'llama3.2' });
+  });
+
+  it('says when a local server is not running', async () => {
+    const local = await localServer();
+    await local.close();
+    const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom(local.baseUrl) } });
+    await agent.send('hi', 'state', [TOOL]);
+    const error = events().find((e) => e.type === 'error') as { message: string; fix?: string } | undefined;
+    expect(error).toMatchObject({ message: `Couldn't reach Ollama at ${local.baseUrl}. Is its server running?`, fix: 'setup' });
   });
 });
 

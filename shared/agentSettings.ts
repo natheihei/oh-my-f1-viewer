@@ -4,6 +4,8 @@
  * (electron/settings.ts). To change the policy, edit it while the app is closed, for example:
  *
  *   "agent": { "provider": "openai", "model": "gpt-6.1-terra", "thinking": "medium", "compaction": { "reserveTokens": 2000 } }
+ *
+ * Models set up by hand aren't here: they're in a file of their own, models.json (shared/customModels.ts).
  */
 import type { ThinkingLevel } from './api';
 

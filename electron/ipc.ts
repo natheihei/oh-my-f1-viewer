@@ -306,7 +306,12 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   handle('ai:connect', (_e, provider, way) => agent.connect(String(provider), way === 'oauth' ? 'oauth' : 'api_key'));
   handle('ai:cancelConnect', () => agent.cancelConnect());
   handle('ai:disconnect', () => agent.disconnect());
-  handle('ai:choose', (_e, model, thinking) => agent.choose(String(model), thinking));
+  handle('ai:choose', (_e, model, thinking, provider) => agent.choose(String(model), thinking, typeof provider === 'string' ? provider : undefined));
+  handle('ai:customModels', () => agent.customModels());
+  handle('ai:customModelsDocs', () => agent.openCustomModelsDocs());
+  handle('ai:openCustomModels', () => agent.openCustomModels());
+  handle('ai:revealCustomModels', () => agent.revealCustomModels());
+  agent.watchCustomModels();
   handle('ai:send', (_e, text, context, tools, reference, mode, scope) =>
     agent.send(String(text), String(context ?? ''), Array.isArray(tools) ? tools : [], String(reference ?? ''), agentMode(mode), String(scope ?? mode ?? 'view')),
   );
