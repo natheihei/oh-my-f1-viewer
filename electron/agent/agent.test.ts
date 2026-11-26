@@ -11,6 +11,7 @@ import { BUILD_PROMPT } from '../../shared/buildPrompt';
 import type { PlaceHealth } from '../../shared/health';
 import { PICK_PROMPT, VIEW_PROMPT } from '../../shared/viewPrompt';
 import { EXAMPLE_CUSTOM_MODELS } from '../../shared/customModels';
+import { RECOMMENDED } from './supported';
 
 const host = vi.hoisted(() => ({
   userData: '',
@@ -19,7 +20,9 @@ const host = vi.hoisted(() => ({
   sent: [] as unknown[],
   onToolCall: (_call: unknown): void => {},
   askForKey: (_title: string, _message: string, _signal: AbortSignal): Promise<string> => Promise.resolve('sk-test-key'),
+  askForPrompt: (_title: string, _prompt: unknown, _signal: AbortSignal): Promise<string> => Promise.resolve('prompt-answer'),
   keyTitles: [] as string[],
+  prompts: [] as { title: string; prompt: unknown }[],
   /** What the shell was asked to open or show, and what opening answers: '' when something opened it. */
   shell: [] as string[],
   openPath: '',
@@ -48,6 +51,10 @@ vi.mock('./keyWindow', () => ({
   askForKey: (title: string, message: string, signal: AbortSignal) => {
     host.keyTitles.push(title);
     return host.askForKey(title, message, signal);
+  },
+  askForPrompt: (title: string, prompt: unknown, signal: AbortSignal) => {
+    host.prompts.push({ title, prompt });
+    return host.askForPrompt(title, prompt, signal);
   },
 }));
 
@@ -145,12 +152,30 @@ function setup(
       { id: 'gpt-6.1-terra', reasoning: true },
     ],
   });
+  // Give the faux openai provider the same auth ways as the real one so OAuth & API-key tests work without network.
+  const fauxWithAuth = {
+    ...faux.provider,
+    name: 'OpenAI',
+    auth: {
+      ...faux.provider.auth,
+      apiKey: faux.provider.auth.apiKey
+        ? { ...faux.provider.auth.apiKey, login: async () => ({ type: 'api_key' as const, key: 'test' }) }
+        : undefined,
+      oauth: {
+        name: 'OpenAI (ChatGPT subscription)',
+        loginLabel: 'Sign in with ChatGPT',
+        login: async () => ({ type: 'oauth' as const, access: 'test', refresh: '', expires: Number.MAX_SAFE_INTEGER }),
+        refresh: async (c: unknown) => c as never,
+        toAuth: async () => ({ apiKey: 'test' }),
+      },
+    },
+  };
   const credentials = new Map<string, Way>(options.credentials ?? [['openai', 'oauth']]);
   const ops: string[] = [];
   const requests: Request[] = [];
   store = memoryStore({ provider: options.provider ?? 'openai', model: options.model ?? 'gpt-6-luna', thinking: options.thinking ?? 'medium', ...settings });
   const agent = new Agent((providers) => {
-    providers.setProvider(faux.provider);
+    providers.setProvider(fauxWithAuth as never);
     providers.credentials = {
       // Whatever way it says it's connected, the faux provider is reached with a key.
       read: async (id: string) => (credentials.has(id) ? { type: 'api_key', key: 'test' } : undefined),
@@ -219,10 +244,12 @@ beforeEach(() => {
   host.events.length = 0;
   host.sent.length = 0;
   host.keyTitles.length = 0;
+  host.prompts.length = 0;
   host.shell.length = 0;
   host.openPath = '';
   host.onToolCall = () => {};
   host.askForKey = () => Promise.resolve('sk-test-key');
+  host.askForPrompt = () => Promise.resolve('prompt-answer');
 });
 
 afterEach(() => {
@@ -860,11 +887,34 @@ describe('failures', () => {
 
   it('refuses when not set up, even with the chosen provider set up in the environment', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'not-a-real-key');
-    const agent = new Agent(undefined, memoryStore({ provider: 'anthropic', model: 'claude-sonnet-5-5' }));
+    vi.stubEnv('GEMINI_API_KEY', 'not-a-real-key');
+    vi.stubEnv('OPENROUTER_API_KEY', 'not-a-real-key');
+    vi.stubEnv('OPENCODE_API_KEY', 'not-a-real-key');
+    for (const [provider, model] of [
+      ['anthropic', 'claude-sonnet-5-5'],
+      ['google', 'gemini-4-hydrogen'],
+      ['openrouter', 'openai/gpt-6.1-terra'],
+      ['opencode-go', 'qwen4-max'],
+    ]) {
+      host.events.length = 0;
+      const agent = new Agent(undefined, memoryStore({ provider, model }));
+      await agent.send('go', 'state', [TOOL]);
+      expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
+      expect(events().at(-1)).toMatchObject({ message: "The agent isn't set up yet.", fix: 'setup' });
+      expect(await agent.status()).toMatchObject({ ready: false });
+    }
+  });
+
+  it('maps Gemini invalid-key and quota errors to their fixes', async () => {
+    const { agent, script } = setup();
+    script(fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'API key not valid. Please pass a valid API key. (API_KEY_INVALID)' }));
     await agent.send('go', 'state', [TOOL]);
-    expect(events().map((e) => e.type)).toEqual(['turn_start', 'error']);
-    expect(events().at(-1)).toMatchObject({ message: "The agent isn't set up yet.", fix: 'setup' });
-    expect(await agent.status()).toMatchObject({ ready: false });
+    expect(events().at(-1)).toMatchObject({ type: 'error', message: "OpenAI didn't accept the connection.", fix: 'connect' });
+
+    host.events.length = 0;
+    script(fauxAssistantMessage('', { stopReason: 'error', errorMessage: '429 RESOURCE_EXHAUSTED: quota exceeded' }));
+    await agent.send('again', 'state', [TOOL]);
+    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'OpenAI usage limit reached.', fix: 'limit' });
   });
 });
 
@@ -879,25 +929,81 @@ describe('setup', () => {
     expect(await agent.status()).toMatchObject({ ready: true, model: 'gpt-6.1-terra' });
   });
 
-  it('counts only the provider in settings, connected a way the supported list offers', async () => {
+  it('counts only the provider in settings, connected a way the provider offers', async () => {
     expect(await setup({ provider: 'anthropic' }).agent.status()).toMatchObject({ ready: false });
-    const oauthAnthropic = setup({ provider: 'anthropic', model: 'claude-sonnet-5-5', credentials: [['anthropic', 'oauth']] });
-    expect(await oauthAnthropic.agent.status()).toMatchObject({ ready: false });
+    const oauthGoogle = setup({ provider: 'google', model: 'gemini-4-hydrogen', credentials: [['google', 'oauth']] });
+    expect(await oauthGoogle.agent.status()).toMatchObject({ ready: false });
   });
 
-  it('lists the supported providers with their ways to connect, models and thinking levels', async () => {
+  it('lists all built-in pi providers in alphabetical order with their models, ways to connect and optional recommended defaults', async () => {
     const { agent } = setup();
     const list = await agent.providers();
-    expect(list.map((p) => p.id)).toEqual(['openai', 'anthropic']);
-    const [openai, anthropic] = list;
+    // Built-in providers stay in alphabetical order by label (never re-ordered to put recommended first).
+    expect(list.map((p) => p.label)).toEqual([...list.map((p) => p.label)].sort((a, b) => a.localeCompare(b)));
+    expect(list.length).toBeGreaterThan(20);
+    const byId = (id: string) => list.find((p) => p.id === id)!;
+    const openai = byId('openai');
+    const anthropic = byId('anthropic');
+    const google = byId('google');
+    const openrouter = byId('openrouter');
+    const opencodeGo = byId('opencode-go');
+
     expect(openai.connected).toMatchObject({ way: 'oauth' });
-    // The faux provider stands in for OpenAI, so only its two models exist.
-    expect(openai.models.map((m) => m.id)).toEqual(['gpt-6.1-terra', 'gpt-6-luna']);
+    // The faux provider stands in for OpenAI, so only its two models exist, kept in alphabetical order.
+    expect(openai.models.map((m) => m.id)).toEqual(['gpt-6-luna', 'gpt-6.1-terra']);
     expect(openai.recommended).toEqual({ model: 'gpt-6.1-terra', thinking: 'medium' });
+
     expect(anthropic.connected).toBeNull();
-    expect(anthropic.ways.map((w) => w.way)).toEqual(['api_key']);
-    expect(anthropic.models.map((m) => m.id)).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5']);
-    expect(anthropic.models[0].thinking).not.toContain('off');
+    expect(anthropic.ways.map((w) => w.way)).toEqual(['oauth', 'api_key']);
+    expect(anthropic.models.map((m) => m.id)).toContain('claude-sonnet-5-5');
+    expect(anthropic.recommended).toBeUndefined();
+
+    expect(google.label).toBe('Google');
+    expect(google.ways.map((w) => w.way)).toEqual(['api_key']);
+    expect(google.models.map((m) => m.id)).toContain('gemini-4-neon');
+    expect(google.recommended).toBeUndefined();
+
+    expect(openrouter.label).toBe('OpenRouter');
+    expect(openrouter.ways.map((w) => w.way)).toEqual(['oauth', 'api_key']);
+    expect(openrouter.models.map((m) => m.id)).toContain('google/gemini-4-neon');
+    expect(openrouter.recommended).toBeUndefined();
+
+    expect(opencodeGo.label).toBe('OpenCode Go');
+    expect(opencodeGo.ways.map((w) => w.way)).toEqual(['api_key']);
+    expect(opencodeGo.models.map((m) => m.id)).toContain('qwen4-max');
+    expect(opencodeGo.recommended).toBeUndefined();
+
+    // Providers with no chat models (e.g. classifier-only TypeSafe) are omitted.
+    expect(list.find((p) => p.id === 'typesafe')).toBeUndefined();
+  });
+
+  it('exposes every built-in pi-ai provider and chat model, with valid RECOMMENDED defaults', async () => {
+    const { builtinModels } = await import('@earendil-works/pi-ai/providers/all');
+    const catalog = builtinModels();
+    const expectedIds = catalog
+      .getProviders()
+      .filter((p) => catalog.getModels(p.id).length > 0 && (p.auth.oauth || p.auth.apiKey?.login))
+      .map((p) => p.id)
+      .sort();
+
+    const agent = new Agent(undefined, memoryStore());
+    const list = await agent.providers();
+    expect(list.map((p) => p.id).sort()).toEqual(expectedIds);
+    for (const option of list) {
+      const catalogSorted = [...catalog.getModels(option.id)]
+        .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+        .map((m) => m.id);
+      expect(option.models.map((m) => m.id), option.id).toEqual(catalogSorted);
+      const rec = RECOMMENDED[option.id];
+      if (rec) {
+        expect(option.recommended).toEqual(rec);
+        const recModel = option.models.find((m) => m.id === rec.model);
+        expect(recModel, `${option.id} recommended model`).toBeDefined();
+        expect(recModel!.thinking).toContain(rec.thinking);
+      } else {
+        expect(option.recommended).toBeUndefined();
+      }
+    }
   });
 
   it('applies a new model and thinking level from the next message, in the same conversation', async () => {
@@ -915,19 +1021,49 @@ describe('setup', () => {
     expect(requests[1].roles.filter((r) => r === 'user')).toHaveLength(2);
   });
 
-  it('refuses a model the supported list does not offer', async () => {
+  it('refuses a model the provider does not offer', async () => {
     const { agent } = setup();
     await expect(agent.choose('gpt-4', 'medium')).rejects.toThrow(/isn't offered/);
     expect(savedSettings()).toBeUndefined();
   });
 
-  it('switches provider: removes the old one only after the new one connects, with its recommended settings', async () => {
+  it('switches to a provider without a recommended model: removes the old one, shows it connected, and waits for a model choice', async () => {
     const { agent, credentials, ops } = setup();
     const status = await agent.connect('anthropic', 'api_key');
     expect(ops).toEqual(['login anthropic', 'logout openai']);
     expect([...credentials]).toEqual([['anthropic', 'api_key']]);
-    expect(status).toMatchObject({ ready: true, provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' });
+    expect(status).toMatchObject({ ready: false });
+    expect(savedSettings()).toEqual({ provider: 'anthropic' });
+    expect((await agent.providers()).find((p) => p.id === 'anthropic')?.connected).toEqual({ way: 'api_key', label: 'API key' });
+
+    await agent.send('hi', 'state', [TOOL]);
+    expect(events().at(-1)).toMatchObject({ type: 'error', message: 'Choose a model for Anthropic in /settings-agent.', fix: 'setup' });
+
+    expect(await agent.choose('claude-sonnet-5-5', 'medium')).toMatchObject({
+      ready: true,
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      thinking: 'medium',
+    });
     expect(savedSettings()).toEqual({ provider: 'anthropic', model: 'claude-sonnet-5-5', thinking: 'medium' });
+  });
+
+  it('connects Google, OpenRouter and OpenCode Go and lets the viewer pick any catalog model', async () => {
+    const { agent, credentials } = setup();
+    expect(await agent.connect('google', 'api_key')).toMatchObject({ ready: false });
+    expect(host.keyTitles.at(-1)).toBe('Google API key');
+    expect(await agent.choose('gemini-4-neon', 'high')).toMatchObject({ ready: true, provider: 'google', model: 'gemini-4-neon', thinking: 'high' });
+
+    expect(await agent.connect('openrouter', 'oauth')).toMatchObject({ ready: false });
+    expect([...credentials]).toEqual([['openrouter', 'oauth']]);
+    expect(await agent.choose('google/gemini-4-neon', 'medium')).toMatchObject({ ready: true, provider: 'openrouter', model: 'google/gemini-4-neon', thinking: 'medium' });
+
+    expect(await agent.connect('opencode-go', 'api_key')).toMatchObject({ ready: false });
+    expect(host.keyTitles.at(-1)).toBe('OpenCode Go API key');
+    expect(await agent.choose('qwen4-max', 'medium')).toMatchObject({ ready: true, provider: 'opencode-go', model: 'qwen4-max', thinking: 'medium' });
+
+    await expect(agent.connect('google', 'oauth')).rejects.toThrow();
+    await expect(agent.connect('opencode-go', 'oauth')).rejects.toThrow();
   });
 
   it('asks for a key in the key window, and never sends it to the renderer', async () => {
@@ -954,9 +1090,9 @@ describe('setup', () => {
     expect(await agent.status()).toMatchObject({ provider: 'openai', model: 'gpt-6-luna' });
   });
 
-  it('refuses a way the supported list does not offer', async () => {
+  it('refuses a way the provider does not offer', async () => {
     const { agent, ops } = setup();
-    await expect(agent.connect('anthropic', 'oauth')).rejects.toThrow();
+    await expect(agent.connect('google', 'oauth')).rejects.toThrow();
     expect(ops).toEqual([]);
   });
 
@@ -1003,11 +1139,11 @@ describe('models from Advanced', () => {
     },
   });
 
-  it('lists each provider it sets up after the supported ones, with its models and thinking levels', async () => {
+  it('lists each provider it sets up after the built-in ones, with its models and thinking levels', async () => {
     const { agent } = setup({ settings: { custom: custom('http://localhost:11434/v1') } });
     const list = await agent.providers();
-    expect(list.map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
-    const ollama = list[2];
+    expect(list.at(-1)?.id).toBe('ollama');
+    const ollama = list.at(-1)!;
     expect(ollama).toMatchObject({
       label: 'Ollama',
       connected: null,
@@ -1081,12 +1217,12 @@ describe('models from Advanced', () => {
     }
   });
 
-  it('stays set up when a supported provider connects, and that one takes over', async () => {
+  it('stays set up when a built-in provider connects, and that one takes over', async () => {
     const { agent, credentials, ops } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('http://localhost:11434/v1') } });
-    expect(await agent.connect('anthropic', 'api_key')).toMatchObject({ ready: true, provider: 'anthropic' });
+    expect(await agent.connect('anthropic', 'api_key')).toMatchObject({ ready: false });
     expect(ops).toEqual(['login anthropic', 'logout openai']);
     expect([...credentials].map(([id]) => id)).toEqual(['anthropic']);
-    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
+    expect((await agent.providers()).at(-1)?.id).toBe('ollama');
   });
 
   it('reads models.json where the app keeps its data, and says what it read without its text', async () => {
@@ -1098,7 +1234,7 @@ describe('models from Advanced', () => {
     expect(JSON.parse(readFileSync(beside.schema, 'utf8')).title).toBe('oh-my-f1-viewer models.json');
     writeModels(custom('http://localhost:11434/v1', { apiKey: 'sk-secret' }));
     expect(await agent.customModels()).toEqual({ path: modelsFile(), exists: true, ...beside, providers: ['Ollama'], errors: [] });
-    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic', 'ollama']);
+    expect((await agent.providers()).at(-1)?.id).toBe('ollama');
     // Nothing the renderer is given holds the key.
     expect(JSON.stringify([await agent.customModels(), await agent.providers(), await agent.status()])).not.toContain('sk-secret');
     // The file is no part of the settings.
@@ -1108,10 +1244,15 @@ describe('models from Advanced', () => {
   it('uses none of a file with anything wrong in it, and says what', async () => {
     const { agent } = setup({ provider: 'ollama', model: 'qwen3:14b', settings: { custom: custom('not a url') } });
     expect(await agent.status()).toMatchObject({ ready: false });
-    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic']);
+    expect((await agent.providers()).some((p) => p.id === 'ollama')).toBe(false);
     expect(await agent.customModels()).toMatchObject({ exists: true, providers: [], errors: ['providers.ollama.baseUrl must be an http or https URL, like http://localhost:11434/v1.'] });
-    writeModels('{ "providers": { "openai": { "baseUrl": "http://x", "models": [] } } }');
-    expect((await agent.customModels()).errors).toEqual(['providers.openai: "openai" is already one of the app\'s providers. Give it another key.', 'providers.openai.models must list at least one model.']);
+    writeModels('{ "providers": { "openai": { "baseUrl": "http://x", "models": [] }, "openrouter": { "baseUrl": "http://x", "models": [{ "id": "m" }] }, "deepseek": { "baseUrl": "http://x", "models": [{ "id": "m" }] } } }');
+    expect((await agent.customModels()).errors).toEqual([
+      'providers.openai: "openai" is already one of the app\'s providers. Give it another key.',
+      'providers.openai.models must list at least one model.',
+      'providers.openrouter: "openrouter" is already one of the app\'s providers. Give it another key.',
+      'providers.deepseek: "deepseek" is already one of the app\'s providers. Give it another key.',
+    ]);
     writeModels('{ "providers": ');
     expect((await agent.customModels()).errors[0]).toMatch(/^It isn't valid JSON: /);
     // Fixed, it's used at the next thing the agent does.
@@ -1166,7 +1307,7 @@ describe('models from Advanced', () => {
     await agent.customModelsChanged();
     expect(await agent.status()).toMatchObject({ ready: false });
     expect(savedSettings()).toBeUndefined();
-    expect((await agent.providers()).map((p) => p.id)).toEqual(['openai', 'anthropic']);
+    expect((await agent.providers()).some((p) => p.id === 'ollama')).toBe(false);
     await agent.send('hi', 'state', [TOOL]);
     const error = events().find((e) => e.type === 'error') as { message: string; fix?: string } | undefined;
     expect(error).toMatchObject({ message: 'The agent was using "ollama", which is no longer in models.json. Choose a model in /settings-agent.', fix: 'setup' });

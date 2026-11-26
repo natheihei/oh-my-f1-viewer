@@ -1,13 +1,12 @@
 /**
- * The providers and models `/settings-agent` offers. Anything else in pi's catalog is left out.
+ * Optional recommendations for `/settings-agent`. Every built-in provider and chat model comes straight
+ * from the installed `@earendil-works/pi-ai` (`builtinProviders()`), with no extra provider or model
+ * allowlist. Only providers the app has tried carry a `recommended` default here.
  *
- * To pick from everything pi offers, with each model's thinking levels:
+ * To inspect what the installed pi offers, with each model's thinking levels:
  *   - `node devscripts/agent-catalog.mjs` lists the catalog of the installed pi. That's what the app can use.
  *   - https://pi.dev/models is pi's live catalog. It can be newer than the installed pi: the app never
- *     fetches it, so a model only listed there needs a pi upgrade first.
- *
- * Each model must exist in the installed pi's catalog for its provider. `recommended` is what a new
- * connection starts with. GPT-6 Luna and GPT-6.1 Terra have run the app's tools on a ChatGPT plan, and nothing on an API key yet.
+ *     fetches it, so newer models arrive with a pi upgrade.
  */
 import type { ConnectWay, ThinkingLevel } from '../../shared/api';
 
@@ -19,35 +18,19 @@ export interface SupportedProvider {
   ways: Partial<Record<ConnectWay, string>>;
   /** Offered in this order. */
   models: string[];
-  /** Absent for a provider from Advanced: the app only recommends among models it has tried. */
+  /** Optional: set only for providers the app has tried. A new connection starts on it when present. */
   recommended?: { model: string; thinking: ThinkingLevel };
   /**
-   * Set for a provider from `/settings-agent` → Advanced (custom.ts), never for one of SUPPORTED. It needs no
+   * Set for a provider from `/settings-agent` → Advanced (custom.ts), never for a built-in provider. It needs no
    * connecting: its key, if it has one, is in its setup.
    */
   custom?: { baseUrl: string; api: string; hasKey: boolean };
 }
 
-/** One the app ships with, which always has a recommended model. */
-export type BuiltInProvider = SupportedProvider & Required<Pick<SupportedProvider, 'recommended'>>;
-
-export const SUPPORTED: BuiltInProvider[] = [
-  {
-    provider: 'openai',
-    label: 'OpenAI',
-    ways: { oauth: 'uses your ChatGPT plan', api_key: 'billed by OpenAI per token' },
-    models: ['gpt-6.1-terra', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-astra'],
-    recommended: { model: 'gpt-6.1-terra', thinking: 'medium' },
-  },
-  {
-    provider: 'anthropic',
-    label: 'Anthropic',
-    ways: { api_key: 'billed by Anthropic per token' },
-    models: ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'],
-    recommended: { model: 'claude-sonnet-5-5', thinking: 'medium' },
-  },
-];
-
-export function supported(provider: string | undefined | null): SupportedProvider | undefined {
-  return SUPPORTED.find((s) => s.provider === provider);
-}
+/**
+ * Default model and thinking level for built-in providers the app has tried. Anything absent here is still
+ * offered in full; connecting it simply leaves the viewer to pick a model.
+ */
+export const RECOMMENDED: Record<string, { model: string; thinking: ThinkingLevel }> = {
+  openai: { model: 'gpt-6.1-terra', thinking: 'medium' },
+};

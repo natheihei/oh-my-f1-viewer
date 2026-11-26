@@ -1,19 +1,17 @@
 /**
  * `/settings-agent`: connect the agent's provider and choose its model and thinking level. It takes the
- * palette's place like the background panel. The providers come from main's supported list, and only one
- * is connected at a time: connecting another removes the first once the new one succeeds. API keys are
- * typed into their own window, never here. Esc or × closes it, and cancels a sign-in in progress.
+ * palette's place like the background panel. Built-in providers come from the installed pi-ai, and only one
+ * is connected at a time: connecting another removes the first once the new one succeeds. API keys and other
+ * auth prompts are answered in their own sandboxed window, never here. Esc or × closes it, and cancels a
+ * sign-in in progress.
  *
- * Keys: ↑↓ choose a provider, → or Tab go to its settings, where ↑↓ move between them and ←→ change the
- * thinking level, and Tab goes back to the providers.
- *
- * Advanced, last in the list, is for power users: models.json, a file of pi-ai providers (shared/customModels.ts)
- * for a local model on Ollama, LM Studio or llama.cpp, or any OpenAI- or Anthropic-compatible server. It's edited
- * in the viewer's own editor, never here: Advanced opens it and says what's wrong with it, if anything. Each provider in
- * it is listed above Advanced, with its models and thinking levels like a supported one, and is used once one of
- * its models is chosen.
+ * Advanced, pinned at the bottom of the sidebar, is for power users: models.json, a file of pi-ai providers
+ * (shared/customModels.ts) for a local model on Ollama, LM Studio or llama.cpp, or any OpenAI- or
+ * Anthropic-compatible server. It's edited in the viewer's own editor, never here: Advanced opens it and says
+ * what's wrong with it, if anything. Each provider in it is listed under Advanced, with its models and
+ * thinking levels like a built-in one, and is used once one of its models is chosen.
  */
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PI_VERSION, customModelsErrorsText, customModelsPrompt } from '../../shared/customModels';
 import type { AgentProviderOption, AiStatus, ConnectWay, CustomModelsFile, ThinkingLevel } from '../../shared/api';
 import { host } from '../host';
@@ -37,7 +35,10 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
   /** What the app read from models.json, and which of Advanced's three copies was just made. */
   const [setup, setSetup] = useState<CustomModelsFile | null>(null);
   const [copied, setCopied] = useState<Copied | null>(null);
+  const [providerFilter, setProviderFilter] = useState('');
+  const [modelFilter, setModelFilter] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const scrolledProvider = useRef(false);
   const connectingRef = useRef(connecting);
   connectingRef.current = connecting;
 
@@ -46,23 +47,49 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
     setProviders(list);
     setSetup(custom);
     setStatus(now);
-    setViewed((v) => v ?? now.provider ?? list[0]?.id ?? null);
+    const connected = list.find((p) => p.connected)?.id;
+    const recommended = list.find((p) => p.recommended)?.id;
+    const initial = now.provider ?? connected ?? recommended ?? list[0]?.id ?? null;
+    setViewed((v) => v ?? initial);
     return now;
   };
 
-  const focusProvider = (id: string | null) =>
-    rootRef.current?.querySelector<HTMLElement>(`[data-testid="agent-provider-${id}"]`)?.focus();
-  const controls = () => [...(rootRef.current?.querySelectorAll<HTMLElement>('.agent-settings [data-control]') ?? [])];
+  const scrollIntoContainer = (el: HTMLElement | null | undefined) => {
+    const box = el?.closest<HTMLElement>('.agent-providers, .agent-models');
+    if (!el || !box) return;
+    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top - (box.clientHeight - el.clientHeight) / 2;
+    box.scrollTop = Math.max(0, box.scrollTop + delta);
+  };
 
-  // Opens on the connected provider, or the first.
+  const scrollProviderIntoView = (id: string | null) => {
+    if (!id) return;
+    scrollIntoContainer(rootRef.current?.querySelector<HTMLElement>(`[data-testid="agent-provider-${CSS.escape(id)}"]`));
+  };
+
+  const scrollModelIntoView = (id: string | null | undefined) => {
+    if (!id) return;
+    scrollIntoContainer(rootRef.current?.querySelector<HTMLElement>(`[data-testid="agent-model-${CSS.escape(id)}"]`));
+  };
+
+  // Opens on the active, connected, or recommended provider, scrolled into view in its alphabetical place.
   useEffect(() => {
-    void load()
-      .then((now) => requestAnimationFrame(() => focusProvider(now.provider ?? null)))
-      .catch((e) => setError(errorText(e)));
+    void load().catch((e) => setError(errorText(e)));
   }, []);
   useEffect(() => {
-    if (!rootRef.current?.contains(document.activeElement)) focusProvider(viewed);
+    if (scrolledProvider.current || !providers.length || !viewed) return;
+    scrolledProvider.current = true;
+    scrollProviderIntoView(viewed);
+  }, [providers.length, viewed]);
+  useEffect(() => {
+    setModelFilter('');
   }, [viewed]);
+  useEffect(() => {
+    const provider = providers.find((p) => p.id === viewed);
+    if (!provider || (!provider.connected && !provider.custom)) return;
+    const target = status?.ready && status.provider === provider.id ? status.model : provider.recommended?.model;
+    if (!target) return;
+    scrollModelIntoView(target);
+  }, [viewed, providers, status?.provider, status?.ready]);
 
   // models.json is edited outside the app: what's shown follows each save of it.
   useEffect(() => host.agent.onCustomModels(() => void load().catch((e) => setError(errorText(e)))), []);
@@ -149,6 +176,12 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
   // The providers of models.json are listed under Advanced, where they come from, and set in from it.
   const builtIn = providers.filter((p) => !p.custom);
   const fromFile = providers.filter((p) => p.custom);
+  const pQuery = providerFilter.trim().toLowerCase();
+  const visibleBuiltIn = pQuery
+    ? builtIn.filter((p) => p.label.toLowerCase().includes(pQuery) || p.id.toLowerCase().includes(pQuery))
+    : builtIn;
+  const hasDot = (p: AgentProviderOption) =>
+    status?.ready ? p.id === status.provider : !!p.connected;
   const providerRow = (p: AgentProviderOption) => (
     <li key={p.id} className={p.custom ? 'agent-from-file' : undefined}>
       <button
@@ -156,107 +189,103 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
         data-testid={`agent-provider-${p.id}`}
         aria-pressed={p.id === viewed}
         aria-label={p.custom ? `${p.label}, from models.json` : undefined}
-        title={p.custom ? 'From models.json' : undefined}
+        title={p.custom ? 'From models.json' : p.label}
         onClick={() => setViewed(p.id)}
       >
-        {p.label}
-        {p.connected || p.custom?.active ? <span className="agent-dot"> ●</span> : null}
+        <span className="agent-provider-name">{p.label}</span>
+        {hasDot(p) ? <span className="agent-dot"> ●</span> : null}
       </button>
     </li>
   );
   const current = advanced ? null : (providers.find((p) => p.id === viewed) ?? null);
-  const inUse = providers.find((p) => p.connected || p.custom?.active) ?? null;
+  const inUse = providers.find((p) => (status?.ready ? p.id === status.provider : !!p.connected)) ?? null;
   const other = inUse && inUse.id !== viewed ? inUse : null;
-  const active = !!current && current.id === status?.provider;
+  const active = !!current && current.id === status?.provider && status?.ready === true;
   const model = active ? (current?.models.find((m) => m.id === status?.model) ?? null) : null;
   const levels = model?.thinking ?? [];
 
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    const vertical = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
-    const across = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (target.closest('.agent-providers')) {
-      if (vertical) {
-        e.preventDefault();
-        const ids = [...builtIn.map((p) => p.id), ADVANCED, ...fromFile.map((p) => p.id)];
-        const i = ids.indexOf(viewed ?? '');
-        const next = ids[Math.min(ids.length - 1, Math.max(0, i + vertical))];
-        if (next) {
-          setViewed(next);
-          focusProvider(next);
-        }
-      } else if (across > 0 || e.key === 'Tab') {
-        e.preventDefault();
-        controls()[0]?.focus();
-      }
-      return;
-    }
-    if (!target.closest('.agent-settings')) return;
-    if (vertical) {
-      e.preventDefault();
-      const all = controls();
-      const at = all.findIndex((c) => c === target || c.contains(target));
-      all[Math.min(all.length - 1, Math.max(0, at + vertical))]?.focus();
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      focusProvider(viewed);
-    } else if (across && target.closest('.agent-thinking') && model && status?.thinking) {
-      e.preventDefault();
-      const i = levels.indexOf(status.thinking);
-      const next = levels[Math.min(levels.length - 1, Math.max(0, i + across))];
-      if (next && next !== status.thinking) void choose(model.id, next);
-    }
-  };
-
   /** The model list and thinking levels, shared by a connected provider and one from Advanced. */
-  const modelRows = (provider: AgentProviderOption) => (
-    <>
-      <div className="agent-row">
-        <span className="agent-label">Model</span>
-        <div className="agent-models" role="listbox" aria-label="Model">
-          {provider.models.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="option"
-              data-control
-              data-testid={`agent-model-${m.id}`}
-              aria-selected={active && m.id === status?.model}
-              className="agent-model"
-              onClick={() =>
-                void choose(m.id, (active ? status?.thinking : provider.recommended?.thinking) ?? provider.recommended?.thinking ?? status?.thinking ?? 'medium', provider.custom && !active ? provider.id : undefined)
-              }
-            >
-              <span>{m.name}</span>
-              <span className="agent-model-note">{provider.custom ? (m.id === m.name ? '' : m.id) : m.id === provider.recommended?.model ? 'recommended' : ''}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      {model && levels.length > 1 ? (
+  const modelRows = (provider: AgentProviderOption) => {
+    const showFilter = provider.models.length > 8;
+    const mQuery = showFilter ? modelFilter.trim().toLowerCase() : '';
+    const visibleModels = mQuery
+      ? provider.models.filter((m) => m.name.toLowerCase().includes(mQuery) || m.id.toLowerCase().includes(mQuery))
+      : provider.models;
+    return (
+      <>
         <div className="agent-row">
-          <span className="agent-label">Thinking</span>
-          <div className="bg-choices agent-thinking" role="radiogroup" aria-label="Thinking" tabIndex={0} data-control>
-            {levels.map((level) => (
-              <button
-                key={level}
-                type="button"
-                tabIndex={-1}
-                className="bg-toggle"
-                role="radio"
-                data-testid={`agent-thinking-${level}`}
-                aria-checked={level === status?.thinking}
-                aria-pressed={level === status?.thinking}
-                onClick={() => void choose(model.id, level)}
-              >
-                {level}
-              </button>
-            ))}
+          <span className="agent-label">Model</span>
+          <div className="agent-models-wrap">
+            {showFilter ? (
+              <div className="agent-filter-row">
+                <input
+                  type="text"
+                  className="agent-filter"
+                  data-testid="agent-model-filter"
+                  aria-label="Filter models"
+                  placeholder={`Filter ${provider.models.length} models…`}
+                  value={modelFilter}
+                  onChange={(e) => setModelFilter(e.target.value)}
+                />
+                {mQuery ? (
+                  <span className="agent-filter-count">
+                    {visibleModels.length}/{provider.models.length}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="agent-models" role="listbox" aria-label="Model">
+              {visibleModels.length ? (
+                visibleModels.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="option"
+                    data-testid={`agent-model-${m.id}`}
+                    aria-selected={active && m.id === status?.model}
+                    className="agent-model"
+                    onClick={() =>
+                      void choose(
+                        m.id,
+                        (active ? status?.thinking : provider.recommended?.thinking) ?? provider.recommended?.thinking ?? status?.thinking ?? 'medium',
+                        !active ? provider.id : undefined,
+                      )
+                    }
+                  >
+                    <span>{m.name}</span>
+                    <span className="agent-model-note">{provider.custom ? (m.id === m.name ? '' : m.id) : m.id === provider.recommended?.model ? 'recommended' : ''}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="agent-models-empty">No models match “{modelFilter.trim()}”.</div>
+              )}
+            </div>
           </div>
         </div>
-      ) : null}
-    </>
-  );
+        {model && levels.length > 1 ? (
+          <div className="agent-row">
+            <span className="agent-label">Thinking</span>
+            <div className="bg-choices agent-thinking" role="radiogroup" aria-label="Thinking">
+              {levels.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className="bg-toggle"
+                  role="radio"
+                  data-testid={`agent-thinking-${level}`}
+                  aria-checked={level === status?.thinking}
+                  aria-pressed={level === status?.thinking}
+                  onClick={() => void choose(model.id, level)}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  };
 
   /**
    * Advanced: what models.json is for, where it is, what's wrong with it, if anything, with a way to copy that,
@@ -269,17 +298,17 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
       <>
         <div className="bg-note">
           <span className="agent-lead">To use a model of your own, such as a local one on Ollama or LM Studio, add its provider to models.json.</span>{' '}
-          OMFV's agent runs on pi, so a provider is written as pi's createProvider() takes one.{' '}
-          <button type="button" className="bg-reset agent-link" data-control data-testid="agent-setup-docs" onClick={() => void host.agent.customModelsDocs()}>
+          OMFV's agent runs on pi, so each provider follows{' '}
+          <button type="button" className="bg-reset agent-link" data-testid="agent-setup-docs" onClick={() => void host.agent.customModelsDocs()}>
             pi {PI_VERSION} documentation
           </button>
+          {' '}for createProvider().
         </div>
-        <div className="agent-row agent-apart">
+        <div className="agent-file-row agent-apart">
           <span className="agent-label">File</span>
           <button
             type="button"
             className="agent-file"
-            data-control
             data-testid="agent-setup-path"
             title={`${setup.path}\nClick to copy`}
             aria-label={`Copy the path of models.json: ${setup.path}`}
@@ -308,7 +337,6 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 className="bg-toggle agent-copy"
-                data-control
                 data-testid="agent-setup-copy-errors"
                 title="Copies the list with the file's path, to paste to your agent"
                 onClick={() => copy('errors', customModelsErrorsText(setup.path, setup.errors))}
@@ -320,10 +348,10 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
           </>
         ) : null}
         <div className={setup.errors.length ? 'bg-choices agent-apart' : 'bg-choices'}>
-          <button type="button" className="bg-toggle" data-control data-testid="agent-setup-open" onClick={() => void openSetup('open')}>
+          <button type="button" className="bg-toggle" data-testid="agent-setup-open" onClick={() => void openSetup('open')}>
             {setup.exists ? 'Open models.json' : 'Create models.json'}
           </button>
-          <button type="button" className="bg-toggle" data-control data-testid="agent-setup-reveal" onClick={() => void openSetup('reveal')}>
+          <button type="button" className="bg-toggle" data-testid="agent-setup-reveal" onClick={() => void openSetup('reveal')}>
             Show in folder
           </button>
         </div>
@@ -332,7 +360,7 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
           ask you first which model to connect.
         </div>
         <div className="bg-choices">
-          <button type="button" className="bg-toggle agent-copy" data-control data-testid="agent-setup-prompt" onClick={() => copy('prompt', customModelsPrompt(setup))}>
+          <button type="button" className="bg-toggle agent-copy" data-testid="agent-setup-prompt" onClick={() => copy('prompt', customModelsPrompt(setup))}>
             <ClipIcon />
             <span role="status">{copied === 'prompt' ? 'Copied' : 'Copy prompt for your agent'}</span>
           </button>
@@ -378,7 +406,7 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
           <div>{connecting.message}</div>
           {connecting.code ? <div className="agent-code">{connecting.code}</div> : null}
           <div>
-            <button type="button" className="bg-toggle" data-control onClick={() => void host.agent.cancelConnect()}>
+            <button type="button" className="bg-toggle" onClick={() => void host.agent.cancelConnect()}>
               Cancel
             </button>
           </div>
@@ -392,10 +420,15 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
           <div className="agent-row">
             <span className="agent-label">Account</span>
             <span>{current.connected.label}</span>
-            <button type="button" className="bg-toggle" data-control data-testid="agent-disconnect" onClick={() => void disconnect()}>
+            <button type="button" className="bg-toggle" data-testid="agent-disconnect" onClick={() => void disconnect()}>
               {current.connected.way === 'oauth' ? 'Sign out' : 'Remove'}
             </button>
           </div>
+          {!active ? (
+            <div className="bg-note">
+              {other ? `The agent uses ${other.label}. ` : ''}Choose a model to use {current.label}.
+            </div>
+          ) : null}
           {modelRows(current)}
         </>
       );
@@ -414,7 +447,6 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               className="bg-toggle"
-              data-control
               data-testid={`agent-connect-${w.way}`}
               onClick={() => void connect(current, w.way)}
             >
@@ -428,29 +460,50 @@ export function AgentPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div ref={rootRef} className="bg-panel" role="dialog" aria-label="Agent" data-testid="agent-panel" onKeyDown={onKeyDown}>
+    <div ref={rootRef} className="bg-panel" role="dialog" aria-label="Agent" data-testid="agent-panel">
       <div className="bg-panel-head">
         <span>Agent</span>
         <button type="button" className="tile-close" aria-label="Close agent settings" title="Close" onClick={close}>
           ×
         </button>
       </div>
-      <div className="bg-panel-body">
-        <ul className="bg-styles agent-providers" aria-label="Provider">
-          {builtIn.map((p) => providerRow(p))}
-          <li className="agent-advanced">
-            <button type="button" data-testid={`agent-provider-${ADVANCED}`} aria-pressed={advanced} onClick={() => setViewed(ADVANCED)}>
-              Advanced
-            </button>
-          </li>
-          {fromFile.map((p) => providerRow(p))}
-        </ul>
+      <div className="bg-panel-body agent-panel-body">
+        <div className="bg-styles agent-sidebar">
+          {builtIn.length > 8 ? (
+            <div className="agent-provider-filter-wrap">
+              <input
+                type="text"
+                className="agent-filter"
+                data-testid="agent-provider-filter"
+                aria-label="Filter providers"
+                placeholder="Filter providers…"
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+              />
+            </div>
+          ) : null}
+          <ul className="agent-providers" aria-label="Provider">
+            {visibleBuiltIn.length ? (
+              visibleBuiltIn.map((p) => providerRow(p))
+            ) : (
+              <li className="agent-providers-empty">No providers match</li>
+            )}
+          </ul>
+          <ul className="agent-advanced-list" aria-label="Advanced">
+            <li className="agent-advanced">
+              <button type="button" data-testid={`agent-provider-${ADVANCED}`} aria-pressed={advanced} onClick={() => setViewed(ADVANCED)}>
+                Advanced
+              </button>
+            </li>
+            {fromFile.map((p) => providerRow(p))}
+          </ul>
+        </div>
         <div className="bg-settings agent-settings">
           {settings()}
           {error ? <div className="agent-error">{error}</div> : null}
         </div>
       </div>
-      <div className="bg-panel-foot">↑↓ choose · → or tab to settings · ←→ thinking · esc close</div>
+      <div className="bg-panel-foot">esc close</div>
     </div>
   );
 }
