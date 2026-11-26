@@ -40,8 +40,8 @@ import { modFilesExtension, type ModFilesHost } from './extensions/modFiles';
 import { renderCheck, type RenderCheck } from './extensions/renderCheck';
 import { customEntry, customProvider, type CustomParts } from './custom';
 import { customModelsSchema } from './modelsSchema';
-import { askForKey } from './keyWindow';
-import { SUPPORTED, supported, type SupportedProvider } from './supported';
+import { askForKey, askForPrompt } from './keyWindow';
+import { RECOMMENDED, type SupportedProvider } from './supported';
 
 const MAX_TOOL_ROUNDS = 10;
 /** Building takes more steps than viewing: reading the types, writing, fixing, looking. */
@@ -60,10 +60,8 @@ const SETUP_NEEDED = 'The agent needs setting up first: /settings-agent';
 /** The agent can't answer until something is chosen in /settings-agent. Its message is in the viewer's words. */
 class SetupError extends Error {}
 const WAYS: ConnectWay[] = ['oauth', 'api_key'];
-/** Ids a provider from Advanced can't take: the supported ones', and the panel's own for Advanced. */
-/** The level a model from Advanced starts at, clamped to what it has. */
+/** The level a model with no recommended default starts at, clamped to what it has. */
 const DEFAULT_THINKING: ThinkingLevel = 'medium';
-const RESERVED = [...SUPPORTED.map((s) => s.provider), 'advanced'];
 
 /** Stored conversations of each kind kept for review. Older ones are deleted when a new one starts. */
 export const KEPT_CONVERSATIONS = 100;
@@ -107,6 +105,8 @@ interface Runtime {
   durable: Durable;
   context: Context;
   providers: AgentModels;
+  /** Built-in provider ids from pi-ai (and test fakes), before any from models.json. */
+  builtInIds: Set<string>;
   /** Opens a conversation's storage. */
   open: (file: string) => Promise<Storage>;
   /** Where each conversation is kept, for review. */
@@ -242,8 +242,7 @@ export class Agent {
     const { BACKGROUND_CONTEXT } = await import('@earendil-works/chord/context');
     const { clampThinkingLevel, getSupportedThinkingLevels } = await import('@earendil-works/pi-ai');
     const { createModels } = await import('@earendil-works/pi-ai/models');
-    const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
-    const { anthropicProvider } = await import('@earendil-works/pi-ai/providers/anthropic');
+    const { builtinProviders } = await import('@earendil-works/pi-ai/providers/all');
     const { openNodeSqliteStorage } = await import('@earendil-works/pi-durable/storage/sqlite/node');
     const { createProvider } = await import('@earendil-works/pi-ai');
     const { openAICompletionsApi } = await import('@earendil-works/pi-ai/api/openai-completions.lazy');
@@ -262,9 +261,12 @@ export class Agent {
     };
     this.onRuntime?.(providers);
     const models = createModels({ credentials: providers.credentials });
-    // Only the providers supported.ts offers: nothing else in pi's catalog can be reached. Advanced's are added
-    // later, from the settings (customEntries).
-    for (const provider of [openaiProvider(), anthropicProvider(), ...added]) models.setProvider(provider);
+    // Every built-in provider pi-ai ships with, plus any test fakes. Advanced's are added later (customEntries).
+    const builtInIds = new Set<string>();
+    for (const provider of [...builtinProviders(), ...added]) {
+      models.setProvider(provider);
+      builtInIds.add(provider.id);
+    }
     providers.models = models;
     providers.setProvider = (provider) => models.setProvider(provider);
     providers.deleteProvider = (id) => models.deleteProvider(id);
@@ -272,6 +274,7 @@ export class Agent {
       durable,
       context: BACKGROUND_CONTEXT,
       providers,
+      builtInIds,
       open: (file) => openNodeSqliteStorage(file),
       conversationsDir: path.join(app.getPath('userData'), 'conversations'),
       levels: (model) => getSupportedThinkingLevels(model) as ThinkingLevel[],
@@ -281,6 +284,31 @@ export class Agent {
         apis: { 'openai-completions': openAICompletionsApi, 'openai-responses': openAIResponsesApi, 'anthropic-messages': anthropicMessagesApi },
       },
     };
+  }
+
+  /**
+   * Built-in providers from the installed pi-ai: every provider with at least one chat model and one interactive
+   * way to connect. Recommended providers come first, then the rest alphabetically by name.
+   */
+  private builtInEntries(runtime: Runtime): SupportedProvider[] {
+    const entries: SupportedProvider[] = [];
+    for (const id of runtime.builtInIds) {
+      const provider = runtime.providers.models.getProvider(id);
+      if (!provider) continue;
+      const list = runtime.providers.models.getModels(id);
+      if (list.length === 0) continue;
+      const { oauth, apiKey } = provider.auth;
+      const ways: Partial<Record<ConnectWay, string>> = {};
+      if (oauth) ways.oauth = oauth.name !== provider.name ? oauth.name : 'sign in through your browser';
+      if (apiKey?.login) ways.api_key = apiKey.name;
+      if (Object.keys(ways).length === 0) continue;
+      const rawRec = RECOMMENDED[id];
+      const recommended = rawRec && list.some((m) => m.id === rawRec.model) ? rawRec : undefined;
+      const models = [...list].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map((m) => m.id);
+      entries.push({ provider: id, label: provider.name, ways, models, ...(recommended ? { recommended } : {}) });
+    }
+    entries.sort((a, b) => a.label.localeCompare(b.label) || a.provider.localeCompare(b.provider));
+    return entries;
   }
 
   /** The setup's file, models.json, and its schema and an example beside it. */
@@ -295,7 +323,7 @@ export class Agent {
    * the agent does. A file with anything wrong in it is used not at all, and Advanced says why.
    */
   private async customEntries(): Promise<SupportedProvider[]> {
-    const { providers, custom } = await this.runtime();
+    const { providers, builtInIds, custom } = await this.runtime();
     let from = '';
     try {
       from = readFileSync(this.customFiles.setup, 'utf8');
@@ -304,7 +332,7 @@ export class Agent {
     }
     if (from === this.custom.from) return this.custom.entries;
     for (const old of this.custom.entries) providers.deleteProvider(old.provider);
-    const { config, errors } = parseCustomModelsText(from, RESERVED);
+    const { config, errors } = parseCustomModelsText(from, [...builtInIds, 'advanced']);
     if (errors.length) console.warn(`[ai] ${CUSTOM_MODELS_FILE} is not used:`, errors.join(' '));
     const entries = Object.entries(config?.providers ?? {}).flatMap(([id, provider]) => {
       try {
@@ -319,18 +347,28 @@ export class Agent {
     return entries;
   }
 
-  /** Why the agent isn't set up, when what it was set up with is gone from models.json. */
+  /** Why the agent isn't set up, when a connected provider has no model chosen yet or one from models.json is gone. */
   private async setupProblem(): Promise<Error> {
     const { provider, model } = this.settings;
-    if (!provider || supported(provider)) return new Error(SETUP_NEEDED);
+    if (!provider) return new Error(SETUP_NEEDED);
     const entry = await this.entryFor(provider);
-    if (!entry) return new SetupError(`The agent was using "${provider}", which is no longer in models.json. Choose a model in /settings-agent.`);
+    if (!entry) {
+      const { builtInIds } = await this.runtime();
+      if (builtInIds.has(provider)) return new Error(SETUP_NEEDED);
+      return new SetupError(`The agent was using "${provider}", which is no longer in models.json. Choose a model in /settings-agent.`);
+    }
+    if (!entry.custom) {
+      if (!(await this.connectedWay(entry))) return new Error(SETUP_NEEDED);
+      return new SetupError(`Choose a model for ${entry.label} in /settings-agent.`);
+    }
     return new SetupError(`${entry.label} no longer has the model ${model ?? 'the agent was using'}. Choose one in /settings-agent.`);
   }
 
-  /** A supported provider, or one from Advanced. */
+  /** A built-in pi provider, or one from Advanced. */
   private async entryFor(id: string | undefined): Promise<SupportedProvider | undefined> {
-    return supported(id) ?? (await this.customEntries()).find((e) => e.provider === id);
+    if (!id) return undefined;
+    const runtime = await this.runtime();
+    return this.builtInEntries(runtime).find((e) => e.provider === id) ?? (await this.customEntries()).find((e) => e.provider === id);
   }
 
   /** The way a provider is connected: its stored credential. Environment variables never count. */
@@ -343,8 +381,8 @@ export class Agent {
 
   /**
    * What the agent runs on, or null if it isn't set up. The provider is the one in the settings, and a
-   * model missing from its supported list falls back to the recommended one. A provider from Advanced has no
-   * recommended model, so when its saved one is gone the agent isn't set up until another is chosen.
+   * missing model falls back to `recommended` when the provider has one. Providers without a recommended
+   * model (including those from Advanced) wait until the viewer chooses a model.
    */
   private async current(): Promise<Choice | null> {
     const { providers, clamp } = await this.runtime();
@@ -366,9 +404,9 @@ export class Agent {
     this.modFiles = host;
   }
 
-  /** Changes the settings, in the app's settings file. */
+  /** Changes the settings, in the app's settings file. Undefined fields are removed. */
   private changeSettings(values: AgentSettings): void {
-    (this.store ?? appSettings()).set('agent', { ...this.settings, ...values });
+    (this.store ?? appSettings()).set('agent', parseAgentSettings({ ...this.settings, ...values }));
   }
 
   /** The run policy for a conversation, from what the settings say. */
@@ -544,17 +582,20 @@ export class Agent {
     };
   }
 
-  /** The supported providers, as pi describes them. One missing from the installed pi is left out. */
+  /** All built-in providers from the installed pi-ai, plus any set up in models.json. */
   async providers(): Promise<AgentProviderOption[]> {
-    const { providers, levels } = await this.runtime();
+    const runtime = await this.runtime();
+    const { providers, levels } = runtime;
     const choice = await this.current();
-    const builtIn = SUPPORTED.flatMap((entry): AgentProviderOption[] => {
+    const credentials = new Map((await providers.credentials.list()).map((c) => [c.providerId, c.type as ConnectWay]));
+    const builtIn = this.builtInEntries(runtime).flatMap((entry): AgentProviderOption[] => {
       const provider = providers.models.getProvider(entry.provider);
       if (!provider) return [];
       const { oauth, apiKey } = provider.auth;
       const label = (way: ConnectWay) => (way === 'oauth' ? (oauth?.loginLabel ?? `Sign in with ${entry.label}`) : 'Use an API key');
       const offered = (way: ConnectWay) => !!entry.ways[way] && (way === 'oauth' ? !!oauth : !!apiKey?.login);
-      const way = choice?.entry === entry ? choice.way : null;
+      const credWay = credentials.get(entry.provider);
+      const way = credWay && entry.ways[credWay] ? credWay : null;
       return [
         {
           id: entry.provider,
@@ -565,7 +606,7 @@ export class Agent {
             const model = providers.models.getModel(entry.provider, id) as Model<Api> | undefined;
             return model ? [{ id, name: model.name, thinking: levels(model) }] : [];
           }),
-          recommended: entry.recommended,
+          ...(entry.recommended ? { recommended: entry.recommended } : {}),
         },
       ];
     });
@@ -700,8 +741,10 @@ export class Agent {
       if (credential.providerId !== entry.provider) await providers.logout(credential.providerId);
     }
     const { recommended } = entry;
-    if (recommended && (switched || !entry.models.includes(stored.model ?? ''))) {
-      this.changeSettings({ provider: entry.provider, model: recommended.model, thinking: recommended.thinking });
+    const keptModel = !switched && stored.model && entry.models.includes(stored.model);
+    if (!keptModel) {
+      if (recommended) this.changeSettings({ provider: entry.provider, model: recommended.model, thinking: recommended.thinking });
+      else this.changeSettings({ provider: entry.provider, model: undefined, thinking: undefined });
     }
     track('agent_connected', { provider: entry.provider, way });
     return this.status();
@@ -711,7 +754,7 @@ export class Agent {
     this.connectAbort?.abort();
   }
 
-  /** How a sign-in reaches the user. The panel shows what's happening, but never sees a key. */
+  /** How a sign-in reaches the user. The panel shows what's happening, but never sees a secret. */
   private interaction(entry: SupportedProvider, signal: AbortSignal): AuthInteraction {
     return {
       signal,
@@ -732,16 +775,21 @@ export class Agent {
           emitConnect({ type: 'key_window', message: `Paste your ${entry.label} API key in the window that opened.` });
           return askForKey(`${entry.label} API key`, `Paste your ${entry.label} API key.`, signals);
         }
-        if (p.type !== 'manual_code') {
-          return Promise.reject(new Error(`${entry.label} asked for something the app can't show: ${p.message}`));
+        if (p.type === 'text' || p.type === 'select') {
+          emitConnect({ type: 'key_window', message: p.message });
+          return askForPrompt(entry.label, p, signals);
         }
-        // pi races this against its callback server. There's no paste box, so this just waits until the
-        // callback wins or the sign-in is cancelled.
-        return new Promise<string>((_resolve, reject) => {
-          const cancel = () => reject(new Error('Sign-in cancelled'));
-          if (signals.aborted) cancel();
-          signals.addEventListener('abort', cancel, { once: true });
-        });
+        // When pi passes a separate per-prompt signal it is racing this against its local callback server:
+        // wait until the callback wins or the sign-in is cancelled. Otherwise (copy-code flow) show a window.
+        if (p.signal && p.signal !== signal) {
+          return new Promise<string>((_resolve, reject) => {
+            const cancel = () => reject(new Error('Sign-in cancelled'));
+            if (signals.aborted) cancel();
+            signals.addEventListener('abort', cancel, { once: true });
+          });
+        }
+        emitConnect({ type: 'key_window', message: p.message });
+        return askForPrompt(entry.label, p, signals);
       },
     };
   }
@@ -750,21 +798,23 @@ export class Agent {
   async disconnect(): Promise<void> {
     await this.reset();
     const { providers } = await this.runtime();
-    const provider = this.settings.provider;
-    if (provider) await providers.logout(provider);
+    for (const credential of await providers.credentials.list()) {
+      await providers.logout(credential.providerId);
+    }
   }
 
   /**
    * Saves the model and thinking level. A conversation picks them up at its next message. `providerId` switches
-   * to another provider: one from Advanced, or a supported one that's connected. A new provider means a new
+   * to another provider: one from Advanced, or a built-in one that's connected. A new provider means a new
    * conversation, from its next message.
    */
   async choose(modelId: string, thinking: ThinkingLevel, providerId?: string): Promise<AiStatus> {
     const choice = await this.current();
     let entry = choice?.entry;
-    if (providerId !== undefined && providerId !== entry?.provider) {
-      entry = await this.entryFor(providerId);
-      if (!entry) throw new Error(`${providerId} isn't a provider the app offers.`);
+    const targetId = providerId ?? (entry ? undefined : this.settings.provider);
+    if (targetId !== undefined && targetId !== entry?.provider) {
+      entry = await this.entryFor(targetId);
+      if (!entry) throw new Error(`${targetId} isn't a provider the app offers.`);
       if (!entry.custom && !(await this.connectedWay(entry))) throw new Error(`${entry.label} isn't connected.`);
     }
     if (!entry) throw new Error(SETUP_NEEDED);
@@ -1087,9 +1137,9 @@ function friendlyError(e: unknown, label = 'The provider', server?: string): { m
   if (server && /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|fetch failed|connection error|connect timeout/i.test(message)) {
     return { message: `Couldn't reach ${label} at ${server}. Is its server running?`, fix: 'setup' };
   }
-  if (/usage_limit|usage limit|rate_limit|rate limit/i.test(message)) return { message: `${label} usage limit reached.`, fix: 'limit' };
+  if (/usage_limit|usage limit|rate_limit|rate limit|resource_exhausted/i.test(message)) return { message: `${label} usage limit reached.`, fix: 'limit' };
   if (/not_eligible/i.test(message)) return { message: `This ${label} account can't use its plan in other apps.`, fix: 'connect' };
-  if (/No API key|not configured|unauthor|invalid_grant|invalid x-api-key|authentication_error|incorrect api key|token/i.test(message)) {
+  if (/No API key|not configured|unauthor|invalid_grant|invalid x-api-key|authentication_error|incorrect api key|invalid api key|api_key_invalid|api key not valid|token/i.test(message)) {
     return { message: `${label} didn't accept the connection.`, fix: 'connect' };
   }
   return { message };

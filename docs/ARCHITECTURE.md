@@ -256,10 +256,13 @@ that refuse a call.
   viewer a spoiler check. With approval the agent may answer from what it read, for that turn only. Other tool results, the `seek_to` result
   and `app_state` hold nothing about how a session turned out: `app_state` adds only the playhead and the roster. There is still no race-state
   tool. See [SPOILER_PREVENTION.md](SPOILER_PREVENTION.md).
-- **Providers and models.** `electron/agent/supported.ts` lists what `/settings-agent` offers: OpenAI, through a ChatGPT plan or an
-  API key, and Anthropic through an API key, each with its models and a recommended model and thinking level. Anything else in pi's
-  catalog is left out. Its comment says how to see everything pi offers. GPT-6 Luna and GPT-6.1 Terra have run the app's tools on a
-  ChatGPT plan. Nothing has run on an API key yet.
+- **Providers and models.** `/settings-agent` pulls every built-in provider (with chat models and interactive sign-in), every chat
+  model, and every connection way straight from the installed `pi-ai` (`builtinProviders()`), listed in alphabetical order with no
+  extra provider or model allowlist. `electron/agent/supported.ts` holds only optional `recommended` defaults (`openai` for now:
+  GPT-6.1 Terra at medium): connecting a provider with a recommended default starts on it, while connecting any other provider
+  leaves the viewer to choose a model from its list. Opening the panel scrolls to the active (or recommended) provider and model in
+  place rather than re-ordering them. GPT-6 Luna and GPT-6.1 Terra have run the app's tools on a ChatGPT plan. Nothing has run on an
+  API key yet.
 - **Models set up by hand.** For power users, a file: `models.json` in the app's user data folder, for a local model on Ollama,
   LM Studio, llama.cpp or vLLM, or any OpenAI- or Anthropic-compatible server. It's edited in the viewer's own editor, never in the
   app: `/settings-agent` → Advanced shows where it is, opens it (making it the first time from an example, named "Ollama (example)") and says what's wrong

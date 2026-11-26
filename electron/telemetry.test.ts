@@ -61,11 +61,25 @@ describe('allowedProps', () => {
     expect(allowedProps('build_ended', { mods: -1 })).toEqual({});
   });
 
-  it('takes names, never text, for ids and tools', () => {
+  it('takes names, never text, for ids and tools', async () => {
     expect(allowedProps('agent_tool', { tool: 'suggest_tiles', ok: true })).toEqual({ tool: 'suggest_tiles', ok: true });
     expect(allowedProps('agent_tool', { tool: 'show me the race' })).toEqual({});
     expect(allowedProps('agent_connected', { provider: 'openai', way: 'oauth' })).toEqual({ provider: 'openai', way: 'oauth' });
+    expect(allowedProps('agent_connected', { provider: 'opencode-go', way: 'api_key' })).toEqual({ provider: 'opencode-go', way: 'api_key' });
+    expect(allowedProps('agent_turn', { provider: 'openrouter', model: 'google/gemini-4-neon' })).toEqual({ provider: 'openrouter', model: 'google/gemini-4-neon' });
     expect(allowedProps('agent_connected', { provider: 'me@example.com' })).toEqual({});
+    expect(allowedProps('agent_turn', { model: 'https://example.com' })).toEqual({});
+    expect(allowedProps('agent_turn', { model: '/etc/passwd' })).toEqual({});
+    expect(allowedProps('agent_turn', { model: 'a'.repeat(65) })).toEqual({});
+
+    const { builtinModels } = await import('@earendil-works/pi-ai/providers/all');
+    const catalog = builtinModels();
+    for (const p of catalog.getProviders()) {
+      expect(allowedProps('agent_connected', { provider: p.id }), p.id).toEqual({ provider: p.id });
+      for (const m of catalog.getModels(p.id)) {
+        expect(allowedProps('agent_turn', { provider: p.id, model: m.id }), `${p.id}/${m.id}`).toEqual({ provider: p.id, model: m.id });
+      }
+    }
   });
 
   it('lists every built-in component', () => {

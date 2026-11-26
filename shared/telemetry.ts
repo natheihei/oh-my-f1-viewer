@@ -104,14 +104,14 @@ type ValueOf<K> = K extends { enum: readonly (infer E)[] } ? E : K extends 'bool
 /** What an event's properties may be, by its list. Every one is optional: one that's unknown is just left out. */
 export type TelemetryProps<E extends TelemetryEvent> = { -readonly [P in keyof (typeof TELEMETRY_EVENTS)[E]]?: ValueOf<(typeof TELEMETRY_EVENTS)[E][P]> };
 
-const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+const ID = /^[a-z0-9@~][a-z0-9._:-]*(?:\/[a-z0-9@~][a-z0-9._:-]*)*$/i;
 const TOOL = /^[a-z][a-z0-9_]{0,47}$/;
 
 /** `value` as `kind` allows it, or undefined when it doesn't fit. */
 function fit(kind: PropKind, value: unknown): string | number | boolean | undefined {
   if (typeof kind === 'object') return typeof value === 'string' && kind.enum.includes(value) ? value : undefined;
   if (kind === 'boolean') return typeof value === 'boolean' ? value : undefined;
-  if (kind === 'id') return typeof value === 'string' && ID.test(value) ? value : undefined;
+  if (kind === 'id') return typeof value === 'string' && value.length <= 64 && ID.test(value) ? value : undefined;
   if (kind === 'tool') return typeof value === 'string' && TOOL.test(value) ? value : undefined;
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
   if (kind === 'count') return Math.min(Math.round(value), COUNT_CAP);

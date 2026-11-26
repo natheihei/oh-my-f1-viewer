@@ -202,7 +202,7 @@ export function Onboarding() {
       const thinking = agent.thinking && agent.thinking !== 'off' ? `, ${agent.thinking} thinking` : '';
       return { mark: 'done', status: agent.modelName ?? 'Connected', message: `Connected: ${agent.modelName ?? agent.model}${thinking}.`, actions: [{ label: 'Change', run: settings }], command: '/settings-agent' };
     }
-    const first = providers[0];
+    const first = providers.find((p) => p.recommended) ?? providers[0];
     const actions: Action[] = [
       ...(first?.ways[0] ? [{ label: first.ways[0].label, run: () => void connect(first), main: true }] : []),
       { label: 'Other ways to connect', run: settings, main: !first?.ways[0] },

@@ -1667,6 +1667,48 @@
 }
 
 /* Agent settings (/settings-agent), in the palette's place. Built on the background panel's layout. */
+.agent-panel-body {
+  grid-template-columns: 200px minmax(0, 1fr);
+  max-height: min(440px, 60vh);
+}
+
+.agent-sidebar {
+  @apply flex min-h-0 flex-col py-0;
+  max-height: min(440px, 60vh);
+}
+
+.agent-provider-filter-wrap {
+  @apply border-b border-line p-1.5;
+}
+
+.agent-providers {
+  @apply min-h-0 flex-1 overflow-y-auto py-1;
+}
+
+.agent-providers button,
+.agent-advanced-list button {
+  @apply flex items-center justify-between gap-1 pr-2;
+}
+
+.agent-provider-name {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.agent-providers-empty {
+  @apply px-2.5 py-1;
+  color: var(--color-mute);
+  font-size: var(--text-s);
+}
+
+.agent-advanced-list {
+  @apply flex-none pb-1;
+}
+
+.agent-settings {
+  @apply min-h-0 min-w-0 overflow-x-hidden overflow-y-auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .agent-row {
   @apply grid items-baseline gap-3;
   grid-template-columns: 80px minmax(0, 1fr) auto;
@@ -1676,12 +1718,44 @@
   @apply text-dim;
 }
 
+.agent-models-wrap {
+  @apply col-span-2 grid gap-1;
+}
+
+.agent-filter-row {
+  @apply flex items-center gap-2;
+}
+
+.agent-filter {
+  @apply w-full border border-line bg-transparent px-2 text-ink outline-none placeholder:text-dim;
+  height: var(--row);
+  font: inherit;
+}
+
+.agent-filter:focus {
+  @apply border-rule;
+}
+
+.agent-filter-count {
+  @apply flex-none whitespace-nowrap tabular-nums;
+  color: var(--color-mute);
+  font-size: var(--text-s);
+}
+
 .agent-models {
-  @apply col-span-2 grid border border-line;
+  @apply grid overflow-y-auto border border-line;
+  max-height: calc(var(--row) * 8 + 2px);
+}
+
+.agent-models-empty {
+  @apply px-2 py-1;
+  color: var(--color-mute);
 }
 
 .agent-model {
   @apply flex cursor-pointer justify-between gap-3 border-l-2 border-transparent bg-transparent px-2 text-left text-dim hover:text-ink;
+  min-height: var(--row);
+  line-height: var(--row);
 }
 
 .agent-model[aria-selected='true'] {
@@ -1690,10 +1764,11 @@
 }
 
 .agent-model > span:first-child {
-  @apply flex-1;
+  @apply min-w-0 flex-1 truncate;
 }
 
 .agent-model-note {
+  @apply flex-none;
   color: var(--color-mute);
 }
 
@@ -1703,11 +1778,11 @@
 
 .agent-way {
   @apply grid items-center gap-3;
-  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, auto) minmax(0, 1fr);
 }
 
 .agent-way .bg-toggle {
-  @apply text-left text-ink;
+  @apply text-left whitespace-nowrap text-ink;
 }
 
 .agent-code {
@@ -1725,11 +1800,6 @@
   @apply text-ink;
 }
 
-.agent-settings [data-control]:focus-visible {
-  outline: 1px solid var(--color-ink);
-  outline-offset: 1px;
-}
-
 /* Advanced: below the providers, apart from them. */
 .agent-advanced {
   @apply mt-1 border-t border-line pt-1;
@@ -1739,9 +1809,13 @@
   @apply truncate text-ink;
 }
 
+.agent-file-row {
+  @apply flex min-w-0 items-center gap-3;
+}
+
 /* Where models.json is: one line, cut in the middle, and a click copies it. */
 .agent-file {
-  @apply col-span-2 flex min-w-0 cursor-pointer items-center bg-transparent p-0 text-left text-ink;
+  @apply flex min-w-0 flex-1 cursor-pointer items-center bg-transparent p-0 text-left text-ink;
   height: var(--row);
 }
 
@@ -1778,13 +1852,13 @@
   margin-top: calc(var(--row) / 2);
 }
 
-/* A button that copies: the clip icon, then what it copies. Brighter than its neighbours, which only open things. */
+/* A button that copies: the clip icon, then what it copies. */
 .bg-toggle.agent-copy {
-  @apply inline-flex items-center gap-1.5 border-rule text-ink;
+  @apply inline-flex items-center gap-1.5;
 }
 
 .agent-copy .agent-file-icon {
-  @apply ml-0 text-ink;
+  @apply ml-0 text-current;
 }
 
 /* A provider from models.json: under Advanced, and set in from it. */
