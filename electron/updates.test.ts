@@ -1,9 +1,32 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('electron', () => ({ app: { isPackaged: false, getVersion: () => '0.1.0' } }));
-vi.mock('electron-updater', () => ({ autoUpdater: {} }));
+const appMock = {
+  isPackaged: false,
+  getVersion: () => '0.1.0',
+  on: vi.fn(),
+};
+const autoUpdaterMock = {
+  logger: null as unknown,
+  autoDownload: false,
+  autoInstallOnAppQuit: false,
+  allowDowngrade: true,
+  disableDifferentialDownload: false,
+  on: vi.fn(),
+  checkForUpdates: vi.fn(async () => null),
+};
 
-const { afterStart, canUpdate, readSaved } = await import('./updates');
+vi.mock('electron', () => ({ app: appMock }));
+vi.mock('electron-updater', () => ({ autoUpdater: autoUpdaterMock }));
+
+const { afterStart, canUpdate, readSaved, startUpdates } = await import('./updates');
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+  appMock.isPackaged = false;
+  appMock.getVersion = () => '0.1.0';
+});
 
 describe('afterStart', () => {
   it('says which release it updated to, once it runs a newer one', () => {
@@ -34,5 +57,29 @@ describe('readSaved', () => {
 describe('canUpdate', () => {
   it("is off for a build that isn't a packaged release", () => {
     expect(canUpdate()).toBe(false);
+  });
+});
+
+describe('startUpdates', () => {
+  it('checks 5 seconds after start and then every 10 minutes', () => {
+    vi.useFakeTimers();
+    vi.stubEnv('APPIMAGE', '/app/omfv.AppImage');
+    appMock.isPackaged = true;
+    appMock.getVersion = () => '20261121.1.0';
+    const settings = { get: vi.fn(), set: vi.fn(), flush: vi.fn() };
+
+    startUpdates(vi.fn(), settings);
+
+    vi.advanceTimersByTime(4_999);
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(10 * 60_000 - 1);
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(2);
   });
 });
