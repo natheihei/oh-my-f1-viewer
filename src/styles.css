@@ -2408,24 +2408,18 @@
   scroll-margin-block: 34px 8px;
 }
 
-/* A race weighs more than qualifying, and qualifying more than practice. What's finished steps back. */
+/* A race weighs more than qualifying, and qualifying more than practice. */
 .landing-what {
   @apply text-dim;
 }
 .landing-row[data-kind='qualifying'] .landing-what,
-.landing-row[data-kind='race'] .landing-what {
+.landing-row[data-kind='race'] .landing-what,
+.landing-row:hover .landing-what,
+.landing-row-open .landing-what {
   @apply text-ink;
 }
 .landing-row[data-kind='race'] .landing-what {
   @apply font-medium;
-}
-.landing-row[data-status='past'] .landing-what {
-  @apply font-normal text-dim;
-}
-.landing-row[data-status='past'][data-kind='race'] .landing-what,
-.landing-row:hover .landing-what,
-.landing-row-open .landing-what {
-  @apply text-ink;
 }
 
 .landing-rel {
