@@ -118,7 +118,13 @@ try {
 
   // The first check is 5 seconds after start, then the download.
   const ready = await until(`${NEW} never became ready`, async () => (await lines(page)).find((l) => l.includes(`OMFV ${NEW} is ready`)), 240_000).catch((e) => e.message);
-  check('the palette says the newer release is ready', ready === `OMFV ${NEW} is ready. It automatically installs next time you start oh-my-f1-viewer.`, ready);
+  check(
+    'the palette says the newer release is ready with a restart button',
+    ready === `OMFV ${NEW} is ready. restart to update`,
+    ready,
+  );
+  const restartLabel = await page.locator('[data-testid=palette-action]').last().innerText().catch(() => '');
+  check('the ready line offers a restart to update button', restartLabel === 'restart to update', restartLabel);
   await page.screenshot({ path: path.join(outDir, 'ready.png') });
 
   // Quit as a viewer does: closing the window.

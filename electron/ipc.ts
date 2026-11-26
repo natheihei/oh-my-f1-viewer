@@ -13,7 +13,7 @@ import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
 import { releaseName, RELEASES_URL, SITE_URL, type AppVersion } from '../shared/release';
-import { updateState } from './updates';
+import { installUpdate, updateState } from './updates';
 import { telemetry, track } from './telemetry';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
@@ -276,6 +276,7 @@ export function setupIpc(databaseFile: string, mods: Mods): { refreshSchedule():
   // --- Which OMFV this is ---
   handle('app:version', (): AppVersion => ({ release: releaseName(app.getVersion()), packaged: app.isPackaged }));
   handle('app:update', () => updateState());
+  handle('app:install-update', () => installUpdate());
   // This release's notes, or every release's for a build that isn't one.
   handle('app:whats-new', () => {
     const release = releaseName(app.getVersion());

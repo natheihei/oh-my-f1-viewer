@@ -46,6 +46,7 @@ const api: OmfvApi = {
     version: () => invoke('app:version'),
     update: () => invoke('app:update'),
     onUpdate: (cb) => subscribe<UpdateState>('app:update', cb),
+    installUpdate: () => invoke('app:install-update'),
     whatsNew: () => invoke('app:whats-new'),
     about: () => invoke('app:about'),
   },
