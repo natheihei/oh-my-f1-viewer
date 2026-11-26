@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 import {
+  clampDragHeight,
   clampHistoryHeight,
   minHistoryHeight,
   parseSavedHeight,
@@ -32,6 +33,25 @@ test('a height stays between the minimum and 60% of the window', () => {
 
 test('in a tiny window the minimum wins', () => {
   expect(clampHistoryHeight(400, 162, 200)).toBe(162);
+});
+
+test('a drag stays within the built-in cap and window share when starting at or above the minimum', () => {
+  expect(clampDragHeight(100, 415, 162, 1000)).toBe(162);
+  expect(clampDragHeight(315, 415, 162, 1000)).toBe(315);
+  expect(clampDragHeight(515, 415, 162, 1000)).toBe(515);
+  expect(clampDragHeight(900, 415, 162, 1000)).toBe(600);
+});
+
+test('a drag from a short history below the minimum never jumps up to the minimum', () => {
+  expect(clampDragHeight(20, 52, 162, 1000)).toBe(52);
+  expect(clampDragHeight(52, 52, 162, 1000)).toBe(52);
+  expect(clampDragHeight(100, 52, 162, 1000)).toBe(100);
+  expect(clampDragHeight(300, 52, 162, 1000)).toBe(300);
+});
+
+test('a drag in a tiny window never jumps above the rendered height', () => {
+  expect(clampDragHeight(100, 120, 162, 200)).toBe(120);
+  expect(clampDragHeight(300, 120, 162, 200)).toBe(120);
 });
 
 test('only a positive number is a saved height', () => {
