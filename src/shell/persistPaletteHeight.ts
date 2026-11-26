@@ -23,6 +23,16 @@ export function clampHistoryHeight(height: number, min: number, windowHeight: nu
   return Math.round(Math.max(min, Math.min(height, windowHeight * MAX_HISTORY_OF_WINDOW)));
 }
 
+/**
+ * A height during a drag of the palette's top edge, starting from the history box's rendered height (`start`).
+ * Never jumps above `start` when a short history sits below `min`, or when a tiny window caps it below `min`.
+ */
+export function clampDragHeight(height: number, start: number, min: number, windowHeight: number): number {
+  const floor = Math.min(start, min);
+  const ceiling = Math.max(start, windowHeight * MAX_HISTORY_OF_WINDOW);
+  return Math.round(Math.max(floor, Math.min(height, ceiling)));
+}
+
 export function parseSavedHeight(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }

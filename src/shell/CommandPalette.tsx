@@ -35,7 +35,7 @@ import {
   usePaletteKeyLabel,
   type PaletteBinding,
 } from './paletteKey';
-import { clampHistoryHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
+import { clampDragHeight, minHistoryHeight, setPaletteHeight, usePaletteHeight } from './persistPaletteHeight';
 import { nextTip, TIP_MS, tipParts, type Tip } from './tips';
 import { PromptInput, type Picker, type PromptInputHandle } from './PromptInput';
 import { SuggestionStrip, type SuggestionStripHandle } from './SuggestionStrip';
@@ -43,6 +43,9 @@ import type { COMMANDS } from '../../shared/telemetry';
 
 /** While the agent is still working, a second Esc this soon after the first stops it. */
 const ESC_AGAIN_MS = 2000;
+
+/** A pointer move this small is a click, not a drag of the palette's top edge. */
+const RESIZE_DRAG_THRESHOLD_PX = 4;
 
 /** The mark before each line of the history. It hangs in its own column, so wrapped text stays clear of it. */
 const ROLE_MARK: Record<EntryRole, string> = {
@@ -315,31 +318,38 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey);
   }, [alone]);
 
-  /** Dragging the top edge up raises the history's cap, from wherever it is now, within its bounds. */
+  /** Dragging the top edge resizes the history's cap from its current rendered height, never jumping on a click. */
   const onResizeStart = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const grip = e.currentTarget;
+    const box = historyRef.current;
     const min = minHistoryHeight(parseFloat(getComputedStyle(grip).getPropertyValue('--row')) || 22);
-    const start = clampHistoryHeight(usePaletteHeight.getState().height ?? min, min, window.innerHeight);
+    const start = box ? Math.round(box.getBoundingClientRect().height) : min;
     const startY = e.clientY;
     let height = start;
+    let dragging = false;
     grip.setPointerCapture(e.pointerId);
-    setDragHeight(start);
     const move = (ev: globalThis.PointerEvent) => {
-      height = clampHistoryHeight(start + startY - ev.clientY, min, window.innerHeight);
+      if (!dragging && Math.abs(ev.clientY - startY) < RESIZE_DRAG_THRESHOLD_PX) return;
+      const next = clampDragHeight(start + startY - ev.clientY, start, min, window.innerHeight);
+      if (!dragging && next === start) return;
+      dragging = true;
+      height = next;
       setDragHeight(height);
     };
-    const end = () => {
+    const stop = (commit: boolean) => {
       grip.removeEventListener('pointermove', move);
-      grip.removeEventListener('pointerup', end);
-      grip.removeEventListener('pointercancel', end);
+      grip.removeEventListener('pointerup', onUp);
+      grip.removeEventListener('pointercancel', onCancel);
       setDragHeight(null);
-      if (height !== start) setPaletteHeight(height > min ? height : null);
+      if (commit && dragging && height !== start) setPaletteHeight(height > min ? height : null);
     };
+    const onUp = () => stop(true);
+    const onCancel = () => stop(false);
     grip.addEventListener('pointermove', move);
-    grip.addEventListener('pointerup', end);
-    grip.addEventListener('pointercancel', end);
+    grip.addEventListener('pointerup', onUp);
+    grip.addEventListener('pointercancel', onCancel);
   };
 
   // Hidden, the palette folds to its input row, see-through, and a click unfolds it. Only with something on screen: without it, it's held.
