@@ -298,9 +298,9 @@ These live on the host too, but they aren't ops: they have no schema, and the ag
 
 - `host.account`: `status()`, `login(service)`, `logout(service)` and `onExpired(cb)`, for F1 TV sign-in, and `status()` also says whether
   the agent is set up. Only the shell uses them, for the user's `/` commands and to notice an expired sign-in.
-- `host.app`: `version()`, which OMFV this is: its release name (`20261119.1`) or null, and whether it's packaged. `update()` and
-  `onUpdate()`, what the updater has to say: a release ready to install on quit, and the release the last update installed or
-  didn't. `whatsNew()` opens this release's notes, and `about()` the OMFV site. Only the shell uses it: `/version`, `/whats-new`,
+- `host.app`: `version()`, which OMFV this is: its release name (`20261119.1`) or null, and whether it's packaged. `update()`,
+  `onUpdate()` and `installUpdate()`, what the updater has to say (a release ready to install on quit, and the release the last update installed or
+  didn't) and restarting straight away to install it. `whatsNew()` opens this release's notes, and `about()` the OMFV site. Only the shell uses it: `/version`, `/whats-new`,
   `/about` and `src/shell/updates.ts`. See [RELEASE.md](RELEASE.md#updates).
 - `host.agent`: the link to the agent loop in the main process (`status`, `send`, `cancel`, `onEvent`, `onToolCall`, `toolResult`), and its
   setup (`providers`, `connect`, `cancelConnect`, `onConnect`, `disconnect`, `choose`, and Advanced's `customModels`, `openCustomModels`, `revealCustomModels`, `customModelsDocs` and `onCustomModels`). The shell's agent feed, `/settings-agent` and

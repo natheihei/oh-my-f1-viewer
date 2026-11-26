@@ -6,10 +6,12 @@ vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
 const { watchUpdates } = await import('./updates');
-const { usePalette } = await import('./palette');
+const { palette, usePalette } = await import('./palette');
 
 let listener: ((state: UpdateState) => void) | null = null;
+let installUpdate = vi.fn(async () => {});
 const fakeMain = (start: UpdateState) => {
+  installUpdate = vi.fn(async () => {});
   (globalThis as { window?: unknown }).window = {
     omfv: {
       app: {
@@ -18,6 +20,7 @@ const fakeMain = (start: UpdateState) => {
           listener = cb;
           return () => (listener = null);
         },
+        installUpdate: () => installUpdate(),
       },
     },
   };
@@ -48,8 +51,30 @@ describe('watchUpdates', () => {
     listener!({ ...NOTHING, ready: '20261121.1' });
     listener!({ ...NOTHING, ready: '20261121.1' });
     listener!({ ...NOTHING, ready: '20261121.2' });
-    expect(lines()).toEqual(['system: OMFV 20261121.1 is ready. It automatically installs next time you start oh-my-f1-viewer.', 'system: OMFV 20261121.2 is ready. It automatically installs next time you start oh-my-f1-viewer.']);
+    expect(lines()).toEqual(['system: OMFV 20261121.1 is ready.', 'system: OMFV 20261121.2 is ready.']);
+    expect(usePalette.getState().entries.map((e) => e.action?.label)).toEqual(['restart to update', 'restart to update']);
     off();
     expect(listener).toBeNull();
+  });
+
+  it('offers a one-click restart button that installs the ready update', async () => {
+    fakeMain({ ...NOTHING, ready: '20261121.1' });
+    await watchUpdates().reported;
+    const entry = usePalette.getState().entries[0];
+    expect(entry.action?.label).toBe('restart to update');
+    palette.act(entry.id);
+    expect(installUpdate).toHaveBeenCalledTimes(1);
+    expect(usePalette.getState().entries[0].action).toBeUndefined();
+    expect(lines().at(-1)).toBe('system: Restarting to install OMFV 20261121.1…');
+  });
+
+  it('reports an error if restarting to install fails', async () => {
+    fakeMain({ ...NOTHING, ready: '20261121.1' });
+    installUpdate.mockRejectedValueOnce(new Error("Error invoking remote method 'app:install-update': Error: No update is ready to install."));
+    await watchUpdates().reported;
+    palette.act(usePalette.getState().entries[0].id);
+    await vi.waitFor(() => {
+      expect(lines().at(-1)).toBe("error: Couldn't restart to install OMFV 20261121.1: No update is ready to install.");
+    });
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Keeps a release of OMFV up to date: checks GitHub for a newer release, downloads it in the background, and
- * installs it when the app quits, so the next start is the new release. Never restarts the app, never asks.
- * Only the AppImage, the Mac app and the Windows app: the pacman package is installed by hand (issue 181). See
- * docs/RELEASE.md.
+ * installs it when the app quits, or straight away if the viewer clicks restart (`installUpdate`). Never restarts
+ * on its own. Only the AppImage, the Mac app and the Windows app: the pacman package is installed by hand
+ * (issue 181). See docs/RELEASE.md.
  *
  * electron-updater does the work, from the feed electron-builder.yml names under `publish`: `latest-linux.yml`,
  * `latest-mac.yml` or `latest.yml` (Windows) on the release marked latest. On Windows it runs the next release's NSIS
@@ -27,6 +27,7 @@ export interface SavedUpdate {
 
 const NOTHING: UpdateState = { ready: null, updated: null, failed: null };
 let state: UpdateState = NOTHING;
+let installReady: (() => Promise<void>) | null = null;
 
 /** Whether this build updates itself: a release, installed as an AppImage, a Mac app or with the Windows installer. */
 export function canUpdate(): boolean {
@@ -58,11 +59,24 @@ export function updateState(): UpdateState {
   return state;
 }
 
+/** Installs the ready update and restarts the app. Throws when none is ready. */
+export async function installUpdate(): Promise<void> {
+  if (!state.ready || !installReady) throw new Error('No update is ready to install.');
+  await installReady();
+}
+
 /**
  * Starts checking, when this build updates itself. Call it before the window opens, so the renderer's first
- * question has the answer. `send` passes each change on to the renderer.
+ * question has the answer. `send` passes each change on to the renderer, and `beforeRestart` flushes anything
+ * that must go before `quitAndInstall` (such as telemetry, so `before-quit` won't cancel the relaunch).
  */
-export function startUpdates(send: (state: UpdateState) => void, settings: Settings & { flush?(): void } = appSettings()): void {
+export function startUpdates(
+  send: (state: UpdateState) => void,
+  settings: Settings & { flush?(): void } = appSettings(),
+  beforeRestart?: () => Promise<void>,
+): void {
+  state = NOTHING;
+  installReady = null;
   const current = releaseName(app.getVersion());
   if (!current || !canUpdate()) return;
   state = { ready: null, ...afterStart(current, readSaved(settings.get('update'))) };
@@ -76,6 +90,7 @@ export function startUpdates(send: (state: UpdateState) => void, settings: Setti
   };
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.allowDowngrade = false;
   // A differential download needs the old release's blockmap beside the new one, which the feed doesn't have.
   autoUpdater.disableDifferentialDownload = true;
@@ -90,12 +105,41 @@ export function startUpdates(send: (state: UpdateState) => void, settings: Setti
   // A failed check or download is tried again at the next check, so it's only logged.
   autoUpdater.on('error', (e) => console.warn('[update]', e?.message ?? e));
 
-  // Kept before electron-updater installs on `quit`, so the next start can tell whether it did.
-  app.on('will-quit', () => {
-    if (!state.ready) return;
+  let recordedInstalling = false;
+  const recordInstalling = () => {
+    if (!state.ready || recordedInstalling) return;
+    recordedInstalling = true;
     settings.set('update', { last: current, installing: state.ready } satisfies SavedUpdate);
     settings.flush?.();
-  });
+  };
+
+  // Kept before electron-updater installs on `quit`, so the next start can tell whether it did.
+  app.on('will-quit', recordInstalling);
+
+  let restarting = false;
+  installReady = async () => {
+    if (!state.ready) throw new Error('No update is ready to install.');
+    if (restarting) return;
+    restarting = true;
+    // Write and flush before quitAndInstall: AppImageUpdater spawns the new AppImage before `will-quit`,
+    // and flushing here keeps the old process from racing on settings.json as the new one starts.
+    recordInstalling();
+    try {
+      await beforeRestart?.();
+    } catch {
+      // A flush hiccup shouldn't stop the viewer from restarting into the update.
+    }
+    // AppImageUpdater spawns the new AppImage before this process exits, so release the lock first.
+    app.releaseSingleInstanceLock();
+    try {
+      autoUpdater.quitAndInstall(true, true);
+    } catch (e) {
+      restarting = false;
+      recordedInstalling = false;
+      app.requestSingleInstanceLock();
+      throw e;
+    }
+  };
 
   const check = () => void autoUpdater.checkForUpdates().catch((e: Error) => console.warn('[update] check:', e.message));
   setTimeout(() => {

@@ -165,7 +165,7 @@ app
       Menu.setApplicationMenu(null);
     }
     // Before the window, so the renderer's first question has what the last update did.
-    startUpdates((state) => sendToRenderer('app:update', state));
+    startUpdates((state) => sendToRenderer('app:update', state), appSettings(), flushTelemetry);
     if (updateState().updated) track('app_updated');
     createMainWindow();
     // The calendar is refreshed on every start. Until it's done, the last one is still there to read.
@@ -183,14 +183,17 @@ app
 
 // The last events go before quitting, for up to a couple of seconds: the open session's minutes, and what's waiting.
 let telemetrySent = false;
-app.on('before-quit', (event) => {
+async function flushTelemetry(): Promise<void> {
   if (telemetrySent || !gotLock) return;
   telemetrySent = true;
-  event.preventDefault();
-  void telemetry()
+  await telemetry()
     .close(QUIT_FLUSH_MS)
-    .catch(() => {})
-    .finally(() => app.quit());
+    .catch(() => {});
+}
+app.on('before-quit', (event) => {
+  if (telemetrySent || !gotLock) return;
+  event.preventDefault();
+  void flushTelemetry().finally(() => app.quit());
 });
 
 // Closing the window quits, on macOS too. OMFV is one window, so staying in the dock would leave nothing to use, and an update

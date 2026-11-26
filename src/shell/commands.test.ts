@@ -133,3 +133,37 @@ describe('usage counts', () => {
     expect([...COMMANDS].sort()).toEqual(SLASH_COMMANDS.map((c) => c.name).sort());
   });
 });
+
+describe('/version', () => {
+  const versionCmd = () => SLASH_COMMANDS.find((c) => c.name === '/version')!;
+  beforeEach(() => usePalette.setState({ entries: [] }));
+
+  it('offers restart to update when an update is ready, and no action otherwise', async () => {
+    const installUpdate = vi.fn(async () => {});
+    (globalThis as { window?: unknown }).window = {
+      omfv: {
+        app: {
+          version: async () => ({ release: '20261120.1', packaged: true }),
+          update: async () => ({ ready: '20261121.1', updated: null, failed: null }),
+          installUpdate,
+        },
+      },
+    };
+    await versionCmd().run('');
+    expect(usePalette.getState().entries.at(-1)?.text).toBe('OMFV 20261120.1. 20261121.1 is ready.');
+    expect(usePalette.getState().entries.at(-1)?.action?.label).toBe('restart to update');
+
+    (globalThis as { window?: unknown }).window = {
+      omfv: {
+        app: {
+          version: async () => ({ release: '20261120.1', packaged: true }),
+          update: async () => ({ ready: null, updated: null, failed: null }),
+          installUpdate,
+        },
+      },
+    };
+    await versionCmd().run('');
+    expect(usePalette.getState().entries.at(-1)?.text).toBe('OMFV 20261120.1.');
+    expect(usePalette.getState().entries.at(-1)?.action).toBeUndefined();
+  });
+});

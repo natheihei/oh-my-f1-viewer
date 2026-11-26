@@ -267,6 +267,8 @@ export interface OmfvApi {
     update(): Promise<import('./release').UpdateState>;
     /** Each change, such as a release becoming ready to install. */
     onUpdate(cb: (state: import('./release').UpdateState) => void): () => void;
+    /** Installs the ready update and restarts the app. */
+    installUpdate(): Promise<void>;
     /** Opens this release's notes in the browser. */
     whatsNew(): Promise<void>;
     /** Opens the OMFV site in the browser. */

@@ -10,6 +10,7 @@ import { goHome } from './home';
 import { onboarding, useOnboarding } from './onboardingState';
 import { palette } from './palette';
 import { runTelemetryCommand } from './telemetry';
+import { restartAction } from './updates';
 
 export interface SlashCommand {
   name: string;
@@ -146,7 +147,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     async run() {
       const [{ release, packaged }, { ready }] = await Promise.all([host.app.version(), host.app.update()]);
       const which = release ? `OMFV ${release}.` : packaged ? 'OMFV, built by hand: not a release.' : 'OMFV from source, not a release.';
-      palette.push('system', ready ? `${which} ${ready} installs automatically next time you start oh-my-f1-viewer.` : which);
+      palette.push(
+        'system',
+        ready ? `${which} ${ready} is ready.` : which,
+        ready ? restartAction(ready) : undefined,
+      );
     },
   },
   {

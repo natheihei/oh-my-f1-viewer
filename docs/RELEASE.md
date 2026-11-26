@@ -56,9 +56,8 @@ The site's [download page](https://oh-my-f1-viewer.yueyao.run/download) links ea
 
 An AppImage, a Mac app or a Windows app that's a release checks for a newer release 5 seconds after it starts, then every 10 minutes. It
 downloads one in the background and installs it when you quit, so the next start is the new release. There's no command,
-it never restarts on its own, and nothing appears over the video. The palette says once `OMFV 20261121.1 is ready. It
-automatically installs next time you start oh-my-f1-viewer.` (it's installed as the app quits), and on the next start, `Updated to
-OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names a release waiting to install. A release that
+it never restarts on its own, and nothing appears over the video. The palette says once `OMFV 20261121.1 is ready.` with a one-click `restart to update` button beside it (it also installs automatically when the app quits), and on the next start, `Updated to
+OMFV 20261121.1.` `/whats-new` opens that release's notes, and `/version` names a release waiting to install with the same `restart to update` button. A release that
 didn't install on quit is named in red on the next start, and tried again.
 A failed check or download is only logged.
 
