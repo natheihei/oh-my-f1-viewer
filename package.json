@@ -19,9 +19,9 @@
     "build:types": "tsc -p tsconfig.types.json"
   },
   "dependencies": {
-    "@earendil-works/chord": "1.5.2",
-    "@earendil-works/pi-ai": "1.5.2",
-    "@earendil-works/pi-durable": "1.5.2",
+    "@earendil-works/chord": "1.6.1",
+    "@earendil-works/pi-ai": "1.6.1",
+    "@earendil-works/pi-durable": "1.6.1",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "axios": "^1.20.0",
     "electron-updater": "^6.8.11",
