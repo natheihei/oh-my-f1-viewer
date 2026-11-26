@@ -54,7 +54,7 @@ The site's [download page](https://oh-my-f1-viewer.yueyao.run/download) links ea
 
 ### Updates
 
-An AppImage, a Mac app or a Windows app that's a release checks for a newer release a minute after it starts, then every 10 minutes. It
+An AppImage, a Mac app or a Windows app that's a release checks for a newer release 5 seconds after it starts, then every 10 minutes. It
 downloads one in the background and installs it when you quit, so the next start is the new release. There's no command,
 it never restarts on its own, and nothing appears over the video. The palette says once `OMFV 20261121.1 is ready. It
 automatically installs next time you start oh-my-f1-viewer.` (it's installed as the app quits), and on the next start, `Updated to
@@ -262,8 +262,7 @@ installing.
 
 `scripts/update-check.mjs` updates an AppImage from one release to the next, on Linux: it packages `20261120.1` and `20261120.2`
 with a feed on localhost, serves the second, and runs the first on an isolated profile. It checks that the palette says the
-second is ready, that quitting puts it in the first's place, and that the next start is the second and says so. The first check
-waits a minute, so it takes a few.
+second is ready, that quitting puts it in the first's place, and that the next start is the second and says so.
 
 ### Not done yet
 

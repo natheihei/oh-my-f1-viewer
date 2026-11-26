@@ -13,8 +13,8 @@ import { autoUpdater } from 'electron-updater';
 import { compareReleases, releaseName, type UpdateState } from '../shared/release';
 import { appSettings, type Settings } from './settings';
 
-/** The first check waits for the app to settle, then they come every 10 minutes. */
-const FIRST_CHECK_MS = 60_000;
+/** The first check runs shortly after start, then they come every 10 minutes. */
+const FIRST_CHECK_MS = 5_000;
 const CHECK_EVERY_MS = 10 * 60_000;
 
 /** What the settings keep under `update` between runs. */
