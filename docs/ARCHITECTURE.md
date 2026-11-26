@@ -271,7 +271,7 @@ that refuse a call.
   The file is what pi-ai's `createProvider()` takes, as far as JSON can say it (`shared/customModels.ts`): each entry of `providers`
   is one call, with its key as the `id` and `name`, `baseUrl`, `headers` and `models` as that call's options, and each model a
   pi-ai `Model` with its fields passed on as written. So pi-ai's own
-  [documentation of custom providers](https://github.com/earendil-works/pi/blob/v1.5.2/packages/ai/README.md#custom-providers) is the
+  [documentation of custom providers](https://github.com/earendil-works/pi/blob/v1.6.1/packages/ai/README.md#custom-providers) is the
   documentation of a model's fields, and Advanced links to it as of the pi release the app is built on (`PI_VERSION`). The app fills in what a `Model` needs and nobody should have to type:
   `provider`, `api` and `baseUrl` from the provider's unless the model has its own, and a default for the rest but `id`. Two of
   `createProvider()`'s options are code, so the file names them instead: `api` is `openai-completions`, `openai-responses` or

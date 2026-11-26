@@ -29,7 +29,7 @@ export const CUSTOM_MODELS_EXAMPLE_FILE = 'models.example.json';
  * The release of pi the app is built on: `@earendil-works/pi-ai` and `pi-durable` in package.json, which are
  * released together. Changed with them: a test holds it to the installed pi-ai.
  */
-export const PI_VERSION = '1.5.2';
+export const PI_VERSION = '1.6.1';
 
 /** pi-ai's documentation of custom providers and their models, as of that release, which Advanced points to. */
 export const CUSTOM_MODELS_DOCS = `https://github.com/earendil-works/pi/blob/v${PI_VERSION}/packages/ai/README.md#custom-providers`;

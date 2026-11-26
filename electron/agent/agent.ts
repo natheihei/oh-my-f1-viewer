@@ -471,7 +471,7 @@ export class Agent {
             const text = await check.next();
             if (!text) return undefined;
             await conversation.root.configure({ maxTurns: left }, context);
-            return { continue: text };
+            return { kind: 'continue', continue: text };
           },
         }),
         hook(CompactionTask, {
@@ -485,7 +485,7 @@ export class Agent {
               return null;
             });
             // No summary is better than one that could give the race away.
-            return summary ? { summary } : { decline: true };
+            return summary ? { kind: 'summary', summary } : { kind: 'decline' };
           },
         }),
       ],
