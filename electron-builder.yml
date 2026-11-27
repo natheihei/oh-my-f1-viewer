@@ -9,9 +9,9 @@ artifactName: omfv-${version}-${os}-${arch}.${ext}
 # castLabs' Widevine build, already in node_modules for this platform: each platform is packaged on its own.
 electronDist: node_modules/electron/dist
 
-# VMP-sign the app through castLabs' EVS, so F1 TV licenses its DRM streams: the Mac app after packing, before it's
-# signed for Apple, and the Windows app after its .exe is edited and signed, which would break the VMP signature.
-afterPack: build/vmp-sign.js
+# Mac afterPack patches Squirrel.framework's ShipIt (Squirrel.Mac#331) and VMP-signs the app through castLabs' EVS
+# before Apple signing seals it. Windows VMP-signs in afterSign after the .exe is edited and signed.
+afterPack: build/after-pack.js
 afterSign: build/vmp-sign-win.js
 
 directories:

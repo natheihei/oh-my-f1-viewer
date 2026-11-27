@@ -69,6 +69,11 @@ Closing the window quits, on macOS too, where Mac apps usually stay in the dock:
 - **The work** is electron-updater's, from `electron/updates.ts`: on Linux it replaces the AppImage file where it is, on
   macOS Squirrel.Mac swaps the app in `/Applications` from the `.zip`, and on Windows it runs the new release's installer,
   silently, as the app quits. It only ever moves to a newer release. Not verified on Windows yet.
+- **Squirrel.Mac#331 local patch (macOS).** `build/after-pack.js` runs `build/patch-squirrel-shipit.js` before VMP and
+  Apple signing to rebuild `Squirrel.framework/Versions/A/Resources/ShipIt` with `build/patches/squirrel-mac-331.patch`
+  ([Squirrel/Squirrel.Mac#331](https://github.com/Squirrel/Squirrel.Mac/pull/331)), so ShipIt removes its own `launchd`
+  job once an update finishes instead of leaving a lingering "Running in the background" item in the macOS Dock after
+  quit. Remove the patch and script once our Electron version includes Squirrel.Mac#331.
 - **What's kept between runs**: `update` in `omfv-settings.json`, the release that ran last and the one that was to install on
   quit, so the next start can say which it is now.
 - **Not**: the pacman package, a build made by hand (`npm run dist` without a release's version), a Windows app run from
