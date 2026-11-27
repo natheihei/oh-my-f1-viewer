@@ -729,8 +729,10 @@
   @apply text-ink;
 }
 
+/* System logs indent to the reply column, so `#` lines up with what the agent says. */
 .palette-system {
   @apply text-dim;
+  padding-left: calc(var(--pad) + 2ch);
 }
 
 .palette-error,
