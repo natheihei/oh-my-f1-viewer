@@ -222,6 +222,8 @@ jobs:
         run: |
           set -euo pipefail
           app=release/mac-arm64/oh-my-f1-viewer.app
+          shipit="$app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt"
+          nm -u "$shipit" | grep -q '_SMJobRemove' || { echo "::error::ShipIt is missing _SMJobRemove (Squirrel.Mac#331 patch)."; exit 1; }
           codesign -d -r- "$app" 2>&1 | grep '^designated' || true
           [ -n "${SIGNED_BY:-}" ] || exit 0
           codesign --verify --deep --strict "$app"
