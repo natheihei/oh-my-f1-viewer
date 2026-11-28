@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import type { SessionInfo, TimingQuery } from '../../shared/api';
 import type {
+  BackfillStatus,
   CircuitView,
   DataStatus,
   Dataset,
@@ -80,8 +81,8 @@ export function archiveQuery(session: SessionInfo): TimingQuery {
 
 /** What a running session asks of this. */
 export interface SessionDataHandle {
-  /** Where the video is: called on every clock tick. */
-  update(timeSec: number, wallClockMs: number | null): void;
+  /** Where the video is: called on every clock tick. `hasMedia` says whether the reference video has loaded its manifest/media. */
+  update(timeSec: number, wallClockMs: number | null, hasMedia?: boolean): void;
   /** The video second showing a moment on the database's clock, or null when the frame can't be placed. */
   videoTimeOf(dateMs: number): number | null;
   destroy(): void;
@@ -120,11 +121,11 @@ export function waitingFor(kind: WaitingFor, aheadMs = 0): Waiting {
         reason: "Can't line the data up with the video",
         detail: "This session's timing feed carries no time to match against the video, so its data stays hidden.",
       };
-    case 'no-wall-clock':
+    case 'awaiting-video':
       return {
         kind,
         reason: 'Not lined up with the video yet',
-        detail: "The live video hasn't said what time it's showing yet. The data appears as soon as it does.",
+        detail: "Waiting for the video stream to report what time it's showing. The data appears as soon as it does.",
       };
     case 'video-behind':
       return {
@@ -157,14 +158,17 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   let map: TimeMap | null = null;
   /** Live: MultiViewer's lead of the stream's frame time over the feed, once it's published. */
   let liveLeadMs: number | null = null;
-  /** Live: when the capture began. Nothing before it can be shown. */
+  /** Live/replay capture: when the capture began. Nothing before it can be shown. */
   let capturedFrom: number | null = null;
+  /** Optional background live backfill status (null when unconfigured or not live). */
+  let backfill: BackfillStatus | null = null;
   let waiting: Waiting | null = null;
   let ready = false;
   let playhead = NOTHING_VISIBLE;
   /** The last position the video reported, for placing a moment relative to it. */
   let videoSec = 0;
   let videoWallClockMs: number | null = null;
+  let videoHasMedia = false;
   /** The frame as consumers see it: null when it's not a real time. */
   let shownPlayhead: number | null = null;
   /** The second of the playhead last read. Row visibility is only asked for this often. */
@@ -183,21 +187,23 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
 
   const publish = () => {
     if (destroyed || !ready || sessionKey === null || !datasets) return;
+    const backfillField = backfill ? { backfill } : {};
     if (waiting) {
       const { reason, detail, kind } = waiting;
-      const brief = kind === 'no-wall-clock';
+      const brief = kind === 'awaiting-video';
       const ahead = kind === 'video-behind';
-      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, brief, ahead, tables, drivers: roster }), true);
+      useSessionData.setState(deepFreeze({ state: 'waiting', sessionKey, datasets, reason, detail, brief, ahead, tables, drivers: roster, ...backfillField }), true);
       return;
     }
-    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects }), true);
+    useSessionData.setState(deepFreeze({ state: 'ready', sessionKey, datasets, revision, playheadMs: shownPlayhead, tables, ...objects, ...backfillField }), true);
   };
 
   /** Places the frame the video last reported. Returns whether what's published changed. */
   const place = (): boolean => {
-    const at = playheadOf(live, map, videoSec, videoWallClockMs, liveLeadMs);
+    const awaitingWallClock = live && !videoHasMedia;
+    const at = playheadOf(map, videoSec, videoWallClockMs, liveLeadMs, awaitingWallClock);
     const next =
-      typeof at === 'string' ? waitingFor(at) : live && capturedFrom !== null && at < capturedFrom ? waitingFor('video-behind', capturedFrom - at) : null;
+      typeof at === 'string' ? waitingFor(at) : capturedFrom !== null && at < capturedFrom ? waitingFor('video-behind', capturedFrom - at) : null;
     playhead = typeof at === 'number' ? at : NOTHING_VISIBLE;
     const shown = typeof at === 'number' && !next ? at : null;
     const changed = shown !== shownPlayhead || next?.reason !== waiting?.reason || next?.detail !== waiting?.detail;
@@ -254,9 +260,10 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
     }
     sessionKey = status.sessionKey;
     datasets = status.coverage?.datasets ?? null;
-    if (status.clock) map = buildTimeMap(status.clock, status.sessionStartSec);
+    map = status.clock ? buildTimeMap(status.clock, status.sessionStartSec) : null;
     liveLeadMs = status.liveLeadMs ?? null;
-    if (live) capturedFrom = status.coverage?.capturedFrom ?? null;
+    capturedFrom = status.coverage?.capturedFrom ?? null;
+    backfill = status.backfill ?? null;
     const sentTables = JSON.stringify(status.tables);
     if (status.tables && sentTables !== lastTables) {
       lastTables = sentTables;
@@ -286,9 +293,10 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
   });
 
   return {
-    update(timeSec, wallClockMs) {
+    update(timeSec, wallClockMs, hasMedia = true) {
       videoSec = timeSec;
       videoWallClockMs = wallClockMs;
+      videoHasMedia = hasMedia;
       const moved = place();
       // A new second reads the objects again and publishes a revision. In between, only the playhead is
       // published, ten times a second: telemetry shows each sample at its own date, about four a second, and
@@ -301,7 +309,7 @@ export function openSessionData(session: SessionInfo, live: boolean): SessionDat
       } else if (moved) publish();
     },
     videoTimeOf(dateMs) {
-      return videoTimeOf(live, map, dateMs, videoSec, videoWallClockMs, liveLeadMs);
+      return videoTimeOf(map, dateMs, videoSec, videoWallClockMs, liveLeadMs, live && !videoHasMedia);
     },
     destroy() {
       destroyed = true;

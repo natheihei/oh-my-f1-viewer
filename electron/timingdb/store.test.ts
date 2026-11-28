@@ -571,6 +571,168 @@ describe('session database', () => {
       capture.append([{ topic: 'ChampionshipPrediction', data: { Drivers: { '1': { PredictedPoints: 5 } } }, receivedAt: BASE }]);
       expect(sql('SELECT * FROM championship_drivers', BASE)).toHaveLength(1);
     });
+
+    it('replays backfilled history from session start, keeping original visible_from and recording server gaps', async () => {
+      const yields = { count: 0 };
+      const backfillRecords = [
+        { topic: 'SessionInfo', data: { Key: 200, Type: 'Race', Meeting: { Key: 100, Circuit: { Key: 9 } } }, snapshot: true, receivedAt: BASE },
+        { topic: 'DriverList', data: { '1': { RacingNumber: '1', FullName: 'Driver One', Tla: 'ONE', TeamName: 'A' } }, snapshot: true, receivedAt: BASE },
+        { topic: 'TimingAppData', data: { Lines: { '1': { Stints: [{ Compound: 'SOFT', StartLaps: 0, TotalLaps: 0 }] } } }, snapshot: true, receivedAt: BASE },
+        { topic: 'TimingData', data: { Lines: { '1': { Line: 3, NumberOfLaps: 0 } } }, receivedAt: BASE + 50_000 },
+        { topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 1, Line: 2 } } }, receivedAt: BASE + 150_000 },
+        { topic: 'TimingData', data: { Lines: { '1': { LastLapTime: { Value: '1:29.000' } } } }, receivedAt: BASE + 151_000 },
+        { topic: 'CarData.z', data: { Entries: [{ Utc: utc(149_000), Cars: { '1': { Channels: { '0': 11000, '2': 305, '3': 8, '4': 100, '5': 0 } } } }] }, ts: utc(149_500), receivedAt: BASE + 150_000 },
+      ];
+      const capture = await LiveCapture.start(
+        store,
+        META,
+        BASE + 200_000,
+        { records: backfillRecords, gaps: [{ from: BASE + 70_000, to: BASE + 85_000 }] },
+        async () => {
+          yields.count++;
+        },
+        undefined,
+        2,
+      );
+      expect(capture).not.toBeNull();
+      expect(capture!.hasTelemetry).toBe(true);
+      expect(yields.count).toBeGreaterThanOrEqual(3);
+      expect(store.liveLastVisibleFrom(META.sessionKey)).toBe(BASE + 151_000);
+      // coverage.capturedFrom is the server's session start, not join time.
+      expect(store.coverage(META.sessionKey).capturedFrom).toBe(BASE);
+      expect(store.coverage(META.sessionKey).gaps).toEqual([{ from: BASE + 70_000, to: BASE + 85_000 }]);
+      expect(store.coverage(META.sessionKey).datasets.telemetry.state).toBe('partial');
+      // Spoiler prevention: rows after the playhead stay hidden, and rewinding shows earlier state.
+      expect(sql('SELECT * FROM position', BASE + 49_999)).toEqual([]);
+      expect(sql('SELECT position FROM position ORDER BY date', BASE + 50_000)).toEqual([{ position: 3 }]);
+      expect(sql('SELECT lap_duration FROM laps WHERE lap_number = 1', BASE + 150_500)[0].lap_duration).not.toBe(89);
+      expect(sql('SELECT lap_number, lap_duration FROM laps ORDER BY lap_number', BASE + 151_000)).toEqual([
+        { lap_number: 1, lap_duration: 89 },
+        { lap_number: 2, lap_duration: null },
+      ]);
+      // Telemetry is gated by its own sample date.
+      expect(sql('SELECT speed FROM car_data', BASE + 148_999)).toEqual([]);
+      expect(sql('SELECT speed FROM car_data', BASE + 149_000)).toEqual([{ speed: 305 }]);
+    });
+
+    it('fills a mid-session restart gap cleanly when incremental backfill covers the downtime', async () => {
+      const first = new LiveCapture(store, META, BASE);
+      first.append(snapshot(BASE));
+      first.append([{ topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 21 } } }, receivedAt: BASE + 90_000 }]);
+      expect(store.liveLastVisibleFrom(META.sessionKey)).toBe(BASE + 90_000);
+
+      // Reopen 60s later with incremental backfill covering (90_000, 150_000].
+      const second = await LiveCapture.start(
+        store,
+        META,
+        BASE + 150_000,
+        {
+          records: [
+            // Older/duplicate record should be ignored automatically.
+            { topic: 'TimingData', data: { Lines: { '1': { Line: 9 } } }, receivedAt: BASE + 90_000 },
+            { topic: 'TimingData', data: { Lines: { '1': { LastLapTime: { Value: '1:30.500' } } } }, receivedAt: BASE + 91_000 },
+            { topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 22 } } }, receivedAt: BASE + 149_000 },
+          ],
+          gaps: [],
+        },
+        async () => {},
+      );
+      expect(second).not.toBeNull();
+      expect(store.coverage(META.sessionKey).gaps).toEqual([]);
+      expect(sql('SELECT lap_number, lap_duration FROM laps ORDER BY lap_number', BASE + 150_000)).toEqual([
+        { lap_number: 21, lap_duration: 90.5 },
+        { lap_number: 22, lap_duration: null },
+        { lap_number: 23, lap_duration: null },
+      ]);
+    });
+
+    it('appends background telemetry backfill in chunked batches, interleaves live updates, and rebuilds on restart', async () => {
+      const timingBackfill = [
+        { topic: 'SessionInfo', data: { Key: 200, Type: 'Race', Meeting: { Key: 100 } }, snapshot: true, receivedAt: BASE },
+        { topic: 'TimingAppData', data: { Lines: { '1': { Stints: [{ Compound: 'SOFT', StartLaps: 0, TotalLaps: 0 }] } } }, snapshot: true, receivedAt: BASE },
+        { topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 1, Line: 1 } } }, receivedAt: BASE + 100_000 },
+      ];
+      const capture = await LiveCapture.start(store, META, BASE + 120_000, { records: timingBackfill, gaps: [] }, async () => {});
+      expect(capture).not.toBeNull();
+      expect(capture!.hasTelemetry).toBe(false);
+      expect(store.coverage(META.sessionKey).datasets.telemetry.state).toBe('absent');
+
+      // Live timing + direct telemetry arrives before background telemetry backfill completes.
+      capture!.append([
+        { topic: 'TimingData', data: { Lines: { '1': { NumberOfLaps: 2, Line: 1 } } }, receivedAt: BASE + 190_000 },
+        {
+          topic: 'CarData.z',
+          data: { Entries: [{ Utc: utc(189_000), Cars: { '1': { Channels: { '0': 11200, '2': 315, '3': 8, '4': 100, '5': 0 } } } }] },
+          ts: utc(189_500),
+          receivedAt: BASE + 190_000,
+        },
+      ]);
+
+      // Background telemetry backfill writes historical samples in batches, yielding between them.
+      const telemetryBackfill = [
+        {
+          topic: 'CarData.z',
+          data: { Entries: [{ Utc: utc(50_000), Cars: { '1': { Channels: { '0': 10500, '2': 290, '3': 7, '4': 100, '5': 0 } } } }] },
+          ts: utc(50_500),
+          receivedAt: BASE + 51_000,
+        },
+        {
+          topic: 'Position.z',
+          data: { Position: [{ Timestamp: utc(50_000), Entries: { '1': { Status: 'OnTrack', X: 111, Y: 222, Z: 3 } } }] },
+          ts: utc(50_500),
+          receivedAt: BASE + 51_000,
+        },
+        {
+          topic: 'CarData.z',
+          data: { Entries: [{ Utc: utc(99_000), Cars: { '1': { Channels: { '0': 11000, '2': 308, '3': 8, '4': 100, '5': 0 } } } }] },
+          ts: utc(99_500),
+          receivedAt: BASE + 100_000,
+        },
+      ];
+
+      let yields = 0;
+      const written = await capture!.appendBackfill(
+        telemetryBackfill,
+        async () => {
+          yields++;
+        },
+        undefined,
+        1,
+      );
+      expect(written).toBe(3);
+      expect(yields).toBe(2);
+      expect(capture!.hasTelemetry).toBe(true);
+      expect(store.coverage(META.sessionKey).datasets.telemetry.state).toBe('partial');
+
+      // Both historical backfilled telemetry and direct live telemetry are readable and spoiler-gated.
+      expect(sql('SELECT speed FROM car_data ORDER BY date', BASE + 190_000)).toEqual([{ speed: 290 }, { speed: 308 }, { speed: 315 }]);
+      expect(sql('SELECT speed FROM car_data ORDER BY date', BASE + 50_000)).toEqual([{ speed: 290 }]);
+      expect(sql('SELECT x, y FROM location', BASE + 50_000)).toEqual([{ x: 111, y: 222 }]);
+
+      // Mid-session restart rebuilds both timing and background-backfilled telemetry cleanly.
+      const restarted = await LiveCapture.start(store, META, BASE + 192_000, null, async () => {});
+      expect(restarted).not.toBeNull();
+      expect(restarted!.hasTelemetry).toBe(true);
+      expect(sql('SELECT lap_number FROM laps ORDER BY lap_number', BASE + 192_000)).toEqual([
+        { lap_number: 1 },
+        { lap_number: 2 },
+        { lap_number: 3 },
+      ]);
+      expect(sql('SELECT speed FROM car_data ORDER BY date', BASE + 192_000)).toEqual([{ speed: 290 }, { speed: 308 }, { speed: 315 }]);
+      expect(sql('SELECT x, y FROM location', BASE + 192_000)).toEqual([{ x: 111, y: 222 }]);
+
+      // Cancellation stops appendBackfill between batches cleanly.
+      let cancel = false;
+      const partialWritten = await restarted!.appendBackfill(
+        telemetryBackfill,
+        async () => {
+          cancel = true;
+        },
+        () => cancel,
+        1,
+      );
+      expect(partialWritten).toBe(1);
+    });
   });
 
   describe('consumers can only read, and only the views', () => {

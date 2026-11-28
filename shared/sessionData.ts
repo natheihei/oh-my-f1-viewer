@@ -189,6 +189,22 @@ export interface SessionCoverage {
   capturedFrom: number | null;
 }
 
+/** Status of optional background historical backfill during a live session. */
+export interface BackfillStatus {
+  /**
+   * - `catching-up`: background backfill is fetching or waiting for chunks up to when this viewer joined.
+   * - `complete`: historical backfill has covered up to when this viewer joined (or the session finished).
+   * - `unavailable`: no backfill capture exists for this session yet (live data from join time only).
+   */
+  state: 'catching-up' | 'complete' | 'unavailable';
+  /** Earliest timestamp covered by the local capture so far (UTC ms), if any. */
+  capturedFrom: number | null;
+  /** Latest timestamp covered by historical backfill chunks so far (UTC ms), if any. */
+  backfilledTo: number | null;
+  /** When this viewer's direct live connection began (UTC ms) — backfill catches up to this point. */
+  targetUntilMs: number | null;
+}
+
 /** Whether there's session data and, if not, why. The data only exists once it's ready. */
 export type SessionDataView =
   | { state: 'idle' }
@@ -213,6 +229,8 @@ export type SessionDataView =
       ahead: boolean;
       tables: SqlTableInfo[];
       drivers: DriverEntry[];
+      /** Present only on live sessions when optional background backfill is configured. */
+      backfill?: BackfillStatus | null;
     }
   | ({
       state: 'ready';
@@ -224,6 +242,8 @@ export type SessionDataView =
       playheadMs: number | null;
       /** Every table SQL can read, and its columns. The same for every session. */
       tables: SqlTableInfo[];
+      /** Present only on live sessions when optional background backfill is configured. */
+      backfill?: BackfillStatus | null;
     } & SessionObjects);
 
 import type { FeedClock } from './feedTime';
@@ -257,4 +277,6 @@ export interface DataStatus {
   liveLeadMs: number | null;
   /** The tables SQL can read, as the database reports them. Null when there's no session to read. */
   tables: SqlTableInfo[] | null;
+  /** Optional background live backfill status (omitted/null when backfill is not configured or not live). */
+  backfill?: BackfillStatus | null;
 }

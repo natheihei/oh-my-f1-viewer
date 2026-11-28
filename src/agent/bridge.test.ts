@@ -5,7 +5,7 @@ import type { SessionDataView, SqlTableInfo } from '../../shared/sessionData';
 vi.mock('shaka-player/dist/shaka-player.compiled-es2021', () => ({ default: {} }));
 vi.mock('gridstack', () => ({ GridStack: {} }));
 
-const { askAgent, connectTools, describeEvents, describeTables } = await import('./bridge');
+const { askAgent, connectTools, describeAppState, describeEvents, describeTables } = await import('./bridge');
 const { PICKING_TOOLS, AGENT_TOOLS } = await import('./tools');
 const { useSession } = await import('../data/session');
 
@@ -196,5 +196,43 @@ describe("the tools sent with the agent's messages", () => {
     expect(failed.handoff).toBeUndefined();
     expect(failed.tools?.map((t) => t.name)).toEqual(PICKING_TOOLS);
     stop();
+  });
+
+  it('surfaces live backfill status (catching-up / unavailable / complete) in agent app state and omits it when unconfigured', async () => {
+    const { useSessionData } = await import('../data/sessionData');
+    useSession.setState({ session: { ...race(), status: 'live' }, channels: [] });
+    const baseReady = {
+      state: 'ready' as const,
+      sessionKey: 10,
+      datasets: {} as never,
+      revision: 1,
+      playheadMs: 1_000_000,
+      tables: [],
+      drivers: [],
+      lapCount: null,
+    };
+
+    useSessionData.setState(baseReady, true);
+    expect(describeAppState()).not.toContain('live backfill:');
+
+    useSessionData.setState(
+      { ...baseReady, backfill: { state: 'catching-up', capturedFrom: 900_000, backfilledTo: 990_000, targetUntilMs: 1_000_000 } },
+      true,
+    );
+    expect(describeAppState()).toContain('live backfill: catching up in the background');
+
+    useSessionData.setState(
+      { ...baseReady, backfill: { state: 'unavailable', capturedFrom: 1_000_000, backfilledTo: null, targetUntilMs: 1_000_000 } },
+      true,
+    );
+    expect(describeAppState()).toContain('live backfill: unavailable');
+
+    useSessionData.setState(
+      { ...baseReady, backfill: { state: 'complete', capturedFrom: 900_000, backfilledTo: 1_000_000, targetUntilMs: 1_000_000 } },
+      true,
+    );
+    expect(describeAppState()).toContain('live backfill: complete');
+
+    useSessionData.setState({ state: 'idle' }, true);
   });
 });

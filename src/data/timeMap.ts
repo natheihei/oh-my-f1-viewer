@@ -1,15 +1,16 @@
 /**
- * Places a video frame on a feed's timeline. Ported from F1OpenViewer's useReplayTiming.
- *
- * Neither timeline starts at the race start: a replay video has a lead-in (lights out at 512.9s
- * for the 2026 Mexico race), and the feed's offset 0 is its first record, 30-50 minutes before that.
- *
- * A frame is only placed when it can be placed to within a second or so. Otherwise the data waits, and
- * says why, rather than show something early:
- *   - a replay needs MultiViewer's curated session_start, bridged by where the feed's clock starts. Its
- *     video has no wall clock, and the scheduled start is only good to about a minute.
- *   - live, the stream's wall clock says what time each frame shows, but it runs ahead of the picture by
- *     MultiViewer's lead when it has published one, or by LIVE_FRAME_LEAD_MS.
+ * Places a video frame on a feed's timeline by the signals actually available, rather than assuming a
+ * session type from F1 TV's catalog:
+ *   1. Real DASH UTC wall clock (`wallClockMs`) — carried by live/DVR dynamic streams whose
+ *      `video.currentTime` counts from `availabilityStartTime` (not VOD 0s). Accurate to 7.6-8.0s
+ *      ahead of the picture (`liveLeadMs` from MultiViewer once published, else `LIVE_FRAME_LEAD_MS`).
+ *      Must outrank curated VOD `session_start` so a live/DVR stream never applies a VOD offset to
+ *      an availabilityStartTime-based `currentTime`.
+ *   2. Curated MultiViewer `session_start` + feed `clock` — exact (< 0.5s) for VOD replays (whose
+ *      DASH manifests carry no UTC wall clock), working for official archives and full static backfill
+ *      captures alike.
+ *   3. Otherwise wait: briefly (`awaiting-video`) while the video has not loaded media yet, or
+ *      `no-anchor` / `no-feed-clock` once a loaded video proves it carries no UTC wall clock.
  */
 import type { FeedClock } from '../../shared/feedTime';
 
@@ -31,12 +32,12 @@ export interface TimeMap {
 
 /** Why a frame can't be placed. */
 export type Unplaced =
-  /** A replay MultiViewer hasn't published an anchor for. */
+  /** The video stream hasn't loaded media yet, so we don't know yet whether it carries a UTC wall clock. */
+  | 'awaiting-video'
+  /** Loaded video carries no UTC wall clock and MultiViewer hasn't published `session_start` yet. */
   | 'no-anchor'
-  /** A replay whose feed has no time on it. */
-  | 'no-feed-clock'
-  /** A live stream that hasn't said what time it shows. */
-  | 'no-wall-clock';
+  /** Loaded video carries no UTC wall clock and the feed carries no time anchor. */
+  | 'no-feed-clock';
 
 export function buildTimeMap(clock: FeedClock, sessionStartSec: number | null): TimeMap {
   const curated = sessionStartSec != null && Number.isFinite(sessionStartSec);
@@ -52,33 +53,46 @@ export function videoToFeedOffset(map: TimeMap, timeSec: number): number {
 }
 
 /**
- * The frame on screen on the database's clock, or why it can't be placed. A live row is visible from when
- * it arrived, so a live frame is the stream's wall clock less its lead: `liveLeadMs` from MultiViewer, or
- * the default.
+ * The frame on screen on the database's clock, or why it can't be placed:
+ * real DASH wall clock (`wallClockMs`) first for live/DVR streams, then curated MultiViewer anchor
+ * for VOD replays, else waiting.
  */
-export function playheadOf(live: boolean, map: TimeMap | null, timeSec: number, wallClockMs: number | null, liveLeadMs: number | null = null): number | Unplaced {
-  if (live) return wallClockMs === null ? 'no-wall-clock' : wallClockMs - (liveLeadMs ?? LIVE_FRAME_LEAD_MS);
+export function playheadOf(
+  map: TimeMap | null,
+  timeSec: number,
+  wallClockMs: number | null,
+  liveLeadMs: number | null = null,
+  awaitingWallClock = false,
+): number | Unplaced {
+  if (wallClockMs !== null) {
+    return wallClockMs - (liveLeadMs ?? LIVE_FRAME_LEAD_MS);
+  }
+  if (map && map.feedBaseUtc !== null && map.curated) {
+    return map.feedBaseUtc + videoToFeedOffset(map, timeSec);
+  }
+  if (awaitingWallClock) return 'awaiting-video';
   if (!map || map.feedBaseUtc === null) return 'no-feed-clock';
-  if (!map.curated) return 'no-anchor';
-  return map.feedBaseUtc + videoToFeedOffset(map, timeSec);
+  return 'no-anchor';
 }
 
 /**
  * The other way: the video second showing a moment on the database's clock, given where the video is
- * now. A curated replay inverts exactly, kept within the feed. Live moves by the difference from the frame
- * on screen, as the wall clock has no fixed origin. Null when the frame on screen can't be placed.
+ * now. A wall-clock stream moves by the difference from the frame on screen. A curated replay inverts
+ * exactly, kept within the feed. Null when the frame on screen can't be placed.
  */
 export function videoTimeOf(
-  live: boolean,
   map: TimeMap | null,
   dateMs: number,
   timeSec: number,
   wallClockMs: number | null,
   liveLeadMs: number | null = null,
+  awaitingWallClock = false,
 ): number | null {
-  const playhead = playheadOf(live, map, timeSec, wallClockMs, liveLeadMs);
+  const playhead = playheadOf(map, timeSec, wallClockMs, liveLeadMs, awaitingWallClock);
   if (typeof playhead !== 'number') return null;
-  if (live) return timeSec + (dateMs - playhead) / 1000;
+  if (wallClockMs !== null) {
+    return timeSec + (dateMs - playhead) / 1000;
+  }
   const offset = Math.max(0, Math.min(dateMs - map!.feedBaseUtc!, map!.durationMs));
   return (offset - map!.leadInMs) / 1000;
 }

@@ -156,13 +156,28 @@ describe('session data', () => {
     handle.destroy();
   });
 
-  it("waits, rather than show everything, when a live stream has no clock", async () => {
+  it("waits briefly while video has not loaded media, then fails fast once loaded without a wall clock or anchor", async () => {
     const handle = openSessionData({ ...session, status: 'live' }, true);
     emit({ ...ready, clock: null, sessionStartSec: null });
-    handle.update(100, null);
     await flush();
-    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', reason: 'Not lined up with the video yet' });
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', brief: true, reason: 'Not lined up with the video yet' });
     expect(useSessionData.getState()).not.toHaveProperty('lapCount');
+    // Once video loads media without reporting a wall clock (and with no feed clock), it is no longer brief.
+    handle.update(100, null, true);
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', brief: false, reason: "Can't line the data up with the video" });
+    handle.destroy();
+  });
+
+  it("uses a real stream wall clock even when the catalog marked the session as a replay", async () => {
+    const handle = openSessionData(session, false);
+    emit({ ...ready, clock: null, sessionStartSec: null });
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'waiting', brief: false });
+    // Stream delivers a real DASH wall clock -> lines up immediately without waiting for MultiViewer.
+    handle.update(100, BASE + 50_000, true);
+    await flush();
+    expect(useSessionData.getState()).toMatchObject({ state: 'ready', playheadMs: BASE + 50_000 - LIVE_FRAME_LEAD_MS });
     handle.destroy();
   });
 

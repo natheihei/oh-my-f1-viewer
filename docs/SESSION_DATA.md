@@ -191,9 +191,21 @@ A session F1 TV lists without keys falls back to matching by name and type, whic
 
 ## Joining a live session late
 
-There's no backfill: the database holds what was captured. The main process records when the capture began and any gaps, but `sessionData` doesn't show them yet.
+Optional historical live backfill is served directly as static files (e.g. from Cloudflare R2 via a custom domain, or Nginx/Caddy on a VPS) written by `ingest/` (see [BACKFILL.md](BACKFILL.md) for the full v1 manifest/chunk protocol and publisher/client contract). It is **strictly optional and non-blocking** — if no backfill URL is configured or no ingestor ran for a session, OMFV behaves identically to pre-backfill live capture:
 
-Checked at 2026 Las Vegas FP1, joined about 30 minutes in. The snapshot is current state, not a log, except for two feeds:
+- **Configuration:** `OMFV_REPLAY_URL` (or `OMFV_LIVE_SERVER_URL`) in the environment, falling back to `replayUrl` (or `liveServerUrl`) in `omfv-settings.json`, and finally `DEFAULT_REPLAY_URL` (`https://replay.oh-my-f1-viewer.yueyao.run`). Setting any of those to `""` / `"off"` (or `false` / `null` in settings) disables backfill with zero network calls.
+- **Static v1 manifest + immutable chunks (`protocol_version: 1`):** `ingest/` buffers records locally, compresses immutable gzipped NDJSON chunks at a startup-configurable interval (`--chunk-interval-ms`, default 30 s), and writes `v1/sessions/{sessionKey}/manifest.json` + `v1/sessions/{sessionKey}/chunks/{timing|telemetry}-{id:06d}.ndjson.gz` directly to R2 or a local directory.
+- **Instant non-blocking live startup & continuous background catch-up:** `beginLive` starts immediately from F1's direct SignalR feed (`ready` right away, zero wait on HTTP). In the background, OMFV continuously polls `GET {baseUrl}/v1/sessions/{sessionKey}/manifest.json` and pulls any un-fetched overlapping chunks in parallel (up to 12 concurrent requests):
+  - **Timing chunks** are atomically merged with already-captured local live messages in a single SQLite WAL transaction (`liveMergeTimingBackfill`) so live charts never flicker empty.
+  - **Telemetry chunks** stream per chunk directly to the worker (`liveAppendBackfill`) without buffering the whole race in main-process memory.
+  - Polling continues until both timing and telemetry chunks cover up to the viewer's join timestamp `T1` (or `manifest.status === 'finished'`), eliminating flush-lag gaps even when the ingestor is delayed.
+- **Agent status:** When backfill is configured on a live session, `DataStatus.backfill` / `SessionDataView.backfill` exposes `catching-up` / `complete` / `unavailable` to `describeAppState` so the agent knows whether earlier session history is still filling in or unavailable.
+- **Security & forward compatibility:** Every request sends `X-OMFV-Client-Version`, enforces same-origin chunk URLs and redirect origins, caps compressed (16 MiB) and decompressed (32 MiB) payloads, requires `protocol_version === 1`, ignores unknown fields/topics, and skips malformed NDJSON lines or unsupported encodings. Clock skew is estimated from `server_now_ms` or the HTTP `Date` response header.
+- **Availability waterfall & post-race fallback:** Opening a VOD replay before F1 publishes its official static archive checks the configured static replay host automatically (never attaching F1's global live SignalR socket on a VOD open). If a full capture exists with an observed `ExtrapolatedClock` `false -> true` start transition, OMFV derives `FeedClock` so MultiViewer's `session_start` lines up with the VOD and keeps polling F1's archive every 5 minutes to upgrade to `complete`. Playhead alignment ([timeMap.ts](../src/data/timeMap.ts)) always prefers a real DASH `wallClockMs` (`wallClockMs - (liveLeadMs ?? 7_600)`) on live/DVR streams so VOD offsets never spoil live streams, falling back to curated MultiViewer `session_start` + `FeedClock` on VODs (`wallClockMs === null`).
+
+Without backfill configured (or when no ingestor ran for the session), the database holds only what this instance captured. The main process records when the capture began and any gaps, though `sessionData` doesn't show gaps yet.
+
+Checked at 2026 Las Vegas FP1, joined about 30 minutes in without backfill. The snapshot is current state, not a log, except for two feeds:
 
 | Feed | In the snapshot |
 | --- | --- |
