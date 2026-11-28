@@ -6,9 +6,10 @@ import type { PlaceHealth } from '../shared/health';
 import { getMainAppUrl, getMainWindow, sendToRenderer } from './windows';
 import { classifySessionType, listChannels, listEvents, listSessions, listUpcoming } from './f1tv/catalog';
 import { agent } from './agent/agent';
-import { setUiState, uiState } from './settings';
+import { appSettings, setUiState, uiState } from './settings';
 import type { Mods } from './mods';
 import { TimingDb } from './timingdb';
+import { fetchLiveManifest, fetchLiveStreamBackfill, resolveLiveServerUrl } from './timingdb/liveBackfill';
 import type { PictureResult } from '../shared/mods';
 import { circuitUrl } from './timingdb/circuit';
 import { localToUtc } from '../shared/feedTime';
@@ -200,6 +201,15 @@ function createTimingDb(file: string): TimingDb {
         });
     },
     disconnectLive: () => livetiming.disconnectLiveSocket(),
+    hasLiveBackfill: () => resolveLiveServerUrl(process.env, appSettings()) !== null,
+    fetchLiveManifest: (sessionKey, options) => {
+      const baseUrl = resolveLiveServerUrl(process.env, appSettings());
+      return baseUrl ? fetchLiveManifest(baseUrl, sessionKey, { ...options, clientVersion: app.getVersion() }) : Promise.resolve(null);
+    },
+    fetchLiveStreamBackfill: (manifest, options) => {
+      const baseUrl = resolveLiveServerUrl(process.env, appSettings());
+      return baseUrl ? fetchLiveStreamBackfill(baseUrl, manifest, { ...options, clientVersion: app.getVersion() }) : Promise.resolve(null);
+    },
     send: sendToRenderer,
   });
 }

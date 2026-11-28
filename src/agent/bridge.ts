@@ -79,11 +79,28 @@ export function describeAppState(note: string | null = null, build: string | nul
     .filter((d) => d.name_acronym)
     .map((d) => `${d.name_acronym} ${d.driver_number}`)
     .join(', ');
+  const describeBackfill = (bf: { state: string } | null | undefined): string | null => {
+    if (!bf) return null;
+    if (bf.state === 'catching-up') {
+      return 'live backfill: catching up in the background (live data is ready now; earlier session history is still filling in automatically)';
+    }
+    if (bf.state === 'unavailable') {
+      return 'live backfill: unavailable for this session (only live data from when the viewer joined is present)';
+    }
+    if (bf.state === 'complete') {
+      return 'live backfill: complete (historical live data backfilled up to join time)';
+    }
+    return null;
+  };
   if (sessionData.state === 'ready') {
     if (sessionData.playheadMs != null) lines.push(`playhead: ${Math.round(sessionData.playheadMs)} (UTC ms, as in date columns)`);
+    const bfLine = describeBackfill(sessionData.backfill);
+    if (bfLine) lines.push(bfLine);
     if (roster) lines.push(`drivers: ${roster}`);
   } else if (sessionData.state === 'waiting') {
     lines.push(`timing data: waiting, so nothing at the frame on screen can be read. ${sessionData.reason}: ${sessionData.detail}`);
+    const bfLine = describeBackfill(sessionData.backfill);
+    if (bfLine) lines.push(bfLine);
     if (roster) lines.push(`drivers: ${roster}`);
   } else if (sessionData.state === 'failed' || sessionData.state === 'unsupported') {
     lines.push(`timing data: ${sessionData.state}. ${sessionData.reason}`);

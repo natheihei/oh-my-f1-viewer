@@ -320,6 +320,11 @@ export class TimingStore {
     this.statement('UPDATE t_capture_gaps SET to_ms = ? WHERE session_key = ? AND to_ms IS NULL').run(at, sessionKey);
   }
 
+  /** Records a known capture gap (e.g. from the live backfill server or a splice boundary). */
+  recordGap(sessionKey: number, from: number, to: number | null): void {
+    this.statement('INSERT OR REPLACE INTO t_capture_gaps (session_key, from_ms, to_ms) VALUES (?, ?, ?)').run(sessionKey, from, to);
+  }
+
   /** Drops a live capture's raw log once the archive has replaced it. */
   clearCapture(sessionKey: number): void {
     this.statement('DELETE FROM t_live_messages WHERE session_key = ?').run(sessionKey);
@@ -340,6 +345,36 @@ export class TimingStore {
 
   liveMessages(sessionKey: number): Array<{ seq: number; topic: string; time: number; visible_from: number; snapshot: number; content: string }> {
     return this.statement('SELECT seq, topic, time, visible_from, snapshot, content FROM t_live_messages WHERE session_key = ? ORDER BY seq').all(sessionKey) as never;
+  }
+
+  /** Timing-only live messages stored locally, ordered by `seq`. */
+  liveTimingMessages(sessionKey: number): Array<{ seq: number; topic: string; time: number; visible_from: number; snapshot: number; content: string }> {
+    return this.statement(
+      "SELECT seq, topic, time, visible_from, snapshot, content FROM t_live_messages WHERE session_key = ? AND topic NOT IN ('CarData.z', 'Position.z') ORDER BY seq",
+    ).all(sessionKey) as never;
+  }
+
+  /** Deletes only timing rows from `t_live_messages` (leaving telemetry untouched for atomic timing merges). */
+  clearLiveTimingMessages(sessionKey: number): void {
+    this.statement("DELETE FROM t_live_messages WHERE session_key = ? AND topic NOT IN ('CarData.z', 'Position.z')").run(sessionKey);
+  }
+
+  /** Highest `seq` stored in `t_live_messages` for a session, or -1 if empty. */
+  liveMaxSeq(sessionKey: number): number {
+    const row = this.statement('SELECT MAX(seq) AS max_seq FROM t_live_messages WHERE session_key = ?').get(sessionKey) as { max_seq: number | null };
+    return row.max_seq ?? -1;
+  }
+
+  /** The newest `visible_from` stored locally for a live session (optionally per stream), or null when none has been captured yet. */
+  liveLastVisibleFrom(sessionKey: number, stream: 'timing' | 'telemetry' | 'all' = 'all'): number | null {
+    const sql =
+      stream === 'telemetry'
+        ? "SELECT MAX(visible_from) AS last FROM t_live_messages WHERE session_key = ? AND topic IN ('CarData.z', 'Position.z')"
+        : stream === 'timing'
+          ? "SELECT MAX(visible_from) AS last FROM t_live_messages WHERE session_key = ? AND topic NOT IN ('CarData.z', 'Position.z')"
+          : 'SELECT MAX(visible_from) AS last FROM t_live_messages WHERE session_key = ?';
+    const row = this.statement(sql).get(sessionKey) as { last: number | null };
+    return row.last;
   }
 
   // --- The calendar ---

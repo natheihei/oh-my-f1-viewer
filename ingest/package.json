@@ -1,0 +1,32 @@
+{
+  "name": "omfv-live-ingest",
+  "version": "0.1.0",
+  "description": "Local F1 live timing & telemetry SignalR Core ingestor CLI for OMFV",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "omfv-live-ingest": "./dist/cli.js"
+  },
+  "scripts": {
+    "ingest": "tsx src/cli.ts run",
+    "login": "tsx src/cli.ts login",
+    "status": "tsx src/cli.ts status",
+    "logout": "tsx src/cli.ts logout",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "playwright": "^1.56.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

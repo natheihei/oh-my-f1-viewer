@@ -714,7 +714,7 @@ describe('seeking to a moment', () => {
       useSessionData.setState({ ...waiting, brief: true } as unknown as SessionDataView, true);
       const run = runTool('query_session', { sql: 'SELECT 1' });
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(notes).toEqual(['Lining the timing data up with the live video…']);
+      expect(notes).toEqual(['Lining the timing data up with the video…']);
       useSessionData.setState({ ...waiting, brief: false, ahead: true, reason: 'Waiting for the video to reach the live data' } as unknown as SessionDataView, true);
       const refused = expect(run).rejects.toThrow(/Waiting for the video to reach the live data/);
       await vi.advanceTimersByTimeAsync(500);

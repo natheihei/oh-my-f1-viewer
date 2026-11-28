@@ -374,7 +374,7 @@ class SessionRuntime {
   /** Between sync ticks, moves session data's playhead to the reference stream's frame. The tick does it when there's none. */
   private followPlayhead(): void {
     const ref = this.referenceId ? this.handles.get(this.referenceId) : undefined;
-    if (ref?.hasMedia) this.sessionData?.update(ref.video.currentTime, ref.wallClockMs());
+    if (ref?.hasMedia) this.sessionData?.update(ref.video.currentTime, ref.wallClockMs(), true);
   }
 
   private tick(): void {
@@ -391,6 +391,7 @@ class SessionRuntime {
     let timeSec: number;
     let buffering = false;
     let wallClockMs: number | null = null;
+    let hasMedia = false;
     let range: { start: number; end: number } | null = null;
     let live = this.live;
 
@@ -418,13 +419,14 @@ class SessionRuntime {
       this.setVirtualTime(timeSec);
       buffering = this.wantPlaying && isStalled(ref.video);
       wallClockMs = ref.wallClockMs();
+      hasMedia = ref.hasMedia;
       range = ref.seekRange();
       live = ref.isLive() || this.live;
     } else {
       timeSec = this.now();
     }
 
-    this.sessionData?.update(timeSec, wallClockMs);
+    this.sessionData?.update(timeSec, wallClockMs, hasMedia);
 
     const prev = useSession.getState().clock;
     const start = range?.start ?? prev.start;

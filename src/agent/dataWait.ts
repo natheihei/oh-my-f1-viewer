@@ -39,7 +39,7 @@ export function readiness(data: SessionDataView, wholeSession = false): Readines
       return { is: 'pending', note: 'Loading the timing data…', done: 'Timing data loaded.' };
     case 'waiting':
       if (wholeSession) return { is: 'ready' };
-      if (data.brief) return { is: 'pending', note: 'Lining the timing data up with the live video…', done: 'Timing data lined up.' };
+      if (data.brief) return { is: 'pending', note: 'Lining the timing data up with the video…', done: 'Timing data lined up.' };
       return {
         is: 'unavailable',
         message: `The timing data can't be read at the frame on screen yet: ${data.reason}. ${data.detail} ${NO_RETRY}`,

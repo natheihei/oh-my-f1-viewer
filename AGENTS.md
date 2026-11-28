@@ -8,12 +8,13 @@ names the old profile, `~/.config/f1a`, or reads what the old name wrote. The lo
 
 ## Build targets
 
-The repo builds two things that share no code. Each has its own `package.json`, and you run npm in its own folder.
+The repo builds three things that share no code. Each has its own build manifest in its own folder.
 
 | Target | Where | Stack | Build |
 | --- | --- | --- | --- |
 | OMFV electron app | Repo root: `electron/` (main process), `src/` (renderer), `shared/` (imported by both) | Electron, React, Vite | `npm run build`. See [README.md](README.md) |
 | OMFV product site | `site/` | Astro (static), Tailwind CSS v4 | `npm run build` in `site/`, which writes `site/dist/`. See [site/README.md](site/README.md). Deployed to Cloudflare Workers: see [site/DEPLOY.md](site/DEPLOY.md) |
+| OMFV live timing ingestor | `ingest/` | TypeScript, Node.js (`ws`, Playwright) | `npm run check` / `npm run login` / `npm run ingest` in `ingest/`. Writes v1 static chunks + manifest directly to R2 or local dir. See [ingest/README.md](ingest/README.md) |
 
 Don't import across them. The site keeps its own copies of the logo from `icons/`.
 
@@ -32,6 +33,7 @@ Read the one that covers what you're changing. [README.md](README.md) has how to
 | [MODS.md](docs/MODS.md) | What a mod is, what it may import, and how the app watches, compiles, serves and reloads it |
 | [BUILD_MODE.md](docs/BUILD_MODE.md) | `/build`: the build agent and its file tools, drafts, Save and Undo all, what isn't drawing, and the cases that check it |
 | [SESSION_DATA.md](docs/SESSION_DATA.md) | The session database: tables, `visible_from` and versioned rows, ingest and caching, linking it to the video, and quirks in F1's data |
+| [BACKFILL.md](docs/BACKFILL.md) | Live timing backfill: v1 static R2/local-dir storage layout, manifest & chunk wire protocol, ingestor publisher contract, and OMFV's non-blocking client catch-up |
 | [SPOILER_PREVENTION.md](docs/SPOILER_PREVENTION.md) | Each layer that keeps the race from the viewer, from the data up to the agent's prompt. Read it before changing what a chart or the agent can see |
 | [RELEASE.md](docs/RELEASE.md) | Releasing the app and the site: the actions, how a release is named, installing it, and what packaging changes |
 | [TELEMETRY.md](docs/TELEMETRY.md) | The anonymous usage counts: every event, what's never sent, and how to add one. Read it before sending anything new |
